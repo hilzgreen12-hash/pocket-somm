@@ -14,9 +14,9 @@ import { useLineupStore } from '../../../src/stores/lineupStore';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
-import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
+import { addCellarWineRemoval, addCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { fetchStorageLocations, assignWineToStorageLocation } from '../../../src/api/storageLocations';
-import { addLocationPlacement, fetchPlacementsForWine, decrementPlacement } from '../../../src/api/placements';
+import { addLocationPlacement, fetchPlacementsForWine, decrementPlacement, clearLocationPlacements } from '../../../src/api/placements';
 import { getBins } from '../../../src/api/bins';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -78,7 +78,7 @@ function Counter({ label, value, onChange }: { label: string; value: number; onC
 }
 
 export default function RackGridScreen() {
-  const { rackId, highlight, lineup, placed, placeWine, placeLimit } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string; placed?: string; placeWine?: string; placeLimit?: string }>();
+  const { rackId, highlight, lineup, placed, placeWine, placeLimit, addMoreWine: addMoreWineParam } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string; placed?: string; placeWine?: string; placeLimit?: string; addMoreWine?: string }>();
   const navigation = useNavigation();
   const { session } = useAuth();
   const { slots, isLoading, assign } = useRack(rackId);
@@ -137,6 +137,13 @@ export default function RackGridScreen() {
   });
   // "Move to a Cellar or Bin" destination picker (Alt Cellars + bins).
   const [locBinPicker, setLocBinPicker] = useState<{ wineId: string; wineName: string } | null>(null);
+  // Unified destination picker for the redesigned long-press menu — "Move Bottles"
+  // (mode 'move') and "Add More Bottles" (mode 'addMore'). Carries the tapped slot so
+  // a move to another slot in this rack knows its source.
+  const [destPicker, setDestPicker] = useState<{ mode: 'move' | 'addMore'; wineId: string; wineName: string; row: number; col: number } | null>(null);
+  // "Add More Bottles to <alt cellar / bin / Full Cellar List>" → how many? prompt.
+  const [addMoreDest, setAddMoreDest] = useState<{ wineId: string; wineName: string; kind: 'location' | 'bin' | 'cellarList'; id?: string; name: string } | null>(null);
+  const [addMoreCountStr, setAddMoreCountStr] = useState('1');
   const [rackMove, setRackMove] = useState<{ wine: CellarWine; currentName: string; max: number; rid: string; row: number; col: number } | null>(null);
   const [rackMoveQty, setRackMoveQty] = useState('');
   // "Delete Wine (Permanent)" on a multi-bottle wine → ask how many (or Delete All).
@@ -538,6 +545,18 @@ export default function RackGridScreen() {
     placeExistingStartedRef.current = true;
     setPlaceExisting({ wine: w, limit: Math.max(1, parseInt(placeLimit ?? '1', 10) || 1) });
   }, [placeWine, placeLimit, wines]);
+
+  // Enter "add more bottles" slot-select mode when routed here from another rack's
+  // long-press "Add More Bottles → <this rack>". Once only, after the cellar loads.
+  const addMoreStartedRef = useRef(false);
+  useEffect(() => {
+    if (addMoreStartedRef.current || !addMoreWineParam || wines.length === 0) return;
+    const w = wines.find((x) => x.id === addMoreWineParam);
+    if (!w) return;
+    addMoreStartedRef.current = true;
+    setAddMoreWine({ wineId: w.id, wineName: w.wine_name });
+    setMultiSlots(new Set());
+  }, [addMoreWineParam, wines]);
 
   // Bottles awaiting a slot are placed ONE at a time — each tapped empty slot
   // takes the next bottle, and the awaiting flag clears only once every bottle
@@ -975,7 +994,7 @@ export default function RackGridScreen() {
       // If somehow there are no slots here, bail rather than fall back to `|| 1` and
       // add a phantom location bottle (placed would exceed quantity → heal inflates).
       const movedCount = slotsForWine(wineId);
-      if (movedCount <= 0) { setLocBinPicker(null); return; }
+      if (movedCount <= 0) { setLocBinPicker(null); setDestPicker(null); return; }
       await removeSlotsForWine(wineId, movedCount, rackId);
       await addLocationPlacement(wineId, locId, null, movedCount);
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
@@ -985,6 +1004,7 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
       setLocBinPicker(null);
+      setDestPicker(null);
       setSavedMsg('Wine moved to your cellar');
     } catch (err) {
       showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -1002,9 +1022,133 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['bins'] });
       setLocBinPicker(null);
+      setDestPicker(null);
       router.push(`/cellar/bin/${binId}` as any);
     } catch (err) {
       showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // MOVE this rack's bottles of a wine into ANOTHER rack/fridge: free them here (they
+  // become loose), then open the target rack in select-slots mode to place them.
+  async function moveToAnotherRack(wineId: string, targetRackId: string) {
+    const movedCount = slotsForWine(wineId);
+    if (movedCount <= 0) { setDestPicker(null); return; }
+    try {
+      await removeSlotsForWine(wineId, movedCount, rackId);
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      setDestPicker(null);
+      router.push(`/cellar/rack/${targetRackId}?placeWine=${wineId}&placeLimit=${movedCount}` as any);
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // MOVE this rack's bottles of a wine to the Full Cellar List (unplace): free the
+  // slots here, quantity unchanged so the bottles sit loose in the cellar.
+  async function unplaceFromRack(wineId: string, wineName: string) {
+    const movedCount = slotsForWine(wineId);
+    if (movedCount <= 0) { setDestPicker(null); return; }
+    try {
+      await removeSlotsForWine(wineId, movedCount, rackId);
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      setDestPicker(null);
+      setSavedMsg(movedCount === 1 ? `${wineName} moved to your Full Cellar List` : `${movedCount} bottles of ${wineName} moved to your Full Cellar List`);
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // ADD MORE bottles of an existing wine to a NON-rack destination (alt cellar / bin /
+  // Full Cellar List). Bumps the wine's quantity by the count, then places the new
+  // bottles at the destination. (Racks use the tap-to-select slot flow instead.)
+  async function confirmAddMoreToDest() {
+    const d = addMoreDest;
+    if (!d) return;
+    const n = Math.max(1, parseInt(addMoreCountStr, 10) || 1);
+    const wine = wines.find((w) => w.id === d.wineId);
+    try {
+      await updateWine.mutateAsync({ id: d.wineId, updates: { quantity: (wine?.quantity ?? 0) + n } });
+      if (d.kind === 'location' && d.id) {
+        await addLocationPlacement(d.wineId, d.id, null, n);
+      } else if (d.kind === 'bin' && d.id) {
+        await updateWine.mutateAsync({ id: d.wineId, updates: { awaiting_placement: true, awaiting_placement_unit_id: d.id } });
+      }
+      // 'cellarList' → nothing extra: the new bottles are simply loose (unplaced).
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      qc.invalidateQueries({ queryKey: ['bins'] });
+      setAddMoreDest(null);
+      setAddMoreCountStr('1');
+      if (d.kind === 'bin' && d.id) { router.push(`/cellar/bin/${d.id}` as any); return; }
+      setSavedMsg(`${n} bottle${n === 1 ? '' : 's'} added to ${d.name}`);
+    } catch (err) {
+      showAlert({ title: 'Could not add bottles', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Immediate archive of the WHOLE wine (all bottles) — the redesigned menu confirms
+  // archive-vs-delete once, then acts; no second popup. Mirrors the full-archive path.
+  async function archiveWholeNow(wine: CellarWine) {
+    if (archiving) return;
+    const today = new Date().toISOString().split('T')[0];
+    setArchiving(true);
+    try {
+      await addCellarWineRemoval({ cellarWineId: wine.id, removedAt: today, count: wine.quantity ?? 1, note: null });
+      await updateWine.mutateAsync({ id: wine.id, updates: { quantity: wine.quantity ?? 1, archived_at: `${today}T12:00:00.000Z` } });
+      await clearWineFromRacks(wine.id);
+      await clearLocationPlacements(wine.id);
+      if (session?.user.id) {
+        qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wine.id));
+        qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+        qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+      }
+      qc.invalidateQueries({ queryKey: ['cellar-removals', wine.id] });
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      setSavedMsg(`${wine.wine_name} archived`);
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  // Immediate permanent delete of the WHOLE wine — the menu already warned it's
+  // permanent, so there's no further confirm.
+  async function deleteWholeNow(wine: CellarWine) {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await clearWineFromRacks(wine.id);
+      await deleteCellarWine(wine.id);
+      if (session?.user.id) {
+        qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wine.id));
+      }
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      setSavedMsg(`${wine.wine_name} deleted`);
+    } catch (err) {
+      showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -1149,60 +1293,44 @@ export default function RackGridScreen() {
     const wine = slot?.wine as CellarWine | null | undefined;
     if (!wine || !slot?.cellar_wine_id) return;
     const wineId = slot.cellar_wine_id;
-    const qty = wine.quantity ?? 1;
-    // Long-press now opens an action sheet rather than dropping straight
-    // into move-mode — this is also the user-facing entry point for
-    // removing a wine directly from the rack grid.
-    const buttons: { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void }[] = [
-      {
-        // Primary action: add more of this same wine into the rack. Reuses the
-        // existing place-into-rack mode (banner → tap an empty slot → choose
-        // how many), which bumps the wine's quantity to match.
-        text: 'Add More Bottles',
-        onPress: () => {
-          // Enter slot-select mode: short-press empty slots to add one bottle
-          // each, running total, then Save. No "how many?" popup.
-          setAddMoreWine({ wineId, wineName: wine.wine_name });
-          setMultiSlots(new Set());
-        },
-      },
-      {
-        text: 'Move to another slot or rack',
-        onPress: () => {
-          setPendingMove({ sourceRackId: rackId, row, col, wineId, wineName: wine.wine_name });
-        },
-      },
-      {
-        // Move OUT of the slot grid entirely — into an Alt Cellar (loose) or a
-        // bin. Racks, fridges, bins and Alt Cellars are all valid destinations.
-        text: 'Move to a Cellar or Bin',
-        onPress: () => setLocBinPicker({ wineId, wineName: wine.wine_name }),
-      },
-      {
-        // Quick amend of the wine's identity (name / vintage / style).
-        text: 'Edit Wine',
-        onPress: () => router.push(`/cellar/edit-wine/${wineId}` as any),
-      },
-      {
-        // Archive keeps the wine in the user's records (Cellar Archive) but
-        // takes it out of the live Cellar List and this rack.
-        text: 'Archive Wine',
-        onPress: () => setSingleArchive({ wineId, wineName: wine.wine_name, qty: wine.quantity ?? 1 }),
-      },
-    ];
-    // Delete — same shape as Archive: ask how many to permanently remove when
-    // there's more than one bottle (with a "Delete all" option); a single bottle
-    // just confirms.
-    buttons.push({
-      text: 'Delete Wine (Permanent)',
-      style: 'destructive',
-      onPress: () => openDeleteFlow(wine),
-    });
-    buttons.push({ text: 'Cancel', style: 'cancel' });
+    // Slimmed to FOUR grouped actions, each opening a focused second step, so the
+    // sheet isn't overwhelming. Order: Add More / Move / Edit / Archive-or-Delete.
     showAlert({
       title: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name,
       body: 'What would you like to do?',
-      buttons,
+      buttons: [
+        {
+          text: 'Add More Bottles',
+          onPress: () => setDestPicker({ mode: 'addMore', wineId, wineName: wine.wine_name, row, col }),
+        },
+        {
+          text: 'Move Bottles',
+          onPress: () => setDestPicker({ mode: 'move', wineId, wineName: wine.wine_name, row, col }),
+        },
+        {
+          text: 'Edit Wine',
+          onPress: () => router.push(`/cellar/edit-wine/${wineId}` as any),
+        },
+        {
+          text: 'Archive or Delete Bottles',
+          onPress: () => promptArchiveOrDelete(wine),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // Second step of "Archive or Delete Bottles": confirm WHICH, warn that Delete is
+  // permanent, then act immediately (no further confirmation popup).
+  function promptArchiveOrDelete(wine: CellarWine) {
+    showAlert({
+      title: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name,
+      body: 'Archive keeps this wine in your records (Cellar Archive). Delete removes it permanently and cannot be undone.',
+      buttons: [
+        { text: 'Archive', onPress: () => void archiveWholeNow(wine) },
+        { text: 'Delete (permanent)', style: 'destructive', onPress: () => void deleteWholeNow(wine) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
     });
   }
 
@@ -2058,29 +2186,92 @@ export default function RackGridScreen() {
       {/* Move OUT of the rack grid: pick an Alt Cellar (loose) or a bin (drops
           into a diamond on the bin screen). Fixes the gap where racks/fridges
           couldn't hand a wine to alt storage or bins. */}
-      <Modal visible={locBinPicker !== null} transparent animationType="fade" onRequestClose={() => setLocBinPicker(null)}>
+      {/* Unified destination picker — "Move Bottles" (mode 'move') and "Add More
+          Bottles" (mode 'addMore'). Racks/fridges, bins, alt cellars are one list;
+          Full Cellar List (unplaced) is always the final option. */}
+      <Modal visible={destPicker !== null} transparent animationType="fade" onRequestClose={() => setDestPicker(null)}>
         <View style={styles.placeOverlay}>
           <View style={styles.placeSheet}>
-            <Text style={styles.placeTitle}>Move to a Cellar or Bin</Text>
-            <Text style={styles.placeBody}>Choose where {locBinPicker?.wineName} should go — all its bottles move together.</Text>
-            <ScrollView style={{ maxHeight: 320, alignSelf: 'stretch' }}>
-              {allLocations.map((l) => (
-                <TouchableOpacity key={l.id} style={styles.destRow} onPress={() => locBinPicker && void moveWineToLocation(locBinPicker.wineId, l.id)} activeOpacity={0.7}>
-                  <Text style={styles.destName} numberOfLines={1}>{l.name}</Text>
-                  <Text style={styles.destType}>Alt Cellar</Text>
+            <Text style={styles.placeTitle}>{destPicker?.mode === 'move' ? 'Move to' : 'Add More Bottles to'}</Text>
+            <Text style={styles.placeBody} numberOfLines={2}>{destPicker?.wineName}</Text>
+            <ScrollView style={{ maxHeight: 360, alignSelf: 'stretch' }}>
+              {destPicker?.mode === 'move' ? (
+                <TouchableOpacity style={styles.destRow} activeOpacity={0.7} onPress={() => {
+                  if (!destPicker) return;
+                  setPendingMove({ sourceRackId: rackId, row: destPicker.row, col: destPicker.col, wineId: destPicker.wineId, wineName: destPicker.wineName });
+                  setDestPicker(null);
+                }}>
+                  <Text style={styles.destName}>Another slot in this rack</Text>
+                  <Text style={styles.destType}>This rack</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.destRow} activeOpacity={0.7} onPress={() => {
+                  if (!destPicker) return;
+                  setAddMoreWine({ wineId: destPicker.wineId, wineName: destPicker.wineName });
+                  setMultiSlots(new Set());
+                  setDestPicker(null);
+                }}>
+                  <Text style={styles.destName}>This Rack</Text>
+                  <Text style={styles.destType}>Tap slots</Text>
+                </TouchableOpacity>
+              )}
+              {racks.filter((r) => r.id !== rackId).map((r) => (
+                <TouchableOpacity key={r.id} style={styles.destRow} activeOpacity={0.7} onPress={() => {
+                  if (!destPicker) return;
+                  if (destPicker.mode === 'move') void moveToAnotherRack(destPicker.wineId, r.id);
+                  else { router.push(`/cellar/rack/${r.id}?addMoreWine=${destPicker.wineId}` as any); setDestPicker(null); }
+                }}>
+                  <Text style={styles.destName} numberOfLines={1}>{r.name}</Text>
+                  <Text style={styles.destType}>{r.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
                 </TouchableOpacity>
               ))}
               {allBins.map((b) => (
-                <TouchableOpacity key={b.id} style={styles.destRow} onPress={() => locBinPicker && void moveWineToBin(locBinPicker.wineId, b.id)} activeOpacity={0.7}>
+                <TouchableOpacity key={b.id} style={styles.destRow} activeOpacity={0.7} onPress={() => {
+                  if (!destPicker) return;
+                  if (destPicker.mode === 'move') void moveWineToBin(destPicker.wineId, b.id);
+                  else { setAddMoreDest({ wineId: destPicker.wineId, wineName: destPicker.wineName, kind: 'bin', id: b.id, name: b.name }); setAddMoreCountStr('1'); setDestPicker(null); }
+                }}>
                   <Text style={styles.destName} numberOfLines={1}>{b.name}</Text>
                   <Text style={styles.destType}>Bin</Text>
                 </TouchableOpacity>
               ))}
-              {allLocations.length === 0 && allBins.length === 0 ? (
-                <Text style={styles.placeBody}>You don't have any Alt Cellars or bins yet — create one from the Cellar tab.</Text>
-              ) : null}
+              {allLocations.map((l) => (
+                <TouchableOpacity key={l.id} style={styles.destRow} activeOpacity={0.7} onPress={() => {
+                  if (!destPicker) return;
+                  if (destPicker.mode === 'move') void moveWineToLocation(destPicker.wineId, l.id);
+                  else { setAddMoreDest({ wineId: destPicker.wineId, wineName: destPicker.wineName, kind: 'location', id: l.id, name: l.name }); setAddMoreCountStr('1'); setDestPicker(null); }
+                }}>
+                  <Text style={styles.destName} numberOfLines={1}>{l.name}</Text>
+                  <Text style={styles.destType}>Alt Cellar</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.destRow} activeOpacity={0.7} onPress={() => {
+                if (!destPicker) return;
+                if (destPicker.mode === 'move') void unplaceFromRack(destPicker.wineId, destPicker.wineName);
+                else { setAddMoreDest({ wineId: destPicker.wineId, wineName: destPicker.wineName, kind: 'cellarList', name: 'your Full Cellar List' }); setAddMoreCountStr('1'); setDestPicker(null); }
+              }}>
+                <Text style={styles.destName}>Full Cellar List (unplaced)</Text>
+                <Text style={styles.destType}>{destPicker?.mode === 'move' ? 'Unplace' : 'Loose'}</Text>
+              </TouchableOpacity>
             </ScrollView>
-            <TouchableOpacity onPress={() => setLocBinPicker(null)} style={styles.placeCancel}>
+            <TouchableOpacity onPress={() => setDestPicker(null)} style={styles.placeCancel}>
+              <Text style={styles.placeCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* "How many bottles to add?" for a non-rack Add More destination. */}
+      <Modal visible={addMoreDest !== null} transparent animationType="fade" onRequestClose={() => setAddMoreDest(null)}>
+        <View style={styles.placeOverlay}>
+          <View style={styles.placeSheet}>
+            <Text style={styles.placeTitle}>Add More Bottles</Text>
+            <Text style={styles.placeBody}>How many bottles of {addMoreDest?.wineName} to add to {addMoreDest?.name}?</Text>
+            <TextInput style={styles.placeInput} value={addMoreCountStr} onChangeText={setAddMoreCountStr} keyboardType="number-pad" placeholder="1" placeholderTextColor={colors.textMuted} />
+            <TouchableOpacity style={styles.placeConfirmBtn} onPress={() => void confirmAddMoreToDest()}>
+              <Text style={styles.placeConfirmText}>Add Bottles</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setAddMoreDest(null)} style={styles.placeCancel}>
               <Text style={styles.placeCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
