@@ -68,18 +68,17 @@ export default function EditWineScreen() {
         style: style.trim() || null,
       };
 
-      // Identity changed (e.g. a Riserva corrected to the standard bottling) →
-      // it's a different wine, so re-derive the market value + intel from
-      // Wine-Searcher for the NEW identity instead of keeping the old figures.
-      const identityChanged =
-        (producer.trim()) !== (wine.producer ?? '') ||
-        (wineName.trim() || producer.trim()) !== (wine.wine_name ?? '') ||
-        (vintage.trim()) !== (wine.vintage ?? '');
-      if (identityChanged) {
+      // "Save & Update Wine Intel" ALWAYS re-derives value + intel from the
+      // details the user just confirmed — feeding Claude the grape + colour so it
+      // pins the right cuvée (e.g. Guigal Ex-Voto Blanc, previously mis-stored as
+      // the Syrah). Unconditional so correcting grape/colour alone refreshes the
+      // intel, and a wine already saved with the wrong intel can be fixed by simply
+      // re-saving. Wrapped in try/catch so a failed lookup still keeps the edit.
+      {
         try {
           const currency = (preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP').toUpperCase();
           const v = await valueWine(
-            { producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || 'NV', style: style.trim() || null } as any,
+            { producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || 'NV', grape: grape.trim() || null, style: style.trim() || null } as any,
             currency,
           );
           Object.assign(updates, {
@@ -174,7 +173,7 @@ export default function EditWineScreen() {
           <TextInput style={styles.input} value={style} onChangeText={setStyle} placeholder="e.g. Red, White, Rosé, Sparkling, Fortified" placeholderTextColor={colors.textMuted} autoCapitalize="words" />
 
           <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
-            {saving ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.buttonText}>Save Changes</Text>}
+            {saving ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.buttonText}>Save & Update Wine Intel</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
             <Text style={styles.cancelText}>Cancel</Text>
