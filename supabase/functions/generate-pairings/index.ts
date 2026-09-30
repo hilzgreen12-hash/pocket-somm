@@ -5,8 +5,8 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 // Generous enough that no ordinary session hits them; low enough to cap a
 // runaway loop. Tune against real usage — these are a first pass.
-const PAIRINGS_HOURLY_LIMIT = 30;
-const PAIRINGS_DAILY_LIMIT = 100;
+const PAIRINGS_HOURLY_LIMIT = 60;
+const PAIRINGS_DAILY_LIMIT = 250;
 
 // Curated pool of high-profile chefs Vinster draws inspiration from, so regular
 // users stop seeing the same one or two names (Ottolenghi / Nobu) every search.
@@ -221,13 +221,19 @@ Ensure recipes are complete, detailed, and genuinely worthy of the chef inspirat
 // Pull the JSON object out of Claude's reply and validate it. Shared by both
 // the buffered and streamed response paths so they enforce identical contracts.
 function extractPairings(text: string): unknown[] {
-  const match = text.match(/\{[\s\S]*\}/);
+  // Strip any markdown code fences the model wraps the JSON in, then take the
+  // outermost object.
+  const cleaned = text.replace(/```(?:json)?/gi, '');
+  const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
   const parsed = JSON.parse(match[0]);
-  if (!Array.isArray(parsed?.pairings) || parsed.pairings.length !== 3) {
+  // The prompt asks for three recipes, but DON'T hard-fail when the model returns
+  // 2 or 4 — that turned a perfectly usable response into a generic error. Only
+  // fail when there's genuinely nothing to show. Cap at 3 for the UI.
+  if (!Array.isArray(parsed?.pairings) || parsed.pairings.length < 1) {
     throw new Error('Unexpected response format from Claude');
   }
-  return parsed.pairings;
+  return parsed.pairings.slice(0, 3);
 }
 
 Deno.serve(async (req) => {
@@ -255,7 +261,10 @@ Deno.serve(async (req) => {
 
     const params = {
       model: 'claude-sonnet-5-5',
-      max_tokens: 8192,
+      // Three full chef recipes (ingredients + method + rationale) can exceed 8192
+      // tokens; a truncated response left the JSON incomplete → parse error → generic
+      // failure. Give it real headroom.
+      max_tokens: 16000,
       temperature,
       messages: [{ role: 'user' as const, content: buildPrompt(wine, filters ?? {}, excludeChefsList, additionalRequestText) }],
     };

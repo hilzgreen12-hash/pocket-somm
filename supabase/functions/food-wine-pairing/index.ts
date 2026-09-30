@@ -3,8 +3,8 @@ import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-const PAIRING_HOURLY_LIMIT = 30;
-const PAIRING_DAILY_LIMIT = 100;
+const PAIRING_HOURLY_LIMIT = 60;
+const PAIRING_DAILY_LIMIT = 250;
 
 function symbolFor(code?: string | null): string {
   const map: Record<string, string> = {
