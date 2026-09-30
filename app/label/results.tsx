@@ -1490,46 +1490,32 @@ export default function LabelResultsScreen() {
       return;
     }
 
-    // A live rack/fridge: auto-place the bottles from the first free slot in
-    // the chosen orientation, then land on the rack.
+    // A live rack/fridge was chosen. Do NOT auto-place from the first free slot —
+    // that dropped bottles into spaces the user never picked. Instead save the bottles
+    // to the cellar (unplaced) and open the rack in SELECT-SLOTS mode: the user taps
+    // the exact slots they want (thumbnails fill immediately) and presses Confirm —
+    // the same flow used for placing unplaced bottles.
     if (selectedRackId && selectedRackId !== '__new__') {
       const rack = racks.find((r) => r.id === selectedRackId);
-      if (rack) {
-        const slots = await getRackSlots(selectedRackId);
-        const occupied = new Set(slots.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`));
-        let start: { row: number; col: number } | null = null;
-        for (let r = 0; r < rack.rows && !start; r++) {
-          for (let c = 0; c < rack.cols; c++) {
-            if (!occupied.has(`${r},${c}`)) { start = { row: r, col: c }; break; }
-          }
-        }
-        if (start) {
-          const candidate = computeSlots(start.row, start.col, rack.rows, rack.cols, qty, placeOrientation, rack.large_format_cols);
-          const free = candidate.filter((s) => !occupied.has(`${s.row},${s.col}`));
-          const placed = free.length > 0 ? free : [start];
-          await assignSlots(selectedRackId, placed, savedWineId);
-          const targetQuantity = mode === 'merge' ? baseQuantity + placed.length : placed.length;
-          await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: targetQuantity } });
-          qc.invalidateQueries({ queryKey: ['rack-slots', selectedRackId] });
-          qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-          qc.invalidateQueries({ queryKey: ['cellar'] });
-          setAddingToCellar(false);
-          if (placed.length < qty) {
-            showAlert({
-              title: 'Placed what fit',
-              body: `Only ${placed.length} of ${qty} bottle${qty === 1 ? '' : 's'} fit from the first free slot — the rest weren't placed.`,
-              buttons: [{ text: 'OK', onPress: () => router.replace(`/cellar/rack/${selectedRackId}` as any) }],
-            });
-          } else {
-            // No confirmation popup — landing on the rack with the bottles in
-            // place is confirmation enough; keep the add flow quick so the user
-            // can move straight to the next wine.
-            router.replace(`/cellar/rack/${selectedRackId}` as any);
-          }
-          return;
-        }
-        showAlert({ title: 'Rack full', body: 'There were no free slots, so this wine was saved to your Full Cellar List instead.' });
+      const targetQuantity = mode === 'merge' ? baseQuantity + qty : qty;
+      await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: targetQuantity } });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      // Rough free-slot check just to catch a genuinely full rack (large-format rows
+      // may vary the exact count, but 0 free is unambiguous).
+      const slots = rack ? await getRackSlots(selectedRackId) : [];
+      const occupiedCount = slots.filter((s) => s.cellar_wine_id).length;
+      const freeApprox = rack ? rack.rows * rack.cols - occupiedCount : 0;
+      setAddingToCellar(false);
+      if (!rack || freeApprox <= 0) {
+        showAlert({
+          title: 'Rack full',
+          body: 'There were no free slots, so this wine was saved to your Full Cellar List. You can place it later.',
+          buttons: [{ text: 'OK', onPress: () => router.replace('/cellar/list?added=1' as any) }],
+        });
+        return;
       }
+      router.replace(`/cellar/rack/${selectedRackId}?placeWine=${savedWineId}&placeLimit=${qty}` as any);
+      return;
     }
 
     // "+ New Location" — the wine is saved to the cellar; ask what kind of
