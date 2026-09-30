@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share, ScrollView } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
@@ -28,7 +28,7 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { valueWine } from '../../src/services/pricing';
-import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
+import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
@@ -101,7 +101,12 @@ function RemovalRow({ removal }: { removal: { id: string; removed_at: string; co
 
 export default function CellarWineDetail() {
   useKeepAwake();
-  const { wineId, from } = useLocalSearchParams<{ wineId: string; from?: string }>();
+  const { wineId, from, fromRackId, fromRow, fromCol } = useLocalSearchParams<{ wineId: string; from?: string; fromRackId?: string; fromRow?: string; fromCol?: string }>();
+  // The exact rack slot the user tapped to open this card (when arriving from a
+  // rack), so archive/remove frees THAT bottle's slot rather than an arbitrary one.
+  const tappedSlot = fromRackId && fromRow != null && fromCol != null
+    ? { rackId: fromRackId, row: parseInt(fromRow, 10), col: parseInt(fromCol, 10) }
+    : null;
   // Coming in via Profile → Wine Reviews — the chef-pairing button on
   // this card is swapped for a Post Review to Community CTA so the user
   // can share what they just wrote with other Vinster users.
@@ -238,6 +243,7 @@ export default function CellarWineDetail() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [titleEditOpen, setTitleEditOpen] = useState(false);
+  const [archiveHistoryOpen, setArchiveHistoryOpen] = useState(false);
   const [producerDraft, setProducerDraft] = useState('');
   const [wineNameDraft, setWineNameDraft] = useState('');
   const [regionDraft, setRegionDraft] = useState('');
@@ -845,12 +851,17 @@ export default function CellarWineDetail() {
         // from loose is the expected, silent behaviour (there's no "live cellar
         // rack" — a wine's placement is just where it sits).
         const unplacedBottles = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
-        const slotsToFree = Math.max(0, count - unplacedBottles);
+        let slotsToFree = Math.max(0, count - unplacedBottles);
         if (slotsToFree > 0) {
-          // Free from placements — rack/fridge slots first, THEN alt-cellar
-          // ('location') placements. removeSlotsForWine only touched racks, so
-          // archiving bottles that lived in an alt cellar left ghost bottles there.
-          await releaseBottlesFromPlacements(wine!.id, slotsToFree);
+          // Free the SPECIFIC slot the user tapped to open this card first, so the
+          // exact bottle they selected is the one removed from the rack (not an
+          // arbitrary same-wine slot). Then free any remainder from placements —
+          // rack/fridge slots first, THEN alt-cellar ('location') placements.
+          if (tappedSlot && Number.isFinite(tappedSlot.row) && Number.isFinite(tappedSlot.col)) {
+            await clearSlot(tappedSlot.rackId, tappedSlot.row, tappedSlot.col);
+            slotsToFree -= 1;
+          }
+          if (slotsToFree > 0) await releaseBottlesFromPlacements(wine!.id, slotsToFree);
           qc.invalidateQueries({ queryKey: ['slot-assignments'] });
           qc.invalidateQueries({ queryKey: ['rack-slots'] });
           qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
@@ -1512,6 +1523,23 @@ export default function CellarWineDetail() {
           more than one wine (e.g. a Syrah AND a Chenin). Picking the variant
           pins the grape so the intel card is accurate. Mirrors the scan flow's
           confirm popup. */}
+      {/* Archive / removal history — opened from the "View Archive History" link. */}
+      <Modal visible={archiveHistoryOpen} transparent animationType="fade" onRequestClose={() => setArchiveHistoryOpen(false)}>
+        <View style={styles.titleEditOverlay}>
+          <View style={styles.titleEditSheet}>
+            <Text style={styles.titleEditHeading}>Archive History</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {removals.map((ev) => (<RemovalRow key={ev.id} removal={ev} />))}
+            </ScrollView>
+            <View style={styles.noteActions}>
+              <TouchableOpacity onPress={() => setArchiveHistoryOpen(false)}>
+                <Text style={styles.cancelText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={grapeConfirmOpen} transparent animationType="fade" onRequestClose={() => setGrapeConfirmOpen(false)}>
         <View style={styles.candOverlay}>
           <View style={styles.candSheet}>
@@ -1817,6 +1845,13 @@ export default function CellarWineDetail() {
           {bottlesInCellar > 0 && !isArchived ? (
             <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}>
               <Text style={styles.statAction}>Add to Archive →</Text>
+            </TouchableOpacity>
+          ) : null}
+          {/* Quick access to this wine's archive/removal history — only when there
+              is one. */}
+          {removals.length > 0 ? (
+            <TouchableOpacity onPress={() => setArchiveHistoryOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.statAction}>View Archive History</Text>
             </TouchableOpacity>
           ) : null}
         </View>

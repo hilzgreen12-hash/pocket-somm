@@ -700,8 +700,10 @@ export default function RackGridScreen() {
       // Navigate to the same wine detail card that Cellar List uses, so
       // there's a single source of truth for the wine UI. The from=rack
       // hint tells the wine card to hide the "In {rack} →" affordance
-      // (which would just point back to where we came from).
-      router.push(`/cellar/${wine.id}?from=rack` as any);
+      // (which would just point back to where we came from). Pass the exact
+      // slot so archiving/removing from the card frees THIS bottle's slot, not
+      // an arbitrary one of the same wine.
+      router.push(`/cellar/${wine.id}?from=rack&fromRackId=${rackId}&fromRow=${row}&fromCol=${col}` as any);
     } else if (pendingWineId) {
       if (placePrechosen) {
         // "Add More Bottles" already asked how many up front — place straight
