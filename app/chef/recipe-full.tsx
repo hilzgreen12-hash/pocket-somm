@@ -125,7 +125,9 @@ export default function RecipeFullScreen() {
       // catch below shows a graceful fallback message.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const Print = require('expo-print');
-      await Print.printAsync({ html: buildRecipeHtml(pairing, wineLine) });
+      // Print uses the clean white-paper layout (buildPrintHtml), not the branded
+      // share card — it was written for exactly this but never wired in.
+      await Print.printAsync({ html: buildPrintHtml(pairing, wineLine) });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('Cannot find module') || msg.includes("Can't find variable")) {

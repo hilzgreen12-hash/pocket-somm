@@ -76,8 +76,11 @@ function preFilterWines(wines: ExtractedWine[], prefs: ProfileFilters | null | u
     filtered = filtered.filter((w) => !prefs.dislikedGrapes!.some((g) =>
       (w.grape ?? '').toLowerCase().includes(g.toLowerCase())));
   }
-  const budget = prefs.defaultBudget;
-  if (budget) filtered = filtered.filter((w) => w.menuPrice === null || w.menuPrice <= budget);
+  // NB: do NOT apply prefs.defaultBudget as a hard ceiling here. It's only the
+  // DEFAULT for the per-scan budget slider; the authoritative ceiling is the
+  // per-scan budget applied in applyScanFilters. Filtering here too made the
+  // effective ceiling min(profileDefault, scanBudget), so raising the scan slider
+  // above the saved default still silently excluded wines.
   const isFavourite = (w: ExtractedWine) =>
     prefs.favouriteRegions?.some((r) => w.region?.toLowerCase().includes(r.toLowerCase())) ||
     prefs.favouriteGrapes?.some((g) => (w.grape ?? '').toLowerCase().includes(g.toLowerCase()));
