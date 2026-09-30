@@ -166,6 +166,40 @@ const FIXES: Array<[RegExp, string]> = [
   [/\bvoo[\s-]?vray\b/gi, 'Vouvray'],
   [/\bmoose?[\s-]?ka[\s-]?day\b/gi, 'Muscadet'],
 
+  // ---- Southern France: Languedoc-Roussillon, Provence, southern Rhône ------
+  // STT mangles these hard ("Languedoc" → "long dock"). Distinctive phonetic
+  // mis-hears + accent normalisation. "Cassis" is deliberately omitted — it
+  // collides with the blackcurrant tasting note.
+  [/\blong[\s-]?dock\b/gi, 'Languedoc'],
+  [/\blang[\s-]?(?:ue|weh|wa)?[\s-]?dock?\b/gi, 'Languedoc'],
+  [/\blanguedoc\b/gi, 'Languedoc'],
+  [/\broo?[\s-]?see[\s-]?yon\b/gi, 'Roussillon'],
+  [/\broussillon\b/gi, 'Roussillon'],
+  [/\bcor[\s-]?bee?[\s-]?air?s?\b/gi, 'Corbières'],
+  [/\bcorbieres\b/gi, 'Corbières'],
+  [/\bmin[\s-]?er[\s-]?v(?:wa|oy)a?\b/gi, 'Minervois'],
+  [/\bminervois\b/gi, 'Minervois'],
+  [/\bfo[\s-]?zh?air?s?\b/gi, 'Faugères'],
+  [/\bfaugeres\b/gi, 'Faugères'],
+  [/\bfee[\s-]?too\b/gi, 'Fitou'],
+  [/\bfitou\b/gi, 'Fitou'],
+  [/\bpic[\s-]?pool?\b/gi, 'Picpoul'],
+  [/\bpicpoul\b/gi, 'Picpoul'],
+  [/\bsan?t?[\s-]?shin[\s-]?yan\b/gi, 'Saint-Chinian'],
+  [/\bsaint[\s-]?chinian\b/gi, 'Saint-Chinian'],
+  [/\bpic\s+san?t?[\s-]?loo\b/gi, 'Pic Saint-Loup'],
+  [/\bban[\s-]?yools?\b/gi, 'Banyuls'],
+  [/\bbanyuls\b/gi, 'Banyuls'],
+  [/\bmaury\b/gi, 'Maury'],
+  [/\bcol[\s-]?ee[\s-]?oor\b/gi, 'Collioure'],
+  [/\bcollioure\b/gi, 'Collioure'],
+  [/\bta[\s-]?vel\b/gi, 'Tavel'],
+  [/\blee[\s-]?rack\b/gi, 'Lirac'],
+  [/\blirac\b/gi, 'Lirac'],
+  [/\bcotes?\s+d(?:e|u)\s+pro[\s-]?vonce?\b/gi, 'Côtes de Provence'],
+  [/\bcostieres?\s+de\s+neem\b/gi, 'Costières de Nîmes'],
+  [/\bter[\s-]?ass(?:es)?\s+d(?:u|oo)\s+lar[\s-]?zac\b/gi, 'Terrasses du Larzac'],
+
   // ---- Italy ---------------------------------------------------------------
   [/\bbar[\s-]?olo\b/gi, 'Barolo'],
   [/\bbar[\s-]?bar[\s-]?esco\b/gi, 'Barbaresco'],
