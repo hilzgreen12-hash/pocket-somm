@@ -12,6 +12,7 @@ import { showAlert } from './AppAlert';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
 import { wineHeaderLine } from '../utils/wineHeader';
+import { splitPersonality } from '../utils/personalityText';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
@@ -30,7 +31,7 @@ const INSIGHT_EXAMPLES: PlaceholderCard[] = [
 
 type Tile =
   | { kind: 'bottle'; key: string; dismissKey: string; wine: CellarWine }
-  | { kind: 'fact'; key: string; dismissKey: string; icon: keyof typeof Ionicons.glyphMap; value: string; title: string; meta: string; wineId?: string; thumbWine?: CellarWine; onTap?: () => void };
+  | { kind: 'fact'; key: string; dismissKey: string; icon: keyof typeof Ionicons.glyphMap; value: string; valueSmall?: boolean; title: string; meta: string; wineId?: string; thumbWine?: CellarWine; onTap?: () => void };
 
 function runningLowWines(wines: CellarWine[], removalSet: Set<string>, dismissed: string[]): CellarWine[] {
   const dset = new Set(dismissed);
@@ -75,7 +76,12 @@ export function CellarInsightsCarousel() {
         .select('last_wine_personality, last_recipe_personality')
         .eq('user_id', session!.user.id)
         .maybeSingle();
-      return { wine: !!data?.last_wine_personality, recipe: !!data?.last_recipe_personality };
+      return {
+        wine: !!data?.last_wine_personality,
+        recipe: !!data?.last_recipe_personality,
+        wineText: (data?.last_wine_personality as string | null) ?? null,
+        recipeText: (data?.last_recipe_personality as string | null) ?? null,
+      };
     },
   });
   // Pairing history — only surface a pairing insight if the user actually pairs.
@@ -185,11 +191,20 @@ export function CellarInsightsCarousel() {
   // Personality sketch — surfaced here so users see it without opening the You tab.
   // Only when a sketch exists (don't show an empty tile).
   const hasSketch = !!(sketches?.wine || sketches?.recipe);
+  const sketchCat: 'wine' | 'recipe' = sketches?.wine ? 'wine' : 'recipe';
+  const sketchTitle = splitPersonality(sketchCat === 'wine' ? sketches?.wineText : sketches?.recipeText).title;
+  // The box shows a brief explainer of what a sketch IS (instead of a "You" logo);
+  // the sketch's own title sits on the meta line below (replacing "Tap to read").
+  const sketchBlurb = sketchCat === 'recipe'
+    ? "Vinster's read on who you are in the kitchen — drawn from your recipes, dining and reviews."
+    : "Vinster's read on who you are in the cellar — drawn from your bottles, choices and reviews.";
   const personalityTile: Tile | null = hasSketch && !dset.has('fact:personality')
     ? {
         kind: 'fact', key: 'personality', dismissKey: 'fact:personality', icon: 'person-circle-outline',
-        value: 'You', title: 'Your Personality Sketch', meta: 'Tap to read',
-        onTap: () => router.push(`/profile/personality?category=${sketches?.wine ? 'wine' : 'recipe'}` as any),
+        value: sketchBlurb, valueSmall: true,
+        title: 'Your Personality Sketch',
+        meta: sketchTitle ?? 'Tap to read',
+        onTap: () => router.push(`/profile/personality?category=${sketchCat}` as any),
       }
     : null;
 
@@ -246,7 +261,7 @@ export function CellarInsightsCarousel() {
             ) : (
               <View style={styles.factBox}>
                 <Ionicons name={t.icon} size={30} color={colors.gold} />
-                <Text style={styles.factValue} numberOfLines={2}>{t.value}</Text>
+                <Text style={t.valueSmall ? styles.factBlurb : styles.factValue} numberOfLines={t.valueSmall ? 4 : 2}>{t.value}</Text>
               </View>
             )}
             <Text style={styles.cardName} numberOfLines={2}>{t.title}</Text>
@@ -268,6 +283,9 @@ const styles = StyleSheet.create({
   // Fact tile — same 220×165 footprint as a wine thumbnail so the row aligns.
   factBox: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: 10 },
   factValue: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
+  // Smaller explanatory text (e.g. what a personality sketch is) that needs to fit a
+  // full sentence in the box rather than a single headline value.
+  factBlurb: { fontFamily: fonts.bodyRegular, fontSize: 13, lineHeight: 18, color: colors.textMuted, textAlign: 'center', letterSpacing: 0.2 },
   // "Only 1 Left" pill, top-right of the thumbnail — IDENTICAL to the Drink Now
   // "Last Call" stamp: black ground, gold (yellow) text + border.
   badge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(18,11,10,0.82)', borderRadius: 8, borderWidth: 1, borderColor: colors.gold, paddingHorizontal: 8, paddingVertical: 3 },
