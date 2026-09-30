@@ -1783,7 +1783,15 @@ export default function CellarWineDetail() {
               placements model so partially-placed wines no longer hide bottles. */}
           {(() => {
             const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
-            return unplaced > 0 && placedCount(winePlacements) > 0 ? (
+            // Partially-placed wine (some placed, some loose): make the "not yet
+            // placed" line TAPPABLE so the remaining bottles can actually be placed —
+            // previously there was no way to (the "Add to Location" action only shows
+            // when the wine has NO placements at all).
+            return unplaced > 0 && placedCount(winePlacements) > 0 && !isArchived && !isWishlist ? (
+              <TouchableOpacity onPress={handleAddToLocation} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Text style={styles.statAction}>{unplaced} bottle{unplaced === 1 ? '' : 's'} not yet placed — tap to place {unplaced === 1 ? 'it' : 'them'} →</Text>
+              </TouchableOpacity>
+            ) : unplaced > 0 && placedCount(winePlacements) > 0 ? (
               <Text style={styles.statActionMuted}>{unplaced} bottle{unplaced === 1 ? '' : 's'} not yet placed in home storage</Text>
             ) : null;
           })()}
