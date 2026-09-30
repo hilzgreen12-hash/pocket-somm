@@ -148,25 +148,34 @@ export function CellarInsightsCarousel() {
     facts.push({ kind: 'fact', key: 'producer', dismissKey: producerKey, icon: 'trophy-outline', value: topProducer.label, title: topProducer.label, meta: `Most Collected · ${topProducer.bottles} bottles`, wineId: producerWine?.id, thumbWine: producerWine });
   }
 
-  // Pairing insight — ONLY when the user actually uses the pairing feature. Most-
-  // paired dish (a dish they've paired ≥2×); no tile if they pair rarely or every
-  // dish is distinct (no genuine "most").
-  const dishAgg = new Map<string, { label: string; n: number }>();
+  // Pairing insight — ONLY for users who actually pair. "Your Most Paired Wine":
+  // the cellar wine Vinster has recommended across the most of your dishes (your
+  // most versatile food wine). Counted from each session's stored cellar_result.
+  // Only shown when a wine recurs across ≥2 dishes (a genuine "most").
+  const pairWineAgg = new Map<string, { name: string; n: number }>();
   for (const s of pairingSessions) {
-    const d = (s.dish ?? '').trim();
-    if (!d) continue;
-    const cur = dishAgg.get(d.toLowerCase()) ?? { label: d, n: 0 };
-    cur.n += 1;
-    dishAgg.set(d.toLowerCase(), cur);
+    for (const rec of s.cellar_result ?? []) {
+      if (!rec?.cellarWineId) continue;
+      const cur = pairWineAgg.get(rec.cellarWineId) ?? { name: rec.wineName ?? '', n: 0 };
+      cur.n += 1;
+      pairWineAgg.set(rec.cellarWineId, cur);
+    }
   }
-  const topDish = [...dishAgg.values()].sort((a, b) => b.n - a.n)[0];
-  const dishKey = topDish ? `fact:dish:${topDish.label.toLowerCase()}` : '';
-  if (topDish && topDish.n >= 2 && !dset.has(dishKey)) {
-    facts.push({
-      kind: 'fact', key: 'dish', dismissKey: dishKey, icon: 'restaurant-outline',
-      value: topDish.label, title: 'Most-Paired Dish', meta: `Paired ${topDish.n}×`,
-      onTap: () => router.push('/chef/find-pairing' as any),
-    });
+  const topPairWine = [...pairWineAgg.entries()].sort((a, b) => b[1].n - a[1].n)[0];
+  if (topPairWine && topPairWine[1].n >= 2) {
+    const [wid, info] = topPairWine;
+    const pairWineKey = `fact:mostpairedwine:${wid}`;
+    if (!dset.has(pairWineKey)) {
+      const matched = wines.find((w) => w.id === wid);
+      facts.push({
+        kind: 'fact', key: 'mostpairedwine', dismissKey: pairWineKey, icon: 'wine-outline',
+        value: matched ? (matched.wine_name ?? info.name) : info.name,
+        title: 'Your Most Paired Wine',
+        meta: `Recommended for ${info.n} dishes`,
+        wineId: matched ? matched.id : undefined,
+        thumbWine: matched ?? undefined,
+      });
+    }
   }
 
   // Personality sketch — surfaced here so users see it without opening the You tab.
