@@ -197,6 +197,52 @@ export default function LineupDetailScreen() {
     )));
   }
 
+  // Tap the "Your Cellar" badge on a matched wine → archive it from the cellar,
+  // or mark it as not actually from the cellar (Off Cellar).
+  function openCellarBadgeOptions(index: number, w: LineupWine, matchedCellar: CellarWine | null) {
+    showAlert({
+      title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || 'This wine',
+      buttons: [
+        ...(matchedCellar ? [{ text: 'Archive from Cellar', onPress: () => confirmArchiveFromCellar(w, matchedCellar) }] : []),
+        { text: 'This wine was Off Cellar', onPress: () => markOffCellar(index) },
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+  // Unlink the bottle from the cellar — it wasn't actually from the user's cellar.
+  function markOffCellar(index: number) {
+    if (!lineup) return;
+    const current: LineupWine[] = lineup.wines ?? [];
+    persistWines(current.map((w, i) => (i === index ? { ...w, cellar_wine_id: null, confirmed: false } : w)));
+  }
+  // Archive this lineup wine's bottles from the live cellar (moves them to Your
+  // Cellar Archive), reusing the canonical archiveBottles helper.
+  function confirmArchiveFromCellar(w: LineupWine, cw: CellarWine) {
+    const count = Math.max(1, Math.min(cw.quantity ?? 1, w.count ?? 1));
+    showAlert({
+      title: `Archive ${count} ${count === 1 ? 'bottle' : 'bottles'}?`,
+      body: `Move ${count} ${count === 1 ? 'bottle' : 'bottles'} of ${wineHeaderLine(cw.producer, cw.wine_name, cw.vintage)} to Your Cellar Archive.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' as const },
+        { text: 'Archive', style: 'destructive' as const, onPress: async () => {
+          try {
+            const today = new Date().toISOString().split('T')[0];
+            await archiveBottles(cw, count, today);
+            qc.invalidateQueries({ queryKey: ['cellar'] });
+            qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+            qc.invalidateQueries({ queryKey: ['cellar-removals', cw.id] });
+            qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+            qc.invalidateQueries({ queryKey: ['rack-slots'] });
+            qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+            showAlert({ title: 'Archived', body: `${count} ${count === 1 ? 'bottle' : 'bottles'} moved to Your Cellar Archive.` });
+          } catch (err) {
+            showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+          }
+        } },
+      ],
+    });
+  }
+
   // Edit the date + location stamp (tap the stamp below the photo).
   const [stampOpen, setStampOpen] = useState(false);
   const [dateDraft, setDateDraft] = useState('');
@@ -717,10 +763,13 @@ export default function LineupDetailScreen() {
                       </Text>
                     </TouchableOpacity>
                     {subParts.length > 0 ? <Text style={styles.wineDetail} numberOfLines={1}>{subParts.join(' · ')}</Text> : null}
-                    {/* Status stamp: Your Cellar (matched), or a tappable Off Cellar
-                        that opens "This was from my cellar" to link the bottle. */}
+                    {/* Status stamp. "Your Cellar" (matched) → tap for Archive from
+                        Cellar / mark Off Cellar. "Off Cellar" → tap to link it via
+                        "This was from my cellar". */}
                     {w.cellar_wine_id ? (
-                      <Text style={styles.stampTag}>Your Cellar</Text>
+                      <TouchableOpacity onPress={() => openCellarBadgeOptions(i, w, matchedCellar ?? null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={styles.stampTag}>Your Cellar</Text>
+                      </TouchableOpacity>
                     ) : (
                       <TouchableOpacity onPress={() => confirmFromCellar(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.stampTag}>Off Cellar</Text>

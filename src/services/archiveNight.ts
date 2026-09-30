@@ -1,7 +1,8 @@
 import type { CellarWine } from '../types/wine';
 import type { DetectedBottle } from '../api/label';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/cellar';
-import { clearWineFromRacks, removeSlotsForWine } from '../api/racks';
+import { clearWineFromRacks } from '../api/racks';
+import { clearLocationPlacements, releaseBottlesFromPlacements, fetchPlacementsForWine, placedCount } from '../api/placements';
 import { wineNameKey, looseWineMatch } from '../utils/wineIdentity';
 
 export interface NightMatch {
@@ -95,11 +96,19 @@ export async function archiveBottles(wine: CellarWine, count: number, removeDate
   const newQuantity = wine.quantity - effective;
   if (newQuantity <= 0) {
     await updateCellarWine(wine.id, { quantity: effective, archived_at: archivedAt } as any);
+    // Detach from ALL storage — rack slots AND alt-cellar placements — or the
+    // archived bottle lingers as a ghost in a rack / home storage location.
     await clearWineFromRacks(wine.id);
+    await clearLocationPlacements(wine.id);
   } else {
     await updateCellarWine(wine.id, { quantity: newQuantity } as any);
     const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine as any;
     await addCellarWine({ ...rest, quantity: effective, archived_at: archivedAt, is_wishlist: false } as any);
-    await removeSlotsForWine(wine.id, effective);
+    // Free the archived bottles taking loose ones first, then racks, then
+    // alt-cellar placements (removeSlotsForWine freed racks only, leaving ghosts).
+    const wp = await fetchPlacementsForWine(wine.id);
+    const unplaced = Math.max(0, wine.quantity - placedCount(wp));
+    const toFree = Math.max(0, effective - unplaced);
+    if (toFree > 0) await releaseBottlesFromPlacements(wine.id, toFree);
   }
 }
