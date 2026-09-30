@@ -604,6 +604,15 @@ export default function CellarWineDetail() {
     router.push(`/cellar/rack/${rackId}` as any);
   }
 
+  // Place EXISTING unplaced bottles: open the rack in select-slots mode, capped at
+  // the unplaced count. The user taps that many empty slots (thumbnails fill) and
+  // presses Confirm — no "how many?" prompt or starting-slot run.
+  function placeUnplacedInRack(rackId: string) {
+    if (!wine) return;
+    const unplaced = Math.max(1, (wine.quantity ?? 0) - placedCount(winePlacements));
+    router.push(`/cellar/rack/${rackId}?placeWine=${wine.id}&placeLimit=${unplaced}` as any);
+  }
+
   // File the (unplaced) wine under a cellar-wide bespoke Location filter — an
   // instant tag, no physical placement.
   async function addWineToLocationFilter(locationId: string) {
@@ -644,8 +653,8 @@ export default function CellarWineDetail() {
   // it into an Other Home Storage location, or tag it under a Cellar List location.
   function handleAddToLocation() {
     const buttons = [
-      // Existing unplaced bottles → place them, don't add to the count.
-      ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id, false) })),
+      // Existing unplaced bottles → select empty slots to place them (no count bump).
+      ...racks.map((r) => ({ text: r.name, onPress: () => placeUnplacedInRack(r.id) })),
       ...storageLocations.map((l) => ({ text: `${l.name} (home storage)`, onPress: () => fileInStorageLocation(l.id) })),
       ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => addWineToLocationFilter(l.id) })),
     ];

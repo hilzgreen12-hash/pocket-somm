@@ -78,7 +78,7 @@ function Counter({ label, value, onChange }: { label: string; value: number; onC
 }
 
 export default function RackGridScreen() {
-  const { rackId, highlight, lineup, placed } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string; placed?: string }>();
+  const { rackId, highlight, lineup, placed, placeWine, placeLimit } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string; placed?: string; placeWine?: string; placeLimit?: string }>();
   const navigation = useNavigation();
   const { session } = useAuth();
   const { slots, isLoading, assign } = useRack(rackId);
@@ -175,6 +175,11 @@ export default function RackGridScreen() {
   // (bottom bar) — short-press empty slots, one bottle each, then Save. No
   // "how many?" popup, no orientation.
   const [addMoreWine, setAddMoreWine] = useState<{ wineId: string; wineName: string } | null>(null);
+  // "Place unplaced bottles" (from the wine card): tap up to `limit` empty slots —
+  // each fills with the wine's thumbnail immediately — then Confirm to place them.
+  // Places EXISTING bottles (no quantity change), unlike Add More.
+  const [placeExisting, setPlaceExisting] = useState<{ wine: CellarWine; limit: number } | null>(null);
+  const placeExistingStartedRef = useRef(false);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [slotUploading, setSlotUploading] = useState(false);
   // Edit-rack modal — Wipe Contents / Rename / Resize / Delete.
@@ -524,6 +529,16 @@ export default function RackGridScreen() {
   );
   const awaitingBottles = awaitingWines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
 
+  // Enter "place unplaced bottles" mode when the wine card sends us here with a
+  // wine + a limit (the unplaced count). Once only, after the cellar has loaded.
+  useEffect(() => {
+    if (placeExistingStartedRef.current || !placeWine || wines.length === 0) return;
+    const w = wines.find((x) => x.id === placeWine);
+    if (!w) return;
+    placeExistingStartedRef.current = true;
+    setPlaceExisting({ wine: w, limit: Math.max(1, parseInt(placeLimit ?? '1', 10) || 1) });
+  }, [placeWine, placeLimit, wines]);
+
   // Bottles awaiting a slot are placed ONE at a time — each tapped empty slot
   // takes the next bottle, and the awaiting flag clears only once every bottle
   // of the wine has a slot. No "how many?" prompt, no second instruction bubble.
@@ -545,6 +560,11 @@ export default function RackGridScreen() {
           .catch(() => {});
       }
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      // Refresh the placement-backed counts (the wine card's "N not yet placed"
+      // and the Full Cellar List's location filter) IMMEDIATELY on every bottle —
+      // a lagging count made users re-place bottles and corrupt their cellar.
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
       await qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
     } catch (err) {
       showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -654,6 +674,8 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
       const n = slots.length;
       setSavedMsg(n === 1 ? 'Saved to rack & Cellar List' : `${n} bottles saved to rack & Cellar List`);
     } catch (err) {
@@ -669,11 +691,66 @@ export default function RackGridScreen() {
     setMultiSlots(new Set());
   }
 
+  // "Place unplaced bottles": toggle an empty slot in/out of the selection, up to
+  // the unplaced limit, showing the wine's thumbnail immediately on selected slots.
+  function togglePlaceExistingSlot(row: number, col: number) {
+    if (!placeExisting) return;
+    const key = `${row},${col}`;
+    if (slotMap[key]?.cellar_wine_id) return; // empty slots only
+    const alreadySelected = multiSlots.has(key);
+    if (!alreadySelected && multiSlots.size >= placeExisting.limit) {
+      setSavedMsg(`That's all ${placeExisting.limit} unplaced bottle${placeExisting.limit === 1 ? '' : 's'} — tap Confirm.`);
+      return;
+    }
+    setMultiSlots((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+    setOptimisticSlots((m) => {
+      const n = { ...m };
+      if (alreadySelected) delete n[key]; else n[key] = placeExisting.wine;
+      return n;
+    });
+  }
+
+  function cancelPlaceExisting() {
+    setOptimisticSlots((m) => { const n = { ...m }; for (const k of multiSlots) delete n[k]; return n; });
+    setMultiSlots(new Set());
+    setPlaceExisting(null);
+    placeExistingStartedRef.current = false;
+  }
+
+  // Place the selected slots — assigns the EXISTING (unplaced) bottles to them,
+  // no quantity change. Counts refresh immediately (placements invalidation).
+  async function placeExistingConfirm() {
+    if (!placeExisting || multiSlots.size === 0) return;
+    const selectedKeys = Array.from(multiSlots);
+    const slots = selectedKeys.map((k) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; });
+    const wineId = placeExisting.wine.id;
+    try {
+      await assignSlots(rackId, slots, wineId);
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      const n = slots.length;
+      setSavedMsg(n === 1 ? 'Bottle placed in this rack' : `${n} bottles placed in this rack`);
+    } catch (err) {
+      showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setOptimisticSlots((m) => { const n = { ...m }; for (const k of selectedKeys) delete n[k]; return n; });
+      setMultiSlots(new Set());
+      setPlaceExisting(null);
+      placeExistingStartedRef.current = false;
+    }
+  }
+
   function openSlot(row: number, col: number) {
     // `rack` is racks.find(...) so it is Rack | undefined, and the empty-slot
     // branch below dereferences rack.rows/.cols. There is no render-level
     // guard, so a stale link to a deleted rack would throw here.
     if (!rack) return;
+    // "Place unplaced bottles" mode: taps select empty slots (thumbnail fills)
+    // up to the unplaced count; Confirm places them. Takes priority.
+    if (placeExisting) { togglePlaceExistingSlot(row, col); return; }
     // Multi-select in progress (new wine OR "add more bottles"): taps toggle
     // empty slots in/out of the set rather than opening or navigating.
     if (multiSelectMode || addMoreWine) { toggleMultiSlot(row, col); return; }
@@ -1004,6 +1081,10 @@ export default function RackGridScreen() {
 
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
+      // Placement-backed counts must update immediately (wine card "not yet placed",
+      // FCL location filter) — a lag caused users to re-place and corrupt the cellar.
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
       await qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       setPendingWineId(null);
       setPlacingAt(null);
@@ -1599,7 +1680,25 @@ export default function RackGridScreen() {
       {/* STATIC header (outside the scroll view). When an Add Multiples / Add
           More flow is active, its bar sits here in place of the instructions so
           it never overlays the grid below; only the filters + grid scroll. */}
-      {multiSelectMode && !addMoreWine ? (
+      {placeExisting ? (
+        <View style={styles.multiBar}>
+          <View style={styles.multiBarInner}>
+            <Text style={styles.multiBarHeader} numberOfLines={2}>{wineHeaderLine(placeExisting.wine.producer, placeExisting.wine.wine_name, placeExisting.wine.vintage) || placeExisting.wine.wine_name}</Text>
+            <Text style={styles.multiBarText}>
+              {placeExisting.limit === 1 ? 'Tap the slot you would like to place the bottle into' : 'Tap every slot you would like to place bottles into'}
+              {multiSlots.size > 0 ? `  ·  ${multiSlots.size}/${placeExisting.limit}` : ''}
+            </Text>
+            <View style={styles.multiBarBtns}>
+              <TouchableOpacity style={styles.multiBarCancel} onPress={cancelPlaceExisting} activeOpacity={0.8}>
+                <Text style={styles.multiBarCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.multiBarPlace, multiSlots.size === 0 && { opacity: 0.4 }]} onPress={placeExistingConfirm} disabled={multiSlots.size === 0} activeOpacity={0.8}>
+                <Text style={styles.multiBarPlaceText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      ) : multiSelectMode && !addMoreWine ? (
         <View style={styles.multiBar}>
           <View style={styles.multiBarInner}>
             <Text style={styles.multiBarHeader}>Add Multiples of the same wine</Text>
