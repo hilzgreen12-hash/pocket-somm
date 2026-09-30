@@ -566,6 +566,13 @@ export default function ImportCellarScreen() {
           const next = base + qty;
           mergeTotals.set(existing.id, next);
           await updateCellarWine(existing.id, { quantity: next });
+          // File the merged-in bottles into the chosen import location too — the
+          // Full Cellar List reads cellar_placements, so without this the added
+          // bottles bumped the count but never appeared in the folder (and the
+          // wine's placement total no longer matched its quantity).
+          if (locationId) {
+            try { await addLocationPlacement(existing.id, locationId, null, qty); } catch { /* best-effort */ }
+          }
           const info = mergedInfo.get(existing.id);
           mergedInfo.set(existing.id, {
             name: [existing.producer, existing.wine_name, existing.vintage].filter(Boolean).join(' '),

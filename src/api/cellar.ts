@@ -4,15 +4,27 @@ import { wineNameKey } from '../utils/wineIdentity';
 import { clearWineFromRacks } from './racks';
 
 export async function getCellarWines(userId: string): Promise<CellarWine[]> {
-  const { data, error } = await supabase
-    .from('cellar_wines')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_wishlist', false)
-    .is('archived_at', null)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  // Page through in 1000-row chunks — PostgREST caps a single response at ~1000
+  // rows, which silently truncated large (~9k) imported cellars, undercounting
+  // Cellar Statistics totals and hiding wines from "From My Cellar" pairing +
+  // import de-dup. Fetch every page so callers always see the whole cellar.
+  const PAGE = 1000;
+  const out: CellarWine[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('cellar_wines')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_wishlist', false)
+      .is('archived_at', null)
+      .order('created_at', { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
 }
 
 // ----- Removal events (cellar_wine_removals) -----

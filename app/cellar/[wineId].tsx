@@ -30,6 +30,7 @@ import { generatePairings, fetchProducerRange, type ProducerRange, type Producer
 import { valueWine } from '../../src/services/pricing';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements } from '../../src/api/placements';
+import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
@@ -1348,27 +1349,12 @@ export default function CellarWineDetail() {
     );
   }
 
-  // Drinking-window status. 'unknown' is no longer a valid state — Vinster
-  // always estimates a window — so when a legacy row still carries 'unknown'
-  // (or a blank status) but has from/to years, derive the real status from
-  // the current year rather than showing "Unknown" beside a date range.
-  const rawWindowStatus = wine.drinking_window_status;
-  const effectiveWindowStatus = (() => {
-    if (rawWindowStatus && rawWindowStatus !== 'unknown' && STATUS_LABELS[rawWindowStatus]) return rawWindowStatus;
-    const from = wine.drinking_window_from;
-    const to = wine.drinking_window_to;
-    if (from || to) {
-      const yr = new Date().getFullYear();
-      if (from && yr < from) return 'too_young';
-      if (to && yr > to) return 'declining';
-      if (from && to) {
-        const span = to - from;
-        return span > 0 && yr <= from + Math.ceil(span / 3) ? 'approaching' : 'peak';
-      }
-      return 'peak';
-    }
-    return rawWindowStatus;
-  })();
+  // Drinking-window status — use the SINGLE canonical derivation (maturity.ts,
+  // the same one the Full Cellar List filter, Cellar Statistics and the Drink Now
+  // carousel use), so the status shown on the card always matches the bucket the
+  // filter puts the wine in. It derives from the from/to years when present
+  // (always current) and falls back to the stored status only when there are none.
+  const effectiveWindowStatus = effectiveMaturity(wine);
   const windowColor = STATUS_COLORS[effectiveWindowStatus] ?? colors.textMuted;
   const windowLabel = STATUS_LABELS[effectiveWindowStatus] ?? 'Unknown';
 
