@@ -7,6 +7,7 @@ import { useCellar, useWishList } from '../../../src/hooks/useCellar';
 import { useAttachLabelPhoto } from '../../../src/hooks/useAttachLabelPhoto';
 import { usePreferences } from '../../../src/hooks/usePreferences';
 import { valueWine } from '../../../src/services/pricing';
+import { fetchWineCandidates } from '../../../src/api/label';
 import { updateCellarWine } from '../../../src/api/cellar';
 import { showAlert } from '../../../src/components/AppAlert';
 import { LabelThumb } from '../../../src/components/LabelThumb';
@@ -50,11 +51,57 @@ export default function EditWineScreen() {
     }
   }, [wine, loaded]);
 
+  // Sanity-check that this producer actually makes this wine before saving an identity
+  // edit. wine-candidates returns ONLY a producer's real bottlings (it will not invent),
+  // so an empty list means the producer is unrecognised, and a non-empty list that
+  // doesn't include this cuvée means the producer doesn't make it. Returns true to
+  // proceed. It's a SOFT warning (the user can save anyway), and any lookup failure
+  // proceeds silently so a network blip never blocks an edit.
+  async function passesPlausibilityCheck(): Promise<boolean> {
+    let cands;
+    try {
+      cands = await fetchWineCandidates({ producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || null });
+    } catch {
+      return true;
+    }
+    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const target = norm(wineName.trim());
+    const plausible = (() => {
+      if (!cands || cands.length === 0) return false; // producer unrecognised / makes nothing matching
+      if (!target) return true; // sold under the producer's own name; producer is recognised
+      const tokens = target.split(' ').filter((w) => w.length >= 4);
+      return cands.some((c) => {
+        const cn = norm(c.wineName ?? '');
+        if (!cn) return false;
+        if (cn.includes(target) || target.includes(cn)) return true;
+        return tokens.some((t) => cn.includes(t));
+      });
+    })();
+    if (plausible) return true;
+    return await new Promise<boolean>((resolve) => {
+      showAlert({
+        title: 'Double-check this wine?',
+        body: `Vinster doesn't recognise "${wineName.trim() || producer.trim()}" as a wine ${producer.trim() || 'this producer'} makes. Save it anyway?`,
+        buttons: [
+          { text: 'Save anyway', onPress: () => resolve(true) },
+          { text: 'Go back & edit', style: 'cancel', onPress: () => resolve(false) },
+        ],
+      });
+    });
+  }
+
   async function handleSave() {
     if (!wine || saving) return;
     if (!wineName.trim() && !producer.trim()) {
       showAlert({ title: 'Name needed', body: 'Add a wine name or producer.' });
       return;
+    }
+    // Only when the producer/name actually changed, and a producer is given — no point
+    // re-checking a wine whose identity the user didn't touch.
+    const identityChanged = producer.trim() !== (wine.producer ?? '').trim() || wineName.trim() !== (wine.wine_name ?? '').trim();
+    if (identityChanged && producer.trim()) {
+      const ok = await passesPlausibilityCheck();
+      if (!ok) return;
     }
     setSaving(true);
     try {
