@@ -20,6 +20,30 @@ export const PERSONALITY_GATE = {
   minDistinctDays: 2,       // activity must span at least this many calendar days
 } as const;
 
+// Regeneration policy: a sketch is generated once, then refreshed either manually
+// (throttled) or automatically once the user has meaningfully EVOLVED since it.
+export const PERSONALITY_REFRESH = {
+  manualCooldownDays: 14,   // manual "Refresh my sketch" button throttle
+  wineGrowth: 8,            // auto-nudge once wine engagement grows by this since the last sketch
+  foodieGrowth: 5,
+} as const;
+
+// A single "engagement score" per side, from the SAME signals as readiness — the
+// growth in this since the last sketch is what the auto-refresh nudge watches.
+export function personalityEngagement(input: PersonalityReadinessInput): { wine: number; foodie: number } {
+  const distinctCellarWines = input.wines.length;
+  const listSessions = new Set(
+    input.chosenWines.filter((cw) => cw.source !== 'other' && cw.scan_session_id).map((cw) => cw.scan_session_id),
+  ).size;
+  const reviewedChosen = input.chosenWines.filter((cw) => cw.user_score != null || (cw.tasting_note && cw.tasting_note.trim())).length;
+  const wine = distinctCellarWines + listSessions + reviewedChosen;
+  const restaurantSignals = input.archive.filter((a) =>
+    (a.restaurantName && a.restaurantName.trim()) || a.ratingOverall != null || a.ratingFood != null || (a.restaurantNote && a.restaurantNote.trim()),
+  ).length;
+  const foodie = restaurantSignals + input.chefLabelSessions.length + input.chefPairingSessions.length;
+  return { wine, foodie };
+}
+
 function dayKey(iso?: string | null): string | null {
   if (!iso) return null;
   const t = Date.parse(iso);

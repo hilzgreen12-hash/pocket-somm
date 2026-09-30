@@ -7,7 +7,7 @@ import { useCellar } from './useCellar';
 import { useChosenWines } from './useChosenWines';
 import { useScanHistory } from './useScanHistory';
 import { useChefLabelHistory, useChefPairingHistory } from './useChefHistory';
-import { evaluatePersonalityReadiness } from '../utils/personalityReadiness';
+import { evaluatePersonalityReadiness, personalityEngagement, PERSONALITY_REFRESH } from '../utils/personalityReadiness';
 
 export type PersonalityCategory = 'wine' | 'recipe';
 
@@ -59,16 +59,34 @@ export function usePersonalityPrompt(): PersonalityCategory | null {
       // Activity gate — shared with the personality screen (one source of truth
       // in personalityReadiness). Requires volume + variety + activity spread
       // over multiple days, so a sketch never fires off a first-session burst.
-      const { wineReady, foodieReady } = evaluatePersonalityReadiness({
+      const readinessInput = {
         wines: wines ?? [],
         chosenWines: chosenWines ?? [],
         archive: archive ?? [],
         chefLabelSessions: chefLabelSessions ?? [],
         chefPairingSessions: chefPairingSessions ?? [],
-      });
+      };
+      const { wineReady, foodieReady } = evaluatePersonalityReadiness(readinessInput);
 
-      const winePending = wineReady && !generated.wine;
-      const foodiePending = foodieReady && !generated.recipe;
+      // Auto-refresh nudge: once a sketch exists, re-offer it when the user has
+      // meaningfully EVOLVED — their engagement has grown by a threshold since the
+      // snapshot taken when that sketch was generated. No snapshot (a pre-feature
+      // sketch) → not evolved; the manual 14-day refresh still covers those.
+      const eng = personalityEngagement(readinessInput);
+      const loadSnap = async (c: 'wine' | 'recipe'): Promise<number | null> => {
+        try {
+          const raw = await AsyncStorage.getItem(`vinster_personality_snap_${c}_${userId}`);
+          return raw ? (JSON.parse(raw).score as number) : null;
+        } catch { return null; }
+      };
+      const wineSnap = await loadSnap('wine');
+      const recipeSnap = await loadSnap('recipe');
+      if (cancelled) return;
+      const evolvedWine = generated.wine && wineSnap != null && (eng.wine - wineSnap) >= PERSONALITY_REFRESH.wineGrowth;
+      const evolvedRecipe = generated.recipe && recipeSnap != null && (eng.foodie - recipeSnap) >= PERSONALITY_REFRESH.foodieGrowth;
+
+      const winePending = wineReady && (!generated.wine || evolvedWine);
+      const foodiePending = foodieReady && (!generated.recipe || evolvedRecipe);
 
       if (!winePending && !foodiePending) {
         if (!cancelled) setCategory(null);

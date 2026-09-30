@@ -13,7 +13,7 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
-import { evaluatePersonalityReadiness } from '../../src/utils/personalityReadiness';
+import { evaluatePersonalityReadiness, personalityEngagement, PERSONALITY_REFRESH } from '../../src/utils/personalityReadiness';
 import { generatePersonality } from '../../src/api/label';
 import { supabase } from '../../src/api/supabase';
 import { splitPersonality, personalityBlurb } from '../../src/utils/personalityText';
@@ -227,6 +227,17 @@ export default function PersonalityScreen() {
       if (archiveError) {
         console.error('[personality] failed to append sketch to archive:', archiveError);
       }
+
+      // Snapshot the engagement score at generation time so the auto-refresh nudge
+      // (usePersonalityPrompt) can detect meaningful GROWTH since this sketch.
+      try {
+        const eng = personalityEngagement({
+          wines: wines ?? [], chosenWines: chosenWines ?? [], archive: archive ?? [],
+          chefLabelSessions: chefLabelSessions ?? [], chefPairingSessions: chefPairingSessions ?? [],
+        });
+        const score = cat === 'recipe' ? eng.foodie : eng.wine;
+        await AsyncStorage.setItem(`vinster_personality_snap_${cat}_${session.user.id}`, JSON.stringify({ score, at: now }));
+      } catch { /* best-effort */ }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not generate personality.');
     } finally {
@@ -350,17 +361,36 @@ export default function PersonalityScreen() {
             </Text>
           </View>
         ) : text ? (
-          <View style={styles.sketchCard}>
+          <>
+            <View style={styles.sketchCard}>
+              {(() => {
+                const { title, body } = splitPersonality(text);
+                return (
+                  <>
+                    {title ? <Text style={styles.sketchTitle}>{title}</Text> : null}
+                    <Text style={styles.sketchText}>{body}</Text>
+                  </>
+                );
+              })()}
+            </View>
             {(() => {
-              const { title, body } = splitPersonality(text);
-              return (
-                <>
-                  {title ? <Text style={styles.sketchTitle}>{title}</Text> : null}
-                  <Text style={styles.sketchText}>{body}</Text>
-                </>
-              );
+              // Manual refresh, throttled to once every PERSONALITY_REFRESH.manualCooldownDays.
+              if (loading) return null;
+              const daysSince = lastGeneratedAt ? (Date.now() - Date.parse(lastGeneratedAt)) / 86400000 : Infinity;
+              if (lastGeneratedAt && daysSince >= PERSONALITY_REFRESH.manualCooldownDays) {
+                return (
+                  <TouchableOpacity style={styles.refreshBtn} onPress={generate} activeOpacity={0.7}>
+                    <Text style={styles.refreshBtnText}>Refresh my sketch</Text>
+                  </TouchableOpacity>
+                );
+              }
+              if (lastGeneratedAt) {
+                const daysLeft = Math.max(1, Math.ceil(PERSONALITY_REFRESH.manualCooldownDays - daysSince));
+                return <Text style={styles.refreshHint}>Refresh again in {daysLeft} day{daysLeft === 1 ? '' : 's'} — or sooner as Vinster sees you evolve.</Text>;
+              }
+              return null;
             })()}
-          </View>
+          </>
         ) : null}
       </ScrollView>
 
@@ -400,6 +430,9 @@ const styles = StyleSheet.create({
   retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   retryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   sketchCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
+  refreshBtn: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.lg },
+  refreshBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  refreshHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg, marginHorizontal: spacing.xl },
   sketchTitle: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.gold, letterSpacing: 0.5, lineHeight: 30, marginBottom: spacing.md, textAlign: 'center' },
   sketchText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 26 },
   archiveLink: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
