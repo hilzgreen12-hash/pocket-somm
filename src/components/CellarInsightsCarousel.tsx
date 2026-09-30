@@ -87,8 +87,11 @@ export function CellarInsightsCarousel() {
     .filter((x) => x.n >= MIN_GRAPE_WINES)
     .map((x) => ({ label: x.label, avg: Math.round(x.sum / x.n) }))
     .sort((a, b) => b.avg - a.avg)[0];
-  if (topGrape && !dset.has('fact:grape')) {
-    facts.push({ kind: 'fact', key: 'grape', dismissKey: 'fact:grape', icon: 'sparkles-outline', value: topGrape.label, title: 'Top-Rated Grape', meta: `Avg ${topGrape.avg}` });
+  // Dismiss keys include the VALUE, so hiding one top grape doesn't suppress a
+  // different grape that later becomes top-rated.
+  const grapeKey = topGrape ? `fact:grape:${topGrape.label.toLowerCase()}` : '';
+  if (topGrape && !dset.has(grapeKey)) {
+    facts.push({ kind: 'fact', key: 'grape', dismissKey: grapeKey, icon: 'sparkles-outline', value: topGrape.label, title: 'Top-Rated Grape', meta: `Avg ${topGrape.avg}` });
   }
 
   // Oldest vintage in the cellar (vintage is stored as a string).
@@ -96,9 +99,10 @@ export function CellarInsightsCarousel() {
     .map((w) => ({ w, y: w.vintage ? parseInt(w.vintage, 10) : NaN }))
     .filter((x) => Number.isFinite(x.y) && x.y > 1900);
   const oldest = vintaged.length ? vintaged.reduce((m, x) => (x.y < m.y ? x : m)) : null;
-  if (oldest && !dset.has('fact:vintage')) {
+  const vintageKey = oldest ? `fact:vintage:${oldest.y}` : '';
+  if (oldest && !dset.has(vintageKey)) {
     facts.push({
-      kind: 'fact', key: 'vintage', dismissKey: 'fact:vintage', icon: 'time-outline', value: String(oldest.y), title: 'Oldest Vintage',
+      kind: 'fact', key: 'vintage', dismissKey: vintageKey, icon: 'time-outline', value: String(oldest.y), title: 'Oldest Vintage',
       meta: [oldest.w.producer, oldest.w.wine_name].filter(Boolean).join(' ') || 'In your cellar',
       wineId: oldest.w.id,
     });
@@ -114,8 +118,9 @@ export function CellarInsightsCarousel() {
     producerAgg.set(p.toLowerCase(), cur);
   }
   const topProducer = [...producerAgg.values()].sort((a, b) => b.bottles - a.bottles)[0];
-  if (topProducer && topProducer.bottles >= 2 && !dset.has('fact:producer')) {
-    facts.push({ kind: 'fact', key: 'producer', dismissKey: 'fact:producer', icon: 'trophy-outline', value: topProducer.label, title: 'Most Collected', meta: `${topProducer.bottles} bottles` });
+  const producerKey = topProducer ? `fact:producer:${topProducer.label.toLowerCase()}` : '';
+  if (topProducer && topProducer.bottles >= 2 && !dset.has(producerKey)) {
+    facts.push({ kind: 'fact', key: 'producer', dismissKey: producerKey, icon: 'trophy-outline', value: topProducer.label, title: 'Most Collected', meta: `${topProducer.bottles} bottles` });
   }
 
   // Last-bottle tiles first (actionable), then the facts.

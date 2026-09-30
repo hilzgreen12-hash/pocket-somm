@@ -118,10 +118,15 @@ export async function clearReviewOnCellar(
   const matches = await findMatchingCellarWines(userId, identity);
   for (const w of matches) {
     await updateCellarWine(w.id, {
+      // Clear review_entries (the source of truth) + user_notes too — clearing
+      // only the flat fields left the wine card still showing the full review and
+      // let Your Wine Reviews re-derive it straight back as a 'cellar' item.
+      review_entries: [],
       review_score: null,
       review_note: null,
       review_location: null,
       review_date: null,
+      user_notes: null,
       user_drinking_window: null,
     } as any);
   }

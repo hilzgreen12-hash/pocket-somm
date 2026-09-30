@@ -159,14 +159,15 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
         labelImagePath: wine.label_image_path,
       };
       try {
-        // Create a chosen_wines row when none exists yet, so a review made
-        // directly on a cellar bottle (never scanned as a List wine) shows in
-        // Your Wine Reviews AND the home Recent Reviews carousel — the carousel
-        // reads only chosen_wines, so a cellar-only review was invisible there.
-        // Your Wine Reviews de-dupes the now-matching chosen row against the
-        // cellar 'cellar' item (see chosen.tsx dedupedCellarReviews), so it
-        // still lists once, not twice.
-        await syncEditToChosen(session.user.id, identity, fields, { createIfMissing: true, region: wine.region });
+        // Do NOT create a chosen_wines twin for a cellar review. A cellar review
+        // already surfaces natively in Your Wine Reviews as a 'cellar' item
+        // (chosen.tsx cellarReviews), where delete + multi-entry history work
+        // correctly. Creating a twin instead misclassified it as a 'chosen' row,
+        // which broke delete (the cellar row re-derived it back), collapsed the
+        // review count/history to 1, and could mis-file it under "Winelist". We
+        // only UPDATE a pre-existing twin (e.g. one created from a List scan of
+        // the same wine) so the two stay in lock-step.
+        await syncEditToChosen(session.user.id, identity, fields, { createIfMissing: false, region: wine.region });
         await syncReviewToCellar(session.user.id, identity, fields, { excludeCellarWineId: wine.id });
         qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
         qc.invalidateQueries({ queryKey: ['wishlist', session.user.id] });

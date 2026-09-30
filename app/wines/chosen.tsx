@@ -267,6 +267,12 @@ export default function ChosenWinesScreen() {
   // archived wine card must still surface in Your Wine Reviews, not vanish
   // because the bottle left the live cellar.
   const cellarReviews = [...cellarWines, ...archivedWines].filter((w) =>
+    // review_entries is the source of truth; the flat fields mirror the latest.
+    // Crucially include review_note (the actual "Your Review" text) — checking
+    // only user_notes (Personal Notes) meant a review that was JUST a tasting
+    // note with no score/date never appeared in Your Wine Reviews.
+    (Array.isArray((w as any).review_entries) && (w as any).review_entries.length > 0) ||
+    (w.review_note && w.review_note.trim().length > 0) ||
     (w.user_notes && w.user_notes.trim().length > 0) ||
     w.review_score != null ||
     (w.review_location && w.review_location.trim().length > 0) ||
@@ -1065,7 +1071,10 @@ export default function ChosenWinesScreen() {
       : (cellar!.review_location?.trim() ?? '');
     const tastingNote = isChosen
       ? cw!.tasting_note ?? ''
-      : cellar!.user_notes ?? '';
+      // review_note is the public "Your Review" text. NEVER share user_notes for a
+      // cellar wine — that's the PRIVATE Personal Note (deliberately hidden in the
+      // detail view); sharing it leaked exactly what the UI keeps private.
+      : cellar!.review_note ?? '';
     const otherObs = isChosen ? (cw!.other_observations ?? '') : '';
     const criticScore = isChosen ? cw!.critic_score : cellar!.critic_score;
 
