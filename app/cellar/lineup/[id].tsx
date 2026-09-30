@@ -204,8 +204,11 @@ export default function LineupDetailScreen() {
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || 'This wine',
       buttons: [
         // Open the cellar wine card to archive the bottle there (full archive flow);
-        // pressing back returns to this lineup.
-        ...(matchedCellar ? [{ text: 'Archive this bottle', onPress: () => router.push(`/cellar/${matchedCellar.id}` as any) }] : []),
+        // pressing back returns to this lineup. Gate on the LINK id (which is what
+        // makes the "Your Cellar" badge show), NOT on the wine being present in the
+        // loaded cellarWines list — a paginated/large cellar or a load-timing gap left
+        // matchedCellar null and made the button vanish. The wine card resolves the id.
+        ...(w.cellar_wine_id ? [{ text: 'Archive this bottle', onPress: () => router.push(`/cellar/${w.cellar_wine_id}` as any) }] : []),
         { text: 'This wine was Off Cellar', onPress: () => markOffCellar(index) },
         { text: 'Cancel', style: 'cancel' as const },
       ],
