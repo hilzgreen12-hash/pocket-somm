@@ -21,7 +21,7 @@ import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWin
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
-import { fetchPlacementsForWines, reconcileLegacyLocationWines, deleteLocationKeepWines, deleteLocationAndWines, type CellarPlacement } from '../../src/api/placements';
+import { fetchPlacementsForWines, fetchPlacementsForWine, placedCount, releaseBottlesFromPlacements, reconcileLegacyLocationWines, deleteLocationKeepWines, deleteLocationAndWines, type CellarPlacement } from '../../src/api/placements';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -399,11 +399,16 @@ export default function FullCellarListScreen() {
         await archiveCellarWine(w.id);
       } else {
         // Partial — decrement the live row, clone an archive row for the removed
-        // bottles, and free that many slots (mirrors the rack / wine-card logic).
+        // bottles, and free that many bottles taking LOOSE ones first, then rack
+        // slots, then alt-cellar placements (mirrors the wine-card logic). Freeing
+        // rack-only (removeSlotsForWine) left ghost bottles in alt cellars.
         await updateWine.mutateAsync({ id: w.id, updates: { quantity: total - count } });
         const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = w;
         await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false } as any);
-        await removeSlotsForWine(w.id, count);
+        const wp = await fetchPlacementsForWine(w.id);
+        const unplaced = Math.max(0, total - placedCount(wp));
+        const toFree = Math.max(0, count - unplaced);
+        if (toFree > 0) await releaseBottlesFromPlacements(w.id, toFree);
       }
       qc.invalidateQueries({ queryKey: ['cellar-removals', w.id] });
       invalidateCellar();

@@ -29,7 +29,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { valueWine } from '../../src/services/pricing';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
-import { fetchPlacementsForWine, placedCount, clearLocationPlacements } from '../../src/api/placements';
+import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements } from '../../src/api/placements';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
@@ -841,9 +841,13 @@ export default function CellarWineDetail() {
         const unplacedBottles = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
         const slotsToFree = Math.max(0, count - unplacedBottles);
         if (slotsToFree > 0) {
-          await removeSlotsForWine(wine!.id, slotsToFree);
+          // Free from placements — rack/fridge slots first, THEN alt-cellar
+          // ('location') placements. removeSlotsForWine only touched racks, so
+          // archiving bottles that lived in an alt cellar left ghost bottles there.
+          await releaseBottlesFromPlacements(wine!.id, slotsToFree);
           qc.invalidateQueries({ queryKey: ['slot-assignments'] });
           qc.invalidateQueries({ queryKey: ['rack-slots'] });
+          qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
         }
         setRackRemovalMsg(null);
         qc.invalidateQueries({ queryKey: ['placements', wine!.id] });
@@ -946,11 +950,17 @@ export default function CellarWineDetail() {
     try {
       if (partial) {
         await updateWine.mutateAsync({ id: wine.id, updates: { quantity: wine.quantity - count } });
-        await removeSlotsForWine(wine.id, count);
+        // Free `count` bottles taking loose ones first, then rack slots, then
+        // alt-cellar placements — so removing bottles that lived in an alt cellar
+        // doesn't leave ghost bottles there (removeSlotsForWine touched racks only).
+        const wp = await fetchPlacementsForWine(wine.id);
+        const unplaced = Math.max(0, wine.quantity - placedCount(wp));
+        const toFree = Math.max(0, count - unplaced);
+        if (toFree > 0) await releaseBottlesFromPlacements(wine.id, toFree);
         qc.invalidateQueries({ queryKey: ['cellar'] });
         qc.invalidateQueries({ queryKey: ['slot-assignments'] });
         qc.invalidateQueries({ queryKey: ['rack-slots'] });
-        if (delLocId) qc.invalidateQueries({ queryKey: ['storage-location-wines', delLocId] });
+        qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
         setRemoveStep('idle');
         setRemoveCount('1');
         setRemoveNote('');

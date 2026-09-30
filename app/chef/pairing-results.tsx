@@ -16,7 +16,8 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
 import { useRacks } from '../../src/hooks/useRacks';
-import { getSlotAssignments } from '../../src/api/racks';
+import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
+import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements } from '../../src/api/placements';
 import { findFoodWinePairing } from '../../src/api/label';
 import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
@@ -286,6 +287,12 @@ export default function PairingResultsScreen() {
           archived_at: removedAt,
           cellar_note: note,
         });
+        // Detach the archived wine from ALL storage — rack/fridge slots + every
+        // cellar_placement — or its bottles linger as ghosts in racks/alt cellars
+        // (this path set archived_at via updateCellarWine, bypassing the central
+        // clear in archiveCellarWine).
+        await clearWineFromRacks(wine.id);
+        await clearLocationPlacements(wine.id);
       } else {
         // Decrement the live row and clone an archived row carrying the
         // selected bottles so the user can edit/note them later.
@@ -298,6 +305,12 @@ export default function PairingResultsScreen() {
           is_wishlist: false,
           cellar_note: note,
         });
+        // Free the selected bottles from storage — loose first, then racks, then
+        // alt-cellar placements — so counts don't drift above the reduced quantity.
+        const wp = await fetchPlacementsForWine(wine.id);
+        const unplaced = Math.max(0, wine.quantity - placedCount(wp));
+        const toFree = Math.max(0, count - unplaced);
+        if (toFree > 0) await releaseBottlesFromPlacements(wine.id, toFree);
       }
 
       qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
@@ -305,6 +318,7 @@ export default function PairingResultsScreen() {
       qc.invalidateQueries({ queryKey: ['cellar-removals', wine.id] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
 
       setArchivedSuccess({ count, recName: selecting.recName });
     } catch (err) {
