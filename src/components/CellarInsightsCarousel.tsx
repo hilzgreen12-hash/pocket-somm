@@ -166,7 +166,11 @@ export function CellarInsightsCarousel() {
     const [wid, info] = topPairWine;
     const pairWineKey = `fact:mostpairedwine:${wid}`;
     if (!dset.has(pairWineKey)) {
-      const matched = wines.find((w) => w.id === wid);
+      // Match to the live cellar wine (by id, then by name) so the tile uses that
+      // wine's stored label image via WineCardThumb.
+      const nameKey = info.name.trim().toLowerCase();
+      const matched = wines.find((w) => w.id === wid)
+        ?? (nameKey ? wines.find((w) => (w.wine_name ?? '').trim().toLowerCase() === nameKey) : undefined);
       facts.push({
         kind: 'fact', key: 'mostpairedwine', dismissKey: pairWineKey, icon: 'wine-outline',
         value: matched ? (matched.wine_name ?? info.name) : info.name,
