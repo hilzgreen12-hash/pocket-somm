@@ -80,13 +80,13 @@ const styles = StyleSheet.create({
   statsSep: { height: 1, backgroundColor: colors.divider, marginTop: spacing.sm, marginBottom: spacing.xs },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
 
-  // Box tiles — matched to the Cellar storage carousel (HomeStorageSection).
+  // Box tiles — 220×165 to match the Your Lineups carousel (LineupsCarousel).
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingVertical: spacing.md },
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
-  card: { width: 152, height: 108, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between' },
+  card: { width: 220, height: 165, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between' },
   cardType: { fontSize: 11, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
   cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardCount: { fontSize: 13, fontFamily: fonts.headingRegular, color: colors.textMuted },
-  cardAdd: { width: 152, height: 108, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  cardAdd: { width: 220, height: 165, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   cardAddText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
 });
