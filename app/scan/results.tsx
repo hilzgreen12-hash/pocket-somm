@@ -107,6 +107,9 @@ export default function ResultsScreen() {
   // an empty-string value means the last fetch failed and a re-open retries.
   const [reviewByIndex, setReviewByIndex] = useState<Record<number, string>>({});
   const [reviewLoading, setReviewLoading] = useState<Set<number>>(new Set());
+  // Indices whose review fetch FAILED (e.g. a 429) — shown as a tappable retry
+  // rather than an endless "Generating…" spinner.
+  const [reviewFailed, setReviewFailed] = useState<Set<number>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
   // Tracks the in-flight autoSave promise so concurrent callers
   // (onBlur of the input + the Review CTA tap) join the same save
@@ -712,6 +715,7 @@ export default function ResultsScreen() {
       // effects repopulate correctly for the new wines once these are empty.
       setReviewByIndex({});
       setReviewLoading(new Set());
+      setReviewFailed(new Set());
       setWsByIndex({});
       setChosenIndexes(new Set());
       sessionPickIdRef.current.clear();
@@ -781,6 +785,7 @@ export default function ResultsScreen() {
     const alreadyHave = (isFromHistory && wine.rationale) || (reviewByIndex[i] && reviewByIndex[i].length > 0);
     if (alreadyHave || reviewLoading.has(i)) return;
     setReviewLoading((prev) => new Set(prev).add(i));
+    setReviewFailed((prev) => { const n = new Set(prev); n.delete(i); return n; });
     try {
       const review = await fetchVinsterReview({
         producer: wine.producer,
@@ -790,10 +795,24 @@ export default function ResultsScreen() {
         grape: wine.grape,
         vintage: wine.vintage,
       });
-      setReviewByIndex((prev) => ({ ...prev, [i]: review ?? '' }));
+      if (review) {
+        setReviewByIndex((prev) => ({ ...prev, [i]: review }));
+      } else {
+        // Failed (e.g. rate-limited) — flag it so the card offers a retry instead
+        // of spinning forever.
+        setReviewFailed((prev) => new Set(prev).add(i));
+      }
+    } catch {
+      setReviewFailed((prev) => new Set(prev).add(i));
     } finally {
       setReviewLoading((prev) => { const n = new Set(prev); n.delete(i); return n; });
     }
+  }
+
+  // Retry a failed review fetch (from the "tap to try again" affordance).
+  function retryReview(i: number) {
+    setReviewFailed((prev) => { const n = new Set(prev); n.delete(i); return n; });
+    void ensureReview(i);
   }
 
   async function handleShare() {
@@ -1180,11 +1199,18 @@ export default function ResultsScreen() {
                   // results screen presents fast and the review reveals only once
                   // ready — never pre-baked. History scans reuse the saved rationale.
                   const reviewText = isFromHistory ? (wine.rationale || reviewByIndex[i]) : reviewByIndex[i];
-                  return reviewText ? (
-                    <Text style={styles.sommNoteText}>{reviewText}</Text>
-                  ) : (
-                    // Still generating (or a rare miss the user can retry by
-                    // collapsing + reopening) — no scary error, just "Generating".
+                  if (reviewText) return <Text style={styles.sommNoteText}>{reviewText}</Text>;
+                  // Failed (and not currently retrying) → offer a tap-to-retry
+                  // rather than an endless spinner (the 429 / rate-limit case).
+                  if (reviewFailed.has(i) && !reviewLoading.has(i)) {
+                    return (
+                      <TouchableOpacity onPress={() => retryReview(i)} activeOpacity={0.7}>
+                        <Text style={styles.sommLoadingText}>Vinster's Review didn't generate just now — tap to try again.</Text>
+                      </TouchableOpacity>
+                    );
+                  }
+                  // Otherwise still generating — no scary error, just "Generating".
+                  return (
                     <View style={styles.sommLoadingRow}>
                       <ActivityIndicator color={colors.gold} />
                       <Text style={styles.sommLoadingText}>Generating Vinster's Review…</Text>
