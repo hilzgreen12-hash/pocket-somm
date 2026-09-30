@@ -907,7 +907,7 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 44 },
   headerSpacer: { width: 44 },
-  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
+  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.8 },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: 60 },
   centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   lead: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', marginBottom: spacing.sm },

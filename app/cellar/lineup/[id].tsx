@@ -160,6 +160,10 @@ export default function LineupDetailScreen() {
     if (!lineup) return;
     try {
       await setLineupWines(lineup.id, next);
+      // Reflect the write in the cache IMMEDIATELY so a rapid follow-up edit
+      // builds from `next`, not the pre-write array (which clobbered the first
+      // edit while the invalidation's refetch was still in flight).
+      qc.setQueryData(['lineup', id], (old: any) => (old ? { ...old, wines: next } : old));
       qc.invalidateQueries({ queryKey: ['lineup', id] });
       qc.invalidateQueries({ queryKey: ['lineup-archives'] });
     } catch (err) {
@@ -386,6 +390,9 @@ export default function LineupDetailScreen() {
     setSavingWineEdit(true);
     try {
       await setLineupWines(lineup.id, next);
+      // Keep the cache in lock-step with the write (see persistWines) so a quick
+      // second edit doesn't rebuild from the stale pre-write array.
+      qc.setQueryData(['lineup', id], (old: any) => (old ? { ...old, wines: next } : old));
       qc.invalidateQueries({ queryKey: ['lineup', id] });
       qc.invalidateQueries({ queryKey: ['lineup-archives'] });
       setEditWineIndex(null);
