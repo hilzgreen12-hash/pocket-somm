@@ -1401,7 +1401,7 @@ export default function CellarWineDetail() {
               setJustDeleted(true);
               setTimeout(() => {
                 if (router.canGoBack()) router.back();
-                else router.replace('/cellar/wishlist');
+                else router.replace('/cellar/list');
               }, 1400);
             } catch {
               showAlert({ title: 'Could not remove', body: 'Please try again.' });
@@ -2003,7 +2003,7 @@ export default function CellarWineDetail() {
       {isWishlist && (
         <TouchableOpacity
           style={[styles.chefBtn, { borderColor: colors.gold }]}
-          onPress={() => router.push('/cellar/wishlist')}
+          onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/cellar/list'); }}
           activeOpacity={0.7}
         >
           <Text style={[styles.chefBtnText, { color: colors.gold }]}>Add to Cellar</Text>

@@ -1333,7 +1333,7 @@ export default function LabelResultsScreen() {
         // When the user came in via the wish-list flow they're expecting to
         // land back on the wish list, not the wine card. Route there from OK.
         buttons: isWishlistFlow
-          ? [{ text: 'OK', onPress: () => router.replace('/cellar/wishlist') }]
+          ? [{ text: 'OK', onPress: () => { if (router.canGoBack()) router.back(); else router.replace('/cellar/list'); } }]
           : undefined,
       });
     } catch (err) {
@@ -1982,7 +1982,7 @@ export default function LabelResultsScreen() {
         style={styles.backRow}
         onPress={() => router.dismissTo(
           backTo ? (decodeURIComponent(backTo) as any)
-          : isWishlistFlow ? '/cellar/wishlist'
+          : isWishlistFlow ? '/cellar/list'
           : isReviewsFlow ? '/wines/chosen'
           : isLineupFlow ? '/cellar/scan-lineup'
           // Wine Intel is launched from the Scan tab now, so return there by
@@ -2405,7 +2405,7 @@ export default function LabelResultsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/cellar/wishlist')}>
+          <TouchableOpacity style={styles.discardButton} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/cellar/list'); }}>
             <Text style={styles.discardText}>Cancel</Text>
           </TouchableOpacity>
         </>
