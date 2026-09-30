@@ -50,6 +50,9 @@ const FIXES: Array<[RegExp, string]> = [
   [/\bkon[\s-]?ter+no\b/gi, 'Conterno'],
   [/\bhar[\s-]?lan\b/gi, 'Harlan'],
   [/\bshave[\s-]?val[\s-]?ay\b/gi, 'Cheval Blanc'],
+  [/\b(?:gui|gee|ghee|giga)[\s-]?gal\b/gi, 'Guigal'],
+  [/\bguigal\b/gi, 'Guigal'],
+  [/\bex[\s-]?voto\b/gi, 'Ex-Voto'],
 
   // ---- Sparkling -----------------------------------------------------------
   [/\b(?:sham|champ)[\s-]?pain\b/gi, 'Champagne'],

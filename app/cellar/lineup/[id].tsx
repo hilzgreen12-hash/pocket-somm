@@ -1081,8 +1081,10 @@ const styles = StyleSheet.create({
   noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.sm },
   noteHeadActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   // Saved note reads back as copy (like a review); tap to edit in the popup.
-  noteBodyText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
-  notePlaceholder: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, fontStyle: 'italic', lineHeight: 22 },
+  // Match the Date · Location · Venue line's font (headingSemibold) so the note
+  // reads consistently with the rest of the header, not in an odd body face.
+  noteBodyText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, lineHeight: 22 },
+  notePlaceholder: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.textMuted, lineHeight: 22 },
   // White "match to a restaurant review" button at the foot of the page.
   matchBottomWrap: { alignItems: 'center', gap: spacing.sm },
   // Match + Export are the two foot buttons — same width so Export isn't a small
