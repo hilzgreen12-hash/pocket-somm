@@ -849,6 +849,7 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['rack-slots', rid] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
       qc.invalidateQueries({ queryKey: ['bins'] });
       qc.invalidateQueries({ queryKey: ['bin-cells'] });
@@ -873,6 +874,7 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
       setLocBinPicker(null);

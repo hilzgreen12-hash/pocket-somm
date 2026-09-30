@@ -198,11 +198,18 @@ export async function addCellarWine(wine: Omit<CellarWine, 'id' | 'created_at' |
 }
 
 export async function updateCellarWine(id: string, updates: Partial<CellarWine>): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('cellar_wines')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) throw error;
+  // A stale/expired session (RLS matches zero rows, no error) makes the update a
+  // silent no-op — the same guard archiveCellarWine/deleteCellarWine use. Without
+  // it, a partial-archive quantity decrement could silently not happen.
+  if (!data || data.length === 0) {
+    throw new Error('That wine could not be updated — please pull to refresh (you may need to sign in again).');
+  }
 }
 
 // Look up an active wishlist row for this user that matches the wine

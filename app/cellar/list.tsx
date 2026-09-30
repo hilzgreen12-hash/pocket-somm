@@ -365,6 +365,7 @@ export default function FullCellarListScreen() {
   function viewWineLocation(w: CellarWine) {
     const wp = placementsByWine.get(w.id) ?? [];
     const dests: { label: string; route: string }[] = [];
+    let hasBinOnly = false;
     for (const p of wp) {
       if (p.kind === 'rack' && p.rack_id) {
         const route = `/cellar/rack/${p.rack_id}?highlight=${w.id}`;
@@ -372,9 +373,24 @@ export default function FullCellarListScreen() {
       } else if (p.kind === 'location' && p.storage_location_id) {
         const l = storageLocations.find((sl) => sl.id === p.storage_location_id);
         dests.push({ label: `${l?.name ?? 'Alt Cellar'}${l?.is_external ? ' (external)' : ''}`, route: `/cellar/storage-location/${p.storage_location_id}` });
+      } else if (p.kind === 'bin') {
+        // Bins are wine_racks (storage_type='bin'); when the placement carries the
+        // bin's id we can jump straight there, otherwise just note it's in a bin
+        // rather than falsely calling it loose.
+        if (p.rack_id) {
+          const route = `/cellar/bin/${p.rack_id}`;
+          if (!dests.some((d) => d.route === route)) dests.push({ label: 'Bin', route });
+        } else {
+          hasBinOnly = true;
+        }
       }
     }
-    if (dests.length === 0) { showAlert({ title: 'No home-storage location', body: 'This wine has no placement yet — its bottles are loose in your cellar list.' }); return; }
+    if (dests.length === 0) {
+      showAlert(hasBinOnly
+        ? { title: 'Stored in a bin', body: 'This wine is filed in a storage bin — open it from Your Wines At Home on the Cellar tab.' }
+        : { title: 'No home-storage location', body: 'This wine has no placement yet — its bottles are loose in your cellar list.' });
+      return;
+    }
     if (dests.length === 1) { router.push(dests[0].route as any); return; }
     showAlert({ title: 'View location', buttons: [...dests.map((d) => ({ text: d.label, onPress: () => router.push(d.route as any) })), { text: 'Cancel', style: 'cancel' as const }] });
   }

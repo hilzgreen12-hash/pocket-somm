@@ -189,8 +189,21 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
   async function runParse() {
     if (!transcript.trim()) return;
-    // Mood / recommendation — a free description, handled by its own flow.
-    if (isMoodCommand(transcript)) { runMoodRecommend(); return; }
+    // Mood / recommendation — a free description, handled by its own flow. But a
+    // SCOPED caller (a home storage location, allowedActions set to move/archive)
+    // doesn't offer recommendations, so don't silently run mood picks there —
+    // honour the scope the intro copy promised.
+    if (isMoodCommand(transcript)) {
+      if (allowedActions) {
+        showAlert({
+          title: 'Not available here',
+          body: 'From a home storage location you can move bottles to another location or archive them. For a recommendation, use Vinster on the Cellar or Pair tab.',
+        });
+        return;
+      }
+      runMoodRecommend();
+      return;
+    }
     // Move / archive / add must name a vintage so the right bottle is targeted —
     // or the user can explicitly say the wine is non-vintage.
     if (!mentionsVintage(transcript)) {
