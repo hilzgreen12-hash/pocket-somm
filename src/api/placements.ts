@@ -294,6 +294,38 @@ export async function reconcileLegacyLocationWines(
   return healed;
 }
 
+// Heal an impossible state: a wine whose `quantity` is BELOW the number of bottles
+// physically placed (rack slots + bin + alt-cellar). Placed bottles really exist,
+// so quantity can never be less — when it is (a decrement drifted out of sync with
+// the placement, e.g. an over-counted archive), correct quantity UP to the placed
+// total. Narrow + idempotent: only touches rows that are genuinely inconsistent.
+// Returns how many rows were healed.
+export async function reconcileQuantityBelowPlacements(userId: string): Promise<number> {
+  const { data: rows, error } = await supabase
+    .from('cellar_wines')
+    .select('id, quantity')
+    .eq('user_id', userId)
+    .is('archived_at', null)
+    .eq('is_wishlist', false);
+  if (error) throw error;
+  const wines = (rows ?? []) as { id: string; quantity: number }[];
+  if (wines.length === 0) return 0;
+  const placed = await fetchPlacementsForWines(wines.map((w) => w.id));
+  const placedByWine = new Map<string, number>();
+  for (const p of placed) {
+    placedByWine.set(p.cellar_wine_id, (placedByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+  }
+  let healed = 0;
+  for (const w of wines) {
+    const placedSum = placedByWine.get(w.id) ?? 0;
+    if (placedSum > (w.quantity ?? 0)) {
+      const { error: upErr } = await supabase.from('cellar_wines').update({ quantity: placedSum }).eq('id', w.id);
+      if (!upErr) healed += 1;
+    }
+  }
+  return healed;
+}
+
 // Merge-safe removal of the bottles a unit (rack/fridge/bin) held when the unit
 // is deleted "& Contents". `countHere` is how many of the wine's bottles were in
 // that unit. If the wine lived ENTIRELY in the unit, delete the whole wine;

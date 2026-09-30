@@ -21,7 +21,7 @@ import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWin
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
-import { fetchPlacementsForWines, fetchPlacementsForWine, placedCount, releaseBottlesFromPlacements, reconcileLegacyLocationWines, deleteLocationKeepWines, deleteLocationAndWines, type CellarPlacement } from '../../src/api/placements';
+import { fetchPlacementsForWines, fetchPlacementsForWine, placedCount, releaseBottlesFromPlacements, reconcileLegacyLocationWines, reconcileQuantityBelowPlacements, deleteLocationKeepWines, deleteLocationAndWines, type CellarPlacement } from '../../src/api/placements';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -138,6 +138,24 @@ export default function FullCellarListScreen() {
   // here). Folds each back onto its existing line in that cellar. Idempotent —
   // once healed there's nothing left to fix. Home locations only, so a large
   // external import is never touched.
+  // Heal any wine whose quantity drifted BELOW its placed bottles (impossible
+  // state — e.g. an over-counted archive left quantity 1 with 2 in a rack). Runs
+  // once per mount; doesn't need storage locations, so it's separate from the
+  // legacy-location reconcile below.
+  const qtyHealedRef = useRef(false);
+  useEffect(() => {
+    if (qtyHealedRef.current || !userId || wines.length === 0) return;
+    qtyHealedRef.current = true;
+    void reconcileQuantityBelowPlacements(userId)
+      .then((healed) => {
+        if (healed > 0) {
+          qc.invalidateQueries({ queryKey: ['cellar', userId] });
+          qc.invalidateQueries({ queryKey: ['placements-list'] });
+        }
+      })
+      .catch(() => { /* non-fatal — heal is best-effort */ });
+  }, [userId, wines.length, qc]);
+
   const reconciledRef = useRef(false);
   useEffect(() => {
     if (reconciledRef.current || !userId || wines.length === 0 || storageLocations.length === 0) return;
