@@ -865,15 +865,40 @@ export default function RackGridScreen() {
       }
       return;
     }
-    // Unplaced (or already in a rack) → map the tapped slot(s), as before.
-    const targets = pendingSlots && pendingSlots.length > 0 ? pendingSlots : [{ row, col }];
+    // Unplaced (or already in a rack) → map the tapped slot(s), but NEVER map more
+    // slots than the wine has UNPLACED bottles. Each rack slot is one real bottle;
+    // mapping extras would push placed > quantity, and the qty-heal then bakes that
+    // over-count into a permanent phantom bottle. So cap the tapped slots to the
+    // loose total and leave any surplus taps empty.
+    const requested = pendingSlots && pendingSlots.length > 0 ? pendingSlots : [{ row, col }];
+    const pls = await fetchPlacementsForWine(wine.id).catch(() => [] as any[]);
+    const placedNow = pls.reduce((s: number, p: any) => s + (p.quantity ?? 0), 0);
+    const unplaced = Math.max(0, (wine.quantity ?? 0) - placedNow);
+    if (unplaced <= 0) {
+      setCellarPickerOpen(false);
+      setPendingSlot(null);
+      setPendingSlots(null);
+      showAlert({
+        title: 'No unplaced bottles',
+        body: `Every bottle of ${wine.wine_name} is already placed. Use “+ Add bottles” on its wine card if you have more.`,
+        buttons: [{ text: 'OK', style: 'cancel' }],
+      });
+      return;
+    }
+    const targets = requested.slice(0, unplaced);
+    const dropped = requested.length - targets.length;
     try {
       await assignSlots(rid, targets, wine.id);
       qc.invalidateQueries({ queryKey: ['rack-slots', rid] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
       showAlert({
         title: targets.length > 1 ? `Placed in ${targets.length} slots` : 'Placed in this rack',
-        body: `${wine.wine_name} is already in your Full Cellar List — it's now mapped to ${targets.length > 1 ? `${targets.length} slots` : 'a slot'} here too.`,
+        body: dropped > 0
+          ? `${wine.wine_name} had only ${unplaced} unplaced bottle${unplaced === 1 ? '' : 's'}, so ${dropped} of the slots you tapped were left empty.`
+          : `${wine.wine_name} is already in your Full Cellar List — it's now mapped to ${targets.length > 1 ? `${targets.length} slots` : 'a slot'} here too.`,
         buttons: [{ text: 'Done', style: 'cancel' }],
       });
     } catch (err) {
@@ -947,7 +972,10 @@ export default function RackGridScreen() {
     try {
       // Move only the bottles that are in THIS rack (a wine can also sit in another
       // rack/fridge), and free only this rack's slots — not every rack it's in.
-      const movedCount = slotsForWine(wineId) || 1;
+      // If somehow there are no slots here, bail rather than fall back to `|| 1` and
+      // add a phantom location bottle (placed would exceed quantity → heal inflates).
+      const movedCount = slotsForWine(wineId);
+      if (movedCount <= 0) { setLocBinPicker(null); return; }
       await removeSlotsForWine(wineId, movedCount, rackId);
       await addLocationPlacement(wineId, locId, null, movedCount);
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });

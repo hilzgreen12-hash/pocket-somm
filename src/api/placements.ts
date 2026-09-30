@@ -295,10 +295,18 @@ export async function reconcileLegacyLocationWines(
 }
 
 // Heal an impossible state: a wine whose `quantity` is BELOW the number of bottles
-// physically placed (rack slots + bin + alt-cellar). Placed bottles really exist,
-// so quantity can never be less — when it is (a decrement drifted out of sync with
-// the placement, e.g. an over-counted archive), correct quantity UP to the placed
-// total. Narrow + idempotent: only touches rows that are genuinely inconsistent.
+// physically in RACK SLOTS. A rack slot is unambiguously one real bottle sitting in a
+// numbered space, so quantity can never be less than the slot count — when it is (a
+// decrement drifted out of sync, e.g. an over-counted archive), correct quantity UP to
+// the rack-slot total.
+//
+// IMPORTANT: only rack placements are trusted here. `location` (alt-cellar) and `bin`
+// placements are COUNT MIRRORS, not physical slots: bins are rebuilt from `quantity`
+// by the mig-104 trigger, and location placements over `quantity` are trimmed by the
+// mig-107 trigger. Trusting those to raise `quantity` would let a stale/over placement
+// (or an under-freed archive) resurrect bottles that were actually removed. So the heal
+// reconciles rack-only and never inflates from a count-based placement.
+// Narrow + idempotent: only touches rows that are genuinely inconsistent.
 // Returns how many rows were healed.
 export async function reconcileQuantityBelowPlacements(userId: string): Promise<number> {
   const { data: rows, error } = await supabase
@@ -311,15 +319,16 @@ export async function reconcileQuantityBelowPlacements(userId: string): Promise<
   const wines = (rows ?? []) as { id: string; quantity: number }[];
   if (wines.length === 0) return 0;
   const placed = await fetchPlacementsForWines(wines.map((w) => w.id));
-  const placedByWine = new Map<string, number>();
+  const rackByWine = new Map<string, number>();
   for (const p of placed) {
-    placedByWine.set(p.cellar_wine_id, (placedByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+    if (p.kind !== 'rack') continue; // rack slots only — physical ground truth
+    rackByWine.set(p.cellar_wine_id, (rackByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
   }
   let healed = 0;
   for (const w of wines) {
-    const placedSum = placedByWine.get(w.id) ?? 0;
-    if (placedSum > (w.quantity ?? 0)) {
-      const { error: upErr } = await supabase.from('cellar_wines').update({ quantity: placedSum }).eq('id', w.id);
+    const rackSlots = rackByWine.get(w.id) ?? 0;
+    if (rackSlots > (w.quantity ?? 0)) {
+      const { error: upErr } = await supabase.from('cellar_wines').update({ quantity: rackSlots }).eq('id', w.id);
       if (!upErr) healed += 1;
     }
   }

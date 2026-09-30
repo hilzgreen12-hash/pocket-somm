@@ -607,9 +607,17 @@ export default function CellarWineDetail() {
   // Place EXISTING unplaced bottles: open the rack in select-slots mode, capped at
   // the unplaced count. The user taps that many empty slots (thumbnails fill) and
   // presses Confirm — no "how many?" prompt or starting-slot run.
-  function placeUnplacedInRack(rackId: string) {
+  async function placeUnplacedInRack(rackId: string) {
     if (!wine) return;
-    const unplaced = Math.max(1, (wine.quantity ?? 0) - placedCount(winePlacements));
+    // Cap from a FRESH placement read, not the React-Query snapshot — a stale/empty
+    // snapshot would inflate `unplaced` and let the rack screen offer (and place) more
+    // slots than the wine has loose bottles, pushing placed above quantity.
+    const pls = await fetchPlacementsForWine(wine.id).catch(() => winePlacements);
+    const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(pls));
+    if (unplaced <= 0) {
+      showAlert({ title: 'All placed', body: 'Every bottle of this wine is already placed in your cellar.' });
+      return;
+    }
     router.push(`/cellar/rack/${rackId}?placeWine=${wine.id}&placeLimit=${unplaced}` as any);
   }
 
@@ -654,7 +662,7 @@ export default function CellarWineDetail() {
   function handleAddToLocation() {
     const buttons = [
       // Existing unplaced bottles → select empty slots to place them (no count bump).
-      ...racks.map((r) => ({ text: r.name, onPress: () => placeUnplacedInRack(r.id) })),
+      ...racks.map((r) => ({ text: r.name, onPress: () => void placeUnplacedInRack(r.id) })),
       ...storageLocations.map((l) => ({ text: `${l.name} (home storage)`, onPress: () => fileInStorageLocation(l.id) })),
       ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => addWineToLocationFilter(l.id) })),
     ];
@@ -837,10 +845,39 @@ export default function CellarWineDetail() {
           buttons: [{ text: 'OK', onPress: () => router.back() }],
         });
       } else {
-        // Partial removal — decrement the live cellar row and clone an
-        // archive row carrying the bottles removed in this event. Without
-        // the clone, the "Bottles in My Archive" stat (which sums archived
-        // matching rows) wouldn't reflect the bottles the user just pulled.
+        // Partial removal. FREE THE PHYSICAL BOTTLES FIRST, then decrement the
+        // cellar row. Order is critical: the quantity update fires the mig-107 trim
+        // trigger, which trims location placements down to (quantity − rack/bin). If
+        // we decremented first, that trim would run against the STALE (pre-removal)
+        // rack/location counts and delete the wrong bottle — e.g. nuking an alt-cellar
+        // bottle when the user archived a RACK one. Freeing first leaves the placements
+        // already correct, so the trim (and the rack/bin resync) is a clean no-op.
+        //
+        // Base the freeing plan on a FRESH placement read. The React-Query snapshot can
+        // be empty/stale, which used to make `loose` too high and leave placements
+        // un-freed — quantity drifting below placed, then the heal baking in a phantom
+        // bottle.
+        const freshPlacements = await fetchPlacementsForWine(wine!.id).catch(() => winePlacements);
+        const placedBefore = placedCount(freshPlacements);
+        // If the user opened this card by tapping a SPECIFIC rack slot, remove THAT
+        // exact bottle FIRST — even when loose (unplaced) stock exists — so the
+        // thumbnail they pressed is the one that disappears. Any remainder then comes
+        // from loose bottles first, then other placements.
+        let remaining = count;
+        let freedAny = false;
+        if (tappedSlot && Number.isFinite(tappedSlot.row) && Number.isFinite(tappedSlot.col)) {
+          await clearSlot(tappedSlot.rackId, tappedSlot.row, tappedSlot.col);
+          remaining -= 1;
+          freedAny = true;
+        }
+        if (remaining > 0) {
+          const loose = Math.max(0, (wine!.quantity ?? 0) - placedBefore);
+          const toFree = Math.max(0, remaining - loose);
+          if (toFree > 0) { await releaseBottlesFromPlacements(wine!.id, toFree); freedAny = true; }
+        }
+        // Now decrement the live cellar row and clone an archive row carrying the
+        // bottles removed in this event. Without the clone, the "Bottles in My Archive"
+        // stat (which sums archived matching rows) wouldn't reflect the bottles pulled.
         await updateWine.mutateAsync({
           id: wine!.id,
           updates: { quantity: newQuantity },
@@ -855,24 +892,6 @@ export default function CellarWineDetail() {
         if (session?.user.id) {
           qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
         }
-        // Free the archived bottles. If the user opened this card by tapping a
-        // SPECIFIC rack slot, remove THAT exact bottle FIRST — even when loose
-        // (unplaced) stock exists — so the thumbnail they pressed is the one that
-        // disappears. (Previously loose bottles were always taken first, so a
-        // tapped rack bottle was left in place.) Any remainder then comes from
-        // loose bottles first, then other placements.
-        let remaining = count;
-        let freedAny = false;
-        if (tappedSlot && Number.isFinite(tappedSlot.row) && Number.isFinite(tappedSlot.col)) {
-          await clearSlot(tappedSlot.rackId, tappedSlot.row, tappedSlot.col);
-          remaining -= 1;
-          freedAny = true;
-        }
-        if (remaining > 0) {
-          const loose = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
-          const toFree = Math.max(0, remaining - loose);
-          if (toFree > 0) { await releaseBottlesFromPlacements(wine!.id, toFree); freedAny = true; }
-        }
         if (freedAny) {
           qc.invalidateQueries({ queryKey: ['slot-assignments'] });
           qc.invalidateQueries({ queryKey: ['rack-slots'] });
@@ -880,6 +899,7 @@ export default function CellarWineDetail() {
         }
         setRackRemovalMsg(null);
         qc.invalidateQueries({ queryKey: ['placements', wine!.id] });
+        qc.invalidateQueries({ queryKey: ['placements-list'] });
         setRemoveCount('1');
         setRemoveNote('');
         setArchiveModalOpen(false);

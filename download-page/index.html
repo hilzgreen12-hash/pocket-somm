@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Get Vinster</title>
+  <meta name="description" content="Vinster — Real Wine Experience, AI Delivered. Install on iOS or Android." />
+  <style>
+    :root { --cream:#F4EBE0; --terracotta:#7F4F4C; --ink:#1A1A1A; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      background: var(--cream); color: var(--terracotta);
+      font-family: Georgia, 'Times New Roman', serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100dvh; padding: 32px 22px; text-align: center;
+    }
+    .card { max-width: 420px; width: 100%; }
+    .brand { font-size: 40px; letter-spacing: 4px; font-weight: 700; text-transform: uppercase; }
+    .tagline { font-size: 16px; margin-top: 10px; font-style: italic; color: var(--terracotta); opacity: 0.85; }
+    .lede { margin-top: 26px; font-size: 17px; line-height: 1.5; }
+    .buttons { margin-top: 26px; display: flex; flex-direction: column; gap: 14px; }
+    a.store {
+      display: block; text-decoration: none; font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+      font-weight: 600; font-size: 16px; letter-spacing: 0.3px;
+      padding: 16px 20px; border-radius: 14px;
+      background: var(--terracotta); color: var(--cream);
+      border: 1px solid var(--terracotta);
+    }
+    a.store.alt { background: transparent; color: var(--terracotta); }
+    .fine { margin-top: 22px; font-size: 13px; opacity: 0.7; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #241615; color: var(--cream); }
+      .tagline, a.store.alt { color: var(--cream); }
+      a.store.alt { border-color: var(--cream); }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">Vinster</div>
+    <div class="tagline">Real Wine Experience, AI Delivered</div>
+    <p class="lede">Get Vinster free — scan, review and manage your wines.</p>
+    <div class="buttons">
+      <a class="store" id="ios" href="https://apps.apple.com/app/id6763607127">Download on the App&nbsp;Store</a>
+      <a class="store alt" id="android" href="https://play.google.com/store/apps/details?id=com.vinster.app">Get it on Google&nbsp;Play</a>
+    </div>
+    <p class="fine">Redirecting you to your app store…</p>
+  </main>
+  <script>
+    // Send phones straight to the right store; everyone still sees both buttons.
+    (function () {
+      var ua = navigator.userAgent || navigator.vendor || '';
+      var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isAndroid = /android/i.test(ua);
+      var ios = document.getElementById('ios').href;
+      var android = document.getElementById('android').href;
+      if (isIOS) { setTimeout(function () { window.location.href = ios; }, 400); }
+      else if (isAndroid) { setTimeout(function () { window.location.href = android; }, 400); }
+      else { document.querySelector('.fine').textContent = 'Choose your platform above.'; }
+    })();
+  </script>
+</body>
+</html>
