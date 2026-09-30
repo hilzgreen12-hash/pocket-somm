@@ -17,12 +17,10 @@ import type { CellarWine } from '../types/wine';
 // Cap on how many "last bottle" tiles show, so a big cellar doesn't create a
 // 40-tile strip. Newest additions first.
 const LAST_BOTTLE_CAP = 8;
-// A grape needs at least this many scored wines for its average to be meaningful.
-const MIN_GRAPE_WINES = 2;
 
 // Placeholder tiles shown until the cellar has enough data to surface real ones.
 const INSIGHT_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'icon', icon: 'sparkles-outline', title: 'Top-Rated Grape', stamp: 'Nebbiolo · avg 94', overlay: 'Your cellar insights appear here' },
+  { kind: 'icon', icon: 'ribbon-outline', title: 'Top Critic Score', stamp: 'Sassicaia · 97', overlay: 'Your cellar insights appear here' },
   { kind: 'icon', icon: 'time-outline', title: 'Oldest Vintage', stamp: '1998', overlay: 'Your cellar insights appear here' },
   { kind: 'icon', icon: 'trophy-outline', title: 'Most Collected', stamp: 'Guigal · 7 bottles', overlay: 'Your cellar insights appear here' },
 ];
@@ -73,29 +71,28 @@ export function CellarInsightsCarousel() {
   // Fact tiles — only included when the data supports them (and not dismissed).
   const facts: Tile[] = [];
 
-  // Top-rated grape by average critic score (needs a few scored wines).
-  const grapeAgg = new Map<string, { label: string; sum: number; n: number }>();
-  for (const w of wines) {
-    const g = (w.grape_variety ?? '').trim();
-    if (!g || w.critic_score == null) continue;
-    const cur = grapeAgg.get(g.toLowerCase()) ?? { label: g, sum: 0, n: 0 };
-    cur.sum += w.critic_score;
-    cur.n += 1;
-    grapeAgg.set(g.toLowerCase(), cur);
+  // Top critic score — the highest Vinster/critic-scored wine you own.
+  const topCritic = wines.filter((w) => w.critic_score != null).sort((a, b) => (b.critic_score ?? 0) - (a.critic_score ?? 0))[0];
+  const criticKey = topCritic ? `fact:critic:${topCritic.id}` : '';
+  if (topCritic && !dset.has(criticKey)) {
+    facts.push({
+      kind: 'fact', key: 'critic', dismissKey: criticKey, icon: 'ribbon-outline',
+      value: String(topCritic.critic_score), title: `Top Critic Score · ${topCritic.critic_score}`,
+      meta: [topCritic.producer, topCritic.wine_name].filter(Boolean).join(' ') || 'In your cellar',
+      wineId: topCritic.id, thumbWine: topCritic,
+    });
   }
-  const topGrape = [...grapeAgg.values()]
-    .filter((x) => x.n >= MIN_GRAPE_WINES)
-    .map((x) => ({ label: x.label, avg: Math.round(x.sum / x.n) }))
-    .sort((a, b) => b.avg - a.avg)[0];
-  // Dismiss keys include the VALUE, so hiding one top grape doesn't suppress a
-  // different grape that later becomes top-rated.
-  const grapeKey = topGrape ? `fact:grape:${topGrape.label.toLowerCase()}` : '';
-  if (topGrape && !dset.has(grapeKey)) {
-    // Representative wine for the thumbnail: the highest-scored wine of that grape.
-    const grapeWine = wines
-      .filter((w) => (w.grape_variety ?? '').toLowerCase() === topGrape.label.toLowerCase() && w.critic_score != null)
-      .sort((a, b) => (b.critic_score ?? 0) - (a.critic_score ?? 0))[0];
-    facts.push({ kind: 'fact', key: 'grape', dismissKey: grapeKey, icon: 'sparkles-outline', value: topGrape.label, title: topGrape.label, meta: `Top-Rated Grape · Avg ${topGrape.avg}`, wineId: grapeWine?.id, thumbWine: grapeWine });
+
+  // Your top score — the wine YOU rated highest.
+  const topUser = wines.filter((w) => w.review_score != null).sort((a, b) => (b.review_score ?? 0) - (a.review_score ?? 0))[0];
+  const userKey = topUser ? `fact:yourscore:${topUser.id}` : '';
+  if (topUser && !dset.has(userKey)) {
+    facts.push({
+      kind: 'fact', key: 'yourscore', dismissKey: userKey, icon: 'star-outline',
+      value: String(topUser.review_score), title: `Your Top Score · ${topUser.review_score}`,
+      meta: [topUser.producer, topUser.wine_name].filter(Boolean).join(' ') || 'In your cellar',
+      wineId: topUser.id, thumbWine: topUser,
+    });
   }
 
   // Oldest vintage in the cellar (vintage is stored as a string).
