@@ -29,7 +29,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { valueWine } from '../../src/services/pricing';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
-import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements } from '../../src/api/placements';
+import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { publishCommunityReview } from '../../src/api/community';
@@ -55,6 +55,14 @@ import type { WineDetailsComplete, CellarWine, GrapeVariant } from '../../src/ty
 function todayISO() {
   return new Date().toISOString().split('T')[0];
 }
+
+// A distinct physical place a wine's bottles sit in, offered as an archive source
+// when the wine is split across more than one (a rack, an alt cellar, a bin, loose).
+type ArchiveSource =
+  | { kind: 'rack'; rackId: string; label: string; count: number }
+  | { kind: 'location'; locationId: string; label: string; count: number }
+  | { kind: 'bin'; label: string; count: number }
+  | { kind: 'loose'; label: string; count: number };
 
 const STATUS_COLORS: Record<string, string> = {
   too_young: colors.warning,
@@ -770,6 +778,73 @@ export default function CellarWineDetail() {
     }
   }
 
+  // Which PHYSICAL place the bottles being archived come from. Set by the "Archive
+  // from which location?" chooser; read inside handleArchiveWine. A ref (not state)
+  // so the value is available synchronously to the archive that runs right after the
+  // chooser tap, with no setState-timing race.
+  const archiveSourceRef = useRef<ArchiveSource | null>(null);
+
+  // Break the wine's bottles into the distinct physical places they sit in, so the
+  // user can say WHERE an archived bottle comes from when it's split. Each rack is
+  // its own bucket; each alt-cellar location its own; bins and loose are single
+  // buckets. Empty buckets are omitted.
+  function archiveSourceBuckets(): ArchiveSource[] {
+    const buckets: ArchiveSource[] = [];
+    const rackCounts = new Map<string, number>();
+    for (const p of winePlacements) {
+      if (p.kind === 'rack' && p.rack_id) rackCounts.set(p.rack_id, (rackCounts.get(p.rack_id) ?? 0) + (p.quantity ?? 1));
+    }
+    for (const [rackId, count] of rackCounts) {
+      buckets.push({ kind: 'rack', rackId, label: racks.find((r) => r.id === rackId)?.name ?? 'a rack', count });
+    }
+    const locCounts = new Map<string, number>();
+    for (const p of winePlacements) {
+      if (p.kind === 'location' && p.storage_location_id) locCounts.set(p.storage_location_id, (locCounts.get(p.storage_location_id) ?? 0) + (p.quantity ?? 0));
+    }
+    for (const [locId, count] of locCounts) {
+      buckets.push({ kind: 'location', locationId: locId, label: storageLocations.find((l) => l.id === locId)?.name ?? 'a home storage location', count });
+    }
+    const binCount = winePlacements.filter((p) => p.kind === 'bin').reduce((s, p) => s + (p.quantity ?? 0), 0);
+    if (binCount > 0) buckets.push({ kind: 'bin', label: 'a wine bin', count: binCount });
+    const loose = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
+    if (loose > 0) buckets.push({ kind: 'loose', label: 'Not yet placed (loose)', count: loose });
+    return buckets;
+  }
+
+  // Tapped "Archive Wine" in the modal. For a PARTIAL archive of a wine split across
+  // more than one place — and not already scoped by a tapped rack slot — ask which
+  // place the bottles come from first, then archive. Otherwise archive straight away.
+  async function onArchivePressed() {
+    const count = parseInt(removeCount) || 0;
+    const isPartial = count >= 1 && count < (wine!.quantity ?? 0);
+    if (isPartial && !tappedSlot) {
+      const buckets = archiveSourceBuckets();
+      if (buckets.length > 1) {
+        setArchiveModalOpen(false);
+        showAlert({
+          title: 'Archive the bottle from which location?',
+          body: 'This wine is split across more than one place — choose where these bottles come from.',
+          buttons: [
+            ...buckets.map((b) => ({ text: `${b.label} · ${b.count} bottle${b.count === 1 ? '' : 's'}`, onPress: () => { void runArchive(b); } })),
+            { text: 'Cancel', style: 'cancel' as const },
+          ],
+        });
+        return;
+      }
+    }
+    await runArchive(null);
+  }
+
+  async function runArchive(source: ArchiveSource | null) {
+    archiveSourceRef.current = source;
+    try {
+      await handleArchiveWine();
+    } finally {
+      archiveSourceRef.current = null;
+      setArchiveModalOpen(false);
+    }
+  }
+
   async function handleArchiveWine() {
     const count = parseInt(removeCount) || 0;
     if (count < 1) {
@@ -865,11 +940,27 @@ export default function CellarWineDetail() {
         // from loose bottles first, then other placements.
         let remaining = count;
         let freedAny = false;
+        const source = archiveSourceRef.current;
         if (tappedSlot && Number.isFinite(tappedSlot.row) && Number.isFinite(tappedSlot.col)) {
           await clearSlot(tappedSlot.rackId, tappedSlot.row, tappedSlot.col);
           remaining -= 1;
           freedAny = true;
+        } else if (source && (source.kind === 'rack' || source.kind === 'location')) {
+          // The user chose a specific physical place — take from THERE first (even when
+          // loose bottles exist), so the bottle leaves the place they picked. Only the
+          // overflow beyond that place spills to the default loose-first fallback below.
+          const take = Math.min(remaining, source.count);
+          if (take > 0) {
+            if (source.kind === 'rack') await removeSlotsForWine(wine!.id, take, source.rackId);
+            else await releaseFromLocation(wine!.id, source.locationId, take);
+            remaining -= take;
+            freedAny = true;
+          }
         }
+        // 'bin'/'loose' sources (and any overflow) fall through here. A bin mirrors
+        // quantity — the mig-104 resync rebuilds it on the quantity update — and loose
+        // bottles have no placement, so this frees from placements ONLY when the removal
+        // still exceeds the loose bottles.
         if (remaining > 0) {
           const loose = Math.max(0, (wine!.quantity ?? 0) - placedBefore);
           const toFree = Math.max(0, remaining - loose);
@@ -2260,10 +2351,7 @@ export default function CellarWineDetail() {
 
             <TouchableOpacity
               style={[styles.removeBtn, removing && styles.buttonDisabled]}
-              onPress={async () => {
-                await handleArchiveWine();
-                setArchiveModalOpen(false);
-              }}
+              onPress={async () => { await onArchivePressed(); }}
               disabled={removing}
             >
               <Text style={styles.removeBtnText}>{removing ? 'Working…' : 'Archive Wine'}</Text>

@@ -124,6 +124,24 @@ export async function releaseBottlesFromPlacements(wineId: string, n: number): P
   return freed;
 }
 
+// Free `n` bottles from ONE specific alt-cellar location (used when the user chooses,
+// on archive, which physical place a bottle comes from). Scoped to that location's
+// placements only — never touches racks or other locations.
+export async function releaseFromLocation(wineId: string, locationId: string, n: number): Promise<number> {
+  if (n <= 0) return 0;
+  let toFree = n;
+  let freed = 0;
+  const locs = (await fetchPlacementsForWine(wineId)).filter(
+    (p) => p.kind === 'location' && p.storage_location_id === locationId,
+  );
+  for (const p of locs) {
+    if (toFree <= 0) break;
+    const take = Math.min(toFree, p.quantity ?? 0);
+    if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; freed += take; }
+  }
+  return freed;
+}
+
 export async function decrementPlacement(placementId: string, by: number): Promise<void> {
   const { data, error } = await supabase
     .from('cellar_placements')
