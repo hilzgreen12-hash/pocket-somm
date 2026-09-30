@@ -80,12 +80,22 @@ async function writeLocal(userId: string | null | undefined, items: ScanHistoryI
   await AsyncStorage.setItem(scanHistoryKey(userId), JSON.stringify(items));
 }
 
+// A STABLE local id for a scan, derived from its content — so the mount-time
+// cacheScanLocally write and the later autoSave write for the SAME scan collapse
+// into one entry instead of two (both previously used Date.now(), so the same
+// scan showed twice in local "View Last Result" history).
+function localScanKey(rec: RecommendationResponse, wines: ExtractedWine[]): string {
+  const first = wines[0];
+  return ['ls', wines.length, first?.producer ?? '', first?.name ?? '', (rec.summary ?? '').slice(0, 24)]
+    .join('|').toLowerCase();
+}
+
 // Caches a fresh scan to local AsyncStorage only (no Supabase, no GPS).
 // Fires on result render so View Last Result always works inside the
 // session, regardless of whether the user has tapped Save to Archive.
 export async function cacheScanLocally(userId: string | null | undefined, input: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse; restaurantName?: string | null; city?: string | null }) {
   const newItem: ScanHistoryItem = {
-    id: Date.now().toString(),
+    id: localScanKey(input.recommendation, input.extractedWines),
     savedAt: new Date().toISOString(),
     extractedWines: input.extractedWines,
     recommendation: input.recommendation,
@@ -94,7 +104,7 @@ export async function cacheScanLocally(userId: string | null | undefined, input:
     restaurantName: input.restaurantName ?? null,
   };
   const existing = await readLocal(userId);
-  const updated = [newItem, ...existing].slice(0, MAX_LOCAL);
+  const updated = [newItem, ...existing.filter((e) => e.id !== newItem.id)].slice(0, MAX_LOCAL);
   await writeLocal(userId, updated);
 }
 
@@ -258,7 +268,7 @@ export function useScanHistory() {
       // stays empty until the user adds one via that flow (take / upload / find).
 
       const newItem: ScanHistoryItem = {
-        id: Date.now().toString(),
+        id: localScanKey(recommendation, extractedWines),
         savedAt: now,
         extractedWines,
         recommendation,
@@ -268,7 +278,8 @@ export function useScanHistory() {
         sessionId,
       };
       const existing = await readLocal(session.user.id);
-      const updated = [newItem, ...existing].slice(0, MAX_LOCAL);
+      // Dedupe against the mount-time cacheScanLocally entry for this same scan.
+      const updated = [newItem, ...existing.filter((e) => e.id !== newItem.id)].slice(0, MAX_LOCAL);
       await writeLocal(session.user.id, updated);
       return updated;
     },

@@ -203,7 +203,9 @@ export function RecentScansCarousel() {
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-      {merged.map((item, i) => <RecentCard key={`${item.kind}-${i}`} item={item} />)}
+      {/* Stable content key (kind + timestamp + title), not the array index —
+          otherwise a new scan reorders the list and React mis-associates cards. */}
+      {merged.map((item) => <RecentCard key={`${item.kind}-${item.ts}-${item.title}`} item={item} />)}
       {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />)}
     </ScrollView>
   );
