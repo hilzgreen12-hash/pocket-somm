@@ -54,11 +54,12 @@ function distinctCandidateIds(ids: string[], wines: CellarWine[]): string[] {
 }
 
 
-// True if the spoken command names a vintage (a 19xx/20xx year) or explicitly
-// flags a non-vintage bottle ("non-vintage" / "NV"). Move / archive / add all
-// require one so Vinster targets the right bottle.
-function mentionsVintage(text: string): boolean {
-  return /\b(19|20)\d{2}\b/.test(text) || /\bnon[-\s]?vintage\b/i.test(text) || /\bnv\b/i.test(text);
+// A move whose DESTINATION is the Full Cellar List (i.e. unplace the bottles — take
+// them out of an alt cellar / rack and leave them loose in the cellar). This isn't a
+// storage location or a rack, so the parser can't resolve it as a destination; we
+// detect the phrasing here and handle it as an unplace.
+function mentionsCellarList(text: string): boolean {
+  return /\b(full\s+)?cellar\s+list\b/i.test(text) || /\bunplace/i.test(text);
 }
 
 // Default intro copy + examples (the Cellar-tab, full-scope voice command).
@@ -110,6 +111,8 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   const [transcript, setTranscript] = useState('');
   const [result, setResult] = useState<CellarCommandResult | null>(null);
   const [chosenWineId, setChosenWineId] = useState<string | null>(null);
+  // Move destination is the Full Cellar List (unplace), not a location/rack/bin.
+  const [moveToCellarList, setMoveToCellarList] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [success, setSuccess] = useState<{
     action: 'move' | 'archive' | 'add';
@@ -123,13 +126,14 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   const chosenWine = wines.find((w) => w.id === chosenWineId);
   const targetLocation = locations.find((l) => l.id === result?.locationId);
   const targetUnit = units.find((u) => u.id === result?.unitId);
-  const destName = targetUnit?.name ?? targetLocation?.name ?? null;
+  const destName = moveToCellarList ? 'your Full Cellar List' : (targetUnit?.name ?? targetLocation?.name ?? null);
 
   function reset() {
     setPhase('speak');
     setTranscript('');
     setResult(null);
     setChosenWineId(null);
+    setMoveToCellarList(false);
     setSuccess(null);
   }
 
@@ -204,20 +208,21 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
       runMoodRecommend();
       return;
     }
-    // Move / archive / add must name a vintage so the right bottle is targeted —
-    // or the user can explicitly say the wine is non-vintage.
-    if (!mentionsVintage(transcript)) {
-      showAlert({
-        title: "Vinster didn't catch a vintage",
-        body: "Please repeat the command including the wine's vintage, or say 'non-vintage'.",
-      });
-      return;
-    }
     // Free-form command: infer the verb from the words rather than making the
     // user pick it up front. "add" (a new bottle) first, then archive, else move.
     const act: CellarCommandAction = /\badd(s|ed|ing)?\b/i.test(transcript)
       ? 'add'
       : /\barchiv/i.test(transcript) ? 'archive' : 'move';
+    // A move whose destination is the Full Cellar List = unplace (take the bottles out
+    // of an alt cellar / rack and leave them loose). Not a resolvable parser
+    // destination, so detect the phrasing and handle it specially.
+    const wantsCellarList = act === 'move' && mentionsCellarList(transcript);
+    setMoveToCellarList(wantsCellarList);
+    // We no longer force a vintage up front: the parser resolves the wine by name
+    // (phonetically), multiple matching vintages come back as candidates → the "which
+    // one?" pick step, and a single match lands on the confirm step (which shows the
+    // vintage before anything happens). Demanding a vintage blocked clear commands
+    // like "move one bottle of Rieussec to my full cellar list".
     // Scoped callers (e.g. a home storage location) may only permit some verbs —
     // e.g. move/archive but not "add". Nudge the user to the right tool instead.
     if (allowedActions && !allowedActions.includes(act)) {
@@ -253,8 +258,10 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         setPhase('need');
         return;
       }
-      // A move needs a destination — either an Alt Cellar or a rack/fridge/bin.
-      if (act === 'move' && (res.needs === 'location' || (!res.locationId && !res.unitId))) {
+      // A move needs a destination — an Alt Cellar, a rack/fridge/bin, OR the Full
+      // Cellar List (unplace). Only nag for a destination when it isn't the cellar-list
+      // case, which has no locationId/unitId by design.
+      if (act === 'move' && !wantsCellarList && (res.needs === 'location' || (!res.locationId && !res.unitId))) {
         setPhase('need');
         return;
       }
@@ -272,12 +279,44 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     try {
       if (action === 'move') {
         if (!chosenWine) return;
-        if (!result?.locationId && !result?.unitId) return;
         const count = Math.min(chosenWine.quantity, Math.max(1, result?.quantity ?? chosenWine.quantity));
         const whole = count >= chosenWine.quantity;
         const fromName = chosenWine.storage_location_id
           ? (locations.find((l) => l.id === chosenWine.storage_location_id)?.name ?? 'your cellar')
           : 'your cellar';
+
+        // Destination is the Full Cellar List → UNPLACE the bottles: take them out of
+        // wherever they sit (alt cellar / rack) and leave them loose in the cellar.
+        // Quantity is unchanged — the bottles don't leave the cellar, just their spot.
+        if (moveToCellarList) {
+          if (whole) {
+            await clearWineFromRacks(chosenWine.id);
+            await clearLocationPlacements(chosenWine.id);
+            await updateCellarWine(chosenWine.id, { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: false, awaiting_placement_unit_id: null });
+          } else {
+            // Free `count` bottles from their placements (rack-first, then alt cellar);
+            // quantity stays the same so those bottles become loose/unplaced.
+            await releaseBottlesFromPlacements(chosenWine.id, count);
+          }
+          qc.invalidateQueries({ queryKey: ['cellar', userId] });
+          qc.invalidateQueries({ queryKey: ['placements', chosenWine.id] });
+          qc.invalidateQueries({ queryKey: ['placements-list'] });
+          qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+          qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+          qc.invalidateQueries({ queryKey: ['rack-slots'] });
+          qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+          setSuccess({
+            action: 'move',
+            wine: [chosenWine.producer, chosenWine.wine_name].filter(Boolean).join(' '),
+            meta: [chosenWine.region, chosenWine.vintage].filter(Boolean).join(' · '),
+            detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} · from ${fromName} to your Full Cellar List`,
+            viewLabel: 'View in Cellar List',
+            viewRoute: '/cellar/list',
+          });
+          return;
+        }
+
+        if (!result?.locationId && !result?.unitId) return;
         const toName = destName ?? 'its new location';
 
         if (result?.locationId) {
