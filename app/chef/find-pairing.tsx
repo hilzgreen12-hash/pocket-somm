@@ -25,7 +25,7 @@ export default function FindPairingScreen() {
   const { wines } = useCellar();
   const { preferences: savedPreferences } = usePreferences();
   const { setCellarResult, setGeneralResult, setDish, setMode, setStylePreference: storeStyle, setBudget: storeBudget, generalResult, cellarResult } = useFoodPairingStore();
-  const { sessions: pairingSessions } = useChefPairingHistory();
+  const { sessions: pairingSessions, save: savePairing } = useChefPairingHistory();
 
   const [dish, setDishLocal] = useState('');
   // Multi-select preference bubbles (mirror the You → Your Preferences page):
@@ -144,6 +144,19 @@ export default function FindPairingScreen() {
         setCellarResult(result.recommendations as CellarRecommendation[]);
       } else {
         setGeneralResult(result.recommendations as GeneralRecommendation[], result.summary);
+      }
+
+      // Silently record this pairing to the user's OWN private history (RLS-scoped,
+      // never shared) so it can power Cellar Insights (e.g. most-paired dishes) —
+      // no archive UI. Fire-and-forget: never block or error the pairing itself.
+      if (session) {
+        savePairing.mutate({
+          dish: cleanDish,
+          mode,
+          cellarResult: mode === 'cellar' ? (result.recommendations as CellarRecommendation[]) : null,
+          generalResult: mode === 'general' ? (result.recommendations as GeneralRecommendation[]) : null,
+          generalSummary: mode === 'general' ? (result.summary ?? null) : null,
+        });
       }
 
       router.push('/chef/pairing-results');

@@ -185,7 +185,6 @@ export default function RootLayout() {
             <Stack.Screen name="chef/recipe-full" />
             <Stack.Screen name="chef/find-pairing" />
             <Stack.Screen name="chef/pairing-results" />
-            <Stack.Screen name="chef/pairing-archive" />
             <Stack.Screen name="chef/archive" />
             <Stack.Screen name="cellar/list" />
             <Stack.Screen name="cellar/stats" />
