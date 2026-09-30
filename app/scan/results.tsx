@@ -704,6 +704,18 @@ export default function ResultsScreen() {
         excludeWines,
         currency: userPrefs?.defaultCurrency ?? 'GBP',
       });
+      // Reset ALL per-index state before swapping in the new list — these maps
+      // are keyed by array position, so without clearing them the new wine #0
+      // would show the PREVIOUS pick's cached review + Wine-Searcher price/score,
+      // keep a stale "Selected" chip, and (worst) let an unselect delete the old
+      // wine's saved pick via a stale sessionPickIdRef. The reconcile/ws/review
+      // effects repopulate correctly for the new wines once these are empty.
+      setReviewByIndex({});
+      setReviewLoading(new Set());
+      setWsByIndex({});
+      setChosenIndexes(new Set());
+      sessionPickIdRef.current.clear();
+      pendingIdxRef.current.clear();
       setRecommendation(newRec);
       setOpenIndex(0);
     } catch (err) {
@@ -1202,7 +1214,7 @@ export default function ResultsScreen() {
       <ChosenWineModal
         wine={chosenModalWine}
         visible={chosenModalWine !== null}
-        scanSessionId={isFromHistory ? (sessionId ?? null) : (autoSave.data?.[0]?.sessionId ?? null)}
+        scanSessionId={effectiveSessionId}
         initialRestaurantName={isFromHistory ? (historyRestaurant ?? null) : (restaurantName || null)}
         initialCity={isFromHistory ? (historyCity ?? null) : (cityOverride ?? autoSave.data?.[0]?.city ?? liveCity ?? null)}
         onClose={() => setChosenModalWine(null)}

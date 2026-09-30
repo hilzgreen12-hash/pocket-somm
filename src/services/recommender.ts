@@ -182,6 +182,9 @@ export function finalizeRecommendation(
     const repeatNote = w.repeatNote && isAlreadySeen(w) ? w.repeatNote : null;
     return {
       ...w,
+      // Coerce a bogus vintage (0, or an implausible year) to null so the card
+      // header doesn't render "Producer · Wine · 0". Real NV wines are already null.
+      vintage: typeof w.vintage === 'number' && w.vintage > 1900 ? w.vintage : null,
       repeatNote,
       menuPrice: match ? match.menuPrice : null,
       currency: match?.currency || scanCurrency,
