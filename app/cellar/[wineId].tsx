@@ -846,22 +846,25 @@ export default function CellarWineDetail() {
         if (session?.user.id) {
           qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
         }
-        // Take the archived bottles from UNPLACED (loose) bottles first — only
-        // free a rack slot for any that exceed the loose count. No note: taking
-        // from loose is the expected, silent behaviour (there's no "live cellar
-        // rack" — a wine's placement is just where it sits).
-        const unplacedBottles = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
-        let slotsToFree = Math.max(0, count - unplacedBottles);
-        if (slotsToFree > 0) {
-          // Free the SPECIFIC slot the user tapped to open this card first, so the
-          // exact bottle they selected is the one removed from the rack (not an
-          // arbitrary same-wine slot). Then free any remainder from placements —
-          // rack/fridge slots first, THEN alt-cellar ('location') placements.
-          if (tappedSlot && Number.isFinite(tappedSlot.row) && Number.isFinite(tappedSlot.col)) {
-            await clearSlot(tappedSlot.rackId, tappedSlot.row, tappedSlot.col);
-            slotsToFree -= 1;
-          }
-          if (slotsToFree > 0) await releaseBottlesFromPlacements(wine!.id, slotsToFree);
+        // Free the archived bottles. If the user opened this card by tapping a
+        // SPECIFIC rack slot, remove THAT exact bottle FIRST — even when loose
+        // (unplaced) stock exists — so the thumbnail they pressed is the one that
+        // disappears. (Previously loose bottles were always taken first, so a
+        // tapped rack bottle was left in place.) Any remainder then comes from
+        // loose bottles first, then other placements.
+        let remaining = count;
+        let freedAny = false;
+        if (tappedSlot && Number.isFinite(tappedSlot.row) && Number.isFinite(tappedSlot.col)) {
+          await clearSlot(tappedSlot.rackId, tappedSlot.row, tappedSlot.col);
+          remaining -= 1;
+          freedAny = true;
+        }
+        if (remaining > 0) {
+          const loose = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
+          const toFree = Math.max(0, remaining - loose);
+          if (toFree > 0) { await releaseBottlesFromPlacements(wine!.id, toFree); freedAny = true; }
+        }
+        if (freedAny) {
           qc.invalidateQueries({ queryKey: ['slot-assignments'] });
           qc.invalidateQueries({ queryKey: ['rack-slots'] });
           qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
