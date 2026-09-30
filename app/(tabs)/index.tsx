@@ -409,7 +409,7 @@ export default function ScanLandingScreen() {
           few facts buried in the data (top-rated grape, oldest vintage, most-
           collected producer). Chef/ingredient tiles deferred — not tracked yet. */}
       <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Your Cellar Insights</Text>
+      <Text style={styles.carouselHeader}>Vinster's Insights</Text>
       <Text style={styles.carouselStats}>{insightsRunningLow > 0 ? `${insightsRunningLow} ${insightsRunningLow === 1 ? 'Wine' : 'Wines'} Running Low` : 'Facts From Your Cellar'}</Text>
       <View style={styles.carouselBleed}><CellarInsightsCarousel /></View>
 

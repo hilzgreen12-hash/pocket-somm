@@ -4,7 +4,9 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../api/supabase';
 import { fetchWineIdsWithRemovals } from '../api/cellar';
+import { useChefPairingHistory } from '../hooks/useChefHistory';
 import { useInsightDismissStore } from '../stores/insightDismissStore';
 import { showAlert } from './AppAlert';
 import { WineCardThumb } from './WineCardThumb';
@@ -18,16 +20,17 @@ import type { CellarWine } from '../types/wine';
 // 40-tile strip. Newest additions first.
 const LAST_BOTTLE_CAP = 8;
 
-// Placeholder tiles shown until the cellar has enough data to surface real ones.
+// Placeholder tiles for a new user with no data yet — a faded example of each of
+// the three staple insights, replaced left-to-right as real ones appear.
 const INSIGHT_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'icon', icon: 'ribbon-outline', title: 'Top Critic Score', stamp: 'Sassicaia · 97', overlay: 'Your cellar insights appear here' },
-  { kind: 'icon', icon: 'time-outline', title: 'Oldest Vintage', stamp: '1998', overlay: 'Your cellar insights appear here' },
-  { kind: 'icon', icon: 'trophy-outline', title: 'Most Collected', stamp: 'Guigal · 7 bottles', overlay: 'Your cellar insights appear here' },
+  { kind: 'label', producer: 'Château Margaux', wineName: 'Grand Vin', title: 'Château Margaux 2015', stamp: 'Running low · Replenish?', overlay: 'Your content will appear here' },
+  { kind: 'icon', icon: 'trophy-outline', title: 'Most Collected', stamp: 'Guigal · 7 bottles', overlay: 'Your content will appear here' },
+  { kind: 'icon', icon: 'time-outline', title: 'Oldest Vintage', stamp: '1998', overlay: 'Your content will appear here' },
 ];
 
 type Tile =
   | { kind: 'bottle'; key: string; dismissKey: string; wine: CellarWine }
-  | { kind: 'fact'; key: string; dismissKey: string; icon: keyof typeof Ionicons.glyphMap; value: string; title: string; meta: string; wineId?: string; thumbWine?: CellarWine };
+  | { kind: 'fact'; key: string; dismissKey: string; icon: keyof typeof Ionicons.glyphMap; value: string; title: string; meta: string; wineId?: string; thumbWine?: CellarWine; onTap?: () => void };
 
 function runningLowWines(wines: CellarWine[], removalSet: Set<string>, dismissed: string[]): CellarWine[] {
   const dset = new Set(dismissed);
@@ -62,6 +65,21 @@ export function CellarInsightsCarousel() {
     queryFn: fetchWineIdsWithRemovals,
     enabled: !!session?.user.id,
   });
+  // Which personality sketches the user has generated (to surface a "view" tile).
+  const { data: sketches } = useQuery({
+    queryKey: ['personality-generated', session?.user.id],
+    enabled: !!session?.user.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('last_wine_personality, last_recipe_personality')
+        .eq('user_id', session!.user.id)
+        .maybeSingle();
+      return { wine: !!data?.last_wine_personality, recipe: !!data?.last_recipe_personality };
+    },
+  });
+  // Pairing history — only surface a pairing insight if the user actually pairs.
+  const { sessions: pairingSessions } = useChefPairingHistory();
   const dset = new Set(dismissed);
 
   // Last-bottle tiles: at 1 bottle AND drawn down to it (has removal history) —
@@ -130,8 +148,41 @@ export function CellarInsightsCarousel() {
     facts.push({ kind: 'fact', key: 'producer', dismissKey: producerKey, icon: 'trophy-outline', value: topProducer.label, title: topProducer.label, meta: `Most Collected · ${topProducer.bottles} bottles`, wineId: producerWine?.id, thumbWine: producerWine });
   }
 
-  // Last-bottle tiles first (actionable), then the facts.
+  // Pairing insight — ONLY when the user actually uses the pairing feature. Most-
+  // paired dish (a dish they've paired ≥2×); no tile if they pair rarely or every
+  // dish is distinct (no genuine "most").
+  const dishAgg = new Map<string, { label: string; n: number }>();
+  for (const s of pairingSessions) {
+    const d = (s.dish ?? '').trim();
+    if (!d) continue;
+    const cur = dishAgg.get(d.toLowerCase()) ?? { label: d, n: 0 };
+    cur.n += 1;
+    dishAgg.set(d.toLowerCase(), cur);
+  }
+  const topDish = [...dishAgg.values()].sort((a, b) => b.n - a.n)[0];
+  const dishKey = topDish ? `fact:dish:${topDish.label.toLowerCase()}` : '';
+  if (topDish && topDish.n >= 2 && !dset.has(dishKey)) {
+    facts.push({
+      kind: 'fact', key: 'dish', dismissKey: dishKey, icon: 'restaurant-outline',
+      value: topDish.label, title: 'Most-Paired Dish', meta: `Paired ${topDish.n}×`,
+      onTap: () => router.push('/chef/find-pairing' as any),
+    });
+  }
+
+  // Personality sketch — surfaced here so users see it without opening the You tab.
+  // Only when a sketch exists (don't show an empty tile).
+  const hasSketch = !!(sketches?.wine || sketches?.recipe);
+  const personalityTile: Tile | null = hasSketch && !dset.has('fact:personality')
+    ? {
+        kind: 'fact', key: 'personality', dismissKey: 'fact:personality', icon: 'person-circle-outline',
+        value: 'You', title: 'Your Personality Sketch', meta: 'Tap to read',
+        onTap: () => router.push(`/profile/personality?category=${sketches?.wine ? 'wine' : 'recipe'}` as any),
+      }
+    : null;
+
+  // Personality first (headline), then actionable last-bottle tiles, then facts.
   const tiles: Tile[] = [
+    ...(personalityTile ? [personalityTile] : []),
     ...lastBottles.map((w): Tile => ({ kind: 'bottle', key: `b-${w.id}`, dismissKey: `bottle:${w.id}`, wine: w })),
     ...facts,
   ];
@@ -170,10 +221,10 @@ export function CellarInsightsCarousel() {
           <TouchableOpacity
             key={t.key}
             style={styles.card}
-            onPress={t.wineId ? () => router.push(`/cellar/${t.wineId}` as any) : undefined}
+            onPress={t.onTap ?? (t.wineId ? () => router.push(`/cellar/${t.wineId}` as any) : undefined)}
             onLongPress={() => tileLongPress(t)}
             delayLongPress={400}
-            activeOpacity={t.wineId ? 0.85 : 1}
+            activeOpacity={t.onTap || t.wineId ? 0.85 : 1}
           >
             {t.thumbWine ? (
               // Show the actual bottle we're referring to (top-rated grape's wine,
