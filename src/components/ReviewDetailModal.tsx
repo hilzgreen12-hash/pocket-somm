@@ -293,9 +293,10 @@ const styles = StyleSheet.create({
   // Share sits directly below "+ Add Review".
   shareBtn: { position: 'absolute', top: 84, right: spacing.xl, zIndex: 10, padding: 4, alignItems: 'flex-end' },
   shareText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  // Foot-of-card Export — full-width gold-outlined button.
-  exportBtn: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)' },
-  exportBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
+  // Foot-of-card Export — gold outline + gold font only (no fill), sized to match
+  // the Cellar tab buttons (paddingVertical sm / paddingHorizontal md, 14pt).
+  exportBtn: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
+  exportBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
   // Centred gold card-type chip — same face/size/spacing as the Cellar card's.
   // Sits BELOW the top controls (back / +Add Review / Export) rather than level
   // with them, so the card's title and everything under it clear the header.
