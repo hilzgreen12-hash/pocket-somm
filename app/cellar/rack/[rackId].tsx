@@ -16,7 +16,7 @@ import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
 import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
 import { fetchStorageLocations, assignWineToStorageLocation } from '../../../src/api/storageLocations';
-import { addLocationPlacement, fetchPlacementsForWine } from '../../../src/api/placements';
+import { addLocationPlacement, fetchPlacementsForWine, decrementPlacement } from '../../../src/api/placements';
 import { getBins } from '../../../src/api/bins';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -819,12 +819,29 @@ export default function RackGridScreen() {
       setRackMove(null); setPendingSlot(null); setPendingSlots(null);
       return;
     }
+    // Free the M moved bottles from the wine's SOURCE placements (alt-cellar
+    // 'location' + 'bin'). Clearing only the legacy storage_location_id/bin_cell_id
+    // (below) does NOT remove the app-owned cellar_placements rows (migration 106),
+    // so without this the bottles were double-counted: M in the rack AND still M in
+    // the alt cellar / bin they came from.
+    async function releaseSourcePlacements(wineId: string, n: number) {
+      let toFree = n;
+      const ps = (await fetchPlacementsForWine(wineId)).filter((p) => p.kind === 'location' || p.kind === 'bin');
+      for (const p of ps) {
+        if (toFree <= 0) break;
+        const take = Math.min(toFree, p.quantity ?? 0);
+        if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; }
+      }
+    }
     try {
       if (M >= N) {
         await updateWine.mutateAsync({ id: wine.id, updates: { storage_location_id: null, bin_cell_id: null, case_id: null } });
+        await releaseSourcePlacements(wine.id, M);
         await assignSlots(rid, free.slice(0, M), wine.id);
       } else {
         await updateWine.mutateAsync({ id: wine.id, updates: { quantity: N - M } });
+        // Reduce the source's own placements by the moved M (the remainder stays).
+        await releaseSourcePlacements(wine.id, M);
         const { id: _id, created_at: _c, updated_at: _u, ...rest } = wine;
         const created = await addCellarWine({ ...rest, quantity: M, storage_location_id: null, bin_cell_id: null, case_id: null, is_wishlist: false } as any);
         await assignSlots(rid, free.slice(0, M), created.id);

@@ -587,10 +587,13 @@ export default function CellarWineDetail() {
     );
   }
 
-  // Send the wine to a rack grid for visual placement (existing flow).
-  function placeInRack(rackId: string) {
+  // Send the wine to a rack grid for visual placement. `addMode` = are these NEW
+  // bottles (bump quantity) or EXISTING ones being placed/moved (quantity
+  // unchanged)? Passing addMode:true for "Add to Location" (placing already-counted
+  // bottles) double-counted them by adding the placed count to quantity.
+  function placeInRack(rackId: string, addMode: boolean) {
     setPendingWineId(wine!.id);
-    setPendingAddMode(true);
+    setPendingAddMode(addMode);
     router.push(`/cellar/rack/${rackId}` as any);
   }
 
@@ -634,7 +637,8 @@ export default function CellarWineDetail() {
   // it into an Other Home Storage location, or tag it under a Cellar List location.
   function handleAddToLocation() {
     const buttons = [
-      ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id) })),
+      // Existing unplaced bottles → place them, don't add to the count.
+      ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id, false) })),
       ...storageLocations.map((l) => ({ text: `${l.name} (home storage)`, onPress: () => fileInStorageLocation(l.id) })),
       ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => addWineToLocationFilter(l.id) })),
     ];
@@ -666,7 +670,8 @@ export default function CellarWineDetail() {
     // list bespoke Location folders here — folders are managed in the Cellar
     // List itself, and offering them here filed bottles into the wrong place.
     const dests: { text: string; onPress: () => void }[] = [
-      ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id) })),
+      // Genuinely NEW bottles → placing them bumps the quantity.
+      ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id, true) })),
       { text: 'Cellar List', onPress: startAddToCellarList },
     ];
     if (dests.length === 1) {

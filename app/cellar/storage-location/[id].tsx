@@ -722,7 +722,10 @@ export default function StorageLocationScreen() {
   // to the rack screen in placement mode (mirrors the wine card's placeInRack).
   function moveToRack(w: CellarWine, rackId: string) {
     setPendingWineId(w.id);
-    setPendingAddMode(true);
+    // addMode FALSE — this is a MOVE of existing bottles (already decremented from
+    // this location), not new bottles. addMode:true made the rack placement ALSO
+    // add the moved count to the wine's quantity, inflating the total on every move.
+    setPendingAddMode(false);
     router.push(`/cellar/rack/${rackId}` as any);
   }
 
