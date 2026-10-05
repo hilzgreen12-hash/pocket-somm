@@ -70,6 +70,21 @@ function wsValueLine(menuPrice: number | null, avgPrice: number, sym: string): s
 // puts the country in both (e.g. appellation "West Sussex/England" + region
 // "England"), which read as "West Sussex/England, England". If one already
 // contains the other, keep the more specific one.
+// Pull a readable message out of ANY thrown value. Supabase/PostgREST errors are
+// plain objects (NOT Error instances), so `err instanceof Error ? err.message : …`
+// silently collapsed every real DB failure (RLS, constraints, auth) to a useless
+// "Please try again." This surfaces the code + message so failures are diagnosable.
+function errText(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object') {
+    const e = err as { message?: string; code?: string; details?: string; hint?: string };
+    const parts = [e.code, e.message, e.details, e.hint].filter(Boolean);
+    if (parts.length) return parts.join(' — ');
+    try { return JSON.stringify(err); } catch { /* fall through */ }
+  }
+  return 'Please try again.';
+}
+
 function joinPlace(appellation?: string | null, region?: string | null): string {
   const a = (appellation ?? '').trim();
   const r = (region ?? '').trim();
@@ -378,7 +393,7 @@ export default function ResultsScreen() {
     try {
       return await promise;
     } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not save', body: errText(err) });
       return null;
     }
   }
@@ -402,7 +417,7 @@ export default function ResultsScreen() {
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
     } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not save', body: errText(err) });
     }
     return liveSessionId;
   }
@@ -428,7 +443,7 @@ export default function ResultsScreen() {
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
     } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not save', body: errText(err) });
     }
   }
 
@@ -621,7 +636,7 @@ export default function ResultsScreen() {
     } catch (err) {
       // Roll back the optimistic selection so the chip reflects reality.
       setChosenIndexes((prev) => { const n = new Set(prev); n.delete(i); return n; });
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not save', body: errText(err) });
     } finally {
       pendingIdxRef.current.delete(i);
     }
@@ -661,7 +676,7 @@ export default function ResultsScreen() {
     } catch (err) {
       setChosenIndexes((prev) => new Set([...prev, i])); // rollback
       if (trackedId) sessionPickIdRef.current.set(i, trackedId);
-      showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not remove', body: errText(err) });
     } finally {
       pendingIdxRef.current.delete(i);
     }
@@ -852,7 +867,7 @@ export default function ResultsScreen() {
         message: `Vinster picked these wines for me:\n\n${lines.join('\n')}\n\nDownload Vinster — Real Wine Experience, AI Delivered.`,
       });
     } catch (err) {
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not share', body: errText(err) });
     } finally {
       setSharing(false);
     }
