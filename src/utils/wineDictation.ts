@@ -27,7 +27,10 @@ const FIXES: Array<[RegExp, string]> = [
   [/\bdomain\b/gi, 'Domaine'],
   [/\bbo[\s-]?day[\s-]?ga\b/gi, 'Bodega'],
   [/\bten[\s-]?oo?ta\b/gi, 'Tenuta'],
-  [/\bvine[\s-]?wine[\s-]?goot\b/gi, 'Weingut'],
+  // Weingut ("wine estate"). STT mangles the "-gut" ending to goot/gut and drops or
+  // doubles the first syllable. Match "gut/goot" after vine/wine/vein/vineyard. The
+  // "good" spelling is deliberately excluded (it collides with ordinary speech).
+  [/\b(?:vine|wine|vein|vile|vine[\s-]?yard)[\s-]?(?:wine[\s-]?)?(?:goot|gut)\b/gi, 'Weingut'],
 
   // ---- Named producers (STT mangles unfamiliar names the worst) -------------
   // Distinctive phonetic mis-hears only — anchored so ordinary words are safe.
@@ -345,7 +348,24 @@ const FIXES: Array<[RegExp, string]> = [
   [/\bsma[\s-]?ra(?:g|k)d?\b/gi, 'Smaragd'],
   [/\b(?:sh|s)p(?:ay|ah|a)t[\s-]?lee?ze?\b/gi, 'Spätlese'],
   [/\b(?:aus|ows)[\s-]?lee?[\s-]?ze\b/gi, 'Auslese'],
+  // Trockenbeerenauslese + Halbtrocken MUST precede the bare Trocken rule (longest
+  // match first) so they aren't partially rewritten.
   [/\btro(?:ck|k)en[\s-]?bee?ren[\s-]?(?:aus|ows)[\s-]?lee?ze\b/gi, 'Trockenbeerenauslese'],
+  [/\bbee?ren[\s-]?(?:aus|ows)[\s-]?lee?ze\b/gi, 'Beerenauslese'],
+  [/\bka[\s-]?bin+et+e?\b/gi, 'Kabinett'],
+  [/\bhalb[\s-]?tro(?:ck|k)en\b/gi, 'Halbtrocken'],
+  [/\btro(?:ck|k)en\b/gi, 'Trocken'],
+  // "ice wine" left alone (it's a legitimate English term); only eis-* and ice-vine/vein map to Eiswein.
+  [/\b(?:eis[\s-]?(?:vine|vein|wine|wein)|ice[\s-]?(?:vine|vein))\b/gi, 'Eiswein'],
+  [/\bfeder[\s-]?shpeel\b/gi, 'Federspiel'],
+  [/\bzekt\b/gi, 'Sekt'],
+  [/\bgro(?:ss|s)es?\s+ge[\s-]?ve(?:x|ks|cks)\b/gi, 'Großes Gewächs'],
+  [/\bspate?[\s-]?boo?r?[\s-]?gun[\s-]?der\b/gi, 'Spätburgunder'],
+  [/\b(?:vice|vise|vais|vice?s)[\s-]?boo?r?[\s-]?gun[\s-]?der\b/gi, 'Weissburgunder'],
+  [/\bgrow[\s-]?boo?r?[\s-]?gun[\s-]?der\b/gi, 'Grauburgunder'],
+  [/\bsil[\s-]?va[\s-]?ner\b/gi, 'Silvaner'],
+  [/\bge[\s-]?v(?:oo|u|ur)rts?[\s-]?tra[\s-]?mee?ner\b/gi, 'Gewürztraminer'],
+  [/\bsh?oy[\s-]?reb+e?\b/gi, 'Scheurebe'],
 
   // ---- Regional catalog: Australia producers -------------------------------
   [/\bpen[\s-]?folds?\b/gi, 'Penfolds'],
