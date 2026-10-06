@@ -310,7 +310,7 @@ ${countryLine}
     async function attemptClaudeCall(): Promise<any> {
       const claudeStream = await client.messages.create({
         model: 'claude-sonnet-5-5',
-        max_tokens: 8192,
+        max_tokens: 12000,
         system: [
           {
             type: 'text',

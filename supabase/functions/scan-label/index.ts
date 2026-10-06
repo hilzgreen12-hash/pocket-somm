@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     // a correction), and Sonnet reads small/stylised label text far better.
     const response = await client.messages.create({
       model: 'claude-sonnet-5-5',
-      max_tokens: 512,
+      max_tokens: 8000,
       messages: [{
         role: 'user',
         content: [

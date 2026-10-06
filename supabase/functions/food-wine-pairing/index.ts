@@ -169,7 +169,9 @@ Deno.serve(async (req) => {
 
     const response = await client.messages.create({
       model: 'claude-sonnet-5-5',
-      max_tokens: 2048,
+      // sonnet-5-5 emits a default thinking block; 2048 was consumed by it, leaving no
+      // JSON → "could not find a pairing". Give thinking + the answer real headroom.
+      max_tokens: 8000,
       messages: [{ role: 'user', content: prompt }],
     });
 

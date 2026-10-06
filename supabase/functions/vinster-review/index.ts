@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
 
     const msg = await client.messages.create({
       model: 'claude-sonnet-5-5',
-      max_tokens: 400,
+      max_tokens: 10000,
       system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: `Write Vinster's Review for this wine:\n${identity}` }],
     });

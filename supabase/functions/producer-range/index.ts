@@ -118,7 +118,7 @@ If you cannot confidently identify the producer's range, return {"wines": [], "s
       // Headroom so a full ~12-wine JSON (plus the consolidated entry line) never
       // truncates mid-object — a cut-off response fails to parse and the range
       // silently comes back empty.
-      max_tokens: 1600,
+      max_tokens: 10000,
       messages: [{ role: 'user', content: prompt }],
     });
 

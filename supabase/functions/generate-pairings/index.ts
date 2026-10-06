@@ -261,10 +261,10 @@ Deno.serve(async (req) => {
 
     const params = {
       model: 'claude-sonnet-5-5',
-      // Three full chef recipes (ingredients + method + rationale) can exceed 8192
-      // tokens; a truncated response left the JSON incomplete → parse error → generic
-      // failure. Give it real headroom.
-      max_tokens: 16000,
+      // Three full chef recipes (ingredients + method + rationale) PLUS sonnet-5-5's
+      // default thinking block can exceed 16000 tokens → truncated JSON → parse error →
+      // "could not generate pairings". Give it generous headroom above thinking + output.
+      max_tokens: 26000,
       temperature,
       messages: [{ role: 'user' as const, content: buildPrompt(wine, filters ?? {}, excludeChefsList, additionalRequestText) }],
     };
