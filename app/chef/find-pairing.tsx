@@ -197,7 +197,7 @@ export default function FindPairingScreen() {
           bottom-aligned, the whole phrase centred as one row. */}
       <View style={styles.cookingHeaderRow}>
         <Text style={[styles.fieldLabel, { marginBottom: 0 }]}>What are you cooking?</Text>
-        <MicButton value={dish} onChangeText={setDishLocal} onClear={() => setDishLocal('')} />
+        <MicButton value={dish} onChangeText={setDishLocal} onClear={() => setDishLocal('')} domain="food" />
       </View>
       <TextInput
         style={styles.inputLeft}

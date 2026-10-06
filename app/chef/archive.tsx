@@ -73,6 +73,22 @@ export default function ChefArchiveScreen() {
     return allItems.filter((i) => membershipMap.get(i.key)?.has(filter));
   }, [filter, allItems, membershipMap]);
 
+  // Search the (folder-filtered) recipes by key ingredient, dish name, or the wine
+  // they were paired with.
+  const [recipeSearch, setRecipeSearch] = useState('');
+  const searchedItems = useMemo(() => {
+    const q = recipeSearch.trim().toLowerCase();
+    if (!q) return filteredItems;
+    return filteredItems.filter((item) => {
+      const p = item.session.pairings?.[0];
+      const dish = (p?.dishName ?? '').toLowerCase();
+      const ings = (p?.recipe?.ingredients ?? []).join(' ').toLowerCase();
+      const w = item.session.wine;
+      const wine = [w?.producer, w?.wineName].filter(Boolean).join(' ').toLowerCase();
+      return dish.includes(q) || ings.includes(q) || wine.includes(q);
+    });
+  }, [recipeSearch, filteredItems]);
+
   async function handleCreateFolder() {
     const trimmed = newFolderName.trim();
     if (!trimmed || creatingFolderRef.current) return;
@@ -215,7 +231,6 @@ export default function ChefArchiveScreen() {
           stats, then the folder carousel (All, your folders, + Add folder). */}
       {session && (
         <>
-          <Text style={styles.listHint}>Long hold a folder or recipe to move or delete it</Text>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryText}>
               {allItems.length} {allItems.length === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
@@ -263,6 +278,17 @@ export default function ChefArchiveScreen() {
               <Text style={styles.folderChipAddText}>+ Add folder</Text>
             </TouchableOpacity>
           </ScrollView>
+          <TextInput
+            style={styles.recipeSearch}
+            value={recipeSearch}
+            onChangeText={setRecipeSearch}
+            placeholder="Search recipes by ingredient or wine"
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
         </>
       )}
 
@@ -273,20 +299,22 @@ export default function ChefArchiveScreen() {
         />
       ) : isLoading ? (
         <View style={styles.empty}><ActivityIndicator size="large" color={colors.gold} /></View>
-      ) : filteredItems.length === 0 ? (
+      ) : searchedItems.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'Your Cookbook is Empty' : 'Nothing here'}</Text>
+          <Text style={styles.emptyTitle}>{recipeSearch.trim() ? 'No matches' : (filter === FILTER_ALL ? 'Your Cookbook is Empty' : 'Nothing here')}</Text>
           <Text style={styles.emptyBody}>
-            {filter === FILTER_ALL
-              ? 'Generate recipes to pair with your wines through Chef and save them here for future reference and share them with friends.'
-              : filter === FILTER_FAVOURITES
-                ? 'Tap the ★ on any recipe card to add it to your Favourites.'
-                : 'No recipes in this folder yet. From the All tab, open any recipe and add it to a folder.'}
+            {recipeSearch.trim()
+              ? `No recipes match "${recipeSearch.trim()}". Try an ingredient or a wine name.`
+              : filter === FILTER_ALL
+                ? 'Generate recipes to pair with your wines through Chef and save them here for future reference and share them with friends.'
+                : filter === FILTER_FAVOURITES
+                  ? 'Tap the ★ on any recipe card to add it to your Favourites.'
+                  : 'No recipes in this folder yet. From the All tab, open any recipe and add it to a folder.'}
           </Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-          {filteredItems.map((item) => {
+          {searchedItems.map((item) => {
             const memberCollectionIds = Array.from(membershipMap.get(item.key) ?? []);
             const memberFolderNames = memberCollectionIds
               .map((id) => collections.find((c) => c.id === id)?.name)
@@ -472,6 +500,7 @@ const styles = StyleSheet.create({
   // Filter/stats bar — copied from the Full Cellar List so the two read alike.
   listHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  recipeSearch: { marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 15 },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },

@@ -3,6 +3,7 @@ import { TouchableOpacity, View, StyleSheet, type StyleProp, type ViewStyle } fr
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { showAlert } from './AppAlert';
 import { correctWineTerms } from '../utils/wineDictation';
+import { correctFoodTerms } from '../utils/foodDictation';
 import { useDictationCorrect } from '../hooks/useDictationCorrect';
 import { colors } from '../constants/theme';
 
@@ -15,13 +16,17 @@ interface Props {
   // what they've written and start a fresh review.
   onClear?: () => void;
   style?: StyleProp<ViewStyle>;
+  // Which vocabulary to correct the dictation against. 'wine' (default) nudges
+  // producer/region/grape names + fuzzy-matches the user's cellar; 'food' nudges
+  // dish/ingredient/technique names (e.g. the Find A Wine Pairing dish field).
+  domain?: 'wine' | 'food';
 }
 
 // On-device dictation mic, drawn in the gold motif style, with an optional
 // bin. Tap the mic to speak, tap again to stop. Speech→text happens on the
 // phone (Apple/Google) — the audio never leaves the device and nothing is
 // stored; only the resulting text is written into the field.
-export function MicButton({ value, onChangeText, onClear, style }: Props) {
+export function MicButton({ value, onChangeText, onClear, style, domain = 'wine' }: Props) {
   const [listening, setListening] = useState(false);
   // Refs, not state, so the global event handlers always read live values —
   // multiple MicButtons can be mounted (one per field) and all receive
@@ -52,14 +57,16 @@ export function MicButton({ value, onChangeText, onClear, style }: Props) {
     // just the ones that happened to wrap it. Correct only the spoken chunk and
     // join onto the untouched base, so anything the user typed is left exactly
     // as written.
-    const spoken = correctWineTerms(transcript);
+    const spoken = (domain === 'food' ? correctFoodTerms : correctWineTerms)(transcript);
     // Interim transcripts are the full hypothesis-so-far for the utterance, so
     // re-join onto the captured base each time rather than appending — this fills
     // the field live instead of only on stop. On the FINAL transcript, also run
     // the (heavier) fuzzy cellar-producer correction once, so a misheard producer
     // snaps to the real name the user owns without slowing the live typing.
     if (e.isFinal) {
-      const refined = refineRef.current(spoken);
+      // The fuzzy cellar-producer snap is wine-only; for food, the dictionary pass
+      // above is the final correction.
+      const refined = domain === 'food' ? spoken : refineRef.current(spoken);
       const joined = joinDictation(baseRef.current, refined);
       onChangeText(joined);
       baseRef.current = joined;
