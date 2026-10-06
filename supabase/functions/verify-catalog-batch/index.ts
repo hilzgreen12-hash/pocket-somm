@@ -51,9 +51,14 @@ Return ONLY a JSON array (no markdown, no prose) with one object per wine:
 
 function parseVerdicts(text: string): any[] {
   const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+  // Prefer the whole array.
   const m = cleaned.match(/\[[\s\S]*\]/);
-  if (!m) return [];
-  try { const p = JSON.parse(m[0]); return Array.isArray(p) ? p : []; } catch { return []; }
+  if (m) { try { const p = JSON.parse(m[0]); if (Array.isArray(p)) return p; } catch { /* fall through */ } }
+  // Salvage: parse each complete {...} object individually, so a response truncated
+  // mid-array (max_tokens) still yields every verdict that fully came through.
+  const out: any[] = [];
+  for (const o of cleaned.match(/\{[^{}]*\}/g) ?? []) { try { out.push(JSON.parse(o)); } catch { /* skip partial */ } }
+  return out;
 }
 
 function mapStatus(verdict: string): 'plausible' | 'implausible' | 'needs_review' {
@@ -63,13 +68,21 @@ function mapStatus(verdict: string): 'plausible' | 'implausible' | 'needs_review
   return 'needs_review';
 }
 
-async function verifyBatch(rows: Row[], model: string): Promise<{ updated: number; counts: Record<string, number>; examples: any[] }> {
-  const resp = await client.messages.create({
-    model,
-    max_tokens: 4000,
-    messages: [{ role: 'user', content: buildPrompt(rows) }],
-  });
-  const text = resp.content[0]?.type === 'text' ? resp.content[0].text : '';
+async function verifyBatch(rows: Row[], model: string): Promise<any> {
+  let resp: any;
+  try {
+    resp = await client.messages.create({
+      model,
+      // sonnet-5-5 returns a thinking block by default; give the JSON verdicts ample
+      // room on top of it so the array can't truncate (that zeroed the first runs).
+      max_tokens: 16000,
+      messages: [{ role: 'user', content: buildPrompt(rows) }],
+    });
+  } catch (e) {
+    return { updated: 0, counts: {}, examples: [], parsed: 0, raw: '', stop: null, blocks: [], content: '', err: (e instanceof Error ? e.message : String(e)).slice(0, 300) };
+  }
+  const textBlock = (resp.content ?? []).find((b: any) => b?.type === 'text');
+  const text = textBlock?.text ?? '';
   const verdicts = parseVerdicts(text);
   const byIndex = new Map<number, any>();
   for (const v of verdicts) if (typeof v?.i === 'number') byIndex.set(v.i, v);
@@ -96,7 +109,8 @@ async function verifyBatch(rows: Row[], model: string): Promise<{ updated: numbe
     if (!error) updated += 1;
   }));
 
-  return { updated, counts, examples };
+  return { updated, counts, examples, parsed: verdicts.length, raw: text.slice(0, 180), err: null,
+    stop: resp?.stop_reason ?? null, blocks: (resp.content ?? []).map((b: any) => b?.type), content: JSON.stringify(resp?.content ?? '').slice(0, 400) };
 }
 
 Deno.serve(async (req) => {
@@ -108,7 +122,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const limit = Math.min(Math.max(Number(body?.limit) || 30, 1), 500);
-    const batchSize = Math.min(Math.max(Number(body?.batchSize) || 25, 5), 40);
+    const batchSize = Math.min(Math.max(Number(body?.batchSize) || 15, 5), 40);
     const model = typeof body?.model === 'string' && body.model.trim() ? body.model.trim() : 'claude-sonnet-5-5';
 
     const { data: rows, error: fetchErr } = await admin.rpc('fetch_unverified_wines', { p_limit: limit });
@@ -121,15 +135,17 @@ Deno.serve(async (req) => {
     const chunks: Row[][] = [];
     for (let i = 0; i < work.length; i += batchSize) chunks.push(work.slice(i, i + batchSize));
 
-    const results = await Promise.all(chunks.map((c) => verifyBatch(c, model).catch(() => ({ updated: 0, counts: {}, examples: [] }))));
+    const results = await Promise.all(chunks.map((c) => verifyBatch(c, model)));
 
     const totals: Record<string, number> = { plausible: 0, implausible: 0, needs_review: 0 };
     let updated = 0;
     const examples: any[] = [];
+    const debug: any[] = [];
     for (const r of results) {
       updated += r.updated;
       for (const k of Object.keys(r.counts)) totals[k] = (totals[k] ?? 0) + (r.counts as any)[k];
       for (const e of r.examples) if (examples.length < 40) examples.push(e);
+      if (debug.length < 3) debug.push({ parsed: r.parsed, err: r.err, raw: r.raw, stop: r.stop, blocks: r.blocks, content: r.content });
     }
 
     // Remaining unverified, for progress / to drive a sweep loop.
@@ -145,6 +161,7 @@ Deno.serve(async (req) => {
       implausible_pct: implausibleRate,
       remaining_unverified: remaining ?? null,
       implausible_examples: examples,
+      debug,
     }, 200);
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
