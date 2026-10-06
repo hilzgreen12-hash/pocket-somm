@@ -145,6 +145,41 @@ Deno.serve(async (req) => {
       return json(out, 200);
     }
 
+    // Auto-correct: re-file implausible rows that carry a "correct→ Producer" suggestion
+    // under their real producer (salvaging real wines filed under the wrong name). If the
+    // corrected identity already exists (search_key collision), the mis-attributed row is
+    // a duplicate and gets removed instead. Dry-run unless { apply: true }.
+    if (body?.autocorrect) {
+      const apply = body.apply === true;
+      const { data: rows, error: selErr } = await admin.from('wines_catalog')
+        .select('id, producer, wine_name, verification_notes')
+        .eq('verification_status', 'implausible')
+        .ilike('verification_notes', '%correct%');
+      if (selErr) return json({ error: selErr.message }, 500);
+      let refiled = 0, deletedDups = 0, skipped = 0;
+      const samples: any[] = [];
+      for (const r of (rows ?? []) as any[]) {
+        const m = (r.verification_notes || '').match(/correct\s*(?:→|->|:)\s*(.+?)\s*$/i);
+        const corrected = m ? m[1].trim().replace(/[.;,]$/, '').trim() : '';
+        if (!corrected || corrected.toLowerCase() === (r.producer || '').toLowerCase()) { skipped++; continue; }
+        if (!apply) { refiled++; if (samples.length < 30) samples.push({ action: 'would-refile', from: r.producer, to: corrected, wine: r.wine_name }); continue; }
+        const upd = await admin.from('wines_catalog').update({
+          producer: corrected,
+          display: [corrected, r.wine_name].filter(Boolean).join(' '),
+          verification_status: 'plausible',
+          verified_source: 'llm-corrected',
+          verified_at: new Date().toISOString(),
+          verification_notes: `refiled from "${r.producer}" · ${r.verification_notes}`.slice(0, 400),
+        }).eq('id', r.id);
+        if (upd.error) {
+          const del = await admin.from('wines_catalog').delete().eq('id', r.id);
+          if (!del.error) { deletedDups++; if (samples.length < 30) samples.push({ action: 'dedup-delete', from: r.producer, to: corrected, wine: r.wine_name }); }
+          else skipped++;
+        } else { refiled++; if (samples.length < 30) samples.push({ action: 'refiled', from: r.producer, to: corrected, wine: r.wine_name }); }
+      }
+      return json({ apply, candidates: rows?.length ?? 0, refiled, deletedDups, skipped, samples }, 200);
+    }
+
     const limit = Math.min(Math.max(Number(body?.limit) || 30, 1), 500);
     const batchSize = Math.min(Math.max(Number(body?.batchSize) || 15, 5), 40);
     const model = typeof body?.model === 'string' && body.model.trim() ? body.model.trim() : 'claude-sonnet-5-5';
