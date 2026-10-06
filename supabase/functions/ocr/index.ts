@@ -103,6 +103,7 @@ Deno.serve(async (req) => {
         // garbage in for every downstream recommendation. Sonnet is the read
         // quality the rest of the pipeline assumes.
         model: 'claude-sonnet-5-5',
+        thinking: { type: 'between_tools' },
         // Headroom for the JSON output. At 8192 a normal-length list sits right
         // on the ceiling: it truncates → invalid JSON → the retry below fires a
         // second full call → the two together blow past the function's time

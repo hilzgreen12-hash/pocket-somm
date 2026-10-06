@@ -121,6 +121,30 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
+
+    // Diagnostic probe: replicate the generate-pairings-style Sonnet call (buffered AND
+    // streamed) so we can see exactly what the model returns / why pairings fail.
+    if (body?.probe) {
+      const prompt = 'You are a chef. Return ONLY a JSON object (no prose) shaped {"pairings":[{"dishName":"...","recipe":{"ingredients":["..."],"instructions":["..."]}}]} with exactly 3 chef-inspired dishes to pair with a Chablis. Make each recipe complete.';
+      const mk = (mt: number, stream: boolean): any => ({ model: 'claude-sonnet-5-5', max_tokens: mt, messages: [{ role: 'user', content: prompt }], ...(stream ? { stream: true } : {}) });
+      const out: any = {};
+      // Streamed @ 26000 (no temperature) — should now succeed.
+      try { let f = ''; const s: any = await client.messages.create(mk(26000, true)); for await (const ev of s) { if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') f += ev.delta.text; } out.stream26k = { len: f.length, head: f.slice(0, 120) }; } catch (e) { out.stream26k = { error: (e instanceof Error ? e.message : String(e)).slice(0, 180) }; }
+      // Buffered thresholds (no temperature) — find the safe ceiling.
+      // Does DISABLING thinking work? If yes → content[0] is text again, no truncation,
+      // and (maybe) temperature is re-allowed — a single root-cause fix.
+      try {
+        const b: any = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 4000, thinking: { type: 'between_tools' }, messages: [{ role: 'user', content: prompt }] });
+        out.thinkingOff = { stop: b.stop_reason, blocks: (b.content ?? []).map((x: any) => x.type), c0: b.content?.[0]?.type, len: (b.content?.[0]?.type === 'text' ? b.content[0].text : '').length };
+      } catch (e) { out.thinkingOff = { error: (e instanceof Error ? e.message : String(e)).slice(0, 180) }; }
+      // between_tools + temperature — does turning thinking off re-allow temperature?
+      try {
+        const b: any = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 4000, thinking: { type: 'between_tools' }, temperature: 0.8, messages: [{ role: 'user', content: prompt }] });
+        out.thinkingOffTemp = { stop: b.stop_reason, ok: true };
+      } catch (e) { out.thinkingOffTemp = { error: (e instanceof Error ? e.message : String(e)).slice(0, 180) }; }
+      return json(out, 200);
+    }
+
     const limit = Math.min(Math.max(Number(body?.limit) || 30, 1), 500);
     const batchSize = Math.min(Math.max(Number(body?.batchSize) || 15, 5), 40);
     const model = typeof body?.model === 'string' && body.model.trim() ? body.model.trim() : 'claude-sonnet-5-5';

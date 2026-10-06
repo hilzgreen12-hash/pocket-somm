@@ -251,21 +251,16 @@ Deno.serve(async (req) => {
       ? additionalRequest
       : null;
 
-    // Bump temperature on regeneration rounds (anything that ships an
-    // excludeChefs list or a steer is by definition a regen). Default
-    // SDK temperature is around 1.0; pushing to 1.0 explicitly + giving
-    // the model the exclude list is what actually breaks the
-    // "same three chefs every time" loop the user reported.
-    const isRegeneration = excludeChefsList.length > 0 || !!additionalRequestText;
-    const temperature = isRegeneration ? 1.0 : 0.8;
-
+    // Chef variety now comes from the shuffled CHEF_POOL + the excludeChefs list in the
+    // prompt — NOT temperature, which sonnet-5-5 rejects outright (400 "temperature is
+    // deprecated for this model").
     const params = {
       model: 'claude-sonnet-5-5',
-      // Three full chef recipes (ingredients + method + rationale) PLUS sonnet-5-5's
-      // default thinking block can exceed 16000 tokens → truncated JSON → parse error →
-      // "could not generate pairings". Give it generous headroom above thinking + output.
-      max_tokens: 26000,
-      temperature,
+      thinking: { type: 'between_tools' },
+      // Thinking is off (between_tools), so three full chef recipes fit comfortably in
+      // 16000 — which also stays under the SDK's non-streaming 10-minute guard so the
+      // buffered fallback works too.
+      max_tokens: 16000,
       messages: [{ role: 'user' as const, content: buildPrompt(wine, filters ?? {}, excludeChefsList, additionalRequestText) }],
     };
 

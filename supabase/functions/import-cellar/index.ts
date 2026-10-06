@@ -12,6 +12,7 @@ Deno.serve(async (req) => {
       // error. Matches the Sonnet-5 text/PDF import path (parse-cellar-import) —
       // same task shouldn't get a weaker read just because it's an image.
       model: 'claude-sonnet-5-5',
+      thinking: { type: 'between_tools' },
       max_tokens: 12000,
       messages: [
         {

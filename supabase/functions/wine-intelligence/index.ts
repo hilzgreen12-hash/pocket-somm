@@ -81,6 +81,7 @@ Return only the raw JSON — no markdown, no explanation.`;
     async function attempt(): Promise<any> {
       const response = await client.messages.create({
         model: 'claude-sonnet-5-5',
+        thinking: { type: 'between_tools' },
         max_tokens: 10000,
         messages: [{ role: 'user', content: prompt }],
       });

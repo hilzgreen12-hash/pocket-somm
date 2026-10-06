@@ -33,6 +33,7 @@ Example output for 3 wines: ["Nebbiolo", "Chardonnay", "Grenache/Syrah/Mourvèdr
     async function attempt(): Promise<(string | null)[]> {
       const response = await client.messages.create({
         model: 'claude-sonnet-5-5',
+        thinking: { type: 'between_tools' },
         max_tokens: 8000,
         messages: [{ role: 'user', content: prompt }],
       });

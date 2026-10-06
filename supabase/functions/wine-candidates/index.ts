@@ -53,6 +53,7 @@ Return ONLY a JSON array (no markdown, no prose) of objects with exactly these k
 
     const resp = await client.messages.create({
       model: 'claude-sonnet-5-5',
+      thinking: { type: 'between_tools' },
       max_tokens: 6000,
       messages: [{ role: 'user', content: prompt }],
     });

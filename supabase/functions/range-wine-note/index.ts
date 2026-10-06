@@ -79,6 +79,7 @@ Deno.serve(async (req) => {
 
     const msg = await client.messages.create({
       model: 'claude-sonnet-5-5',
+      thinking: { type: 'between_tools' },
       max_tokens: 8000,
       system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: `Give the inside line for this wine:\n${identity}` }],

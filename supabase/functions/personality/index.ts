@@ -218,6 +218,7 @@ Deno.serve(async (req) => {
 
     const response = await client.messages.create({
       model: 'claude-sonnet-5-5',
+      thinking: { type: 'between_tools' },
       max_tokens: 12000,
       messages: [{ role: 'user', content: prompt }],
     });
