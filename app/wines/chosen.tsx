@@ -1502,7 +1502,7 @@ export default function ChosenWinesScreen() {
         <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
             <Text style={styles.chooserTitle}>Add a wine review</Text>
-            <Text style={styles.chooserBody}>Scan or upload a label and Vinster identifies the bottle, enter it by hand, or pick a wine from your cellar — then straight to your review.</Text>
+            <Text style={styles.chooserBody}>Scan or upload a label and Vinster identifies the bottle, search for it, or pick a wine from your cellar — then straight to your review.</Text>
             <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseScan} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Scan Label</Text>
             </TouchableOpacity>
@@ -1510,7 +1510,7 @@ export default function ChosenWinesScreen() {
               <Text style={styles.chooserBtnText}>Upload A Wine Label</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseManual} activeOpacity={0.85}>
-              <Text style={styles.chooserBtnText}>Search/Manual Input</Text>
+              <Text style={styles.chooserBtnText}>Search a Wine</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseCellar} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Select from Cellar</Text>

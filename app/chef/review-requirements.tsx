@@ -7,6 +7,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { SearchProgress } from '../../src/components/SearchProgress';
+import { WineSearchModal } from '../../src/components/WineSearchModal';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -92,8 +93,10 @@ export default function ReviewRequirementsScreen() {
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   // Free-text filter for the "Select a Wine From Your Cellar" list.
   const [cellarSearch, setCellarSearch] = useState('');
-  // "Choose Your Wine" chooser — Scan / Upload / Cellar / Manual.
+  // "Choose Your Wine" chooser — Scan / Upload / Cellar / Search.
   const [wineChooserOpen, setWineChooserOpen] = useState(false);
+  // Catalog Search (replaces free-text Manual Input).
+  const [wineSearchOpen, setWineSearchOpen] = useState(false);
 
   // Narrow the cellar list by producer / wine / region / vintage as the user types.
   const cellarResults = (() => {
@@ -211,6 +214,16 @@ export default function ReviewRequirementsScreen() {
   function handleManual() {
     setFilters(buildFilters() as unknown as Record<string, unknown>);
     setWineDetails({ producer: '', region: '', wineName: null, vintage: '', style: null } as any);
+    router.push('/chef/confirm');
+  }
+
+  // Mode B — pick a wine from the catalog Search (replaces free-text Manual
+  // Input). Pre-fills the confirm form with the chosen identity; the user can
+  // still tweak fields, and WineSearchInput's own "Use '<typed>'" fallback
+  // covers a wine genuinely not in the catalog.
+  function handleSearchSelect(r: { producer: string; wineName: string | null; region: string | null; style: string | null; vintage: string | null }) {
+    setFilters(buildFilters() as unknown as Record<string, unknown>);
+    setWineDetails({ producer: r.producer ?? '', region: r.region ?? '', wineName: r.wineName ?? null, vintage: r.vintage ?? '', style: r.style ?? null } as any);
     router.push('/chef/confirm');
   }
 
@@ -468,8 +481,8 @@ export default function ReviewRequirementsScreen() {
             <TouchableOpacity style={styles.chooserOption} onPress={() => { setWineChooserOpen(false); setCellarPickerOpen(true); }} activeOpacity={0.8}>
               <Text style={styles.chooserOptionText}>Select From Your Cellar</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.chooserOption} onPress={() => { setWineChooserOpen(false); handleManual(); }} activeOpacity={0.8}>
-              <Text style={styles.chooserOptionText}>Manual Input</Text>
+            <TouchableOpacity style={styles.chooserOption} onPress={() => { setWineChooserOpen(false); setWineSearchOpen(true); }} activeOpacity={0.8}>
+              <Text style={styles.chooserOptionText}>Search a Wine</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancel} onPress={() => setWineChooserOpen(false)}>
               <Text style={styles.modalCancelText}>Cancel</Text>
@@ -477,6 +490,9 @@ export default function ReviewRequirementsScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Catalog Search — replaces free-text Manual Input. */}
+      <WineSearchModal visible={wineSearchOpen} onClose={() => setWineSearchOpen(false)} onSelect={handleSearchSelect} />
 
       {/* Select a wine from the cellar — picks a known bottle and generates
           pairings straight away, no scanning. */}

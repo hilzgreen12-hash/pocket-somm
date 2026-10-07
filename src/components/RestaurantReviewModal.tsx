@@ -23,6 +23,7 @@ import { useAuth } from '../hooks/useAuth';
 import type { ChosenWine } from '../types/wine';
 import { publishRestaurantSessionToCommunity } from '../services/communityPublish';
 import { StarRating } from './StarRating';
+import { WineSearchModal } from './WineSearchModal';
 import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
 import { RestaurantReviewShareCard } from './RestaurantReviewShareCard';
@@ -205,6 +206,7 @@ export function RestaurantReviewModal({
   // scanned/manual ones default to "off the list" with a single "I brought this"
   // toggle on the confirm sheet to correct it. ---
   const [bottleChooserOpen, setBottleChooserOpen] = useState(false);
+  const [wineSearchOpen, setWineSearchOpen] = useState(false);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [cellarSearch, setCellarSearch] = useState('');
   // "Link to a Wine Review" — attach existing reviews (not yet tied to a visit)
@@ -250,7 +252,12 @@ export function RestaurantReviewModal({
     setConfirmOpen(true);
   }
 
-  function chooseManual() { setBottleChooserOpen(false); setCbCellarWineId(null); setCbImageUri(null); openConfirm({}, false); }
+  // Catalog Search replaces free-text Manual Input — pick the match, then confirm.
+  function chooseSearch() { setBottleChooserOpen(false); setWineSearchOpen(true); }
+  function handleSearchSelect(r: { producer: string; wineName: string | null; region: string | null; style: string | null; vintage: string | null }) {
+    setCbCellarWineId(null); setCbImageUri(null);
+    openConfirm({ producer: r.producer, wineName: r.wineName, region: r.region, colour: r.style, vintage: r.vintage }, false);
+  }
   function chooseCellar() { setBottleChooserOpen(false); setCellarSearch(''); setCellarPickerOpen(true); }
 
   async function chooseFromImage(source: 'camera' | 'library') {
@@ -837,11 +844,13 @@ export function RestaurantReviewModal({
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={chooseLinkReview} activeOpacity={0.85}><Text style={styles.bottleOptText}>Link to a Wine Review</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('library')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Upload a Wine Label</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('camera')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Scan a Label</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={chooseManual} activeOpacity={0.85}><Text style={styles.bottleOptText}>Manual Input</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={chooseSearch} activeOpacity={0.85}><Text style={styles.bottleOptText}>Search a Wine</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.bottleCancel} onPress={() => setBottleChooserOpen(false)}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
               </View>
             </View>
           )}
+
+          <WineSearchModal visible={wineSearchOpen} onClose={() => setWineSearchOpen(false)} onSelect={handleSearchSelect} />
 
           {/* Cellar picker — a simple searchable list. */}
           {cellarPickerOpen && (

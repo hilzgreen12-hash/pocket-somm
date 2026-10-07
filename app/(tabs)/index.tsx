@@ -5,6 +5,7 @@ import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../src/components/AppAlert';
+import { MicButton } from '../../src/components/MicButton';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
@@ -37,7 +38,7 @@ let welcomeShownThisSession = false;
 
 // "How Scan works" — the help body behind the underlined Scan title, matching
 // the other tabs' tappable titles.
-const SCAN_HELP = `Home is your starting point. Scan a label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — or scan a wine list for tailored picks from the menu. No label to hand? Manually Search a Wine from Vinster's catalogue. Below, revisit your Recent Scans, see which cellar bottles are drinking now, and catch up on Community Musings.`;
+const SCAN_HELP = `Home is your starting point. Scan a label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — or scan a wine list for tailored picks from the menu. No label to hand? Search a Wine from Vinster's catalogue. Below, revisit your Recent Scans, see which cellar bottles are drinking now, and catch up on Community Musings.`;
 
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
 // an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
@@ -398,7 +399,7 @@ export default function ScanLandingScreen() {
       {/* Search bar directly beneath the two scan tiles (above the separator). */}
       <TouchableOpacity style={styles.searchBar} onPress={() => setSearchModalOpen(true)} activeOpacity={0.7}>
         <Feather name="search" size={18} color={colors.textMuted} style={styles.searchBarIcon} />
-        <Text style={styles.searchBarText}>Manually Search a Wine</Text>
+        <Text style={styles.searchBarText}>Search a Wine</Text>
       </TouchableOpacity>
 
       {/* Recent Scans — mixed label + list scans, most recent first. */}
@@ -490,7 +491,10 @@ export default function ScanLandingScreen() {
       <Modal visible={searchModalOpen} transparent animationType="fade" onRequestClose={() => setSearchModalOpen(false)}>
         <KeyboardAvoidingView style={styles.searchModalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.searchModalSheet}>
-            <Text style={styles.searchModalTitle}>Manually Search a Wine</Text>
+            <View style={styles.searchModalHeaderRow}>
+              <Text style={styles.searchModalTitle}>Search a Wine</Text>
+              <MicButton value={wineSearch} onChangeText={setWineSearch} onClear={() => setWineSearch('')} domain="wine" />
+            </View>
             <View style={styles.searchRow}>
               <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
               <TextInput
@@ -656,7 +660,9 @@ const styles = StyleSheet.create({
   // Search-a-Wine prompt (opened from the Search tile).
   searchModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.xl },
   searchModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg },
-  searchModalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
+  // Header row: title on the left, mic + bin (voice command) top-right, above the field.
+  searchModalHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  searchModalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, letterSpacing: 0.5, flexShrink: 1 },
   searchModalCancel: { alignItems: 'center', paddingTop: spacing.md },
   searchModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   // "Search a Wine Name for Intel" — magnifying-glass icon left of the field.
