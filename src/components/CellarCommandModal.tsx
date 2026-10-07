@@ -11,7 +11,7 @@ import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/ce
 import { getRacks, clearWineFromRacks, removeSlotsForWine } from '../api/racks';
 import { getBins } from '../api/bins';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
-import { moveBottlesToLocation, clearLocationPlacements, releaseBottlesFromPlacements, fetchPlacementsForWine, placedCount } from '../api/placements';
+import { moveBottlesToLocation, clearLocationPlacements, releaseBottlesFromPlacements, fetchPlacementsForWine, fetchPlacementsForWines, placedCount } from '../api/placements';
 import { recommendFromCellar } from '../api/cellarRecommend';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
@@ -175,7 +175,33 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   async function runMoodRecommend() {
     setPhase('parsing');
     try {
-      const picks = await recommendFromCellar(transcript, wines);
+      // "What should I open?" should only suggest bottles that are actually to
+      // hand — exclude wines living ONLY in external / offsite cellars, since
+      // those aren't easily accessible. If the user explicitly asks for
+      // something from storage/offsite (to be delivered or collected), keep them.
+      const wantsStorage = /\b(storage|stored|external|offsite|off-site|bonded|deliver|delivered|collect|collection|reserves?)\b/i.test(transcript);
+      let candidateWines = wines;
+      if (!wantsStorage) {
+        const externalLocIds = new Set(locations.filter((l) => l.is_external).map((l) => l.id));
+        if (externalLocIds.size > 0) {
+          const pls = await fetchPlacementsForWines(wines.map((w) => w.id));
+          const extByWine = new Map<string, number>();
+          for (const p of pls) {
+            if (p.kind === 'location' && p.storage_location_id && externalLocIds.has(p.storage_location_id)) {
+              extByWine.set(p.cellar_wine_id, (extByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+            }
+          }
+          candidateWines = wines.filter((w) => {
+            const ext = extByWine.get(w.id) ?? 0;
+            // Legacy single-location filing straight onto the wine row.
+            const legacyExternalOnly = !!w.storage_location_id && externalLocIds.has(w.storage_location_id) && ext === 0;
+            if (legacyExternalOnly) return false;
+            // Keep the wine if at least one bottle is home/loose (not external).
+            return (w.quantity ?? 0) - ext > 0;
+          });
+        }
+      }
+      const picks = await recommendFromCellar(transcript, candidateWines);
       const views = picks
         .map((p) => {
           const w = wines.find((x) => x.id === p.id);
