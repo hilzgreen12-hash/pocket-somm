@@ -32,6 +32,7 @@ import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot }
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
+import { generateServingSuggestion, generateMarketVintage } from '../../src/api/wineExtras';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -378,6 +379,11 @@ export default function CellarWineDetail() {
   // The "(what's this)" link surfaces a short explanation modal so a
   // user encountering the field for the first time knows what it is.
   const [vinstersNoteOpen, setVinstersNoteOpen] = useState(false);
+  // On-demand card sections (generated when first opened, then cached on the wine).
+  const [servingOpen, setServingOpen] = useState(false);
+  const [marketOpen, setMarketOpen] = useState(false);
+  const [generatingServing, setGeneratingServing] = useState(false);
+  const [generatingMarket, setGeneratingMarket] = useState(false);
 
   // Off-screen share card for "Share outside the app" — captured to
   // PNG and handed to the native share sheet. Same pattern Wine
@@ -747,6 +753,35 @@ export default function CellarWineDetail() {
   function openCellarNote() {
     setNoteText(wine?.cellar_note ?? '');
     setCellarNoteOpen(true);
+  }
+
+  // On-demand Serving Suggestions — generate once, cache on the wine. Never part
+  // of the auto wine-card generation or "update intel", so it doesn't slow those.
+  async function handleGenerateServing() {
+    if (!wine || generatingServing) return;
+    setGeneratingServing(true);
+    try {
+      const data = await generateServingSuggestion(wine);
+      await updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: data } });
+    } catch {
+      showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
+    } finally {
+      setGeneratingServing(false);
+    }
+  }
+
+  // On-demand Market & Vintage Comparison — generate once, cache on the wine.
+  async function handleGenerateMarket() {
+    if (!wine || generatingMarket) return;
+    setGeneratingMarket(true);
+    try {
+      const data = await generateMarketVintage(wine, preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP');
+      await updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: data } });
+    } catch {
+      showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
+    } finally {
+      setGeneratingMarket(false);
+    }
   }
 
   async function handleSaveCellarNote() {
@@ -1930,6 +1965,44 @@ export default function CellarWineDetail() {
         </View>
       </View>
 
+      {/* On-demand Serving Suggestions — temperature, decant, glassware and a wine
+          to enjoy before/after. Generated on command (not during wine-card
+          generation or "update intel") and cached on the wine. */}
+      {!isWishlist ? (
+        <>
+          <View style={styles.reviewRow}>
+            <View style={styles.vinsterHeaderRow}>
+              <TouchableOpacity onPress={() => setServingOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+                <Text style={styles.vinsterReviewTitle}>Serving Suggestions</Text>
+                <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          {servingOpen ? (
+            <View style={styles.reviewExpandedFull}>
+              {wine.serving_suggestion ? (
+                <>
+                  {wine.serving_suggestion.temperature ? <Text style={styles.servingLine}>Temperature · {wine.serving_suggestion.temperature}</Text> : null}
+                  {wine.serving_suggestion.decant ? <Text style={styles.servingLine}>Decanting · {wine.serving_suggestion.decant}</Text> : null}
+                  {wine.serving_suggestion.glassware ? <Text style={styles.servingLine}>Glassware · {wine.serving_suggestion.glassware}</Text> : null}
+                  {wine.serving_suggestion.aperitif?.style ? <Text style={[styles.servingLine, { marginTop: spacing.sm }]}>Enjoy before · {wine.serving_suggestion.aperitif.style}{wine.serving_suggestion.aperitif.reason ? ` — ${wine.serving_suggestion.aperitif.reason}` : ''}</Text> : null}
+                  {wine.serving_suggestion.digestif?.style ? <Text style={styles.servingLine}>Enjoy after · {wine.serving_suggestion.digestif.style}{wine.serving_suggestion.digestif.reason ? ` — ${wine.serving_suggestion.digestif.reason}` : ''}</Text> : null}
+                  <TouchableOpacity onPress={handleGenerateServing} disabled={generatingServing} activeOpacity={0.7}>
+                    <Text style={styles.diveDeeperLink}>{generatingServing ? 'Regenerating…' : 'Regenerate →'}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : generatingServing ? (
+                <Text style={styles.tastingNotes}>Generating…</Text>
+              ) : (
+                <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateServing} activeOpacity={0.7}>
+                  <Text style={styles.generateNoteBtnText}>Generate</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : null}
+        </>
+      ) : null}
+
       <View style={styles.cardDivider} />
 
       <View style={[styles.statsGrid, { paddingBottom: 0 }]}>
@@ -2042,6 +2115,41 @@ export default function CellarWineDetail() {
             </Text>
           </View>
         ) : null
+      ) : null}
+
+      {/* On-demand "Vinster's Market & Vintage Comparison" — how this vintage
+          compares and where its market value sits. Generated on command (not in
+          wine-card generation or "update intel") and cached on the wine. */}
+      {!isWishlist ? (
+        <>
+          <View style={styles.reviewRow}>
+            <View style={styles.vinsterHeaderRow}>
+              <TouchableOpacity onPress={() => setMarketOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+                <Text style={styles.vinsterReviewTitle}>Vinster's Market & Vintage Comparison</Text>
+                <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          {marketOpen ? (
+            <View style={styles.reviewExpandedFull}>
+              {wine.market_vintage_note ? (
+                <>
+                  {wine.market_vintage_note.vintage ? (<><Text style={styles.servingSubhead}>Vintage</Text><Text style={styles.tastingNotes}>{wine.market_vintage_note.vintage}</Text></>) : null}
+                  {wine.market_vintage_note.market ? (<><Text style={[styles.servingSubhead, { marginTop: spacing.sm }]}>Market</Text><Text style={styles.tastingNotes}>{wine.market_vintage_note.market}</Text></>) : null}
+                  <TouchableOpacity onPress={handleGenerateMarket} disabled={generatingMarket} activeOpacity={0.7}>
+                    <Text style={styles.diveDeeperLink}>{generatingMarket ? 'Regenerating…' : 'Regenerate →'}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : generatingMarket ? (
+                <Text style={styles.tastingNotes}>Generating…</Text>
+              ) : (
+                <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateMarket} activeOpacity={0.7}>
+                  <Text style={styles.generateNoteBtnText}>Generate</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : null}
+        </>
       ) : null}
 
       {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
@@ -2665,6 +2773,9 @@ const styles = StyleSheet.create({
   // The inlined "what's this" explainer shown in italics after Vinster's Review.
   vinsterExplainer: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 19, marginTop: spacing.sm },
   // "Generate" button shown inside Vinster's Review when there's no note yet.
+  // On-demand Serving Suggestions / Market & Vintage dropdown bodies.
+  servingLine: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22 },
+  servingSubhead: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   generateNoteBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.xs, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   generateNoteBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   // Vinster's Review toggle — mirrors the List results "Sommelier Note":

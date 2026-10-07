@@ -246,6 +246,20 @@ export interface DietaryFilters {
   servings?: number | null;
 }
 
+// On-demand wine-card sections (generated only when opened, then cached on the
+// wine; never part of the auto wine-card generation or "update intel").
+export interface WineServingSuggestion {
+  temperature?: string;
+  decant?: string;
+  glassware?: string;
+  aperitif?: { style?: string; reason?: string };
+  digestif?: { style?: string; reason?: string };
+}
+export interface WineMarketVintageNote {
+  vintage?: string;
+  market?: string;
+}
+
 // Cellar types
 export interface CellarWine {
   id: string;
@@ -268,6 +282,9 @@ export interface CellarWine {
   // "The Inside Line" — Vinster's sommelier-best-friend verdict (migration 089).
   // Filled from the wine-intelligence insiderNote when intel is generated.
   insider_note?: string | null;
+  // On-demand, cached card sections (migration 114).
+  serving_suggestion?: WineServingSuggestion | null;
+  market_vintage_note?: WineMarketVintageNote | null;
   grape_variety: string | null;
   // Wine colour / style (red, white, rosé…), migration 026. Nullable.
   style: string | null;
