@@ -1580,17 +1580,9 @@ export default function CellarWineDetail() {
         <Text style={styles.cardTypeLabel}>
           {isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : 'Wine Card'}
         </Text>
-        <View style={styles.topBarActions}>
-          <TouchableOpacity
-            onPress={handleShareIntel}
-            disabled={sharingIntel}
-            hitSlop={{ top: 10, bottom: 6, left: 12, right: 12 }}
-          >
-            <Text style={[styles.topBarShareText, sharingIntel && { color: colors.textMuted }]}>
-              {sharingIntel ? 'Preparing…' : 'Export'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* Export moved to a button above Archive/Delete; keep a spacer so the
+            card-type label stays centred between Back and this edge. */}
+        <View style={styles.topBarSpacer} />
       </View>
 
       {/* Date cellared — sits just below the 'Wine Card' chip, with a gap before
@@ -2217,6 +2209,12 @@ export default function CellarWineDetail() {
         </TouchableOpacity>
       )}
 
+      {/* Export (share the wine card) — moved here from the top-right, as a
+          yellow button sitting directly above Archive / Delete. */}
+      <TouchableOpacity style={styles.exportBtn} onPress={handleShareIntel} disabled={sharingIntel} activeOpacity={0.85}>
+        <Text style={styles.exportBtnText}>{sharingIntel ? 'Preparing…' : 'Export'}</Text>
+      </TouchableOpacity>
+
       {!isArchived && !isWishlist && (
         <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
           <Text style={styles.archiveAccessBtnText}>Archive or Delete Wine</Text>
@@ -2519,6 +2517,8 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
   },
   topBarActions: { flexDirection: 'column', alignItems: 'flex-end', gap: 6 },
+  // Right-edge spacer balancing the Back arrow so the card-type label centres.
+  topBarSpacer: { width: 24 },
   topBarShareText: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.gold },
   editPhotoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
   editThumb: { width: 44, height: 56 },
@@ -2709,6 +2709,9 @@ const styles = StyleSheet.create({
   archiveAccessBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.md },
   // Cormorant — button text
   archiveAccessBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+  // Yellow Export button above Archive/Delete — matches archiveAccessBtn footprint.
+  exportBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md },
+  exportBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   archiveModalSheet: { backgroundColor: colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, paddingBottom: 48, borderTopWidth: 1, borderColor: colors.border },
   // Cormorant — archive modal title
   archiveModalTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, marginBottom: 2 },
