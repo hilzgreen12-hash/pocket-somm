@@ -220,6 +220,9 @@ export default function CellarWineDetail() {
   // Read-only popup shown when an existing cellar note's chevron is tapped —
   // offers Edit / Delete. (The input popup, cellarNoteOpen, is the editor.)
   const [cellarNoteViewOpen, setCellarNoteViewOpen] = useState(false);
+  // "View in Cellar" popup — lists every physical place this wine's bottles sit
+  // (external cellars, or a home wine split across locations).
+  const [cellarViewOpen, setCellarViewOpen] = useState(false);
   const [noteText, setNoteText] = useState(wine?.cellar_note ?? '');
   const [savingNote, setSavingNote] = useState(false);
 
@@ -811,6 +814,33 @@ export default function CellarWineDetail() {
     const loose = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
     if (loose > 0) buckets.push({ kind: 'loose', label: 'Not yet placed (loose)', count: loose });
     return buckets;
+  }
+
+  // Every physical place this wine's bottles sit — racks + storage-location
+  // placements (home or external) + bins — for the "View in Cellar" link/popup.
+  // Home entries carry an href to that cellar's view; external ones don't
+  // (external cellars aren't browsable).
+  function buildCellarEntries(): { key: string; label: string; quantity: number | null; caseFormat: string | null; isExternal: boolean; href: string | null }[] {
+    const entries: { key: string; label: string; quantity: number | null; caseFormat: string | null; isExternal: boolean; href: string | null }[] = [];
+    for (const { rack, count } of wineRacks) {
+      entries.push({ key: `rack-${rack.id}`, label: rack.name, quantity: count, caseFormat: null, isExternal: false, href: `/cellar/rack/${rack.id}?highlight=${wine!.id}` });
+    }
+    for (const p of locationPlacements) {
+      const loc = storageLocations.find((l) => l.id === p.storage_location_id);
+      const cs = placementCases.find((c) => c.id === p.case_id);
+      entries.push({
+        key: p.id,
+        label: loc?.name ?? 'A location',
+        quantity: p.quantity ?? null,
+        caseFormat: cs?.name ?? null,
+        isExternal: !!loc?.is_external,
+        href: loc?.is_external ? null : `/cellar/storage-location/${p.storage_location_id}`,
+      });
+    }
+    for (const p of winePlacements.filter((x) => x.kind === 'bin')) {
+      entries.push({ key: p.id, label: 'Wine bin', quantity: p.quantity ?? null, caseFormat: null, isExternal: false, href: null });
+    }
+    return entries;
   }
 
   // Tapped "Archive Wine" in the modal. For a PARTIAL archive of a wine split across
@@ -1891,60 +1921,29 @@ export default function CellarWineDetail() {
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
           <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
-          {/* Per-location breakdown — always shown so a wine split across a
-              fridge and a rack reads "1 in My Wine Fridge · 2 in Large Wine
-              Rack", not just a bare total. (Tapping the rack you came from just
-              returns to it — harmless, and worth it for the full picture.) */}
-          {wineRacks.map(({ rack, count }) => (
-            <TouchableOpacity key={rack.id} onPress={() => router.push(`/cellar/rack/${rack.id}?highlight=${wine.id}`)}>
-              <Text style={styles.statAction}>{count} bottle{count === 1 ? '' : 's'} in {rack.name} →</Text>
-            </TouchableOpacity>
-          ))}
-          {wineLocations.map((l) => (
-            <Text key={l.id} style={styles.statAction}>In {l.name}</Text>
-          ))}
-          {/* Alt-cellar placements — a wine can be in a rack AND one or more alt
-              cellars now; each placement is its own "N bottles in <location> - <case>" line. */}
-          {locationPlacements.map((p) => {
-            const loc = storageLocations.find((l) => l.id === p.storage_location_id);
-            const cs = placementCases.find((c) => c.id === p.case_id);
-            const line = `${p.quantity} bottle${p.quantity === 1 ? '' : 's'} in ${loc?.name ?? 'a location'}${cs ? ` - ${cs.name}` : ''}`;
-            // External cellars aren't browsable like home storage, so their line is
-            // plain text — no link, no arrow.
-            return loc?.is_external ? (
-              <Text key={p.id} style={styles.statActionPlain}>{line}</Text>
-            ) : (
-              <TouchableOpacity key={p.id} onPress={() => router.push(`/cellar/storage-location/${p.storage_location_id}` as any)}>
-                <Text style={styles.statAction}>{line} →</Text>
+          {/* A single yellow "View in Cellar →" (matching "Add to Archive →")
+              replaces the inline where-they-are breakdown. A single home location
+              navigates straight there; external cellars or a multi-location wine
+              open a popup listing each cellar, its quantity and case format. */}
+          {(() => {
+            const entries = buildCellarEntries();
+            const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
+            if (entries.length === 0) {
+              // Nothing placed yet — keep the "Add to Location" affordance.
+              return (!isArchived && !isWishlist) ? (
+                <TouchableOpacity onPress={handleAddToLocation}>
+                  <Text style={styles.statAction}>Add to Location</Text>
+                </TouchableOpacity>
+              ) : null;
+            }
+            // One home location and no stray unplaced bottles → go straight there.
+            const singleHome = entries.length === 1 && !entries[0].isExternal && !!entries[0].href && unplaced === 0;
+            return (
+              <TouchableOpacity onPress={() => singleHome ? router.push(entries[0].href as any) : setCellarViewOpen(true)}>
+                <Text style={styles.statAction}>View in Cellar →</Text>
               </TouchableOpacity>
             );
-          })}
-          {/* Wine-bin placements — previously the breakdown skipped bins, so a
-              bin-only wine showed just the total with no "in <bin>" line. */}
-          {winePlacements.filter((p) => p.kind === 'bin').map((p) => (
-            <Text key={p.id} style={styles.statActionPlain}>{p.quantity} bottle{p.quantity === 1 ? '' : 's'} in a wine bin</Text>
-          ))}
-          {/* Bottles not covered by any placement — surfaced from the unified
-              placements model so partially-placed wines no longer hide bottles. */}
-          {(() => {
-            const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
-            // Partially-placed wine (some placed, some loose): make the "not yet
-            // placed" line TAPPABLE so the remaining bottles can actually be placed —
-            // previously there was no way to (the "Add to Location" action only shows
-            // when the wine has NO placements at all).
-            return unplaced > 0 && placedCount(winePlacements) > 0 && !isArchived && !isWishlist ? (
-              <TouchableOpacity onPress={handleAddToLocation} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                <Text style={styles.statAction}>{unplaced} bottle{unplaced === 1 ? '' : 's'} not yet placed — tap to place {unplaced === 1 ? 'it' : 'them'} →</Text>
-              </TouchableOpacity>
-            ) : unplaced > 0 && placedCount(winePlacements) > 0 ? (
-              <Text style={styles.statActionMuted}>{unplaced} bottle{unplaced === 1 ? '' : 's'} not yet placed in home storage</Text>
-            ) : null;
           })()}
-          {wineRacks.length === 0 && wineLocations.length === 0 && locationPlacements.length === 0 && !wine?.bin_cell_id && !isArchived && !isWishlist && (
-            <TouchableOpacity onPress={handleAddToLocation}>
-              <Text style={styles.statAction}>Add to Location</Text>
-            </TouchableOpacity>
-          )}
         </View>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Archive</Text>
@@ -2488,6 +2487,33 @@ export default function CellarWineDetail() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* View in Cellar popup — full wine name header + "Bottles In My Cellar",
+          then one line per place (external cellars show quantity + case but no
+          link; home locations link through to that cellar's view). */}
+      <Modal visible={cellarViewOpen} transparent animationType="fade" onRequestClose={() => setCellarViewOpen(false)}>
+        <TouchableOpacity style={styles.cnOverlay} activeOpacity={1} onPress={() => setCellarViewOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.cnSheet} onPress={() => {}}>
+            <Text style={styles.cnViewWineName} numberOfLines={2}>{[wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ')}</Text>
+            <Text style={styles.cnViewSub}>Bottles In My Cellar</Text>
+            {buildCellarEntries().map((e) => {
+              const qty = e.quantity != null ? `${e.quantity} bottle${e.quantity === 1 ? '' : 's'}` : 'Bottles';
+              const line = `${qty} in ${e.label}${e.caseFormat ? ` · ${e.caseFormat}` : ''}`;
+              return e.href ? (
+                <TouchableOpacity key={e.key} onPress={() => { setCellarViewOpen(false); router.push(e.href as any); }} activeOpacity={0.7}>
+                  <Text style={styles.cellarViewLink}>{line} →</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text key={e.key} style={styles.cellarViewPlain}>{line}{e.isExternal ? '  (external cellar)' : ''}</Text>
+              );
+            })}
+            {(() => {
+              const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
+              return unplaced > 0 ? <Text style={styles.cellarViewPlain}>{unplaced} bottle{unplaced === 1 ? '' : 's'} not yet placed</Text> : null;
+            })()}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAwareScrollView>
   );
 }
@@ -2891,6 +2917,9 @@ const styles = StyleSheet.create({
   cnViewWineName: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.text, textAlign: 'center', lineHeight: 24 },
   cnViewSub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', marginTop: 4, marginBottom: spacing.md },
   cnViewNote: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 22 },
+  // "View in Cellar" popup lines — gold link (home, navigable) vs plain (external/bin).
+  cellarViewLink: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, textAlign: 'center', paddingVertical: spacing.xs },
+  cellarViewPlain: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, textAlign: 'center', paddingVertical: spacing.xs },
   cnInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface, minHeight: 52, textAlignVertical: 'top' },
   cnCount: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, textAlign: 'right', marginTop: 4 },
   cnSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
