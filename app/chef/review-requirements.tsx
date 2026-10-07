@@ -90,8 +90,25 @@ export default function ReviewRequirementsScreen() {
   // Holds the picked screenshot while it's being read (Mode B upload).
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
+  // Free-text filter for the "Select a Wine From Your Cellar" list.
+  const [cellarSearch, setCellarSearch] = useState('');
   // "Choose Your Wine" chooser — Scan / Upload / Cellar / Manual.
   const [wineChooserOpen, setWineChooserOpen] = useState(false);
+
+  // Narrow the cellar list by producer / wine / region / vintage as the user types.
+  const cellarResults = (() => {
+    const q = cellarSearch.trim().toLowerCase();
+    if (!q) return wines;
+    return wines.filter((cw) =>
+      [cw.producer, cw.wine_name, cw.region, cw.vintage != null ? String(cw.vintage) : '']
+        .filter(Boolean).join(' ').toLowerCase().includes(q)
+    );
+  })();
+
+  function closeCellarPicker() {
+    setCellarPickerOpen(false);
+    setCellarSearch('');
+  }
 
   const timeBlock = TIME_OPTIONS.find((t) => t.value === timeChoice) ?? TIME_OPTIONS[0];
   const timeDisplay = timeBlock.sub ? `${timeBlock.label} · ${timeBlock.sub}` : timeBlock.label;
@@ -200,7 +217,7 @@ export default function ReviewRequirementsScreen() {
   // Mode B alternative — pick a wine already in the cellar, skip scanning,
   // and generate pairings straight away (reuses the Mode A generate path).
   async function handleSelectCellarWine(cw: CellarWine) {
-    setCellarPickerOpen(false);
+    closeCellarPicker();
     setLoading(true);
     try {
       const filters = buildFilters();
@@ -463,23 +480,40 @@ export default function ReviewRequirementsScreen() {
 
       {/* Select a wine from the cellar — picks a known bottle and generates
           pairings straight away, no scanning. */}
-      <Modal visible={cellarPickerOpen} transparent animationType="fade" onRequestClose={() => setCellarPickerOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCellarPickerOpen(false)}>
+      <Modal visible={cellarPickerOpen} transparent animationType="fade" onRequestClose={closeCellarPicker}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeCellarPicker}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Select a wine from your cellar</Text>
+            <Text style={styles.cellarPickerTitle}>Select a Wine From Your Cellar</Text>
+            <View style={styles.cellarPickerDivider} />
             {wines.length === 0 ? (
               <Text style={styles.pickerEmpty}>Your cellar is empty — add wines to your cellar first, or scan/upload a label above.</Text>
             ) : (
-              <ScrollView style={{ maxHeight: 380 }}>
-                {wines.map((cw) => (
-                  <TouchableOpacity key={cw.id} style={styles.pickerRow} onPress={() => handleSelectCellarWine(cw)} activeOpacity={0.7}>
-                    <Text style={styles.pickerWine} numberOfLines={2}>{[cw.producer, cw.wine_name, cw.vintage].filter(Boolean).join(' · ')}</Text>
-                    {cw.region ? <Text style={styles.pickerRegion} numberOfLines={1}>{cw.region}</Text> : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <>
+                <TextInput
+                  style={styles.cellarSearch}
+                  placeholder="Search your cellar…"
+                  placeholderTextColor={colors.textMuted}
+                  value={cellarSearch}
+                  onChangeText={setCellarSearch}
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                />
+                {cellarResults.length === 0 ? (
+                  <Text style={styles.pickerEmpty}>No wines match “{cellarSearch.trim()}”.</Text>
+                ) : (
+                  <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+                    {cellarResults.map((cw) => (
+                      <TouchableOpacity key={cw.id} style={styles.pickerRow} onPress={() => handleSelectCellarWine(cw)} activeOpacity={0.7}>
+                        <Text style={styles.pickerWine} numberOfLines={2}>{[cw.producer, cw.wine_name, cw.vintage].filter(Boolean).join(' · ')}</Text>
+                        {cw.region ? <Text style={styles.pickerRegion} numberOfLines={1}>{cw.region}</Text> : null}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+              </>
             )}
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setCellarPickerOpen(false)}>
+            <TouchableOpacity style={styles.modalCancel} onPress={closeCellarPicker}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -532,6 +566,11 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
   modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  // "Select a Wine From Your Cellar" — a proper section header with an underline rule.
+  cellarPickerTitle: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.8 },
+  cellarPickerDivider: { height: 1, backgroundColor: colors.border, marginTop: spacing.sm, marginBottom: spacing.md },
+  // Search field between the header and the wine list.
+  cellarSearch: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm },
   modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   modalOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
   modalOptionText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text },
