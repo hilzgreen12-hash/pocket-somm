@@ -1,5 +1,6 @@
 import { generateWineIntel } from './pricing';
-import { fetchAutoLabelUri } from '../api/label';
+import { searchLabelImages } from '../api/label';
+import { uploadLabelImageFromUrl } from '../api/labelPhotos';
 import { updateCellarWine } from '../api/cellar';
 import type { CellarWine } from '../types/wine';
 
@@ -43,16 +44,21 @@ export async function updateCellarIntelBatch(
           vintage: w.vintage || 'NV',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any, currency);
-        // Give a photo-less wine a thumbnail while we're here: fetch a web label
-        // image for its identity (best-effort). A remote URL is a valid
-        // label_image_path — the app renders it directly. Skips wines that already
-        // have a photo.
+        // Give a photo-less wine a thumbnail while we're here (best-effort):
+        // find a web label image for its identity, then UPLOAD it to the label
+        // storage bucket and persist the STORAGE PATH. (Previously this stored a
+        // transient local file:// cache URI, which LabelThumb/getCachedLabelUri —
+        // a storage-path resolver — couldn't load, so no thumbnail ever showed.)
+        // Skips wines that already have a photo.
         let labelPatch: { label_image_path?: string } = {};
-        if (!w.label_image_path) {
+        if (!w.label_image_path && w.user_id) {
           try {
-            const lbl = await fetchAutoLabelUri(w.producer, w.wine_name);
-            if (lbl) labelPatch = { label_image_path: lbl };
-          } catch { /* no label found — leave without a photo */ }
+            const cands = await searchLabelImages({ producer: w.producer, wineName: w.wine_name });
+            if (cands.length) {
+              const storedPath = await uploadLabelImageFromUrl(w.user_id, cands[0].url, w.id);
+              labelPatch = { label_image_path: storedPath };
+            }
+          } catch { /* no label found / upload failed — leave without a photo */ }
         }
         // Backfill a missing region / grape from the intel so region-less imports
         // become classifiable in Cellar Statistics (and grape shows on the card).
