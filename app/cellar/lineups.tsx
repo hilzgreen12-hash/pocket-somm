@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Modal, TextInput, useWindowDimensions } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
+import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
 import * as ImagePicker from 'expo-image-picker';
 import { captureRef } from 'react-native-view-shot';
 import { router } from 'expo-router';
@@ -246,7 +246,7 @@ export default function LineupLibraryScreen() {
   // Share the lineup as a branded image (photo + date stamp + note). Resolves a
   // fresh signed URL, mounts the off-screen card, and snapshots it once the
   // photo has loaded (captureAndShareLineup, fired by the card's onImageReady).
-  const [shareData, setShareData] = useState<{ url: string; date: string; note: string; location?: string | null } | null>(null);
+  const [shareData, setShareData] = useState<{ url: string; title?: string | null; date: string; note: string; location?: string | null } | null>(null);
   const [sharingNote, setSharingNote] = useState(false);
   const shareCardRef = useRef<View>(null);
   const capturedRef = useRef(false);
@@ -260,6 +260,7 @@ export default function LineupLibraryScreen() {
       capturedRef.current = false;
       setShareData({
         url,
+        title: noteTarget.name ?? null,
         date: new Date(noteTarget.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
         note: noteDraft.trim() || (noteTarget.note ?? ''),
         location: noteTarget.city ?? null,
@@ -277,7 +278,7 @@ export default function LineupLibraryScreen() {
       await new Promise((r) => setTimeout(r, 150)); // let the photo settle after load
       if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine lineup') });
       }
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -481,6 +482,7 @@ export default function LineupLibraryScreen() {
           <LineupShareCard
             ref={shareCardRef}
             imageUrl={shareData.url}
+            title={shareData.title}
             date={shareData.date}
             location={shareData.location}
             note={shareData.note}

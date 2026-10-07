@@ -15,7 +15,7 @@ import { ReviewCardHeader, ReviewedStamp } from './ReviewCardHeader';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { useAttachLabelPhoto } from '../hooks/useAttachLabelPhoto';
 import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom } from '../utils/shareCard';
+import { shareResult, sharerNameFrom, vinsterSharedLead } from '../utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -335,7 +335,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
       await new Promise((r) => setTimeout(r, 250));
       if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine review') });
         return;
       }
       const header = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');

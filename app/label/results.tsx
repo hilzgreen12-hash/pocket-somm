@@ -37,7 +37,7 @@ import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
-import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
+import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { regionWithCountry } from '../../src/utils/wineOrigin';
 import * as ImagePicker from 'expo-image-picker';
@@ -745,7 +745,7 @@ export default function LabelResultsScreen() {
       await new Promise((r) => setTimeout(r, 250));
       if (intelShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(intelShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine note') });
         return;
       }
       // Plain-text fallback for devices without share-sheet support.

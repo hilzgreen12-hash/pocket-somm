@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
+import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
@@ -149,7 +149,7 @@ export default function RestaurantReviewsScreen() {
       await new Promise((r) => setTimeout(r, 250));
       if (restaurantShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(restaurantShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a restaurant review') });
         return;
       }
 

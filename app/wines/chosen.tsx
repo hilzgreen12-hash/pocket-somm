@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
+import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
@@ -1102,7 +1102,7 @@ export default function ChosenWinesScreen() {
       await new Promise((r) => setTimeout(r, 250));
       if (reviewShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(reviewShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine review') });
         return;
       }
       // Plain-text fallback — same shape as the previous behaviour so

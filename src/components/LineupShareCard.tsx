@@ -11,6 +11,7 @@ import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../co
 
 interface Props {
   imageUrl: string;
+  title?: string | null;        // the user's name for this lineup
   date: string;                 // pre-formatted, e.g. "24 June 2026"
   location?: string | null;     // optional — not stored on lineups yet
   note?: string | null;
@@ -18,7 +19,7 @@ interface Props {
 }
 
 export const LineupShareCard = forwardRef<View, Props>(
-  ({ imageUrl, date, location, note, onImageReady }, ref) => {
+  ({ imageUrl, title, date, location, note, onImageReady }, ref) => {
     const stamp = [date, location].filter((s) => s && String(s).trim().length > 0).join(' · ');
     return (
       <View ref={ref} collapsable={false} style={styles.card}>
@@ -30,7 +31,7 @@ export const LineupShareCard = forwardRef<View, Props>(
 
           <View style={styles.divider} />
 
-          <Text style={styles.subhead}>Our Lineup</Text>
+          <Text style={styles.subhead}>{(title ?? '').trim() || 'Your Lineup'}</Text>
           {stamp ? <Text style={styles.stamp}>{stamp}</Text> : null}
 
           <View style={styles.photoWrap}>

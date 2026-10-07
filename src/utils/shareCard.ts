@@ -34,6 +34,15 @@ export function vinsterShareMessage(sharerName: string | null | undefined): stri
   return `${name} has shared a Vinster result with you. Get Vinster: ${APP_STORE_URL}`;
 }
 
+// Lead sentence for shareResult({ message }), tailored to WHAT was shared so the
+// caption reflects the media rather than a generic "Vinster result". Pass a noun
+// phrase, e.g. 'a wine lineup', 'a restaurant review', 'their wine personality'.
+// shareResult appends the "Get Vinster" link, so don't include it here.
+export function vinsterSharedLead(sharerName: string | null | undefined, mediaLabel: string): string {
+  const name = (sharerName ?? '').trim() || 'Someone';
+  return `${name} has shared ${mediaLabel} with you.`;
+}
+
 function sharedFilename(sharerName: string | null | undefined, ext: string): string {
   const name = (sharerName ?? '').trim() || 'Someone';
   const base = `${name} has shared a Vinster result with you`;

@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, A
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
+import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { showAlert } from '../../src/components/AppAlert';
 import { DateInput } from '../../src/components/DateInput';
@@ -1371,7 +1371,7 @@ export default function CellarWineDetail() {
       await new Promise((r) => setTimeout(r, 250));
       if (reviewShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(reviewShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine review') });
         return;
       }
       // Plain-text fallback for devices without share-sheet support.
@@ -1430,7 +1430,7 @@ export default function CellarWineDetail() {
       await new Promise((r) => setTimeout(r, 250));
       if (intelShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(intelShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine note') });
         return;
       }
       // Plain-text fallback for devices without share-sheet support.

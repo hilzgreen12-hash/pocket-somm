@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom } from '../../../src/utils/shareCard';
+import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -609,7 +609,7 @@ export default function LineupDetailScreen() {
       await new Promise((r) => setTimeout(r, 150));
       if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine lineup') });
       }
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -1022,7 +1022,7 @@ export default function LineupDetailScreen() {
       {/* Off-screen share card. */}
       {shareData ? (
         <View style={styles.offscreen} pointerEvents="none">
-          <LineupShareCard ref={shareCardRef} imageUrl={shareData.url} date={shareData.date} location={lineup.city} note={shareData.note} onImageReady={captureAndShare} />
+          <LineupShareCard ref={shareCardRef} imageUrl={shareData.url} title={name.trim() || lineup.name} date={shareData.date} location={lineup.city} note={shareData.note} onImageReady={captureAndShare} />
         </View>
       ) : null}
 

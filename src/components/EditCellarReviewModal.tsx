@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom } from '../utils/shareCard';
+import { shareResult, sharerNameFrom, vinsterSharedLead } from '../utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
@@ -266,7 +266,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
       await new Promise((r) => setTimeout(r, 250));
       if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine review') });
         return;
       }
       const header = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
