@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
@@ -64,22 +64,50 @@ export function LineupsCarousel({ requireAccount }: { requireAccount?: (action: 
   const { session } = useAuth();
   const userId = session?.user.id;
   const gate = requireAccount ?? ((a: () => void) => a());
+  // "Add Lineup" chooser — Take a Photo (live camera) or Upload a Photo (library).
+  const [addOpen, setAddOpen] = useState(false);
   const { data: lineups = [], isLoading } = useQuery({
     queryKey: ['lineup-archives', userId],
     queryFn: () => listLineupArchives(userId!),
     enabled: !!userId,
   });
   if (isLoading) return <View style={styles.loading}><ActivityIndicator color={colors.gold} /></View>;
+
+  function startLineup(upload: boolean) {
+    setAddOpen(false);
+    router.push(upload ? '/cellar/archive-night?upload=1' : '/cellar/archive-night');
+  }
+
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-      {lineups.map((l) => <LineupCard key={l.id} item={l} />)}
-      {/* Empty state → three faded bottle placeholders (like the scan carousel). */}
-      {lineups.length === 0 ? LINEUP_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />) : null}
-      <TouchableOpacity style={styles.addCard} onPress={() => gate(() => router.push('/cellar/archive-night'))} activeOpacity={0.85}>
-        <Text style={styles.addCardIcon}>＋</Text>
-        <Text style={styles.addCardText}>Add</Text>
-      </TouchableOpacity>
-    </ScrollView>
+    <>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+        {lineups.map((l) => <LineupCard key={l.id} item={l} />)}
+        {/* Empty state → three faded bottle placeholders (like the scan carousel). */}
+        {lineups.length === 0 ? LINEUP_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />) : null}
+        <TouchableOpacity style={styles.addCard} onPress={() => gate(() => setAddOpen(true))} activeOpacity={0.85}>
+          <Text style={styles.addCardIcon}>＋</Text>
+          <Text style={styles.addCardText}>Add</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setAddOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => {}}>
+            <Text style={styles.sheetTitle}>Add Lineup</Text>
+            <Text style={styles.sheetBody}>Photograph your lineup now, or upload a photo you already have.</Text>
+            <TouchableOpacity style={styles.optBtn} onPress={() => startLineup(false)} activeOpacity={0.85}>
+              <Text style={styles.optText}>Take a Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.optBtn, styles.optBtnMt]} onPress={() => startLineup(true)} activeOpacity={0.85}>
+              <Text style={styles.optText}>Upload a Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setAddOpen(false)}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    </>
   );
 }
 
@@ -95,4 +123,14 @@ const styles = StyleSheet.create({
   addCard: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', gap: 6 },
   addCardIcon: { fontFamily: fonts.headingBold, fontSize: 30, color: colors.gold },
   addCardText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // "Add Lineup" chooser popup.
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
+  sheetTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.xs },
+  sheetBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
+  optBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
+  optBtnMt: { marginTop: spacing.sm },
+  optText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
+  cancelBtn: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.xs },
+  cancelText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 15 },
 });
