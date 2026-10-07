@@ -3157,10 +3157,12 @@ const styles = StyleSheet.create({
   // Gold "bubble" packaging choices (Loose / Add to Existing / Create New). The
   // selected one fills gold with dark text; the modal's own white Cancel sits at
   // the very bottom of the sheet.
-  pkgBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm + 2, alignItems: 'center', marginBottom: spacing.sm },
-  pkgBubbleActive: { backgroundColor: colors.gold },
-  pkgBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  pkgBubbleTextActive: { color: colors.surface },
+  // White, unfilled by default; the selected one brightens with a subtle white
+  // wash (no solid-gold fill) so it reads as "chosen" without the yellow.
+  pkgBubble: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm + 2, alignItems: 'center', marginBottom: spacing.sm },
+  pkgBubbleActive: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: '#FFFFFF' },
+  pkgBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF' },
+  pkgBubbleTextActive: { color: '#FFFFFF' },
   caseKindRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   caseKindBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: colors.surface },
   caseKindBtnOn: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.14)' },
