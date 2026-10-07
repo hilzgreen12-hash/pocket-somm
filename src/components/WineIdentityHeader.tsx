@@ -4,6 +4,7 @@ import type { StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import { wineHeaderLine } from '../utils/wineHeader';
+import { tidyWineRegion } from '../utils/regionFormat';
 
 // The one canonical wine header used across the whole app — wine cards, review
 // pages, scan/intel cards and modals. Enforces a single, consistent identity:
@@ -54,7 +55,7 @@ export function WineIdentityHeader({
   numberOfLinesName,
 }: WineIdentityHeaderProps) {
   const line1 = wineHeaderLine(producer, wineName, vintage);
-  const regionText = (region ?? '').trim();
+  const regionText = (tidyWineRegion(region) ?? '').trim();
   const grapeText = (grape ?? '').trim();
   const textAlign = align === 'center' ? 'center' : 'left';
   const s = SIZE[size];
