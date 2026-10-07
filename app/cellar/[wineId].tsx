@@ -33,6 +33,7 @@ import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBo
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { generateServingSuggestion, generateMarketVintage } from '../../src/api/wineExtras';
+import { wineNameKey } from '../../src/utils/wineIdentity';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -1563,9 +1564,14 @@ export default function CellarWineDetail() {
   // identity. Producer + wine name + vintage normalised so 'NV' / null /
   // case differences don't fragment the count.
   const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+  // Same wine + same vintage, matched on the shared identity KEY rather than
+  // exact producer/name equality — so a bottle archived while the wine was
+  // stored under a slightly different name-split (e.g. 'Château X' vs 'X', or a
+  // scan vs a re-add) is still recognised as the same wine and remembered in
+  // "Bottles in My Archive". Mirrors the review/search dedup hardening.
+  const wineKey = wineNameKey(wine.producer, wine.wine_name);
   const matchesIdentity = (w: typeof wine) =>
-    norm(w.producer) === norm(wine.producer) &&
-    norm(w.wine_name) === norm(wine.wine_name) &&
+    wineNameKey(w.producer, w.wine_name) === wineKey &&
     norm(w.vintage) === norm(wine.vintage);
   const bottlesInCellar = wines.filter(matchesIdentity).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
   const archivedMatches = archivedWines.filter(matchesIdentity);
