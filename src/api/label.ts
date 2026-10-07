@@ -5,6 +5,7 @@ import { streamPairings } from './pairingsStream';
 import { supabase } from './supabase';
 import type { WineDetails, WineIntelligence, Pairing, WineDetailsComplete, DietaryFilters } from '../types/wine';
 import { withBordeauxInfo } from '../constants/bordeauxClassification';
+import { wineNameKey } from '../utils/wineIdentity';
 
 // All edge calls go through invokeResilient, which attaches the user's JWT (via
 // the supabase client), applies a per-call timeout, and retries transport
@@ -103,9 +104,12 @@ export async function searchWines(query: string): Promise<WineSearchResult[]> {
   // return REAL wines. An unmatched query returns []; the UI then offers
   // "Use '<typed text>' — enter it yourself".
   try {
-    const { data, error } = await supabase.rpc('search_wines_catalog', { q, lim: 8 });
+    // Ask for more than we show so that collapsing duplicate rows (the same wine
+    // filed twice with different winery-word / region splits — e.g. "Pontet-Canet"
+    // and "Château Pontet-Canet") still leaves a full list of DISTINCT wines.
+    const { data, error } = await supabase.rpc('search_wines_catalog', { q, lim: 16 });
     if (error || !Array.isArray(data)) return [];
-    return data.map((r: { producer: string; wine_name: string | null; region: string | null; style: string | null; colour?: string | null; grape: string | null }) => ({
+    const mapped = data.map((r: { producer: string; wine_name: string | null; region: string | null; style: string | null; colour?: string | null; grape: string | null }) => ({
       producer: r.producer,
       wineName: r.wine_name ?? null,
       region: r.region ?? null,
@@ -114,6 +118,19 @@ export async function searchWines(query: string): Promise<WineSearchResult[]> {
       grape: r.grape ?? null,
       vintage,
     }));
+    // Collapse duplicate catalog rows for the SAME wine identity, keeping the
+    // first (best-ranked) and capping at 8 shown. Uses the shared identity key,
+    // so winery-type words and name-split differences no longer show twice.
+    const seen = new Set<string>();
+    const deduped: WineSearchResult[] = [];
+    for (const r of mapped) {
+      const key = wineNameKey(r.producer, r.wineName);
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      deduped.push(r);
+      if (deduped.length >= 8) break;
+    }
+    return deduped;
   } catch {
     return [];
   }
