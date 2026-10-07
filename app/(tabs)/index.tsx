@@ -11,8 +11,8 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
-import { DrinkNowCarousel, useDrinkNowCounts } from '../../src/components/DrinkNowCarousel';
-import { CellarInsightsCarousel, useCellarInsightsCount } from '../../src/components/CellarInsightsCarousel';
+import { DrinkNowCarousel } from '../../src/components/DrinkNowCarousel';
+import { CellarInsightsCarousel } from '../../src/components/CellarInsightsCarousel';
 import { DiscoverVoiceModal } from '../../src/components/DiscoverVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -405,7 +405,6 @@ export default function ScanLandingScreen() {
       {/* Recent Scans — mixed label + list scans, most recent first. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Your Recent Scans</Text>
-      <Text style={styles.carouselStats}>Last 8 Wine Label and List Scans</Text>
       <View style={styles.carouselBleed}><RecentScansCarousel /></View>
 
       {/* Drink Now — cellar bottles at last call (drinkable now, window closes
@@ -413,8 +412,7 @@ export default function ScanLandingScreen() {
           Reviews carousel (reviews live in the Review tab) and consolidates the
           old "Drink Soon" carousel. */}
       <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Your Cellar - Drink Now</Text>
-      <Text style={styles.carouselStats}>{drinkNow.total} {drinkNow.total === 1 ? 'Wine' : 'Wines'} to Drink{drinkNow.lastCall > 0 ? ` · ${drinkNow.lastCall} Last Call` : ''}</Text>
+      <Text style={styles.carouselHeader}>Your Cellar Insights</Text>
       <View style={styles.carouselBleed}><DrinkNowCarousel /></View>
 
       {/* Cellar Insights — actionable "running low" bottles to replenish, then a
@@ -422,7 +420,6 @@ export default function ScanLandingScreen() {
           collected producer). Chef/ingredient tiles deferred — not tracked yet. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Vinster's Insights</Text>
-      <Text style={styles.carouselStats}>{insightsRunningLow > 0 ? `${insightsRunningLow} ${insightsRunningLow === 1 ? 'Wine' : 'Wines'} Running Low` : 'Facts From Your Cellar'}</Text>
       <View style={styles.carouselBleed}><CellarInsightsCarousel /></View>
 
       {/* Community Musings — coming soon (recently shared reviews, journal). */}
