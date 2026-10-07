@@ -1097,19 +1097,38 @@ export default function RackGridScreen() {
     }
   }
 
-  // Immediate archive of the WHOLE wine (all bottles) — the redesigned menu confirms
-  // archive-vs-delete once, then acts; no second popup. Mirrors the full-archive path.
+  // Archive this wine FROM THIS RACK — the redesigned menu confirms archive-vs-delete
+  // once, then acts. Scoped to the bottles physically in THIS rack: a wine split
+  // across a fridge and another rack only loses the bottles stored here (previously
+  // this archived the WHOLE wine and cleared every rack, so archiving from one unit
+  // wrongly took a bottle from another). Only when this rack holds ALL the wine's
+  // bottles does it become a full archive.
   async function archiveWholeNow(wine: CellarWine) {
     if (archiving) return;
     const today = new Date().toISOString().split('T')[0];
+    const total = wine.quantity ?? 1;
+    const here = rackCountOf(wine.id) || total; // bottles of this wine in THIS rack
+    const count = Math.min(here, total);
     setArchiving(true);
     try {
-      await addCellarWineRemoval({ cellarWineId: wine.id, removedAt: today, count: wine.quantity ?? 1, note: null });
-      await updateWine.mutateAsync({ id: wine.id, updates: { quantity: wine.quantity ?? 1, archived_at: `${today}T12:00:00.000Z` } });
-      await clearWineFromRacks(wine.id);
-      await clearLocationPlacements(wine.id);
+      await addCellarWineRemoval({ cellarWineId: wine.id, removedAt: today, count, note: null });
+      if (count >= total) {
+        // This rack holds every bottle → full archive (mark row, clear all spots).
+        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: total, archived_at: `${today}T12:00:00.000Z` } });
+        await clearWineFromRacks(wine.id);
+        await clearLocationPlacements(wine.id);
+        if (session?.user.id) {
+          qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wine.id));
+        }
+      } else {
+        // Only the bottles in THIS rack leave: clone an archive row for them,
+        // decrement the live row, and free that many slots from THIS rack only.
+        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: total - count } });
+        const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
+        await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
+        await removeSlotsForWine(wine.id, count, rackId);
+      }
       if (session?.user.id) {
-        qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wine.id));
         qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
         qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
       }
@@ -1119,7 +1138,7 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['placements'] });
       qc.invalidateQueries({ queryKey: ['placements-list'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-      setSavedMsg(`${wine.wine_name} archived`);
+      setSavedMsg(count >= total ? `${wine.wine_name} archived` : `${count} bottle${count === 1 ? '' : 's'} archived from ${rack?.name ?? 'this rack'}`);
     } catch (err) {
       showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
