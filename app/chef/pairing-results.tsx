@@ -10,7 +10,7 @@ import { SearchProgress } from '../../src/components/SearchProgress';
 import { PairMasthead } from '../../src/components/PairMasthead';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation, type PriceBandExample } from '../../src/stores/foodPairingStore';
+import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation, type PriceBandExample, type ServingSuggestion, type ComplementaryWine } from '../../src/stores/foodPairingStore';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -26,6 +26,40 @@ import type { CellarWine } from '../../src/types/wine';
 
 function isPriceBandExample(ex: PriceBandExample | string): ex is PriceBandExample {
   return typeof ex === 'object' && ex !== null && 'priceBand' in ex;
+}
+
+// Shared "Serving Suggestion" block: how to serve the wine (temperature,
+// decanting, glassware) plus a wine to enjoy before and after. Renders nothing
+// for archived pairings generated before these fields existed.
+function ServingBlock({ serving, aperitif, digestif }: { serving?: ServingSuggestion; aperitif?: ComplementaryWine; digestif?: ComplementaryWine }) {
+  const hasServing = !!(serving && (serving.temperature || serving.decant || serving.glassware));
+  const hasBefore = !!aperitif?.style;
+  const hasAfter = !!digestif?.style;
+  if (!hasServing && !hasBefore && !hasAfter) return null;
+  return (
+    <>
+      {hasServing ? (
+        <>
+          <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Serving Suggestion</Text>
+          {serving?.temperature ? <Text style={styles.cardItem}>Temperature · {serving.temperature}</Text> : null}
+          {serving?.decant ? <Text style={styles.cardItem}>Decanting · {serving.decant}</Text> : null}
+          {serving?.glassware ? <Text style={styles.cardItem}>Glassware · {serving.glassware}</Text> : null}
+        </>
+      ) : null}
+      {hasBefore ? (
+        <>
+          <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Enjoy Before</Text>
+          <Text style={styles.cardItem}>{aperitif!.style}{aperitif!.reason ? ` — ${aperitif!.reason}` : ''}</Text>
+        </>
+      ) : null}
+      {hasAfter ? (
+        <>
+          <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Enjoy After</Text>
+          <Text style={styles.cardItem}>{digestif!.style}{digestif!.reason ? ` — ${digestif!.reason}` : ''}</Text>
+        </>
+      ) : null}
+    </>
+  );
 }
 
 // Capitalise the dish so the results heading reads as a proper title
@@ -83,8 +117,14 @@ function CellarResults({ recommendations, wines, onSelect }: {
             {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
             <Text style={styles.cardBody}>{rec.rationale}</Text>
 
-            <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Serving tip</Text>
-            <Text style={styles.cardItem}>{rec.servingTip}</Text>
+            {rec.serving || rec.aperitif || rec.digestif ? (
+              <ServingBlock serving={rec.serving} aperitif={rec.aperitif} digestif={rec.digestif} />
+            ) : rec.servingTip ? (
+              <>
+                <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Serving tip</Text>
+                <Text style={styles.cardItem}>{rec.servingTip}</Text>
+              </>
+            ) : null}
 
             {/* Jump straight to where this bottle lives (rack / bin / location). */}
             <TouchableOpacity onPress={() => router.push(storageHref(wine) as any)} activeOpacity={0.8} style={styles.cardBtn}>
@@ -145,6 +185,8 @@ function GeneralResults({ results, summary, currency }: { results: GeneralRecomm
               })}
             </>
           ) : null}
+
+          <ServingBlock serving={result.serving} aperitif={result.aperitif} digestif={result.digestif} />
         </View>
       ))}
     </>

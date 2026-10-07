@@ -96,7 +96,20 @@ Return ONLY valid JSON with this structure:
       "cellarWineId": "the id field from above",
       "wineName": "wine name",
       "rationale": "2-3 sentences explaining why this wine works with the dish",
-      "servingTip": "1 sentence on temperature, decanting, or glassware"
+      "servingTip": "1 sentence on temperature, decanting, or glassware",
+      "serving": {
+        "temperature": "ideal serving temperature, e.g. '16-18°C, lightly cool'",
+        "decant": "whether to decant and for how long, e.g. 'Decant 45-60 min' or 'No need to decant'",
+        "glassware": "the glass to use, e.g. 'Large Burgundy bowl' or 'Standard white-wine glass'"
+      },
+      "aperitif": {
+        "style": "a lighter wine STYLE to serve BEFORE this wine, e.g. 'Crémant de Loire'",
+        "reason": "1 short sentence why — keep it a palate-friendly opener, nothing too heavy"
+      },
+      "digestif": {
+        "style": "a wine STYLE to serve AFTER this wine, e.g. 'LBV Port'",
+        "reason": "1 short sentence why it follows this wine and dish well"
+      }
     }
   ]
 }
@@ -137,7 +150,20 @@ Return ONLY valid JSON with this structure:
       "region": "e.g. Côte de Beaune, Burgundy, France",
       "whyItWorks": "2-3 sentences explaining the pairing logic and why this ranks above the others",
       "characteristics": "What to look for on the label or shelf — body, oak, acidity etc.",
-      "whereToLook": "A specific country + region/appellation where the user can find a good example AT THEIR BUDGET — e.g. 'France, Mâcon-Villages'. Lead with the country. No producers or brand names."
+      "whereToLook": "A specific country + region/appellation where the user can find a good example AT THEIR BUDGET — e.g. 'France, Mâcon-Villages'. Lead with the country. No producers or brand names.",
+      "serving": {
+        "temperature": "ideal serving temperature for this style, e.g. '10-12°C, well chilled'",
+        "decant": "whether to decant and for how long, e.g. 'Decant 30 min' or 'No need to decant'",
+        "glassware": "the glass to use, e.g. 'Tulip-shaped white-wine glass'"
+      },
+      "aperitif": {
+        "style": "a lighter wine STYLE to serve BEFORE this one, e.g. 'Crémant de Loire'",
+        "reason": "1 short sentence why — a palate-friendly opener, nothing too heavy"
+      },
+      "digestif": {
+        "style": "a wine STYLE to serve AFTER this one, e.g. 'LBV Port'",
+        "reason": "1 short sentence why it follows this style and dish well"
+      }
     }
   ],
   "summary": "1-2 sentences on your overall pairing approach for this dish"

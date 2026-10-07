@@ -1,10 +1,28 @@
 import { create } from 'zustand';
 
+// How to serve a recommended wine — temperature, decanting, glassware. All
+// fields optional so archived pairings (which predate this) render gracefully.
+export interface ServingSuggestion {
+  temperature?: string;
+  decant?: string;
+  glassware?: string;
+}
+
+// A complementary wine to serve before (aperitif) or after (digestif) the
+// recommended wine, each with a one-line reason.
+export interface ComplementaryWine {
+  style?: string;
+  reason?: string;
+}
+
 export interface CellarRecommendation {
   cellarWineId: string;
   wineName: string;
   rationale: string;
   servingTip: string;
+  serving?: ServingSuggestion;
+  aperitif?: ComplementaryWine;
+  digestif?: ComplementaryWine;
 }
 
 export interface PriceBandExample {
@@ -29,6 +47,9 @@ export interface GeneralRecommendation {
   // archived pairings may still be plain string[]. The pairing-results
   // renderer handles both, falling back to whereToLook for current pairings.
   examples?: PriceBandExample[] | string[];
+  serving?: ServingSuggestion;
+  aperitif?: ComplementaryWine;
+  digestif?: ComplementaryWine;
 }
 
 interface FoodPairingStore {
