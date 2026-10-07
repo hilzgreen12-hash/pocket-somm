@@ -1777,6 +1777,134 @@ export default function CellarWineDetail() {
         editLabel="Edit Wine"
       />
 
+      {/* Bottles grid moved ABOVE the chef button so the user can see
+          at a glance whether they own (or have owned) the wine before
+          deciding whether to pair a meal to it. Hidden for wishlist
+          wines — bottle counts don't apply to a wine not yet bought. */}
+      {!isWishlist && (
+      <View style={[styles.statsGrid, { paddingTop: 0 }]}>
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>Bottles in My Cellar</Text>
+          <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
+          {/* A single yellow "View in Cellar →" (matching "Add to Archive →")
+              replaces the inline where-they-are breakdown. A single home location
+              navigates straight there; external cellars or a multi-location wine
+              open a popup listing each cellar, its quantity and case format. */}
+          {(() => {
+            const entries = buildCellarEntries();
+            const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
+            if (entries.length === 0) {
+              // Nothing placed yet — keep the "Add to Location" affordance.
+              return (!isArchived && !isWishlist) ? (
+                <TouchableOpacity onPress={handleAddToLocation}>
+                  <Text style={styles.statAction}>Add to Location</Text>
+                </TouchableOpacity>
+              ) : null;
+            }
+            // One home location and no stray unplaced bottles → go straight there.
+            const singleHome = entries.length === 1 && !entries[0].isExternal && !!entries[0].href && unplaced === 0;
+            return (
+              <TouchableOpacity onPress={() => singleHome ? router.push(entries[0].href as any) : setCellarViewOpen(true)}>
+                <Text style={styles.statAction}>View in Cellar →</Text>
+              </TouchableOpacity>
+            );
+          })()}
+        </View>
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>Bottles in My Archive</Text>
+          {bottlesInArchive === 0 ? (
+            <Text style={[styles.statValue, styles.statValueMuted]}>{bottleLabel(0)}</Text>
+          ) : (
+            <Text style={styles.statValue}>
+              {bottlesInArchive}x{bottleSizeCl(archiveBottleMl)}cl
+              {lastArchivedAt ? `, ${new Date(lastArchivedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
+            </Text>
+          )}
+          {/* Archive bottles from the cellar — asks how many (and which location
+              if the wine is filed in several), then confirms. Replaces the old
+              "I drank some" wording on the cellar side. */}
+          {bottlesInCellar > 0 && !isArchived ? (
+            <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}>
+              <Text style={styles.statAction}>Add to Archive →</Text>
+            </TouchableOpacity>
+          ) : null}
+          {/* Quick access to this wine's archive/removal history — only when there
+              is one. */}
+          {removals.length > 0 ? (
+            <TouchableOpacity onPress={() => setArchiveHistoryOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.statAction}>View Archive History</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+      )}
+
+      {!isArchived && rackRemovalMsg && (
+        <Text style={[styles.rackRemovalMsg, { marginHorizontal: spacing.xl }]}>{rackRemovalMsg}</Text>
+      )}
+
+      {/* Your Review (left) beside Cellar Note (right); each header stays in its
+          column, but its expanded body lays out FULL WIDTH below the row. */}
+      <View style={styles.reviewRow}>
+        <View style={styles.reviewCol}>
+          {/* Your Review — the chevron opens this wine's review in Your Wine
+              Reviews when one exists, or jumps straight to the review input
+              when it doesn't. No in-card expand; no yellow prompt. */}
+          {(() => {
+            const hasReview = wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window;
+            const reviewHref = hasReview
+              ? `/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}`
+              : `/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}`;
+            return (
+              <>
+                <View style={styles.vinsterHeaderRow}>
+                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+                    <Text style={styles.vinsterReviewTitle}>Your Review</Text>
+                    <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
+                  </TouchableOpacity>
+                </View>
+                {/* Collapsed summary when a review exists — also opens the card. */}
+                {hasReview ? (
+                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7}>
+                    <Text style={styles.reviewScoreLine} numberOfLines={1}>
+                      {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
+                      {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
+                      {wine.review_date ? (
+                        <Text style={styles.reviewScoreDate}>
+                          {new Date(wine.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Text>
+                      ) : null}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            );
+          })()}
+        </View>
+
+        {!isWishlist && (
+        <View style={styles.reviewCol}>
+          {/* Cellar Note — a short private note, card-only. The chevron opens a
+              read-only popup (Edit / Delete) when a note exists, or the manual
+              input popup when it doesn't. No yellow prompt. */}
+          <View style={styles.vinsterHeaderRow}>
+            <TouchableOpacity onPress={() => wine.cellar_note ? setCellarNoteViewOpen(true) : openCellarNote()} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <Text style={styles.vinsterReviewTitle}>Cellar Note</Text>
+              <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
+            </TouchableOpacity>
+          </View>
+          {/* One-line preview when a note exists — tapping it opens the popup. */}
+          {wine.cellar_note ? (
+            <TouchableOpacity onPress={() => setCellarNoteViewOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.cellarNotePreview} numberOfLines={1}>{wine.cellar_note}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        )}
+      </View>
+
+      <View style={styles.cardDivider} />
+
       {/* Compact stats grid — score / window / bottle counts only. The
           Purchase and Estimated values are pulled out into full-width rows
           below so each has room to breathe and a clearer call to action. */}
@@ -1800,7 +1928,11 @@ export default function CellarWineDetail() {
             <Text style={styles.statSub}>{wine.drinking_window_from}–{wine.drinking_window_to}</Text>
           )}
         </View>
+      </View>
 
+      <View style={styles.cardDivider} />
+
+      <View style={[styles.statsGrid, { paddingBottom: 0 }]}>
         {!isWishlist && (
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Purchase Price</Text>
@@ -1911,137 +2043,6 @@ export default function CellarWineDetail() {
           </View>
         ) : null
       ) : null}
-
-      {/* Bottles grid moved ABOVE the chef button so the user can see
-          at a glance whether they own (or have owned) the wine before
-          deciding whether to pair a meal to it. Hidden for wishlist
-          wines — bottle counts don't apply to a wine not yet bought. */}
-      {!isWishlist && (
-      <View style={[styles.statsGrid, { paddingTop: 0 }]}>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Bottles in My Cellar</Text>
-          <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
-          {/* A single yellow "View in Cellar →" (matching "Add to Archive →")
-              replaces the inline where-they-are breakdown. A single home location
-              navigates straight there; external cellars or a multi-location wine
-              open a popup listing each cellar, its quantity and case format. */}
-          {(() => {
-            const entries = buildCellarEntries();
-            const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
-            if (entries.length === 0) {
-              // Nothing placed yet — keep the "Add to Location" affordance.
-              return (!isArchived && !isWishlist) ? (
-                <TouchableOpacity onPress={handleAddToLocation}>
-                  <Text style={styles.statAction}>Add to Location</Text>
-                </TouchableOpacity>
-              ) : null;
-            }
-            // One home location and no stray unplaced bottles → go straight there.
-            const singleHome = entries.length === 1 && !entries[0].isExternal && !!entries[0].href && unplaced === 0;
-            return (
-              <TouchableOpacity onPress={() => singleHome ? router.push(entries[0].href as any) : setCellarViewOpen(true)}>
-                <Text style={styles.statAction}>View in Cellar →</Text>
-              </TouchableOpacity>
-            );
-          })()}
-        </View>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Bottles in My Archive</Text>
-          {bottlesInArchive === 0 ? (
-            <Text style={[styles.statValue, styles.statValueMuted]}>{bottleLabel(0)}</Text>
-          ) : (
-            <Text style={styles.statValue}>
-              {bottlesInArchive}x{bottleSizeCl(archiveBottleMl)}cl
-              {lastArchivedAt ? `, ${new Date(lastArchivedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
-            </Text>
-          )}
-          {/* Archive bottles from the cellar — asks how many (and which location
-              if the wine is filed in several), then confirms. Replaces the old
-              "I drank some" wording on the cellar side. */}
-          {bottlesInCellar > 0 && !isArchived ? (
-            <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}>
-              <Text style={styles.statAction}>Add to Archive →</Text>
-            </TouchableOpacity>
-          ) : null}
-          {/* Quick access to this wine's archive/removal history — only when there
-              is one. */}
-          {removals.length > 0 ? (
-            <TouchableOpacity onPress={() => setArchiveHistoryOpen(true)} activeOpacity={0.7}>
-              <Text style={styles.statAction}>View Archive History</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-      )}
-
-      {!isArchived && rackRemovalMsg && (
-        <Text style={[styles.rackRemovalMsg, { marginHorizontal: spacing.xl }]}>{rackRemovalMsg}</Text>
-      )}
-
-      {/* Reviews — Vinster's AI note, the user's review, and private notes,
-          grouped under one header with consistent sub-titles and no internal
-          dividers. The Chef button now sits lower, above Archive/Delete. */}
-      <View style={styles.cardDivider} />
-
-      {/* Your Review (left) beside Cellar Note (right); each header stays in its
-          column, but its expanded body lays out FULL WIDTH below the row. */}
-      <View style={styles.reviewRow}>
-        <View style={styles.reviewCol}>
-          {/* Your Review — the chevron opens this wine's review in Your Wine
-              Reviews when one exists, or jumps straight to the review input
-              when it doesn't. No in-card expand; no yellow prompt. */}
-          {(() => {
-            const hasReview = wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window;
-            const reviewHref = hasReview
-              ? `/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}`
-              : `/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}`;
-            return (
-              <>
-                <View style={styles.vinsterHeaderRow}>
-                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-                    <Text style={styles.vinsterReviewTitle}>Your Review</Text>
-                    <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-                  </TouchableOpacity>
-                </View>
-                {/* Collapsed summary when a review exists — also opens the card. */}
-                {hasReview ? (
-                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7}>
-                    <Text style={styles.reviewScoreLine} numberOfLines={1}>
-                      {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
-                      {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
-                      {wine.review_date ? (
-                        <Text style={styles.reviewScoreDate}>
-                          {new Date(wine.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </Text>
-                      ) : null}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </>
-            );
-          })()}
-        </View>
-
-        {!isWishlist && (
-        <View style={styles.reviewCol}>
-          {/* Cellar Note — a short private note, card-only. The chevron opens a
-              read-only popup (Edit / Delete) when a note exists, or the manual
-              input popup when it doesn't. No yellow prompt. */}
-          <View style={styles.vinsterHeaderRow}>
-            <TouchableOpacity onPress={() => wine.cellar_note ? setCellarNoteViewOpen(true) : openCellarNote()} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-              <Text style={styles.vinsterReviewTitle}>Cellar Note</Text>
-              <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-            </TouchableOpacity>
-          </View>
-          {/* One-line preview when a note exists — tapping it opens the popup. */}
-          {wine.cellar_note ? (
-            <TouchableOpacity onPress={() => setCellarNoteViewOpen(true)} activeOpacity={0.7}>
-              <Text style={styles.cellarNotePreview} numberOfLines={1}>{wine.cellar_note}</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-        )}
-      </View>
 
       {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
           chevron toggle. Sits last of the three review blocks (after Your
