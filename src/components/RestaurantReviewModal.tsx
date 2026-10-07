@@ -51,7 +51,7 @@ interface Props {
   sessionId: string;
   initialName?: string | null;
   initialNote?: string | null;
-  initialRatings?: { food: number | null; service: number | null; wineList: number | null; overall: number | null; value: number | null; atmosphere: number | null } | null;
+  initialRatings?: { food: number | null; service: number | null; wineList: number | null; overall: number | null; value: number | null; atmosphere: number | null; glassware: number | null } | null;
   initialFavourite?: boolean;
   // Read-only context shown at the top of the card, mirroring the wine
   // review page's header: where/when the visit was, all pre-filled by
@@ -119,6 +119,7 @@ export function RestaurantReviewModal({
   const [wineList, setWineList] = useState<number | null>(initialRatings?.wineList ?? null);
   const [service, setService] = useState<number | null>(initialRatings?.service ?? null);
   const [atmosphere, setAtmosphere] = useState<number | null>(initialRatings?.atmosphere ?? null);
+  const [glassware, setGlassware] = useState<number | null>(initialRatings?.glassware ?? null);
   const [value, setValue] = useState<number | null>(initialRatings?.value ?? null);
   const [isFavourite, setIsFavourite] = useState(initialFavourite ?? false);
   // Visit date, editable as YYYY-MM-DD. Only writable when a raw capturedAt was
@@ -147,6 +148,7 @@ export function RestaurantReviewModal({
       rating_overall: overall,
       rating_value: value,
       rating_atmosphere: atmosphere,
+      rating_glassware: glassware,
       is_favourite: isFavourite,
       // Only overwrite the visit date when the field holds a complete valid
       // date; an empty/partial entry leaves captured_at untouched.
@@ -604,6 +606,8 @@ export function RestaurantReviewModal({
         ratingText('Food', food),
         ratingText('Wine list', wineList),
         ratingText('Service', service),
+        ratingText('Atmosphere', atmosphere),
+        ratingText('Glassware', glassware),
         ratingText('Value', value),
       ].filter(Boolean).join('\n');
       const noteText = note.trim() ? `\n\n"${note.trim()}"` : '';
@@ -759,6 +763,12 @@ export function RestaurantReviewModal({
                 </TouchableOpacity>
               )}
             </View>
+            {/* Overall star rating lives here so a review can be a single star
+                score plus an optional note — no written review required. */}
+            <View style={styles.overallRow}>
+              <Text style={styles.overallLabel}>Overall</Text>
+              <StarRating value={overall} onChange={setOverall} size={22} />
+            </View>
             {noteEditing ? (
               <TextInput
                 style={[styles.input, styles.noteInput]}
@@ -783,11 +793,11 @@ export function RestaurantReviewModal({
             <Text style={styles.fieldLabel}>Ratings</Text>
             <View style={styles.ratingsGrid}>
               {([
-                { label: 'Overall', value: overall, set: setOverall },
                 { label: 'Food', value: food, set: setFood },
                 { label: 'Wine list', value: wineList, set: setWineList },
                 { label: 'Service', value: service, set: setService },
                 { label: 'Atmosphere', value: atmosphere, set: setAtmosphere },
+                { label: 'Glassware', value: glassware, set: setGlassware },
                 { label: 'Value', value: value, set: setValue },
               ] as const).map((r) => (
                 <View key={r.label} style={styles.ratingItem}>
@@ -1024,6 +1034,7 @@ export function RestaurantReviewModal({
             ratingService={service}
             ratingWineList={wineList}
             ratingAtmosphere={atmosphere}
+            ratingGlassware={glassware}
             ratingValue={value}
             note={note.trim() || null}
             wines={(wines ?? []).map((w) => ({ producer: w.producer, wineName: w.wineName, vintage: w.vintage, userScore: w.userScore }))}
@@ -1100,6 +1111,9 @@ const styles = StyleSheet.create({
   },
   // Field label + dictation mic on one row.
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  // Overall star rating beneath the "Your review" header.
+  overallRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  overallLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

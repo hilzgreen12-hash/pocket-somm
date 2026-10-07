@@ -62,6 +62,7 @@ export interface ScanArchiveItem {
   ratingOverall: number | null;
   ratingValue: number | null;
   ratingAtmosphere: number | null;
+  ratingGlassware: number | null;
   isFavourite: boolean;
   // Storage path of the restaurant-visit photo (migration 088), or null.
   restaurantPhotoPath: string | null;
@@ -129,7 +130,7 @@ export function useScanHistory() {
       if (!userId) return [];
       const { data, error } = await supabase
         .from('scan_sessions')
-        .select('id, captured_at, extracted_wines, recommendation, city, restaurant_name, restaurant_note, rating_food, rating_service, rating_wine_list, rating_overall, rating_value, rating_atmosphere, is_favourite, restaurant_photo_path')
+        .select('id, captured_at, extracted_wines, recommendation, city, restaurant_name, restaurant_note, rating_food, rating_service, rating_wine_list, rating_overall, rating_value, rating_atmosphere, rating_glassware, is_favourite, restaurant_photo_path')
         .eq('user_id', userId)
         .order('captured_at', { ascending: false });
       if (error) throw error;
@@ -147,6 +148,7 @@ export function useScanHistory() {
         ratingOverall: row.rating_overall ?? null,
         ratingValue: row.rating_value ?? null,
         ratingAtmosphere: row.rating_atmosphere ?? null,
+        ratingGlassware: row.rating_glassware ?? null,
         isFavourite: row.is_favourite ?? false,
         restaurantPhotoPath: row.restaurant_photo_path ?? null,
       }));

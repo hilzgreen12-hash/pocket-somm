@@ -89,6 +89,7 @@ export default function RestaurantReviewsScreen() {
     ratingService: number | null;
     ratingWineList: number | null;
     ratingAtmosphere: number | null;
+    ratingGlassware: number | null;
     ratingValue: number | null;
     note: string | null;
     wines: Array<{ producer: string | null; wineName: string; vintage: string | number | null; userScore: number | null }>;
@@ -134,6 +135,7 @@ export default function RestaurantReviewsScreen() {
       ratingService: item.ratingService,
       ratingWineList: item.ratingWineList,
       ratingAtmosphere: item.ratingAtmosphere,
+      ratingGlassware: item.ratingGlassware,
       ratingValue: item.ratingValue,
       note: item.restaurantNote?.trim() || null,
       wines: winesForCard,
@@ -160,6 +162,7 @@ export default function RestaurantReviewsScreen() {
         ratingLine('Wine list', item.ratingWineList),
         ratingLine('Service',  item.ratingService),
         ratingLine('Atmosphere', item.ratingAtmosphere),
+        ratingLine('Glassware', item.ratingGlassware),
         ratingLine('Value',    item.ratingValue),
       ].filter(Boolean).join('\n');
       const note = item.restaurantNote?.trim()
@@ -282,6 +285,7 @@ export default function RestaurantReviewsScreen() {
         ratingOverall: null,
         ratingValue: null,
         ratingAtmosphere: null,
+        ratingGlassware: null,
         isFavourite: false,
         restaurantPhotoPath: null,
       });
@@ -501,6 +505,7 @@ export default function RestaurantReviewsScreen() {
   const restaurantReviewed = (item: typeof reviewed[number]) => !!(
     item.ratingOverall != null || item.ratingFood != null || item.ratingService != null ||
     item.ratingWineList != null || item.ratingAtmosphere != null || item.ratingValue != null ||
+    item.ratingGlassware != null ||
     (item.restaurantNote && item.restaurantNote.trim())
   );
 
@@ -747,7 +752,7 @@ export default function RestaurantReviewsScreen() {
             </View>
           ) : (
             sorted.map((item) => {
-              const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null || item.ratingAtmosphere != null || item.ratingValue != null;
+              const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null || item.ratingAtmosphere != null || item.ratingGlassware != null || item.ratingValue != null;
               return (
                 <View key={item.id} style={styles.cardCompact}>
                   {/* Photo of the night on the left, then the restaurant header
@@ -828,6 +833,7 @@ export default function RestaurantReviewsScreen() {
             overall: editing.ratingOverall,
             value: editing.ratingValue,
             atmosphere: editing.ratingAtmosphere,
+            glassware: editing.ratingGlassware,
           }}
           initialFavourite={editing.isFavourite}
           city={editing.city}
@@ -1001,6 +1007,7 @@ export default function RestaurantReviewsScreen() {
             ratingService={restaurantSharePayload.ratingService}
             ratingWineList={restaurantSharePayload.ratingWineList}
             ratingAtmosphere={restaurantSharePayload.ratingAtmosphere}
+            ratingGlassware={restaurantSharePayload.ratingGlassware}
             ratingValue={restaurantSharePayload.ratingValue}
             note={restaurantSharePayload.note}
             wines={restaurantSharePayload.wines}

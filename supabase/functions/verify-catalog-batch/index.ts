@@ -113,6 +113,71 @@ async function verifyBatch(rows: Row[], model: string): Promise<any> {
     stop: resp?.stop_reason ?? null, blocks: (resp.content ?? []).map((b: any) => b?.type), content: JSON.stringify(resp?.content ?? '').slice(0, 400) };
 }
 
+// Second-pass, WEB-SEARCH-grounded verification of implausible rows. The model must
+// search the web before deciding — so a real-but-obscure wine the first (parametric)
+// pass flagged gets rescued, and only genuinely unfindable wines stay flagged. Never
+// deletes here; it re-tags (real→plausible, fake→implausible double-confirmed,
+// unsure→needs_review) and re-files when the web reveals the true producer.
+async function webSearchBatch(rows: Row[]): Promise<any> {
+  const list = rows.map((r, i) => `${i + 1}. producer="${r.producer ?? ''}", wine="${r.wine_name ?? ''}", region="${r.region ?? ''}", grape="${r.grape ?? ''}", style="${r.style ?? ''}"`).join('\n');
+  const prompt = `These wines were flagged as possibly FABRICATED or MIS-ATTRIBUTED. For EACH wine, USE WEB SEARCH to verify whether it is a REAL wine that THIS EXACT producer actually makes. Search thoroughly (producer + cuvée, producer site, Wine-Searcher, merchants) before deciding.
+
+Verdicts:
+- "real": web evidence confirms this producer makes this wine/cuvée → rescue it.
+- "fake": the web shows this producer does NOT make it (or it clearly belongs to a different producer — give correctedProducer), or there is simply no evidence it exists.
+- "uncertain": you genuinely cannot confirm either way from the web.
+
+Return ONLY a JSON array (no prose) of {"i":<number>,"verdict":"real"|"fake"|"uncertain","reason":"<brief>","correctedProducer":<string or null>}.
+
+Wines:
+${list}`;
+  let resp: any;
+  try {
+    resp = await client.messages.create({
+      model: 'claude-sonnet-5-5',
+      max_tokens: 12000,
+      thinking: { type: 'between_tools' },
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: Math.max(6, rows.length * 2) }] as any,
+      messages: [{ role: 'user', content: prompt }],
+    });
+  } catch (e) { return { real: 0, fake: 0, uncertain: 0, refiled: 0, updated: 0, searched: false, samples: [{ error: (e instanceof Error ? e.message : String(e)).slice(0, 200) }] }; }
+  const searched = (resp.content ?? []).some((b: any) => b.type === 'web_search_tool_result' || b.type === 'server_tool_use');
+  const text = (resp.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n');
+  const byIndex = new Map<number, any>();
+  for (const v of parseVerdicts(text)) if (typeof v?.i === 'number') byIndex.set(v.i, v);
+  let real = 0, fake = 0, uncertain = 0, refiled = 0, updated = 0;
+  const samples: any[] = [];
+  const now = new Date().toISOString();
+  await Promise.all(rows.map(async (row, idx) => {
+    const v = byIndex.get(idx + 1);
+    if (!v) return;
+    const verdict = String(v.verdict ?? '').toLowerCase();
+    const corrected = (typeof v.correctedProducer === 'string' ? v.correctedProducer : '').trim();
+    if (verdict === 'real') {
+      real += 1;
+      const { error } = await admin.from('wines_catalog').update({ verification_status: 'plausible', verified_source: 'web-search', verified_at: now, verification_notes: `web: real · ${v.reason ?? ''}`.slice(0, 400) }).eq('id', row.id);
+      if (!error) updated += 1;
+      if (samples.length < 25) samples.push({ action: 'rescued-real', producer: row.producer, wine: row.wine_name });
+    } else if (verdict === 'fake' && corrected && corrected.toLowerCase() !== (row.producer ?? '').toLowerCase()) {
+      const upd = await admin.from('wines_catalog').update({ producer: corrected, display: [corrected, row.wine_name].filter(Boolean).join(' '), verification_status: 'plausible', verified_source: 'web-search', verified_at: now, verification_notes: `web: refiled from "${row.producer}" · ${v.reason ?? ''}`.slice(0, 400) }).eq('id', row.id);
+      if (upd.error) await admin.from('wines_catalog').delete().eq('id', row.id);
+      refiled += 1; updated += 1;
+      if (samples.length < 25) samples.push({ action: 'refiled', from: row.producer, to: corrected, wine: row.wine_name });
+    } else if (verdict === 'fake') {
+      fake += 1;
+      const { error } = await admin.from('wines_catalog').update({ verification_status: 'implausible', verified_source: 'web-search', verified_at: now, verification_notes: `web: fake (double-confirmed) · ${v.reason ?? ''}`.slice(0, 400) }).eq('id', row.id);
+      if (!error) updated += 1;
+      if (samples.length < 25) samples.push({ action: 'confirmed-fake', producer: row.producer, wine: row.wine_name, reason: v.reason });
+    } else {
+      uncertain += 1;
+      const { error } = await admin.from('wines_catalog').update({ verification_status: 'needs_review', verified_source: 'web-search', verified_at: now, verification_notes: `web: uncertain · ${v.reason ?? ''}`.slice(0, 400) }).eq('id', row.id);
+      if (!error) updated += 1;
+      if (samples.length < 25) samples.push({ action: 'uncertain', producer: row.producer, wine: row.wine_name });
+    }
+  }));
+  return { real, fake, uncertain, refiled, updated, searched, samples };
+}
+
 async function colourBatch(rows: Row[]): Promise<{ updated: number; counts: Record<string, number> }> {
   const list = rows.map((r, i) => `${i + 1}. producer="${r.producer ?? ''}", wine="${r.wine_name ?? ''}", region="${r.region ?? ''}", grape="${r.grape ?? ''}", style="${r.style ?? ''}"`).join('\n');
   const prompt = `For each wine below, state its COLOUR as exactly one of: red, white, rosé. Judge from producer, wine, region, grape and style.
@@ -247,6 +312,31 @@ Deno.serve(async (req) => {
       let updated = 0; const counts: Record<string, number> = {};
       for (const r of results) { updated += r.updated; for (const k of Object.keys(r.counts)) counts[k] = (counts[k] ?? 0) + (r.counts as any)[k]; }
       return json({ processed: work.length, updated, counts }, 200);
+    }
+
+    // Web-search second pass over implausible rows not yet web-checked.
+    if (body?.websearch2) {
+      const wl = Math.min(Math.max(Number(body?.limit) || 20, 1), 100);
+      const bs = Math.min(Math.max(Number(body?.batchSize) || 5, 2), 10);
+      const { data: rows, error: we } = await admin.from('wines_catalog')
+        .select('id, producer, wine_name, region, grape, style')
+        .eq('verification_status', 'implausible')
+        .neq('verified_source', 'web-search')
+        .limit(wl);
+      if (we) return json({ error: we.message }, 500);
+      const work = (rows ?? []) as Row[];
+      if (work.length === 0) return json({ note: 'websearch: done', processed: 0 }, 200);
+      const chunks: Row[][] = [];
+      for (let i = 0; i < work.length; i += bs) chunks.push(work.slice(i, i + bs));
+      const results = await Promise.all(chunks.map((c) => webSearchBatch(c)));
+      let real = 0, fake = 0, uncertain = 0, refiled = 0, updated = 0, searchedCalls = 0;
+      const samples: any[] = [];
+      for (const r of results) {
+        real += r.real; fake += r.fake; uncertain += r.uncertain; refiled += r.refiled; updated += r.updated;
+        if (r.searched) searchedCalls += 1;
+        for (const s of r.samples) if (samples.length < 30) samples.push(s);
+      }
+      return json({ processed: work.length, updated, real, fake_confirmed: fake, refiled, uncertain, searchedCalls_of: chunks.length, samples }, 200);
     }
 
     const limit = Math.min(Math.max(Number(body?.limit) || 30, 1), 500);
