@@ -819,19 +819,19 @@ export default function FullCellarListScreen() {
   const winesMissingIntel = filtered.filter(isMissingIntel);
 
   // "Update all" — refresh critic score + pricing (and a thumbnail + region/grape
-  // for wines missing them) in batches of 10 for efficiency. Each run confirms
-  // first, then does the next 10; the missing-intel count drops by 10 and the user
-  // presses again for the next batch.
-  const INTEL_BATCH_SIZE = 10;
+  // for wines missing them) in bunches of 25 for efficiency. Each run confirms
+  // first, then does the next 25; the missing-intel count drops by 25 and the user
+  // presses again for the next bunch.
+  const INTEL_BATCH_SIZE = 25;
   function handleUpdateAllIntel() {
     if (winesMissingIntel.length === 0 || intelUpdating) return;
     const total = winesMissingIntel.length;
     const batch = winesMissingIntel.slice(0, INTEL_BATCH_SIZE);
     showAlert({
       title: 'Update wine intel',
-      body: `Vinster updates your wines in batches of ${INTEL_BATCH_SIZE} at a time for efficiency.${
+      body: `Vinster updates your wines in bunches of ${INTEL_BATCH_SIZE} at a time, which it completes with ease.${
         total > batch.length
-          ? ` This will do the next ${batch.length} of ${total} — press "Update all" again for each further batch.`
+          ? ` This will do the next ${batch.length} of ${total} — press "Update all" again for each further bunch.`
           : ''
       }`,
       buttons: [

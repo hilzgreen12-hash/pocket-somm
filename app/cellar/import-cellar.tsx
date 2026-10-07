@@ -809,6 +809,9 @@ export default function ImportCellarScreen() {
           <Text style={styles.hint}>
             {addedCount} bottle{addedCount === 1 ? '' : 's'} added{mergedBottles > 0 ? ` — ${mergedBottles} of them merged into wines already in your cellar` : ''}.{'\n\n'}This import can be viewed in Your Cellar List{importedLocationName ? ` in your ${importedLocationName} folder` : ''}.
           </Text>
+          <Text style={styles.doneIntelNudge}>
+            Please update intel on these wines so that prices and scores are included in your cellar statistics — you can do this from the Full Cellar List screen.
+          </Text>
           {mergedList.length > 0 ? (
             <View style={styles.mergedBlock}>
               {mergedList.map((m, i) => (
@@ -933,6 +936,8 @@ const styles = StyleSheet.create({
   doneBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: spacing.sm },
   doneTitle: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center' },
+  // Yellow nudge prompting the user to run intel updates after a cellar import.
+  doneIntelNudge: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
   mergedBlock: { alignSelf: 'stretch', gap: spacing.xs, marginTop: spacing.xs },
   mergedLine: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, textAlign: 'center', lineHeight: 20 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
