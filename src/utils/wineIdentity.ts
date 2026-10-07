@@ -20,6 +20,21 @@ const norm = (s: string | null | undefined) => (s ?? '')
 // deliberately NOT here — "Brunello di Montalcino" keeps its "di".
 const ARTICLES = new Set(['il', 'lo', 'la', 'le', 'les', 'gli', 'the', 'el', 'los', 'las', 'der', 'die', 'das']);
 
+// Generic winery-TYPE words that may or may not prefix a producer without
+// changing which wine it is — "Château Pontet-Canet" == "Pontet-Canet",
+// "Kellerei/Cantina Terlan" == "Terlan", "Weingut Keller" == "Keller". Dropped
+// from the identity key so the same wine filed with or without them matches.
+// Kept deliberately conservative: identity-BEARING words (Clos, Mas, Castello,
+// Quinta, Finca, Hospices…) are NOT here, so distinct estates don't over-merge.
+const PRODUCER_WORDS = new Set([
+  'chateau', 'domaine', 'domaines', 'weingut', 'weinhaus', 'kellerei', 'cantina', 'cantine',
+  'bodega', 'bodegas', 'tenuta', 'tenute', 'azienda', 'maison', 'estate', 'winery', 'weinbau',
+  'vineyard', 'vineyards', 'wines', 'wine', 'family', 'champagne',
+]);
+
+// Words dropped from the identity key — articles + winery-type words.
+const KEY_STOPWORDS = new Set([...ARTICLES, ...PRODUCER_WORDS]);
+
 // Fold accents + lowercase for accent-insensitive text search ("Müller" ==
 // "Muller"). Keeps everything else (punctuation, digits) so it's safe for
 // free-text "does this contain that" matching, unlike the stricter key below.
@@ -54,7 +69,7 @@ export function wineQueryName(
 // different wine (kept conservative so distinct cuvées don't merge). Definite
 // articles are dropped so "Il Marroneto" and "Marroneto" match.
 export function wineNameKey(producer: string | null | undefined, wineName: string | null | undefined): string {
-  const tokens = norm(`${producer ?? ''} ${wineName ?? ''}`).split(' ').filter((t) => t && !ARTICLES.has(t));
+  const tokens = norm(`${producer ?? ''} ${wineName ?? ''}`).split(' ').filter((t) => t && !KEY_STOPWORDS.has(t));
   return Array.from(new Set(tokens)).sort().join(' ');
 }
 
@@ -62,7 +77,7 @@ export function wineNameKey(producer: string | null | undefined, wineName: strin
 // grape…). 3+ chars so short connectors don't count; articles dropped.
 function identityTokens(...parts: (string | number | null | undefined)[]): Set<string> {
   const joined = parts.filter((p) => p != null && p !== '').map(String).join(' ');
-  return new Set(norm(joined).split(' ').filter((t) => t.length >= 3 && !ARTICLES.has(t)));
+  return new Set(norm(joined).split(' ').filter((t) => t.length >= 3 && !KEY_STOPWORDS.has(t)));
 }
 
 // LOOSER identity match, used only as a FALLBACK after wineNameKey exact fails.

@@ -1,5 +1,5 @@
 import type { ChosenWine } from '../types/wine';
-import { wineNameKey } from './wineIdentity';
+import { wineNameKey, looseWineMatch } from './wineIdentity';
 
 // Shared helpers for the duplicate-review flow. When a user reviews a
 // wine they've already reviewed (matched by identity), the review modals
@@ -31,7 +31,13 @@ export function findExistingReview(reviews: ChosenWine[], identity: WineIdentity
   const matches = reviews.filter((r) =>
     norm(r.vintage != null ? String(r.vintage) : '') === v &&
     ((wantId != null && r.ws_wine_id != null && r.ws_wine_id === wantId) ||
-      (!!wantKey && wineNameKey(r.producer, r.wine_name) === wantKey)),
+      (!!wantKey && wineNameKey(r.producer, r.wine_name) === wantKey) ||
+      // Looser subset fallback — same wine filed with extra winery/appellation
+      // words on one side (see wineNameKey hardening + looseWineMatch).
+      looseWineMatch(
+        { producer: identity.producer, wineName: identity.wineName, vintage: identity.vintage },
+        { producer: r.producer, wineName: r.wine_name, grape: r.grape, vintage: r.vintage },
+      )),
   );
   if (matches.length === 0) return null;
   return matches.reduce((a, b) =>

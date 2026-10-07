@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { wineNameKey } from '../utils/wineIdentity';
+import { wineNameKey, looseWineMatch } from '../utils/wineIdentity';
 import type { ChosenWine, WineRecommendation } from '../types/wine';
 
 export interface SaveChosenWineInput {
@@ -355,7 +355,14 @@ export async function findMatchingChosenWine(
   const isMatch = (w: ChosenWine) =>
     sameVintage(w) && (
       (wantId != null && w.ws_wine_id != null && w.ws_wine_id === wantId) ||
-      (!!wantKey && wineNameKey(w.producer, w.wine_name) === wantKey)
+      (!!wantKey && wineNameKey(w.producer, w.wine_name) === wantKey) ||
+      // Looser subset fallback: the same wine filed with extra winery/appellation
+      // words on one side ("Kellerei Cantina Terlan … Terlaner" vs "Cantina
+      // Terlan") — one side's significant words are a subset of the other's.
+      looseWineMatch(
+        { producer: identity.producer, wineName: identity.wineName, vintage: identity.vintage },
+        { producer: w.producer, wineName: w.wine_name, grape: w.grape, vintage: w.vintage },
+      )
     );
 
   const matches = list.filter(isMatch);
