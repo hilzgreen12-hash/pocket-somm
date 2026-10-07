@@ -187,6 +187,15 @@ export async function getSharedCellarWines(ownerId: string): Promise<CellarWine[
   return data ?? [];
 }
 
+// Fetch a single cellar wine by id — used when a screen holds a per-location
+// VIEW of a wine (its row's quantity is the location count, not the true total)
+// and needs the authoritative full row before a scoped archive.
+export async function getCellarWineById(id: string): Promise<CellarWine | null> {
+  const { data, error } = await supabase.from('cellar_wines').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return (data as CellarWine) ?? null;
+}
+
 export async function addCellarWine(wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>): Promise<CellarWine> {
   const { data, error } = await supabase
     .from('cellar_wines')

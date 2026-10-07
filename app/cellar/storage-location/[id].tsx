@@ -9,7 +9,7 @@ import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation,
 import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement, setPlacementCase } from '../../../src/api/placements';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
-import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine } from '../../../src/api/cellar';
+import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine, addCellarWineRemoval, getCellarWineById } from '../../../src/api/cellar';
 import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../../../src/api/racks';
 import { fetchStorageLocations } from '../../../src/api/storageLocations';
 import { useRacks } from '../../../src/hooks/useRacks';
@@ -547,7 +547,7 @@ export default function StorageLocationScreen() {
       body: 'They move to Your Archive and leave this location. Your reviews and history stay.',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive Wines', onPress: () => runBulk('Archived', async (wid) => { await clearWineFromRacks(wid); await assignWineToCase(wid, null); await archiveCellarWine(wid); }) },
+        { text: 'Archive Wines', onPress: () => runBulk('Archived', async (wid) => { const row = wines.find((x) => x.id === wid); if (row) await archiveWineFromLocation(row); }) },
       ],
     });
   }
@@ -705,15 +705,46 @@ export default function StorageLocationScreen() {
     });
   }
 
-  // Archive this wine (all bottles) — moved out of the "Move" popup into its own
-  // top-level long-press action.
+  // Archive a wine FROM THIS LOCATION only — scoped to the bottles physically
+  // here (the list row's quantity is the per-location count, not the wine's true
+  // total). A wine split across this alt cellar and another spot only loses the
+  // bottles stored here; it becomes a full archive only when this location holds
+  // all of them. (Previously this ran archiveCellarWine, archiving the WHOLE wine
+  // and clearing every placement — wrongly taking bottles from other locations.)
+  async function archiveWineFromLocation(row: CellarWine): Promise<void> {
+    const wid = row.id;
+    const here = row.quantity ?? 1;                        // per-location count (placement qty)
+    const placementId = (row as unknown as { placement_id?: string }).placement_id;
+    const today = new Date().toISOString().split('T')[0];
+    const real = await getCellarWineById(wid);
+    const total = real?.quantity ?? here;
+    await addCellarWineRemoval({ cellarWineId: wid, removedAt: today, count: Math.min(here, total), note: null });
+    if (here >= total || !placementId) {
+      // This location holds every bottle → full archive (clears all placements).
+      await clearWineFromRacks(wid);
+      await assignWineToCase(wid, null);
+      await archiveCellarWine(wid);
+    } else {
+      // Only this location's bottles leave: release them FIRST (so the mig-107
+      // quantity-trim trigger doesn't nuke the wrong placement), decrement the
+      // live row, then clone an archive row for the removed bottles.
+      await decrementPlacement(placementId, here);
+      await updateCellarWine(wid, { quantity: total - here });
+      if (real) {
+        const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = real;
+        await addCellarWine({ ...rest, quantity: here, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
+      }
+    }
+  }
+
+  // Archive this wine — scoped to the bottles in THIS location (see above).
   function openArchiveWine(w: CellarWine) {
     showAlert({
       title: 'Archive this wine?',
-      body: 'It moves to Your Archive and leaves this location. Your reviews and history stay.',
+      body: 'The bottles in this location move to Your Archive. Any bottles of this wine stored elsewhere stay put. Your reviews and history stay.',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive', onPress: () => runSingle('Archived', w.id, async (wid) => { await clearWineFromRacks(wid); await assignWineToCase(wid, null); await archiveCellarWine(wid); }) },
+        { text: 'Archive', onPress: () => runSingle('Archived', w.id, async () => { await archiveWineFromLocation(w); }) },
       ],
     });
   }
