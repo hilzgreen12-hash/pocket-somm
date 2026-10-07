@@ -44,7 +44,6 @@ import { fetchStorageLocations, assignWineToStorageLocation, assignWineToCase, d
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { PackagingPrompt } from '../../src/components/PackagingPrompt';
-import { MicButton } from '../../src/components/MicButton';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { colors, spacing } from '../../src/constants/theme';
@@ -218,7 +217,9 @@ export default function CellarWineDetail() {
   // Cellar Note — a short private note shown ONLY on the wine card (never in a
   // review). Edited through a small dictate/type popup, capped at 100 chars.
   const [cellarNoteOpen, setCellarNoteOpen] = useState(false);
-  const [cellarNoteExpanded, setCellarNoteExpanded] = useState(false);
+  // Read-only popup shown when an existing cellar note's chevron is tapped —
+  // offers Edit / Delete. (The input popup, cellarNoteOpen, is the editor.)
+  const [cellarNoteViewOpen, setCellarNoteViewOpen] = useState(false);
   const [noteText, setNoteText] = useState(wine?.cellar_note ?? '');
   const [savingNote, setSavingNote] = useState(false);
 
@@ -771,6 +772,7 @@ export default function CellarWineDetail() {
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
       setNoteText('');
       setCellarNoteOpen(false);
+      setCellarNoteViewOpen(false);
     } catch {
       showAlert({ title: 'Error', body: 'Could not delete note.' });
     } finally {
@@ -1994,76 +1996,61 @@ export default function CellarWineDetail() {
           column, but its expanded body lays out FULL WIDTH below the row. */}
       <View style={styles.reviewRow}>
         <View style={styles.reviewCol}>
-          {/* Your Review — the title is a LINK to this wine's card in Your Wine
-              Reviews (the single home for every review); no in-card expand, so
-              reviews never live separately on the wine card. */}
-          <View style={styles.vinsterHeaderRow}>
-            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}` as any)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-              <Text style={styles.vinsterReviewTitle}>Your Review</Text>
-              <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-            </TouchableOpacity>
-          </View>
-          {/* Collapsed summary under the header — also opens the card. Adding a
-              review jumps straight to the review input in Your Wine Reviews. */}
-          {(wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
-            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}` as any)} activeOpacity={0.7}>
-              <Text style={styles.reviewScoreLine} numberOfLines={1}>
-                {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
-                {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
-                {wine.review_date ? (
-                  <Text style={styles.reviewScoreDate}>
-                    {new Date(wine.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </Text>
+          {/* Your Review — the chevron opens this wine's review in Your Wine
+              Reviews when one exists, or jumps straight to the review input
+              when it doesn't. No in-card expand; no yellow prompt. */}
+          {(() => {
+            const hasReview = wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window;
+            const reviewHref = hasReview
+              ? `/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}`
+              : `/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}`;
+            return (
+              <>
+                <View style={styles.vinsterHeaderRow}>
+                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+                    <Text style={styles.vinsterReviewTitle}>Your Review</Text>
+                    <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
+                  </TouchableOpacity>
+                </View>
+                {/* Collapsed summary when a review exists — also opens the card. */}
+                {hasReview ? (
+                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7}>
+                    <Text style={styles.reviewScoreLine} numberOfLines={1}>
+                      {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
+                      {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
+                      {wine.review_date ? (
+                        <Text style={styles.reviewScoreDate}>
+                          {new Date(wine.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Text>
+                      ) : null}
+                    </Text>
+                  </TouchableOpacity>
                 ) : null}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}` as any)} activeOpacity={0.7}>
-              <Text style={styles.addReviewLink}>+ Add Review</Text>
-            </TouchableOpacity>
-          )}
+              </>
+            );
+          })()}
         </View>
 
         {!isWishlist && (
         <View style={styles.reviewCol}>
-          {/* Cellar Note — a short private note, card-only. Same chevron header
-              as Your Review (so the two align); expand for the note (full-width
-              below). Editing opens a small dictate/type popup. */}
+          {/* Cellar Note — a short private note, card-only. The chevron opens a
+              read-only popup (Edit / Delete) when a note exists, or the manual
+              input popup when it doesn't. No yellow prompt. */}
           <View style={styles.vinsterHeaderRow}>
-            <TouchableOpacity onPress={() => setCellarNoteExpanded((v) => { const nv = !v; if (nv) setReviewExpanded(false); return nv; })} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+            <TouchableOpacity onPress={() => wine.cellar_note ? setCellarNoteViewOpen(true) : openCellarNote()} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
               <Text style={styles.vinsterReviewTitle}>Cellar Note</Text>
-              <Ionicons name={cellarNoteExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+              <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
             </TouchableOpacity>
           </View>
-          {/* The EMPTY state ("No cellar note yet" + add link) stays in this
-              column, directly under the Cellar Note header. An existing note is
-              rendered full-width below the row (see below). */}
-          {cellarNoteExpanded && !wine.cellar_note ? (
-            <>
-              <Text style={styles.reviewEmptyText}>No cellar note yet.</Text>
-              <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
-                <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
-              </TouchableOpacity>
-            </>
-          ) : !cellarNoteExpanded && wine.cellar_note ? (
-            <Text style={styles.cellarNotePreview} numberOfLines={1}>{wine.cellar_note}</Text>
-          ) : !cellarNoteExpanded && !wine.cellar_note ? (
-            <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
-              <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
+          {/* One-line preview when a note exists — tapping it opens the popup. */}
+          {wine.cellar_note ? (
+            <TouchableOpacity onPress={() => setCellarNoteViewOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.cellarNotePreview} numberOfLines={1}>{wine.cellar_note}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
         )}
       </View>
-      {/* An EXISTING cellar note renders full-width below the row (starting under
-          Your Review is fine); the "(edit)" link trails it inline, in gold. */}
-      {cellarNoteExpanded && wine.cellar_note && !isWishlist ? (
-        <TouchableOpacity style={styles.reviewExpandedFull} onPress={openCellarNote} activeOpacity={0.7}>
-          <Text style={styles.noteText}>
-            {wine.cellar_note}{'   '}<Text style={styles.cellarNoteEditInline}>(edit)</Text>
-          </Text>
-        </TouchableOpacity>
-      ) : null}
 
       {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
           chevron toggle. Sits last of the three review blocks (after Your
@@ -2078,7 +2065,7 @@ export default function CellarWineDetail() {
           <View style={styles.vinsterHeaderRow}>
             <TouchableOpacity onPress={() => setVinstersNoteOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
               <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
-              <Ionicons name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+              <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
             </TouchableOpacity>
           </View>
         </View>
@@ -2457,7 +2444,6 @@ export default function CellarWineDetail() {
             <View style={styles.cnHeaderRow}>
               <Text style={styles.cnTitle}>Cellar Note</Text>
               <View style={styles.cnHeaderRight}>
-                <MicButton value={noteText} onChangeText={(t) => setNoteText(t.slice(0, 100))} onClear={() => setNoteText('')} />
                 <TouchableOpacity onPress={() => setCellarNoteOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
                   <Text style={styles.cnCloseText}>✕</Text>
                 </TouchableOpacity>
@@ -2485,6 +2471,24 @@ export default function CellarWineDetail() {
             ) : null}
           </View>
         </View>
+      </Modal>
+
+      {/* Cellar Note read-only popup — shown when an existing note's chevron is
+          tapped. Full wine name header, the note, then Edit / Delete. */}
+      <Modal visible={cellarNoteViewOpen} transparent animationType="fade" onRequestClose={() => setCellarNoteViewOpen(false)}>
+        <TouchableOpacity style={styles.cnOverlay} activeOpacity={1} onPress={() => setCellarNoteViewOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.cnSheet} onPress={() => {}}>
+            <Text style={styles.cnViewWineName} numberOfLines={2}>{[wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ')}</Text>
+            <Text style={styles.cnViewSub}>Cellar Note</Text>
+            <Text style={styles.cnViewNote}>{wine.cellar_note}</Text>
+            <TouchableOpacity style={styles.cnSaveBtn} onPress={() => { setCellarNoteViewOpen(false); openCellarNote(); }} activeOpacity={0.85}>
+              <Text style={styles.cnSaveText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cnCancel} onPress={handleDeleteCellarNote} disabled={savingNote}>
+              <Text style={styles.cnDeleteText}>{savingNote ? 'Deleting…' : 'Delete'}</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </KeyboardAwareScrollView>
   );
@@ -2880,6 +2884,10 @@ const styles = StyleSheet.create({
   cnDeleteText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.error },
   cnTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text },
   cnBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.md },
+  // Read-only cellar-note popup: full wine name, "Cellar Note" subhead, the note.
+  cnViewWineName: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.text, textAlign: 'center', lineHeight: 24 },
+  cnViewSub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', marginTop: 4, marginBottom: spacing.md },
+  cnViewNote: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 22 },
   cnInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface, minHeight: 52, textAlignVertical: 'top' },
   cnCount: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, textAlign: 'right', marginTop: 4 },
   cnSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
