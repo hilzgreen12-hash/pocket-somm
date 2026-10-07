@@ -72,6 +72,10 @@ export interface WineSearchResult {
   wineName: string | null;
   region: string | null;
   style: string | null;
+  // Wine colour ('red' | 'white' | 'rosé') — its own catalog attribute, so a rosé
+  // Champagne (style 'Sparkling') still reads as rosé. Drives the search-result dot.
+  // Optional: only catalog results carry it; other constructors can omit it.
+  colour?: string | null;
   grape: string | null;
   // A 4-digit vintage typed into the search ("Forts de Latour 2009") — stripped
   // before matching the (vintage-less) catalog, then carried onto every result so
@@ -101,11 +105,12 @@ export async function searchWines(query: string): Promise<WineSearchResult[]> {
   try {
     const { data, error } = await supabase.rpc('search_wines_catalog', { q, lim: 8 });
     if (error || !Array.isArray(data)) return [];
-    return data.map((r: { producer: string; wine_name: string | null; region: string | null; style: string | null; grape: string | null }) => ({
+    return data.map((r: { producer: string; wine_name: string | null; region: string | null; style: string | null; colour?: string | null; grape: string | null }) => ({
       producer: r.producer,
       wineName: r.wine_name ?? null,
       region: r.region ?? null,
       style: r.style ?? null,
+      colour: r.colour ?? null,
       grape: r.grape ?? null,
       vintage,
     }));

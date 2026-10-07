@@ -113,6 +113,39 @@ async function verifyBatch(rows: Row[], model: string): Promise<any> {
     stop: resp?.stop_reason ?? null, blocks: (resp.content ?? []).map((b: any) => b?.type), content: JSON.stringify(resp?.content ?? '').slice(0, 400) };
 }
 
+async function colourBatch(rows: Row[]): Promise<{ updated: number; counts: Record<string, number> }> {
+  const list = rows.map((r, i) => `${i + 1}. producer="${r.producer ?? ''}", wine="${r.wine_name ?? ''}", region="${r.region ?? ''}", grape="${r.grape ?? ''}", style="${r.style ?? ''}"`).join('\n');
+  const prompt = `For each wine below, state its COLOUR as exactly one of: red, white, rosé. Judge from producer, wine, region, grape and style.
+- A rosé Champagne / sparkling is "rosé" even though the style is sparkling.
+- A white Hermitage / white Burgundy is "white"; a red Hermitage is "red".
+- Port, Ruby, Tawny, LBV, Vintage Port, red fortified → "red". White Port, Fino, Manzanilla, Amontillado, Oloroso, Pale Cream, amber Sherry → "white".
+- Orange / amber / skin-contact wines → "white".
+
+Wines:
+${list}
+
+Return ONLY a JSON array (no prose) of objects: {"i": <number>, "colour": "red" | "white" | "rosé"}.`;
+  let resp: any;
+  try { resp = await client.messages.create({ model: 'claude-sonnet-5-5', max_tokens: 4000, thinking: { type: 'between_tools' }, messages: [{ role: 'user', content: prompt }] }); }
+  catch { return { updated: 0, counts: {} }; }
+  const text = (resp.content ?? []).find((b: any) => b.type === 'text')?.text ?? '';
+  const byIndex = new Map<number, any>();
+  for (const v of parseVerdicts(text)) if (typeof v?.i === 'number') byIndex.set(v.i, v);
+  const counts: Record<string, number> = {};
+  let updated = 0;
+  await Promise.all(rows.map(async (row, idx) => {
+    const v = byIndex.get(idx + 1);
+    if (!v) return;
+    let col = String(v.colour ?? '').toLowerCase().trim();
+    if (['rose', 'rosado', 'rosato', 'pink'].includes(col)) col = 'rosé';
+    if (!['red', 'white', 'rosé'].includes(col)) return;
+    counts[col] = (counts[col] ?? 0) + 1;
+    const { error } = await admin.from('wines_catalog').update({ colour: col, colour_source: 'llm' }).eq('id', row.id);
+    if (!error) updated += 1;
+  }));
+  return { updated, counts };
+}
+
 Deno.serve(async (req) => {
   try {
     const secret = Deno.env.get('CATALOG_ADMIN_SECRET');
@@ -121,6 +154,25 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
+
+    // One-time admin SQL runner (DDL/migrations) via the direct DB connection that
+    // edge functions get (SUPABASE_DB_URL) — lets migrations be applied without the
+    // SQL editor. Gated behind the admin secret + --no-verify-jwt. Uses the simple
+    // protocol so multi-statement migrations (incl. $$ blocks) run as one script.
+    if (body?.runsql && typeof body.sql === 'string') {
+      const dbUrl = Deno.env.get('SUPABASE_DB_URL');
+      if (!dbUrl) return json({ error: 'SUPABASE_DB_URL not available' }, 500);
+      const postgres = (await import('npm:postgres')).default;
+      const sql = postgres(dbUrl, { prepare: false, max: 1, idle_timeout: 5 });
+      try {
+        await sql.unsafe(body.sql).simple();
+        return json({ ok: true }, 200);
+      } catch (e) {
+        return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
+      } finally {
+        try { await sql.end({ timeout: 5 }); } catch { /* ignore */ }
+      }
+    }
 
     // Diagnostic probe: replicate the generate-pairings-style Sonnet call (buffered AND
     // streamed) so we can see exactly what the model returns / why pairings fail.
@@ -178,6 +230,23 @@ Deno.serve(async (req) => {
         } else { refiled++; if (samples.length < 30) samples.push({ action: 'refiled', from: r.producer, to: corrected, wine: r.wine_name }); }
       }
       return json({ apply, candidates: rows?.length ?? 0, refiled, deletedDups, skipped, samples }, 200);
+    }
+
+    // Colour LLM-refine pass: double-check the heuristic-assigned colour on the
+    // ambiguous Sparkling/Fortified rows (and fill any nulls), marking colour_source='llm'.
+    if (body?.colourfix) {
+      const cl = Math.min(Math.max(Number(body?.limit) || 90, 1), 500);
+      const bs = Math.min(Math.max(Number(body?.batchSize) || 20, 5), 40);
+      const { data: rows, error: fe } = await admin.rpc('fetch_colour_todo', { p_limit: cl });
+      if (fe) return json({ error: fe.message }, 500);
+      const work = (rows ?? []) as Row[];
+      if (work.length === 0) return json({ note: 'colour: done', processed: 0 }, 200);
+      const chunks: Row[][] = [];
+      for (let i = 0; i < work.length; i += bs) chunks.push(work.slice(i, i + bs));
+      const results = await Promise.all(chunks.map((c) => colourBatch(c)));
+      let updated = 0; const counts: Record<string, number> = {};
+      for (const r of results) { updated += r.updated; for (const k of Object.keys(r.counts)) counts[k] = (counts[k] ?? 0) + (r.counts as any)[k]; }
+      return json({ processed: work.length, updated, counts }, 200);
     }
 
     const limit = Math.min(Math.max(Number(body?.limit) || 30, 1), 500);

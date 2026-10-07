@@ -42,6 +42,17 @@ const SCAN_HELP = `Home is your starting point. Scan a label for instant Wine In
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
 // an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
 // carousel. The six-tab bar handles all other navigation, so there's no hamburger.
+// Dot colour for a wine's colour in the search results: red → wine red, white →
+// gold/yellow (as requested), rosé → pink. Unknown → transparent (no dot).
+function colourDotColour(c: string | null | undefined): string {
+  switch ((c ?? '').toLowerCase()) {
+    case 'red': return '#B23A2E';
+    case 'white': return '#E0B84A';
+    case 'rosé': case 'rose': return '#E39AA6';
+    default: return 'transparent';
+  }
+}
+
 export default function ScanLandingScreen() {
   const { session } = useAuth();
   // Match every other tab page's top spacing so the Vinster mark + title sit at
@@ -506,7 +517,10 @@ export default function ScanLandingScreen() {
                       <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.searchOption} onPress={() => selectWine(r)} activeOpacity={0.7}>
                         {/* Show the typed vintage on the result so the list offers
                             the full wine + vintage the user searched. */}
-                        <Text style={styles.searchOptionName}>{`${formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}${r.vintage ? ` ${r.vintage}` : ''}`}</Text>
+                        <View style={styles.searchOptionNameRow}>
+                          {r.colour ? <View style={[styles.colourDot, { backgroundColor: colourDotColour(r.colour) }]} /> : null}
+                          <Text style={styles.searchOptionName}>{`${formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}${r.vintage ? ` ${r.vintage}` : ''}`}</Text>
+                        </View>
                         {r.region || r.style ? <Text style={styles.searchOptionMeta} numberOfLines={1}>{[r.region, r.style].filter(Boolean).join(' · ')}</Text> : null}
                       </TouchableOpacity>
                     ))}
@@ -653,7 +667,9 @@ const styles = StyleSheet.create({
   searchDropdown: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surface, marginTop: spacing.xs, maxHeight: 280 },
   searchDropdownEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, padding: spacing.md },
   searchOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  searchOptionName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  searchOptionNameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  colourDot: { width: 8, height: 8, borderRadius: 4, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.3)' },
+  searchOptionName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, flexShrink: 1 },
   searchOptionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 1 },
   // "What's the Vintage?" prompt.
   vintageOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
