@@ -493,7 +493,7 @@ export default function ScanLandingScreen() {
           <View style={styles.searchModalSheet}>
             <View style={styles.searchModalHeaderRow}>
               <Text style={styles.searchModalTitle}>Search a Wine</Text>
-              <MicButton value={wineSearch} onChangeText={setWineSearch} onClear={() => setWineSearch('')} domain="wine" />
+              <MicButton value={wineSearch} onChangeText={setWineSearch} onClear={() => setWineSearch('')} domain="wine" serverCorrect />
             </View>
             <View style={styles.searchRow}>
               <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />

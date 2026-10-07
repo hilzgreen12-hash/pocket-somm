@@ -4,6 +4,7 @@ import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-spe
 import { showAlert } from './AppAlert';
 import { correctWineTerms } from '../utils/wineDictation';
 import { correctFoodTerms } from '../utils/foodDictation';
+import { correctVoiceTranscript } from '../api/correctVoice';
 import { useDictationCorrect } from '../hooks/useDictationCorrect';
 import { colors } from '../constants/theme';
 
@@ -20,13 +21,20 @@ interface Props {
   // producer/region/grape names + fuzzy-matches the user's cellar; 'food' nudges
   // dish/ingredient/technique names (e.g. the Find A Wine Pairing dish field).
   domain?: 'wine' | 'food';
+  // When true, the FINAL transcript is additionally sent to the server-side LLM
+  // corrector (correct-voice) — catches the long tail of mangled wine/food names
+  // the on-device dictionary misses ("corn-ass" → "Cornas"). Best-effort: the
+  // local-corrected text shows immediately and is replaced if the server differs.
+  // Enable on short, name-heavy fields (search, dish, voice command), NOT on
+  // long free-text notes.
+  serverCorrect?: boolean;
 }
 
 // On-device dictation mic, drawn in the gold motif style, with an optional
 // bin. Tap the mic to speak, tap again to stop. Speech→text happens on the
 // phone (Apple/Google) — the audio never leaves the device and nothing is
 // stored; only the resulting text is written into the field.
-export function MicButton({ value, onChangeText, onClear, style, domain = 'wine' }: Props) {
+export function MicButton({ value, onChangeText, onClear, style, domain = 'wine', serverCorrect = false }: Props) {
   const [listening, setListening] = useState(false);
   // Refs, not state, so the global event handlers always read live values —
   // multiple MicButtons can be mounted (one per field) and all receive
@@ -66,10 +74,27 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
     if (e.isFinal) {
       // The fuzzy cellar-producer snap is wine-only; for food, the dictionary pass
       // above is the final correction.
+      const base = baseRef.current;
       const refined = domain === 'food' ? spoken : refineRef.current(spoken);
-      const joined = joinDictation(baseRef.current, refined);
+      const joined = joinDictation(base, refined);
       onChangeText(joined);
       baseRef.current = joined;
+      // Server-side LLM pass for the long tail the local dictionary misses. Fires
+      // after the local text is already shown; replaces it only if the server
+      // returns something different. Re-joins onto the SAME base so a slow
+      // response can't clobber text typed/dictated afterwards being rare here.
+      if (serverCorrect && refined.trim()) {
+        correctVoiceTranscript(refined, domain === 'food' ? 'food' : 'wine')
+          .then((corrected) => {
+            const c = (corrected ?? '').trim();
+            if (c && c !== refined.trim() && baseRef.current === joined) {
+              const rejoined = joinDictation(base, c);
+              onChangeText(rejoined);
+              baseRef.current = rejoined;
+            }
+          })
+          .catch(() => { /* keep local-corrected text */ });
+      }
     } else {
       onChangeText(joinDictation(baseRef.current, spoken));
     }
