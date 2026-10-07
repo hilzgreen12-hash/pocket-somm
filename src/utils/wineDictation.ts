@@ -454,6 +454,13 @@ const FIXES: Array<[RegExp, string]> = [
   [/\b[oa][\s-]?so+[\s-]?yoo?s\b/gi, 'Osoyoos'],
   [/\bcol\s+so[\s-]?lar+e?\b/gi, 'Col Solare'],
   [/\bcul[\s-]?mee?na\b/gi, 'Culmina'],
+
+  // ---- Producer / appellation dictation fixes (reported mis-hearings) -------
+  // Mullineux (Swartland, SA) → STT often "Mullingar" / "Mullin-oo".
+  [/\bm+ul+in+(?:eux|ux|oo|ew|gar|gur|o)\b/gi, 'Mullineux'],
+  // Savennières "Roche aux Moines" (Loire) → "aux" collapses to "o", giving
+  // "rush omoire" / "roche o moines".
+  [/\b(?:rush|rosh|roche)[\s-]*(?:aux?[\s-]*)?o?[\s-]*mo(?:ine|ire|yne|wine)s?\b/gi, 'Roche aux Moines'],
 ];
 
 export function correctWineTerms(text: string): string {
