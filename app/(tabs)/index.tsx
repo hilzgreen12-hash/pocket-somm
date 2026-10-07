@@ -86,8 +86,6 @@ export default function ScanLandingScreen() {
   // The "Search a Wine" tile opens the predictive typeahead in a prompt.
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const drinkNow = useDrinkNowCounts();
-  const insightsRunningLow = useCellarInsightsCount();
 
   // The Scan tab always shows its normal compact header. On the first landing
   // after opening the app, a welcome overlay (logo · "Real Wine Experience, AI Delivered" ·
