@@ -219,8 +219,8 @@ export default function FindPairingScreen() {
         <View style={styles.styleAccordionLeft}>
           <Text style={styles.styleQuestion}>Regional Preference</Text>
           {!regionOpen && (
-            <Text style={[styles.styleAccordionSummary, regionPrefs.length > 0 && styles.styleAccordionSummaryActive]}>
-              {regionPrefs.length > 0 ? `${regionPrefs.length} selected` : 'Any'}
+            <Text style={[styles.styleAccordionSummary, regionPrefs.length > 0 && styles.styleAccordionSummaryActive]} numberOfLines={1}>
+              {regionPrefs.length === 1 ? regionPrefs[0] : regionPrefs.length > 1 ? `${regionPrefs.length} selected` : 'Any'}
             </Text>
           )}
         </View>
@@ -236,8 +236,8 @@ export default function FindPairingScreen() {
         <View style={styles.styleAccordionLeft}>
           <Text style={styles.styleQuestion}>Wine Style Preference</Text>
           {!styleOpen && (
-            <Text style={[styles.styleAccordionSummary, stylePrefs.length > 0 && styles.styleAccordionSummaryActive]}>
-              {stylePrefs.length > 0 ? `${stylePrefs.length} selected` : 'Any'}
+            <Text style={[styles.styleAccordionSummary, stylePrefs.length > 0 && styles.styleAccordionSummaryActive]} numberOfLines={1}>
+              {stylePrefs.length === 1 ? stylePrefs[0] : stylePrefs.length > 1 ? `${stylePrefs.length} selected` : 'Any'}
             </Text>
           )}
         </View>
