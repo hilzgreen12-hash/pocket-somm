@@ -14,6 +14,7 @@ import { useCellar } from '../../../src/hooks/useCellar';
 import { showAlert } from '../../../src/components/AppAlert';
 import { bottleSizeLabel } from '../../../src/components/BottleSizePicker';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
+import { tidyWineRegion } from '../../../src/utils/regionFormat';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 import type { BinCell, CellarWine } from '../../../src/types/wine';
@@ -577,8 +578,14 @@ export default function BinDetailScreen() {
                           {label ? <Text style={styles.cubbyTag}>{label}</Text> : null}
                           <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}</Text>
                         </View>
+                        {/* Region + grape in gold beneath the white name. */}
+                        {tidyWineRegion(wine.region) || wine.grape_variety ? (
+                          <Text style={[styles.wineMeta, { color: colors.gold }]} numberOfLines={1}>
+                            {[tidyWineRegion(wine.region), wine.grape_variety].filter(Boolean).join(' · ')}
+                          </Text>
+                        ) : null}
                         <Text style={styles.wineMeta} numberOfLines={1}>
-                          {[wine.region, `${wine.bin_cell_quantity ?? wine.quantity ?? 1} × ${bottleSizeLabel(wine.bottle_size_ml ?? 750)}`].filter(Boolean).join(' · ')}
+                          {`${wine.bin_cell_quantity ?? wine.quantity ?? 1} × ${bottleSizeLabel(wine.bottle_size_ml ?? 750)}`}
                         </Text>
                       </TouchableOpacity>
                     );
