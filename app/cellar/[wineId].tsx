@@ -27,7 +27,8 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
-import { valueWine } from '../../src/services/pricing';
+import { valueWine, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
+import { wineQueryName } from '../../src/utils/wineIdentity';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
@@ -383,6 +384,8 @@ export default function CellarWineDetail() {
   // On-demand card sections (generated when first opened, then cached on the wine).
   const [servingOpen, setServingOpen] = useState(false);
   const [marketOpen, setMarketOpen] = useState(false);
+  // Live per-vintage Wine-Searcher table (same as the Wine Intel screen).
+  const [vintageRows, setVintageRows] = useState<VintageComparisonRow[] | null>(null);
   const [generatingServing, setGeneratingServing] = useState(false);
   const [generatingMarket, setGeneratingMarket] = useState(false);
 
@@ -773,13 +776,22 @@ export default function CellarWineDetail() {
     }
   }
 
-  // On-demand Market & Vintage Comparison — generate once, cache on the wine.
+  // On-demand Market & Vintage Comparison — the SAME per-vintage Wine-Searcher
+  // table the Wine Intel screen shows (vintage · score · price), not a prose
+  // description. Fetched live (each (wine, vintage) is cached server-side, so a
+  // re-open is fast); held in state for this view.
   async function handleGenerateMarket() {
     if (!wine || generatingMarket) return;
     setGeneratingMarket(true);
     try {
-      const data = await generateMarketVintage(wine, preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP');
-      await updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: data } });
+      const currency = preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP';
+      const scanned = parseInt(wine.vintage ?? '', 10);
+      const rows = await fetchVintageComparison(
+        wineQueryName(wine.producer, wine.wine_name),
+        currency,
+        Number.isFinite(scanned) ? scanned : null,
+      );
+      setVintageRows(rows);
     } catch {
       showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
     } finally {
@@ -2137,16 +2149,37 @@ export default function CellarWineDetail() {
           </View>
           {marketOpen ? (
             <View style={styles.reviewExpandedFull}>
-              {wine.market_vintage_note ? (
+              {generatingMarket ? (
+                <View style={styles.vintageLoading}>
+                  <ActivityIndicator color={colors.gold} />
+                  <Text style={styles.tastingNotes}>Checking Wine-Searcher across vintages…</Text>
+                </View>
+              ) : vintageRows && vintageRows.length > 0 ? (
+                <View style={styles.vintageTable}>
+                  <View style={[styles.vintageRow, styles.vintageHeadRow]}>
+                    <Text style={[styles.vintageCell, styles.vintageColYear, styles.vintageHeadCell]}>Vintage</Text>
+                    <Text style={[styles.vintageCell, styles.vintageColScore, styles.vintageHeadCell]}>Score</Text>
+                    <Text style={[styles.vintageCell, styles.vintageColPrice, styles.vintageHeadCell]}>Price</Text>
+                  </View>
+                  {vintageRows.map((r) => (
+                    <View key={r.vintage} style={[styles.vintageRow, String(r.vintage) === (wine.vintage ?? '') && styles.vintageRowThis]}>
+                      <Text style={[styles.vintageCell, styles.vintageColYear]}>{r.vintage}</Text>
+                      <Text style={[styles.vintageCell, styles.vintageColScore]}>{r.score != null ? `${r.score}/100` : '—'}</Text>
+                      <Text style={[styles.vintageCell, styles.vintageColPrice]}>{r.price != null ? formatCurrency(r.price, preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP', { decimals: 0 }) : '—'}</Text>
+                    </View>
+                  ))}
+                  <Text style={styles.vintageFootnote}>Wine-Searcher market value and aggregate critic score, by vintage.</Text>
+                  <TouchableOpacity onPress={handleGenerateMarket} activeOpacity={0.7}>
+                    <Text style={styles.diveDeeperLink}>Refresh →</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : vintageRows ? (
                 <>
-                  {wine.market_vintage_note.vintage ? (<><Text style={styles.servingSubhead}>Vintage</Text><Text style={styles.tastingNotes}>{wine.market_vintage_note.vintage}</Text></>) : null}
-                  {wine.market_vintage_note.market ? (<><Text style={[styles.servingSubhead, { marginTop: spacing.sm }]}>Market</Text><Text style={styles.tastingNotes}>{wine.market_vintage_note.market}</Text></>) : null}
-                  <TouchableOpacity onPress={handleGenerateMarket} disabled={generatingMarket} activeOpacity={0.7}>
-                    <Text style={styles.diveDeeperLink}>{generatingMarket ? 'Regenerating…' : 'Regenerate →'}</Text>
+                  <Text style={styles.tastingNotes}>Wine-Searcher has no per-vintage listings for this wine.</Text>
+                  <TouchableOpacity onPress={handleGenerateMarket} activeOpacity={0.7}>
+                    <Text style={styles.diveDeeperLink}>Try again →</Text>
                   </TouchableOpacity>
                 </>
-              ) : generatingMarket ? (
-                <Text style={styles.tastingNotes}>Generating…</Text>
               ) : (
                 <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateMarket} activeOpacity={0.7}>
                   <Text style={styles.generateNoteBtnText}>Generate</Text>
@@ -2785,6 +2818,18 @@ const styles = StyleSheet.create({
   servingBubble: { backgroundColor: 'rgba(224,184,74,0.06)', borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.lg },
   servingTitle: { fontFamily: fonts.bodySemibold, color: colors.gold },
   servingSubhead: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  // Per-vintage Wine-Searcher table — mirrors the Wine Intel screen.
+  vintageLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  vintageTable: { marginTop: 4 },
+  vintageRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  vintageHeadRow: { borderBottomColor: colors.gold },
+  vintageRowThis: { backgroundColor: 'rgba(224,184,74,0.10)' },
+  vintageCell: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text },
+  vintageHeadCell: { fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.6 },
+  vintageColYear: { flex: 1 },
+  vintageColScore: { flex: 1, textAlign: 'center' },
+  vintageColPrice: { flex: 1, textAlign: 'right' },
+  vintageFootnote: { fontSize: 11, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
   generateNoteBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.xs, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   generateNoteBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   // Vinster's Review toggle — mirrors the List results "Sommelier Note":
