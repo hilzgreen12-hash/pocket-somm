@@ -175,6 +175,9 @@ export default function StorageLocationScreen() {
   // Permanent delete of a multi-bottle wine → ask how many first.
   const [deleteWine, setDeleteWine] = useState<{ id: string; name: string; qty: number } | null>(null);
   const [deleteCountStr, setDeleteCountStr] = useState('1');
+  // Archive of a multi-bottle wine from this location → ask how many first.
+  const [archiveWine, setArchiveWine] = useState<{ row: CellarWine; name: string; qty: number } | null>(null);
+  const [archiveCountStr, setArchiveCountStr] = useState('1');
 
   async function executeMove(w: CellarWine, count: number, _fromName: string | null) {
     const N = w.quantity ?? 1;
@@ -747,42 +750,52 @@ export default function StorageLocationScreen() {
   // bottles stored here; it becomes a full archive only when this location holds
   // all of them. (Previously this ran archiveCellarWine, archiving the WHOLE wine
   // and clearing every placement — wrongly taking bottles from other locations.)
-  async function archiveWineFromLocation(row: CellarWine): Promise<void> {
+  async function archiveWineFromLocation(row: CellarWine, count?: number): Promise<void> {
     const wid = row.id;
     const here = row.quantity ?? 1;                        // per-location count (placement qty)
+    const n = Math.max(1, Math.min(count ?? here, here));  // bottles to archive from here
     const placementId = (row as unknown as { placement_id?: string }).placement_id;
     const today = new Date().toISOString().split('T')[0];
     const real = await getCellarWineById(wid);
     const total = real?.quantity ?? here;
-    await addCellarWineRemoval({ cellarWineId: wid, removedAt: today, count: Math.min(here, total), note: null });
-    if (here >= total || !placementId) {
-      // This location holds every bottle → full archive (clears all placements).
+    await addCellarWineRemoval({ cellarWineId: wid, removedAt: today, count: Math.min(n, total), note: null });
+    if (n >= total || !placementId) {
+      // Archiving every bottle the wine has → full archive (clears all placements).
       await clearWineFromRacks(wid);
       await assignWineToCase(wid, null);
       await archiveCellarWine(wid);
     } else {
-      // Only this location's bottles leave: release them FIRST (so the mig-107
-      // quantity-trim trigger doesn't nuke the wrong placement), decrement the
-      // live row, then clone an archive row for the removed bottles.
-      await decrementPlacement(placementId, here);
-      await updateCellarWine(wid, { quantity: total - here });
+      // Only `n` of this location's bottles leave: release them FIRST (so the
+      // mig-107 quantity-trim trigger doesn't nuke the wrong placement), decrement
+      // the live row, then clone an archive row for the removed bottles.
+      await decrementPlacement(placementId, n);
+      await updateCellarWine(wid, { quantity: total - n });
       if (real) {
         const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = real;
-        await addCellarWine({ ...rest, quantity: here, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
+        await addCellarWine({ ...rest, quantity: n, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
       }
     }
   }
 
   // Archive this wine — scoped to the bottles in THIS location (see above).
   function openArchiveWine(w: CellarWine) {
+    const here = w.quantity ?? 1;
+    if (here > 1) { setArchiveCountStr('1'); setArchiveWine({ row: w, name: w.wine_name, qty: here }); return; }
     showAlert({
       title: 'Archive this wine?',
-      body: 'The bottles in this location move to Your Archive. Any bottles of this wine stored elsewhere stay put. Your reviews and history stay.',
+      body: 'The bottle in this location moves to Your Archive. Any bottles of this wine stored elsewhere stay put. Your reviews and history stay.',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive', onPress: () => runSingle('Archived', w.id, async () => { await archiveWineFromLocation(w); }) },
+        { text: 'Archive', onPress: () => runSingle('Archived', w.id, async () => { await archiveWineFromLocation(w, 1); }) },
       ],
     });
+  }
+  // Archive `n` bottles from this location (n chosen in the count modal).
+  async function runArchiveWine(n: number) {
+    const a = archiveWine;
+    if (!a) return;
+    setArchiveWine(null);
+    await runSingle('Archived', a.row.id, async () => { await archiveWineFromLocation(a.row, n); });
   }
 
   // Send this wine to a rack/fridge — a rack needs a physical slot, so we route
@@ -1516,6 +1529,35 @@ export default function StorageLocationScreen() {
               <Text style={styles.caseModalSaveText}>Delete all {deleteWine?.qty}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.caseModalCancel} onPress={() => setDeleteWine(null)}>
+              <Text style={styles.caseModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Archive — how many bottles from this location? Shown for multi-bottle wines. */}
+      <Modal visible={archiveWine !== null} transparent animationType="fade" onRequestClose={() => setArchiveWine(null)}>
+        <View style={styles.caseModalOverlay}>
+          <View style={[styles.caseModalSheet, { marginHorizontal: spacing.xl }]}>
+            <Text style={styles.caseModalTitle}>Archive how many?</Text>
+            <Text style={styles.caseModalHint}>You have {archiveWine?.qty} bottle{archiveWine?.qty === 1 ? '' : 's'} of {archiveWine?.name} in this location. How many to move to Your Archive? Bottles elsewhere stay put.</Text>
+            <TextInput
+              style={styles.caseModalInput}
+              value={archiveCountStr}
+              onChangeText={(t) => setArchiveCountStr(t.replace(/[^0-9]/g, '').slice(0, 3))}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textSubtle}
+              autoFocus
+              selectTextOnFocus
+            />
+            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = archiveWine; if (!q) return; const n = Math.max(1, Math.min(q.qty, parseInt(archiveCountStr, 10) || 1)); void runArchiveWine(n); }}>
+              <Text style={styles.caseModalSaveText}>Archive Bottles</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = archiveWine; if (!q) return; void runArchiveWine(q.qty); }}>
+              <Text style={styles.caseModalSaveText}>Archive all {archiveWine?.qty}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setArchiveWine(null)}>
               <Text style={styles.caseModalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>

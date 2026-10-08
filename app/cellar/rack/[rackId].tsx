@@ -1434,8 +1434,10 @@ export default function RackGridScreen() {
       title: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name,
       body: 'Archive keeps this wine in your records (Cellar Archive). Delete removes it permanently and cannot be undone.',
       buttons: [
-        { text: 'Archive', onPress: () => void archiveWholeNow(wine) },
-        { text: 'Delete (permanent)', style: 'destructive', onPress: () => void deleteWholeNow(wine) },
+        // Both ask HOW MANY bottles (a wine can have several) rather than acting on
+        // the whole listing — matching the wine-list menu and the delete flow.
+        { text: 'Archive', onPress: () => setSingleArchive({ wineId: wine.id, wineName: wine.wine_name, qty: wine.quantity ?? 1 }) },
+        { text: 'Delete (permanent)', style: 'destructive', onPress: () => openDeleteFlow(wine) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
