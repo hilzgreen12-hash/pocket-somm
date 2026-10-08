@@ -508,6 +508,26 @@ export default function RackGridScreen() {
     return map;
   }, [slots]);
 
+  // Reconcile the optimistic overlay against freshly-fetched slots: once the
+  // server owns a real slot at a position, drop any optimistic entry for that
+  // key. Without this, an optimistic thumbnail whose per-flow teardown raced the
+  // refetch could linger — rendering an extra bottle (thumbnails = slotMap ∪
+  // optimisticSlots) while the header count (slotMap only) stayed correct. That
+  // was the "3 shown / 2 total" desync after a move.
+  useEffect(() => {
+    setOptimisticSlots((prev) => {
+      const keys = Object.keys(prev);
+      if (keys.length === 0) return prev;
+      let changed = false;
+      const next: Record<string, CellarWine> = {};
+      for (const k of keys) {
+        if (slotMap[k]) { changed = true; continue; }
+        next[k] = prev[k];
+      }
+      return changed ? next : prev;
+    });
+  }, [slotMap]);
+
   // Build unique wine list from slots — used by the search list below the
   // grid. Wine names live in the slot cells themselves now (font scales to
   // slot size), so the list just carries name / region / bottle count.
@@ -1454,6 +1474,12 @@ export default function RackGridScreen() {
     const today = date;
     const wine = wines.find((w) => w.id === wineId);
     setArchiving(true);
+    // Optimistically drop `count` of this wine's slots from the grid so the
+    // thumbnail disappears immediately, not after the DB round-trips + refetch.
+    qc.setQueryData<RackSlot[]>(['rack-slots', rackId], (old = []) => {
+      let left = count;
+      return old.filter((s) => { if (left > 0 && s.cellar_wine_id === wineId) { left--; return false; } return true; });
+    });
     try {
       await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count, note: note || null });
       qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
@@ -1613,6 +1639,12 @@ export default function RackGridScreen() {
       return;
     }
     setDeleting(true);
+    // Optimistically drop `count` of this wine's slots so the thumbnail vanishes
+    // at once (not after the delete + refetch).
+    qc.setQueryData<RackSlot[]>(['rack-slots', rackId], (old = []) => {
+      let left = count;
+      return old.filter((s) => { if (left > 0 && s.cellar_wine_id === wineId) { left--; return false; } return true; });
+    });
     try {
       const newTotal = totalQty - count;
       if (newTotal <= 0) {
@@ -1651,6 +1683,33 @@ export default function RackGridScreen() {
     const destSlot = slotMap[`${toRow},${toCol}`];
     const destWine = destSlot?.cellar_wine_id ?? null;
     setPendingMove(null);
+
+    // Optimistic cache update so the thumbnail moves INSTANTLY (and the header
+    // count, which also reads ['rack-slots'], moves with it — no desync). Only
+    // for a same-rack move/swap; a cross-rack move spans two caches, so we let it
+    // refetch. On error we invalidate to snap back to server truth.
+    const sameRack = sourceRackId === rackId;
+    if (sameRack) {
+      const srcWineObj = slotMap[`${srcRow},${srcCol}`]?.wine ?? null;
+      const destWineObj = destSlot?.wine ?? null;
+      qc.setQueryData<RackSlot[]>(['rack-slots', rackId], (old = []) => {
+        const arr = old.map((s) => ({ ...s }));
+        const src = arr.find((s) => s.row_index === srcRow && s.col_index === srcCol);
+        if (destWine) {
+          const dst = arr.find((s) => s.row_index === toRow && s.col_index === toCol);
+          if (src && dst) {
+            src.cellar_wine_id = destWine; src.wine = destWineObj;
+            dst.cellar_wine_id = sourceWine; dst.wine = srcWineObj;
+          }
+          return arr;
+        }
+        // Move into an empty cell: relocate the source row to the dest position.
+        const rest = arr.filter((s) => !(s.row_index === srcRow && s.col_index === srcCol));
+        if (src) rest.push({ ...src, rack_id: rackId, row_index: toRow, col_index: toCol, cellar_wine_id: sourceWine, wine: srcWineObj });
+        return rest;
+      });
+    }
+
     try {
       // Source slot lives on sourceRackId (which may differ from this rack);
       // the drop target is the rack we're viewing now.
@@ -1668,6 +1727,7 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       setSavedMsg(sourceRackId !== rackId ? 'Moved to this rack' : 'Bottle moved');
     } catch {
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] }); // snap back to server truth
       showAlert({ title: 'Move failed', body: 'Could not move the wine. Please try again.' });
     }
   }
