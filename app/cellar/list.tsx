@@ -21,7 +21,7 @@ import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWin
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
-import { fetchPlacementsForWines, fetchPlacementsForWine, placedCount, releaseBottlesFromPlacements, reconcileLegacyLocationWines, reconcileQuantityBelowPlacements, deleteLocationKeepWines, deleteLocationAndWines, type CellarPlacement } from '../../src/api/placements';
+import { fetchPlacementsForWines, fetchPlacementsForWine, placedCount, releaseBottlesFromPlacements, reconcileLegacyLocationWines, reconcileQuantityBelowPlacements, deleteLocationKeepWines, deleteLocationAndWines, decrementPlacement, addLocationPlacement, type CellarPlacement } from '../../src/api/placements';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -365,7 +365,15 @@ export default function FullCellarListScreen() {
   // Long-press a wine → a per-wine action popup (replaces the bottom select
   // bar). Edit opens the Confirm Wine Details screen (updates the wine wherever
   // it's placed); the rest act on this one wine.
+  // External placements of this wine (bottles held in an offsite/external cellar).
+  function externalPlacementsOf(w: CellarWine): CellarPlacement[] {
+    return (placementsByWine.get(w.id) ?? []).filter((p) =>
+      p.kind === 'location' && p.storage_location_id &&
+      storageLocations.find((l) => l.id === p.storage_location_id)?.is_external);
+  }
+
   function openWineActions(w: CellarWine) {
+    const externalPls = externalPlacementsOf(w);
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name,
       buttons: [
@@ -378,10 +386,44 @@ export default function FullCellarListScreen() {
             { text: 'Cancel', style: 'cancel' },
           ],
         }) },
+        // Only for wines held in an external cellar — bring them home.
+        ...(externalPls.length > 0 ? [{ text: 'Deliver to Home Storage', onPress: () => deliverToHome(w, externalPls) }] : []),
         { text: 'View Location', onPress: () => viewWineLocation(w) },
         { text: 'Archive Wine', onPress: () => confirmArchiveOne(w) },
         { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteOne(w) },
         { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // Move a wine's external-cellar bottles into home storage — to the Full Cellar
+  // List (loose), an existing home location, or a new one.
+  function deliverToHome(w: CellarWine, externalPls: CellarPlacement[]) {
+    const n = externalPls.reduce((s, p) => s + (p.quantity ?? 0), 0);
+    if (n === 0) return;
+    const homeLocs = storageLocations.filter((l) => !l.is_external);
+    const move = async (destLocId: string | null) => {
+      try {
+        for (const p of externalPls) await decrementPlacement(p.id, p.quantity ?? 0);
+        if (destLocId) await addLocationPlacement(w.id, destLocId, null, n);
+        qc.invalidateQueries({ queryKey: ['placements-list'] });
+        qc.invalidateQueries({ queryKey: ['placements', w.id] });
+        qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+        qc.invalidateQueries({ queryKey: ['cellar', session?.user.id] });
+        const dest = destLocId ? (homeLocs.find((l) => l.id === destLocId)?.name ?? 'home storage') : 'your Full Cellar List';
+        showAlert({ title: 'Delivered home', body: `${n} bottle${n === 1 ? '' : 's'} of ${w.wine_name} moved out of external storage to ${dest}.` });
+      } catch (err) {
+        showAlert({ title: 'Could not deliver', body: err instanceof Error ? err.message : 'Please try again.' });
+      }
+    };
+    showAlert({
+      title: 'Deliver to Home Storage',
+      body: `Bring ${n} bottle${n === 1 ? '' : 's'} home from external storage — where to?`,
+      buttons: [
+        { text: 'Full Cellar List (loose)', onPress: () => void move(null) },
+        ...homeLocs.map((l) => ({ text: l.name, onPress: () => void move(l.id) })),
+        { text: 'Add a New Location', onPress: () => router.push('/cellar/storage-location/new' as any) },
+        { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
