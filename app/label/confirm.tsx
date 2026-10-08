@@ -879,14 +879,17 @@ export default function LabelConfirmScreen() {
       <Modal visible={binPopupOpen} transparent animationType="fade" onRequestClose={() => !placing && setBinPopupOpen(false)}>
         <View style={styles.candOverlay}>
           <View style={styles.candSheet}>
-            <Text style={styles.candTitle}>ADD TO YOUR DIAMOND</Text>
+            <Text style={styles.candTitle}>Add to Diamond</Text>
             <Text style={styles.candBody}>
               {binCellCapacity != null
                 ? `This ${binCellKind} fits ${binCellCapacity} ${binCellCapacity === 1 ? 'bottle' : 'bottles'}.`
                 : 'How many bottles, and the format.'}
             </Text>
 
-            <Text style={[styles.label, styles.binFieldLabel]}>Bottles</Text>
+            <Text style={[styles.label, styles.binFieldLabel]}>Bottle Size</Text>
+            <BottleSizePicker value={binFormat} onChange={setBinFormat} />
+            <View style={{ height: spacing.md }} />
+            <Text style={[styles.label, styles.binFieldLabel]}>Number of Bottles</Text>
             <TextInput
               style={styles.binQtyInput}
               value={binQty}
@@ -896,10 +899,7 @@ export default function LabelConfirmScreen() {
               placeholderTextColor={colors.textMuted}
             />
             <View style={{ height: spacing.md }} />
-            <Text style={[styles.label, styles.binFieldLabel]}>Format</Text>
-            <BottleSizePicker value={binFormat} onChange={setBinFormat} />
-            <View style={{ height: spacing.md }} />
-            <Text style={[styles.label, styles.binFieldLabel]}>Estimated Purchase Price / Bottle</Text>
+            <Text style={[styles.label, styles.binFieldLabel]}>Estimated Purchase Price</Text>
             <Text style={styles.binPriceHint}>Vinster's Estimate, edit if you know it.</Text>
             <View style={styles.binPriceRow}>
               <Text style={styles.binPriceSymbol}>{currencySymbol(preferences?.defaultCurrency ?? 'GBP')}</Text>

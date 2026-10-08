@@ -2713,7 +2713,7 @@ export default function LabelResultsScreen() {
                 bottle count still matters — e.g. photographing a whole case. */}
             {context === 'add-location' && (
               <>
-                <Text style={styles.modalLabel}>Bottle size</Text>
+                <Text style={[styles.modalLabel, styles.modalLabelGold]}>Bottle Size</Text>
                 <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('bottle')} activeOpacity={0.7}>
                   <Text style={styles.fieldSelectValue} numberOfLines={1}>{customSizeMode ? (customSizeCl ? `${customSizeCl}cl` : 'Other') : bottleSizeLabel(bottleSizeMl)}</Text>
                   <Text style={styles.fieldSelectArrow}>▾</Text>
@@ -2739,7 +2739,7 @@ export default function LabelResultsScreen() {
                   </View>
                 )}
 
-                <Text style={styles.modalLabel}>Number of bottles</Text>
+                <Text style={[styles.modalLabel, styles.modalLabelGold]}>Number of Bottles</Text>
                 <TextInput
                   style={styles.countInput}
                   value={bottleCount ? String(bottleCount) : ''}
@@ -2756,7 +2756,7 @@ export default function LabelResultsScreen() {
                   <Text style={styles.caseAddingNote}>Adding to your open case.</Text>
                 ) : (
                   <>
-                    <Text style={styles.modalLabel}>How is this wine packaged?</Text>
+                    <Text style={[styles.modalLabel, styles.modalLabelGold]}>How Is This Wine Packaged</Text>
                     <TouchableOpacity
                       style={[styles.pkgBubble, storageKind === 'loose' && styles.pkgBubbleActive]}
                       onPress={() => { setStorageKind('loose'); setExistingCaseId(null); setCaseName(''); setCaseNote(''); }}
@@ -2813,7 +2813,7 @@ export default function LabelResultsScreen() {
               </>
             )}
 
-            <Text style={styles.modalLabel}>Estimated Purchase Price/Bottle <Text style={styles.modalLabelHint}>(adjust for accuracy)</Text></Text>
+            <Text style={[styles.modalLabel, styles.modalLabelGold]}>Estimated Purchase Price <Text style={styles.modalLabelHint}>(adjust for accuracy)</Text></Text>
             <View style={styles.priceRow}>
               <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
               <TextInput
@@ -3151,6 +3151,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.xs },
   modalWine: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.lg },
   modalLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
+  modalLabelGold: { color: colors.gold },
   // Lower-case bracketed hint inside an uppercase label, e.g. "(adjust for accuracy)".
   modalLabelHint: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textMuted, textTransform: 'none', letterSpacing: 0 },
   caseAddingNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginBottom: spacing.md },
