@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // Header — Back on its own row, then the title on a centred line with a
   // bottom rule, mirroring the Full Cellar List.
-  headerRow: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'flex-start' },
+  headerRow: { paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: 2, flexDirection: 'row', alignItems: 'flex-start' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Filter/stats bar — copied from the Full Cellar List so the two read alike.

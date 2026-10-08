@@ -652,9 +652,8 @@ export default function LineupDetailScreen() {
             <Text accessibilityLabel="Back" style={styles.back}>←</Text>
           </TouchableOpacity>
         </View>
-        {/* Fixed screen title for the review flow. */}
-        <Text style={styles.headerTitle} numberOfLines={1}>Your Lineup</Text>
-        {/* Title — the lineup's own name, saved on blur. */}
+        {/* The lineup's own name IS the title (no fixed "Your Lineup" heading) —
+            saved on blur. */}
         <TextInput
           style={styles.titleInput}
           value={name}
