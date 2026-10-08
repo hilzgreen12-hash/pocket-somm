@@ -561,7 +561,20 @@ export default function RackGridScreen() {
   // Bottles awaiting a slot are placed ONE at a time — each tapped empty slot
   // takes the next bottle, and the awaiting flag clears only once every bottle
   // of the wine has a slot. No "how many?" prompt, no second instruction bubble.
-  const slotsForWine = (wineId: string) => Object.values(slotMap).filter((s) => (s as { cellar_wine_id?: string } | undefined)?.cellar_wine_id === wineId).length;
+  // Count this wine's slots across BOTH the fetched slotMap and the optimistic
+  // (just-tapped, not-yet-persisted) slots, deduped by position. Without the
+  // optimistic ones, tapping the next slot before the DB round-trip landed read a
+  // stale count and the awaiting flow asked for an extra bottle (the off-by-one).
+  const slotsForWine = (wineId: string) => {
+    const keys = new Set<string>();
+    for (const [k, s] of Object.entries(slotMap)) {
+      if ((s as { cellar_wine_id?: string } | undefined)?.cellar_wine_id === wineId) keys.add(k);
+    }
+    for (const [k, w] of Object.entries(optimisticSlots)) {
+      if ((w as CellarWine | undefined)?.id === wineId) keys.add(k);
+    }
+    return keys.size;
+  };
   async function placeAwaitingBottle(w: typeof wines[number], row: number, col: number) {
     const key = `${row},${col}`;
     // Show the bottle in the slot straight away (with a placing swirl).
