@@ -170,7 +170,10 @@ export async function fetchLocationPlacementRows(locationId: string): Promise<an
     .from('cellar_placements')
     .select(COLS)
     .eq('storage_location_id', locationId)
-    .eq('kind', 'location');
+    .eq('kind', 'location')
+    // Add-order: oldest placement first, so wines land in the order they were
+    // added to this alt cellar (incl. via a filter case) rather than arbitrarily.
+    .order('created_at', { ascending: true });
   if (error) throw error;
   const rows = (placements ?? []) as CellarPlacement[];
   if (rows.length === 0) return [];
