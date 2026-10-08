@@ -1989,16 +1989,13 @@ export default function CellarWineDetail() {
           {servingOpen ? (
             <View style={styles.reviewExpandedFull}>
               {wine.serving_suggestion ? (
-                <>
-                  {wine.serving_suggestion.temperature ? <Text style={styles.servingLine}>Temperature · {wine.serving_suggestion.temperature}</Text> : null}
-                  {wine.serving_suggestion.decant ? <Text style={styles.servingLine}>Decanting · {wine.serving_suggestion.decant}</Text> : null}
-                  {wine.serving_suggestion.glassware ? <Text style={styles.servingLine}>Glassware · {wine.serving_suggestion.glassware}</Text> : null}
-                  {wine.serving_suggestion.aperitif?.style ? <Text style={[styles.servingLine, { marginTop: spacing.sm }]}>Enjoy before · {wine.serving_suggestion.aperitif.style}{wine.serving_suggestion.aperitif.reason ? ` — ${wine.serving_suggestion.aperitif.reason}` : ''}</Text> : null}
-                  {wine.serving_suggestion.digestif?.style ? <Text style={styles.servingLine}>Enjoy after · {wine.serving_suggestion.digestif.style}{wine.serving_suggestion.digestif.reason ? ` — ${wine.serving_suggestion.digestif.reason}` : ''}</Text> : null}
-                  <TouchableOpacity onPress={handleGenerateServing} disabled={generatingServing} activeOpacity={0.7}>
-                    <Text style={styles.diveDeeperLink}>{generatingServing ? 'Regenerating…' : 'Regenerate →'}</Text>
-                  </TouchableOpacity>
-                </>
+                <View style={styles.servingBubble}>
+                  {wine.serving_suggestion.temperature ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Temperature · </Text>{wine.serving_suggestion.temperature}</Text> : null}
+                  {wine.serving_suggestion.decant ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Decanting · </Text>{wine.serving_suggestion.decant}</Text> : null}
+                  {wine.serving_suggestion.glassware ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Glassware · </Text>{wine.serving_suggestion.glassware}</Text> : null}
+                  {wine.serving_suggestion.aperitif?.style ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Drink Before · </Text>{wine.serving_suggestion.aperitif.style}{wine.serving_suggestion.aperitif.reason ? ` — ${wine.serving_suggestion.aperitif.reason}` : ''}</Text> : null}
+                  {wine.serving_suggestion.digestif?.style ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Drink After · </Text>{wine.serving_suggestion.digestif.style}{wine.serving_suggestion.digestif.reason ? ` — ${wine.serving_suggestion.digestif.reason}` : ''}</Text> : null}
+                </View>
               ) : generatingServing ? (
                 <Text style={styles.tastingNotes}>Generating…</Text>
               ) : (
@@ -2782,7 +2779,11 @@ const styles = StyleSheet.create({
   vinsterExplainer: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 19, marginTop: spacing.sm },
   // "Generate" button shown inside Vinster's Review when there's no note yet.
   // On-demand Serving Suggestions / Market & Vintage dropdown bodies.
-  servingLine: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22 },
+  servingLine: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22, marginBottom: spacing.md },
+  // Serving suggestions presented as one soft bubble; each title + its separator
+  // in gold, with a clear gap between items.
+  servingBubble: { backgroundColor: 'rgba(224,184,74,0.06)', borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.lg },
+  servingTitle: { fontFamily: fonts.bodySemibold, color: colors.gold },
   servingSubhead: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   generateNoteBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.xs, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   generateNoteBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
