@@ -8,7 +8,8 @@ import { useRackStore } from '../stores/rackStore';
 import { getRackBottleCounts, getSlotAssignments } from '../api/racks';
 import { getBins, getBinBottleCounts, deleteBin, getBinCells } from '../api/bins';
 import { fetchStorageLocations, deleteStorageLocation, renameStorageLocation } from '../api/storageLocations';
-import { deleteLocationAndWines, trimOrDeleteWineOnUnitDelete } from '../api/placements';
+import { deleteLocationAndWines, trimOrDeleteWineOnUnitDelete, fetchLatestLocationThumbs } from '../api/placements';
+import { LabelThumb } from './LabelThumb';
 import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -17,6 +18,19 @@ import type { WineRack } from '../types/wine';
 
 function bottleLabel(n: number) {
   return n === 0 ? 'Empty' : `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
+}
+
+// The last-added wine's label as a storage tile's backdrop, with a dark scrim so
+// the eyebrow / name / count stay legible. Renders nothing when the location has
+// no thumbnail yet (the tile keeps its plain surface).
+function CardBg({ path }: { path?: string }) {
+  if (!path) return null;
+  return (
+    <>
+      <LabelThumb path={path} style={styles.cardBg} radius={14} frame={0} />
+      <View style={styles.cardScrim} pointerEvents="none" />
+    </>
+  );
 }
 
 // The five empty-state templates shown when a user has no storage yet — four
@@ -97,6 +111,14 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
   const binBottles = Object.values(binCounts).reduce((sum: number, n: number) => sum + n, 0);
   const locationBottles = homeLocations.reduce((sum, l) => sum + (l.wineCount ?? 0), 0);
   const totalBottles = rackBottles + binBottles + locationBottles;
+
+  // Last-wine-added thumbnail per location, for the tile backgrounds. Keyed on the
+  // bottle total so it refreshes whenever wines are added/moved/removed.
+  const { data: tileThumbs } = useQuery({
+    queryKey: ['home-storage-thumbs', userId, totalBottles],
+    queryFn: () => fetchLatestLocationThumbs(userId!),
+    enabled: !!userId,
+  });
   const totalLocations = racks.length + bins.length + homeLocations.length;
   const hasStorage = totalLocations > 0;
 
@@ -256,6 +278,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   delayLongPress={400}
                   activeOpacity={0.85}
                 >
+                  <CardBg path={tileThumbs?.rack[rack.id]} />
                   <Text style={styles.storageCardType}>{rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
                   <Text style={styles.storageCardName} numberOfLines={2}>{rack.name}</Text>
                   <Text style={styles.storageCardCount}>{bottleLabel(rackCounts[rack.id] ?? 0)}</Text>
@@ -270,6 +293,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   delayLongPress={400}
                   activeOpacity={0.85}
                 >
+                  <CardBg path={tileThumbs?.bin[bin.id]} />
                   <Text style={styles.storageCardType}>Bin</Text>
                   <Text style={styles.storageCardName} numberOfLines={2}>{bin.name}</Text>
                   <Text style={styles.storageCardCount}>{bottleLabel(binCounts[bin.id] ?? 0)}</Text>
@@ -284,6 +308,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   delayLongPress={400}
                   activeOpacity={0.85}
                 >
+                  <CardBg path={tileThumbs?.location[loc.id]} />
                   <Text style={styles.storageCardType}>Alt Cellar</Text>
                   <Text style={styles.storageCardName} numberOfLines={2}>{loc.name}</Text>
                   <Text style={styles.storageCardCount}>{bottleLabel(loc.wineCount ?? 0)}</Text>
@@ -362,10 +387,13 @@ const styles = StyleSheet.create({
   carouselScroll: { marginTop: 0 },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
-  storageCard: { width: 152, height: 108, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between' },
-  storageCardType: { fontSize: 11, fontFamily: fontsSpectral.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
-  storageCardName: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
-  storageCardCount: { fontSize: 13, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted },
+  storageCard: { width: 152, height: 108, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between', overflow: 'hidden' },
+  // Last-added wine label filling the tile, under a dark scrim for legibility.
+  cardBg: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: 152, height: 108 },
+  cardScrim: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
+  storageCardType: { fontSize: 11, fontFamily: fontsSpectral.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
+  storageCardName: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
+  storageCardCount: { fontSize: 13, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
   addTile: { width: 152, height: 108, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   addTilePlus: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   // Rename-location modal.

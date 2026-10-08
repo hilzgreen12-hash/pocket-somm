@@ -130,6 +130,38 @@ export async function addBinPlacement(wineId: string, cellId: string, quantity: 
   }
 }
 
+// The label thumbnail of the MOST-RECENTLY-PLACED live wine in each home storage
+// unit — rack/fridge (by rack_id), bin (by bin_cell_id → bin), alt cellar (by
+// storage_location_id) — so the Cellar carousel tiles can show the last wine
+// added there (and refresh as new wines land). Newest placement first; first
+// non-empty thumbnail per location wins. RLS scopes rows to the user.
+export async function fetchLatestLocationThumbs(userId: string): Promise<{
+  rack: Record<string, string>; bin: Record<string, string>; location: Record<string, string>;
+}> {
+  const result = { rack: {} as Record<string, string>, bin: {} as Record<string, string>, location: {} as Record<string, string> };
+  // bin cell → bin id (so a bin placement can resolve to its unit).
+  const { data: binRows } = await supabase.from('wine_racks').select('id').eq('user_id', userId).eq('storage_type', 'bin');
+  const binIds = (binRows ?? []).map((b) => b.id);
+  const cellToBin: Record<string, string> = {};
+  if (binIds.length) {
+    const { data: cells } = await supabase.from('bin_cells').select('id, bin_id').in('bin_id', binIds);
+    for (const c of (cells ?? []) as { id: string; bin_id: string }[]) cellToBin[c.id] = c.bin_id;
+  }
+  const { data, error } = await supabase
+    .from('cellar_placements')
+    .select('kind, rack_id, bin_cell_id, storage_location_id, created_at, wine:cellar_wines!inner(label_image_path, archived_at, is_wishlist)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  for (const p of (data ?? []) as any[]) {
+    const w = p.wine;
+    if (!w || w.archived_at || w.is_wishlist || !w.label_image_path) continue;
+    if (p.kind === 'rack' && p.rack_id) { if (!result.rack[p.rack_id]) result.rack[p.rack_id] = w.label_image_path; }
+    else if (p.kind === 'bin' && p.bin_cell_id) { const b = cellToBin[p.bin_cell_id]; if (b && !result.bin[b]) result.bin[b] = w.label_image_path; }
+    else if (p.kind === 'location' && p.storage_location_id) { if (!result.location[p.storage_location_id]) result.location[p.storage_location_id] = w.label_image_path; }
+  }
+  return result;
+}
+
 // Every bin placement sitting in any of these cells — for the lattice/cell reads.
 export async function fetchBinPlacementsForCells(cellIds: string[]): Promise<CellarPlacement[]> {
   if (cellIds.length === 0) return [];
