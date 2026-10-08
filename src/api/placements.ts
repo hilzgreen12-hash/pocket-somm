@@ -101,6 +101,89 @@ export async function addLocationPlacement(
   }
 }
 
+// ---- App-managed 'bin' placements (Phase 4, mig 116) -----------------------
+
+// Add `quantity` bottles of a wine to ONE bin cell, merging into an existing
+// (wine, cell) bin placement rather than spawning a duplicate. This is how a
+// wine comes to sit in a bin now — NOT via cellar_wines.bin_cell_id.
+export async function addBinPlacement(wineId: string, cellId: string, quantity: number): Promise<void> {
+  const { data: existing, error: selErr } = await supabase
+    .from('cellar_placements')
+    .select('id, quantity')
+    .eq('cellar_wine_id', wineId)
+    .eq('kind', 'bin')
+    .eq('bin_cell_id', cellId)
+    .limit(1)
+    .maybeSingle();
+  if (selErr) throw selErr;
+  if (existing) {
+    const { error } = await supabase
+      .from('cellar_placements')
+      .update({ quantity: (existing.quantity ?? 0) + quantity })
+      .eq('id', existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('cellar_placements').insert({
+      cellar_wine_id: wineId, kind: 'bin', quantity, bin_cell_id: cellId,
+    });
+    if (error) throw error;
+  }
+}
+
+// Every bin placement sitting in any of these cells — for the lattice/cell reads.
+export async function fetchBinPlacementsForCells(cellIds: string[]): Promise<CellarPlacement[]> {
+  if (cellIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('cellar_placements')
+    .select(COLS)
+    .eq('kind', 'bin')
+    .in('bin_cell_id', cellIds);
+  if (error) throw error;
+  return (data ?? []) as CellarPlacement[];
+}
+
+// Free `n` bottles of a wine from ONE specific bin cell (the moved/removed bottles
+// become loose unless the caller re-places them). Scoped to that cell only.
+export async function releaseFromBinCell(wineId: string, cellId: string, n: number): Promise<number> {
+  if (n <= 0) return 0;
+  let toFree = n;
+  let freed = 0;
+  const bins = (await fetchPlacementsForWine(wineId)).filter(
+    (p) => p.kind === 'bin' && p.bin_cell_id === cellId,
+  );
+  for (const p of bins) {
+    if (toFree <= 0) break;
+    const take = Math.min(toFree, p.quantity ?? 0);
+    if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; freed += take; }
+  }
+  return freed;
+}
+
+// Delete every bin placement in a set of cells (empty cell / empty bin). The
+// wines survive loose (their quantity is untouched — only the cell membership
+// goes). Returns nothing; callers invalidate.
+export async function clearBinCellPlacements(cellIds: string[]): Promise<void> {
+  if (cellIds.length === 0) return;
+  const { error } = await supabase
+    .from('cellar_placements')
+    .delete()
+    .eq('kind', 'bin')
+    .in('bin_cell_id', cellIds);
+  if (error) throw error;
+}
+
+// Remove ONE wine's placement from ONE cell entirely (the row's bottles stay in
+// the cellar, loose). Mirrors "remove from location".
+export async function removeWineFromBinCell(wineId: string, cellId: string): Promise<void> {
+  const { error } = await supabase
+    .from('cellar_placements')
+    .delete()
+    .eq('kind', 'bin')
+    .eq('cellar_wine_id', wineId)
+    .eq('bin_cell_id', cellId);
+  if (error) throw error;
+}
+
 // Remove `by` bottles from ONE placement (a specific spot). Deletes the row when
 // that empties it. Used by the alt-cellar partial "Move Wine/Bottles" flow — the
 // moved bottles either become loose (Full Cellar List) or land in a new placement.
@@ -114,8 +197,9 @@ export async function releaseBottlesFromPlacements(wineId: string, n: number): P
   let freed = await removeSlotsForWine(wineId, n);
   let toFree = n - freed;
   if (toFree > 0) {
-    const locs = (await fetchPlacementsForWine(wineId)).filter((p) => p.kind === 'location');
-    for (const p of locs) {
+    // Then alt-cellar locations, then bins — all app-owned placement rows.
+    const rest = (await fetchPlacementsForWine(wineId)).filter((p) => p.kind === 'location' || p.kind === 'bin');
+    for (const p of rest) {
       if (toFree <= 0) break;
       const take = Math.min(toFree, p.quantity ?? 0);
       if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; freed += take; }

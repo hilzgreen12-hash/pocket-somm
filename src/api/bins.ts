@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { fetchBinPlacementsForCells, clearBinCellPlacements, removeWineFromBinCell } from './placements';
 import type { WineRack, BinCell, CellarWine } from '../types/wine';
 
 // A bin is a wine_racks row with storage_type='bin'. It is a grid of diamonds:
@@ -178,22 +179,46 @@ export async function renameBin(binId: string, name: string): Promise<void> {
 }
 
 // Empty every cell in a bin at once — the wines stay in the cellar (loose),
-// they just lose their cell pointer. Mirrors the rack "Wipe contents" action.
+// they just lose their bin placements. Mirrors the rack "Wipe contents" action.
 export async function emptyBin(binId: string): Promise<void> {
   const { data: cells, error: cellsErr } = await supabase.from('bin_cells').select('id').eq('bin_id', binId);
   if (cellsErr) throw cellsErr;
   const cellIds = (cells ?? []).map((c) => c.id);
-  if (cellIds.length === 0) return;
-  const { error } = await supabase
+  await clearBinCellPlacements(cellIds);
+}
+
+// Resolve a set of bin cells' wines from their 'bin' placements (mig 116: bin
+// membership lives in cellar_placements now). Each returned wine's `quantity` is
+// overridden to the bottles IN THAT CELL, and `bin_placement_id` carries the
+// placement row (for per-cell remove/archive/decrement). Archived/wishlist wines
+// are excluded, as on the rack path.
+async function resolveCellWines(cellIds: string[]): Promise<Record<string, CellarWine[]>> {
+  const byCell: Record<string, CellarWine[]> = {};
+  if (cellIds.length === 0) return byCell;
+  const placements = await fetchBinPlacementsForCells(cellIds);
+  if (placements.length === 0) return byCell;
+  const wineIds = Array.from(new Set(placements.map((p) => p.cellar_wine_id)));
+  const { data: rows, error } = await supabase
     .from('cellar_wines')
-    .update({ bin_cell_id: null, updated_at: new Date().toISOString() })
-    .in('bin_cell_id', cellIds);
+    .select('*')
+    .in('id', wineIds)
+    .is('archived_at', null)
+    .eq('is_wishlist', false);
   if (error) throw error;
+  const wineById = new Map((rows ?? []).map((w) => [w.id, w as CellarWine]));
+  // Stable order within a cell: oldest placement first.
+  const ordered = [...placements].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const p of ordered) {
+    if (!p.bin_cell_id) continue;
+    const w = wineById.get(p.cellar_wine_id);
+    if (!w) continue; // archived / wishlist / deleted
+    (byCell[p.bin_cell_id] ??= []).push({ ...w, quantity: p.quantity ?? 0, bin_placement_id: p.id });
+  }
+  return byCell;
 }
 
 // A bin's cells with the (live) wines filed into each, plus a summed bottle
-// count per cell for the fill meter. Wishlist/archived wines are excluded, as
-// on the rack path.
+// count per cell for the fill meter.
 export async function getBinCells(binId: string): Promise<BinCell[]> {
   const { data: cells, error } = await supabase
     .from('bin_cells')
@@ -203,20 +228,7 @@ export async function getBinCells(binId: string): Promise<BinCell[]> {
   if (error) throw error;
 
   const cellIds = (cells ?? []).map((c) => c.id);
-  const byCell: Record<string, CellarWine[]> = {};
-  if (cellIds.length > 0) {
-    const { data: binWines, error: bwErr } = await supabase
-      .from('cellar_wines')
-      .select('*')
-      .in('bin_cell_id', cellIds)
-      .is('archived_at', null)
-      .eq('is_wishlist', false);
-    if (bwErr) throw bwErr;
-    for (const w of (binWines ?? []) as CellarWine[]) {
-      if (!w.bin_cell_id) continue;
-      (byCell[w.bin_cell_id] ??= []).push(w);
-    }
-  }
+  const byCell = await resolveCellWines(cellIds);
 
   return (cells ?? []).map((c) => {
     const cellWines = byCell[c.id] ?? [];
@@ -236,54 +248,46 @@ export async function getBinCell(cellId: string): Promise<{ cell: BinCell; wines
     .eq('id', cellId)
     .single();
   if (error) throw error;
-
-  const { data: wines, error: wineErr } = await supabase
-    .from('cellar_wines')
-    .select('*')
-    .eq('bin_cell_id', cellId)
-    .is('archived_at', null)
-    .eq('is_wishlist', false)
-    .order('created_at', { ascending: true });
-  if (wineErr) throw wineErr;
-  return { cell, wines: (wines ?? []) as CellarWine[] };
+  const byCell = await resolveCellWines([cellId]);
+  return { cell, wines: byCell[cellId] ?? [] };
 }
 
-// Empty a whole cell — every wine in it loses its cell pointer (bottles stay in
+// Empty a whole cell — every wine in it loses its bin placement (bottles stay in
 // the cellar, loose). Used by the long-press "Empty" action on the lattice.
 export async function emptyBinCell(cellId: string): Promise<void> {
-  const { error } = await supabase
-    .from('cellar_wines')
-    .update({ bin_cell_id: null, updated_at: new Date().toISOString() })
-    .eq('bin_cell_id', cellId);
-  if (error) throw error;
+  await clearBinCellPlacements([cellId]);
 }
 
-// Take a wine out of its bin cell — the bottles stay in the cellar (loose), the
-// row just loses its cell pointer. Mirrors "remove from location" / clearing a
-// rack slot: the wine is never destroyed by leaving its container.
-export async function removeWineFromCell(cellarWineId: string): Promise<void> {
-  const { error } = await supabase
-    .from('cellar_wines')
-    .update({ bin_cell_id: null, updated_at: new Date().toISOString() })
-    .eq('id', cellarWineId);
-  if (error) throw error;
+// Take a wine out of a bin cell — the bottles stay in the cellar (loose), the
+// cell just loses this wine's placement. Mirrors "remove from location" /
+// clearing a rack slot: the wine is never destroyed by leaving its container.
+export async function removeWineFromCell(cellarWineId: string, cellId: string): Promise<void> {
+  await removeWineFromBinCell(cellarWineId, cellId);
 }
 
 // Per-bin total bottle counts (for the Home Storage carousel cards + tally),
 // computed in one query. Live wines only.
 export async function getBinBottleCounts(binIds: string[]): Promise<Record<string, number>> {
   if (binIds.length === 0) return {};
-  const { data, error } = await supabase
-    .from('bin_cells')
-    .select('bin_id, wines:cellar_wines!inner(quantity, archived_at, is_wishlist)')
-    .in('bin_id', binIds)
-    .is('wines.archived_at', null)
-    .eq('wines.is_wishlist', false);
-  if (error) throw error;
+  const { data: cells, error: cellErr } = await supabase.from('bin_cells').select('id, bin_id').in('bin_id', binIds);
+  if (cellErr) throw cellErr;
+  const binByCell = new Map((cells ?? []).map((c) => [c.id, c.bin_id as string]));
+  const cellIds = (cells ?? []).map((c) => c.id);
   const counts: Record<string, number> = {};
-  for (const row of (data ?? []) as { bin_id: string; wines: { quantity: number }[] }[]) {
-    const cellTotal = (row.wines ?? []).reduce((s, w) => s + (w.quantity ?? 0), 0);
-    counts[row.bin_id] = (counts[row.bin_id] ?? 0) + cellTotal;
+  if (cellIds.length === 0) return counts;
+  // Sum 'bin' placement quantities per bin, live wines only (mig 116).
+  const { data, error } = await supabase
+    .from('cellar_placements')
+    .select('quantity, bin_cell_id, wine:cellar_wines!inner(archived_at, is_wishlist)')
+    .eq('kind', 'bin')
+    .in('bin_cell_id', cellIds)
+    .is('wine.archived_at', null)
+    .eq('wine.is_wishlist', false);
+  if (error) throw error;
+  for (const row of (data ?? []) as { quantity: number; bin_cell_id: string }[]) {
+    const binId = binByCell.get(row.bin_cell_id);
+    if (!binId) continue;
+    counts[binId] = (counts[binId] ?? 0) + (row.quantity ?? 0);
   }
   return counts;
 }
