@@ -186,6 +186,9 @@ export default function RackGridScreen() {
   // each fills with the wine's thumbnail immediately — then Confirm to place them.
   // Places EXISTING bottles (no quantity change), unlike Add More.
   const [placeExisting, setPlaceExisting] = useState<{ wine: CellarWine; limit: number } | null>(null);
+  // The lineup wine currently being placed (ticked) — tap a slot to file its next
+  // bottle. Kept valid as wines complete (see the effect below the awaiting list).
+  const [selectedAwaitingId, setSelectedAwaitingId] = useState<string | null>(null);
   const placeExistingStartedRef = useRef(false);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [slotUploading, setSlotUploading] = useState(false);
@@ -605,6 +608,35 @@ export default function RackGridScreen() {
     }
   }
 
+  // Keep the ticked (active) lineup wine pointed at one that still has bottles to
+  // place; auto-pick the first unplaced when none is selected or the current is done.
+  useEffect(() => {
+    if (awaitingWines.length === 0) { if (selectedAwaitingId) setSelectedAwaitingId(null); return; }
+    const unplaced = awaitingWines.filter((w) => slotsForWine(w.id) < (w.quantity ?? 1));
+    if (!selectedAwaitingId || !unplaced.some((w) => w.id === selectedAwaitingId)) {
+      setSelectedAwaitingId(unplaced[0]?.id ?? null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [awaitingWines, slotMap, optimisticSlots]);
+
+  // "Untick" a fully-placed lineup wine — free its slots in THIS rack so it goes
+  // back to awaiting and can be re-placed.
+  async function unplaceAwaitingWine(w: CellarWine) {
+    const placed = slotsForWine(w.id);
+    if (placed <= 0) return;
+    try {
+      setOptimisticSlots((m) => { const n = { ...m }; for (const k of Object.keys(n)) { if ((n[k] as CellarWine | undefined)?.id === w.id) delete n[k]; } return n; });
+      await removeSlotsForWine(w.id, placed, rackId);
+      await updateWine.mutateAsync({ id: w.id, updates: { awaiting_placement: true, awaiting_placement_unit_id: rackId } });
+      setSelectedAwaitingId(w.id);
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      await qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+    } catch (err) {
+      showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
   // Order for the filter wine-picker: wines already in the filter (when the
   // editor opened) first, then the rest — each group keeps the recency order
   // of winesInRack. Uses the open-time snapshot so rows don't reshuffle as the
@@ -800,7 +832,12 @@ export default function RackGridScreen() {
     // the next bottle (one at a time); occupied slots do nothing until done.
     if (awaitingBottles > 0) {
       if (slotMap[`${row},${col}`]) return;
-      void placeAwaitingBottle(awaitingWines[0], row, col);
+      // Place a bottle of the TICKED wine (fall back to the first with bottles
+      // still to place). No ticked wine with room → nudge the user to pick one.
+      const target = awaitingWines.find((w) => w.id === selectedAwaitingId && slotsForWine(w.id) < (w.quantity ?? 1))
+        ?? awaitingWines.find((w) => slotsForWine(w.id) < (w.quantity ?? 1));
+      if (!target) { setSavedMsg('Tick a wine below first'); return; }
+      void placeAwaitingBottle(target, row, col);
       return;
     }
     const slot = slotMap[`${row},${col}`];
@@ -1937,13 +1974,28 @@ export default function RackGridScreen() {
           an empty slot to file the next bottle. No long-press, no second bubble. */}
       {awaitingBottles > 0 ? (
         <View style={styles.awaitingBlock}>
+          {/* One checklist: tick a wine, then tap an empty slot to place a bottle.
+              The row ticks when all its bottles are placed; tap a ticked row to
+              remove it from its slot(s). Place every wine to finish. */}
+          <Text style={styles.awaitingTitle}>Tick a wine, then tap an empty slot to place it</Text>
           {awaitingWines.map((w) => {
-            const remaining = Math.max(1, (w.quantity ?? 1) - slotsForWine(w.id));
+            const total = w.quantity ?? 1;
+            const placed = Math.min(slotsForWine(w.id), total);
+            const done = placed >= total;
+            const active = selectedAwaitingId === w.id;
             return (
-              <View key={w.id} style={styles.awaitingRow}>
-                <Text style={styles.awaitingWine} numberOfLines={2}>Tap an empty slot to place {wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
-                {remaining > 1 ? <Text style={styles.awaitingHint}>{remaining} bottles to place — one slot at a time</Text> : null}
-              </View>
+              <TouchableOpacity
+                key={w.id}
+                style={[styles.awaitingRow, active && !done && styles.awaitingRowActive]}
+                onPress={() => (done ? void unplaceAwaitingWine(w) : setSelectedAwaitingId(w.id))}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.awaitingCheck, (done || active) && styles.awaitingCheckOn]}>
+                  {done ? <Text style={styles.awaitingTick}>✓</Text> : null}
+                </View>
+                <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
+                <Text style={styles.awaitingCount}>{placed}/{total}</Text>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -2864,9 +2916,16 @@ const styles = StyleSheet.create({
   // "Awaiting placement" banner + yellow rows (moved here, no slot yet).
   awaitingBlock: { paddingTop: spacing.sm },
   awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl },
-  awaitingRow: { marginHorizontal: spacing.xl, marginTop: spacing.sm, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
-  awaitingWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
-  awaitingHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  awaitingTitle: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.4 },
+  // Checklist row: checkbox + wine + placed/total. White/unfilled by default; the
+  // ticked (active) row brightens with a gold wash.
+  awaitingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.xl, marginTop: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.borderWhite },
+  awaitingRowActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.14)' },
+  awaitingCheck: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: colors.borderWhite, alignItems: 'center', justifyContent: 'center' },
+  awaitingCheckOn: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.22)' },
+  awaitingTick: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
+  awaitingWine: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF' },
+  awaitingCount: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
   slotMultiSelected: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.28)' },
   multiBar: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm },
   multiBarInner: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
