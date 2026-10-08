@@ -465,6 +465,9 @@ export interface DetectedBottle {
   wineName: string;
   vintage: string | null;
   region?: string | null;
+  // Primary grape (read or inferred from the appellation) — seeds the cellar
+  // wine's grape_variety so a lineup-added wine isn't left blank.
+  grape?: string | null;
   // Wine colour / style (Red, White, Rosé, Sparkling…), read from the label
   // when legible. Seeds the Style field when a scanned bottle is confirmed.
   style?: string | null;
