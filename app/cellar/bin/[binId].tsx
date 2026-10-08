@@ -59,6 +59,9 @@ export default function BinDetailScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
+  // Permanent delete of a multi-bottle wine → ask how many first.
+  const [deleteWine, setDeleteWine] = useState<{ id: string; name: string; qty: number } | null>(null);
+  const [deleteCountStr, setDeleteCountStr] = useState('1');
   const [movingWine, setMovingWine] = useState<{ id: string; name: string } | null>(null);
   // Bottles moved into THIS bin (e.g. by Voice Command) that have no cell yet.
   const { wines: allWines } = useCellar();
@@ -165,6 +168,21 @@ export default function BinDetailScreen() {
     qc.invalidateQueries({ queryKey: ['cellar'] });
   }
 
+  // Permanent delete of `n` bottles: delete the whole row when it covers every
+  // bottle, else just decrement (the mirror trigger re-syncs the bin placement).
+  async function runDeleteWine(n: number) {
+    const d = deleteWine;
+    if (!d) return;
+    try {
+      if (n >= d.qty) await deleteCellarWine(d.id);
+      else await updateCellarWine(d.id, { quantity: d.qty - n });
+      setDeleteWine(null);
+      invalidate();
+    } catch (err) {
+      showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
   function nearestCell(lx: number, ly: number): BinCell | null {
     let best: BinCell | null = null;
     let bestDist = Infinity;
@@ -251,14 +269,18 @@ export default function BinDetailScreen() {
         {
           text: 'Delete Wine (Permanent)',
           style: 'destructive',
-          onPress: () => showAlert({
-            title: 'Delete this wine?',
-            body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
-            buttons: [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete', style: 'destructive', onPress: async () => { try { await deleteCellarWine(w.id); invalidate(); } catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
-            ],
-          }),
+          onPress: () => {
+            const qty = w.quantity ?? 1;
+            if (qty > 1) { setDeleteCountStr('1'); setDeleteWine({ id: w.id, name: w.wine_name, qty }); return; }
+            showAlert({
+              title: 'Delete this wine?',
+              body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
+              buttons: [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: async () => { try { await deleteCellarWine(w.id); invalidate(); } catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
+              ],
+            });
+          },
         },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -618,6 +640,35 @@ export default function BinDetailScreen() {
 
       {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
       <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} />
+
+      {/* Permanent delete — how many bottles? Shown for multi-bottle wines. */}
+      <Modal visible={deleteWine !== null} transparent animationType="fade" onRequestClose={() => setDeleteWine(null)}>
+        <View style={styles.delOverlay}>
+          <View style={styles.delSheet}>
+            <Text style={styles.delTitle}>Delete how many?</Text>
+            <Text style={styles.delBody}>You have {deleteWine?.qty} bottle{deleteWine?.qty === 1 ? '' : 's'} of {deleteWine?.name}. How many would you like to permanently delete? This can't be undone.</Text>
+            <TextInput
+              style={styles.delInput}
+              value={deleteCountStr}
+              onChangeText={(t) => setDeleteCountStr(t.replace(/[^0-9]/g, '').slice(0, 3))}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              selectTextOnFocus
+            />
+            <TouchableOpacity style={styles.delBtn} onPress={() => { const q = deleteWine; if (!q) return; const n = Math.max(1, Math.min(q.qty, parseInt(deleteCountStr, 10) || 1)); void runDeleteWine(n); }}>
+              <Text style={styles.delBtnText}>Delete Bottles</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.delAll} onPress={() => { const q = deleteWine; if (!q) return; void runDeleteWine(q.qty); }}>
+              <Text style={styles.delAllText}>Delete all {deleteWine?.qty}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.delCancel} onPress={() => setDeleteWine(null)}>
+              <Text style={styles.delCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -627,6 +678,17 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  delOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  delSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
+  delTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+  delBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  delInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', marginBottom: spacing.md },
+  delBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
+  delBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#1A1A1A' },
+  delAll: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  delAllText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text },
+  delCancel: { alignItems: 'center', paddingVertical: spacing.sm },
+  delCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   headerDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   // Equal-width back / Edit so the flex-1 title is truly screen-centred.

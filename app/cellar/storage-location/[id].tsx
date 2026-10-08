@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, createStorageCase, updateStorageCase, deleteStorageCase, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
-import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement, setPlacementCase } from '../../../src/api/placements';
+import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement, setPlacementCase, releaseBottlesFromPlacements } from '../../../src/api/placements';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
 import { WineSearchModal } from '../../../src/components/WineSearchModal';
@@ -172,6 +172,9 @@ export default function StorageLocationScreen() {
   const [packagingWineId, setPackagingWineId] = useState<string | null>(null);
   const [wineSearchOpen, setWineSearchOpen] = useState(false);
   const wineSearchCaseRef = useRef<string | null>(null);
+  // Permanent delete of a multi-bottle wine → ask how many first.
+  const [deleteWine, setDeleteWine] = useState<{ id: string; name: string; qty: number } | null>(null);
+  const [deleteCountStr, setDeleteCountStr] = useState('1');
 
   async function executeMove(w: CellarWine, count: number, _fromName: string | null) {
     const N = w.quantity ?? 1;
@@ -607,6 +610,19 @@ export default function StorageLocationScreen() {
     } finally { setBusy(false); }
   }
 
+  // Permanent delete of `n` bottles from this location: delete the whole row when
+  // it covers every bottle, else free `n` bottles from placements (this location
+  // first, via the loose-first release) and decrement the quantity.
+  async function runDeleteWine(n: number) {
+    const d = deleteWine;
+    if (!d) return;
+    setDeleteWine(null);
+    await runSingle('Deleted', d.id, async (wid) => {
+      if (n >= d.qty) { await clearWineFromRacks(wid); await deleteCellarWine(wid); }
+      else { await releaseBottlesFromPlacements(wid, n); await updateCellarWine(wid, { quantity: d.qty - n }); }
+    });
+  }
+
   // Long-press a wine → a per-wine action pop-up (replaces the select-mode dark
   // bar), for consistency with the rack/fridge grids.
   function openWineActions(w: CellarWine) {
@@ -622,14 +638,18 @@ export default function StorageLocationScreen() {
         { text: 'Move Bottles', onPress: () => openMoveBottlesMenu(w) },
         { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
         { text: 'Archive Wine', onPress: () => openArchiveWine(w) },
-        { text: 'Delete Wine', style: 'destructive', onPress: () => showAlert({
-          title: 'Delete this wine?',
-          body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
-          buttons: [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete (permanent)', style: 'destructive', onPress: () => runSingle('Deleted', w.id, async (wid) => { await clearWineFromRacks(wid); await deleteCellarWine(wid); }) },
-          ],
-        }) },
+        { text: 'Delete Wine', style: 'destructive', onPress: () => {
+          const qty = w.quantity ?? 1;
+          if (qty > 1) { setDeleteCountStr('1'); setDeleteWine({ id: w.id, name: w.wine_name, qty }); return; }
+          showAlert({
+            title: 'Delete this wine?',
+            body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
+            buttons: [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete (permanent)', style: 'destructive', onPress: () => runSingle('Deleted', w.id, async (wid) => { await clearWineFromRacks(wid); await deleteCellarWine(wid); }) },
+            ],
+          });
+        } },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -1472,6 +1492,35 @@ export default function StorageLocationScreen() {
 
       {/* Catalog Search → prefilled Confirm (replaces free-text Manual Input). */}
       <WineSearchModal visible={wineSearchOpen} onClose={() => setWineSearchOpen(false)} onSelect={handleSearchSelect} />
+
+      {/* Permanent delete — how many bottles? Shown for multi-bottle wines. */}
+      <Modal visible={deleteWine !== null} transparent animationType="fade" onRequestClose={() => setDeleteWine(null)}>
+        <View style={styles.caseModalOverlay}>
+          <View style={[styles.caseModalSheet, { marginHorizontal: spacing.xl }]}>
+            <Text style={styles.caseModalTitle}>Delete how many?</Text>
+            <Text style={styles.caseModalHint}>You have {deleteWine?.qty} bottle{deleteWine?.qty === 1 ? '' : 's'} of {deleteWine?.name}. How many to permanently delete? This can't be undone.</Text>
+            <TextInput
+              style={styles.caseModalInput}
+              value={deleteCountStr}
+              onChangeText={(t) => setDeleteCountStr(t.replace(/[^0-9]/g, '').slice(0, 3))}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textSubtle}
+              autoFocus
+              selectTextOnFocus
+            />
+            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = deleteWine; if (!q) return; const n = Math.max(1, Math.min(q.qty, parseInt(deleteCountStr, 10) || 1)); void runDeleteWine(n); }}>
+              <Text style={styles.caseModalSaveText}>Delete Bottles</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = deleteWine; if (!q) return; void runDeleteWine(q.qty); }}>
+              <Text style={styles.caseModalSaveText}>Delete all {deleteWine?.qty}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setDeleteWine(null)}>
+              <Text style={styles.caseModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Voice Command — same engine as the Cellar tab, scoped copy for home storage. */}
       <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} />
