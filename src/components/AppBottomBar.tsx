@@ -68,7 +68,13 @@ export function AppBottomBar() {
   if (keyboardUp || segments.length === 0 || HIDDEN_FIRST.has(first) || isCapture) return null;
 
   // On the group's index route (Scan landing) segments[1] is undefined.
-  const active = first === '(tabs)' ? (segments[1] ?? 'index') : sectionFor(first);
+  // Lineups live under /cellar/ but are a Review-tab feature (Your Lineups),
+  // so keep Review highlighted when viewing a lineup rather than switching to
+  // Cellar.
+  const isLineupRoute = first === 'cellar' && (segments[1] === 'lineup' || segments[1] === 'lineups');
+  const active = first === '(tabs)'
+    ? (segments[1] ?? 'index')
+    : isLineupRoute ? 'scan' : sectionFor(first);
   const bottomPad = Math.max(insets.bottom, Platform.OS === 'ios' ? 8 : 6);
 
   return (
