@@ -4,7 +4,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { generatePairings, searchLabelImages, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
 import * as ImagePicker from 'expo-image-picker';
@@ -89,6 +89,14 @@ export default function LabelConfirmScreen() {
   // Bin-diamond placement (context=place-bin): quantity + bottle format are
   // collected inline on this screen so the whole add is one step.
   const isPlaceBin = context === 'place-bin' && !!pendingBinCell;
+  // The target cell — drives the "This diamond/half diamond fits X bottles" blurb.
+  const { data: binCellData } = useQuery({
+    queryKey: ['bin-cell', pendingBinCell?.cellId],
+    queryFn: () => getBinCell(pendingBinCell!.cellId),
+    enabled: isPlaceBin,
+  });
+  const binCellKind = binCellData?.cell.kind === 'triangle' ? 'half diamond' : 'diamond';
+  const binCellCapacity = binCellData?.cell.capacity ?? null;
   const { wines: cellarWines, addWine, updateWine } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -871,8 +879,12 @@ export default function LabelConfirmScreen() {
       <Modal visible={binPopupOpen} transparent animationType="fade" onRequestClose={() => !placing && setBinPopupOpen(false)}>
         <View style={styles.candOverlay}>
           <View style={styles.candSheet}>
-            <Text style={styles.candTitle}>Add to your diamond</Text>
-            <Text style={styles.candBody}>How many bottles, what format, and — if you like — the price you paid.</Text>
+            <Text style={styles.candTitle}>ADD TO YOUR DIAMOND</Text>
+            <Text style={styles.candBody}>
+              {binCellCapacity != null
+                ? `This ${binCellKind} fits ${binCellCapacity} ${binCellCapacity === 1 ? 'bottle' : 'bottles'}.`
+                : 'How many bottles, and the format.'}
+            </Text>
 
             <Text style={[styles.label, styles.binFieldLabel]}>Bottles</Text>
             <TextInput
@@ -887,15 +899,19 @@ export default function LabelConfirmScreen() {
             <Text style={[styles.label, styles.binFieldLabel]}>Format</Text>
             <BottleSizePicker value={binFormat} onChange={setBinFormat} />
             <View style={{ height: spacing.md }} />
-            <Text style={[styles.label, styles.binFieldLabel]}>Estimated Purchase Price / Bottle — {currencySymbol(preferences?.defaultCurrency ?? 'GBP')} (Vinster's estimate; edit if you know it)</Text>
-            <TextInput
-              style={styles.binQtyInput}
-              value={binPrice}
-              onChangeText={(t) => setBinPrice(t.replace(/[^0-9.]/g, '').slice(0, 10))}
-              keyboardType="decimal-pad"
-              placeholder={binPriceEstimating ? 'Estimating…' : `e.g. ${currencySymbol(preferences?.defaultCurrency ?? 'GBP')}45`}
-              placeholderTextColor={colors.textMuted}
-            />
+            <Text style={[styles.label, styles.binFieldLabel]}>Estimated Purchase Price / Bottle</Text>
+            <Text style={styles.binPriceHint}>Vinster's Estimate, edit if you know it.</Text>
+            <View style={styles.binPriceRow}>
+              <Text style={styles.binPriceSymbol}>{currencySymbol(preferences?.defaultCurrency ?? 'GBP')}</Text>
+              <TextInput
+                style={[styles.binQtyInput, styles.binPriceInput]}
+                value={binPrice}
+                onChangeText={(t) => setBinPrice(t.replace(/[^0-9.]/g, '').slice(0, 10))}
+                keyboardType="decimal-pad"
+                placeholder={binPriceEstimating ? 'Estimating…' : 'e.g. 45'}
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
 
             <TouchableOpacity style={[styles.button, placing && styles.buttonDisabled]} onPress={() => binConfirmed && void handlePlaceBinConfirm(binConfirmed)} disabled={placing}>
               <Text style={styles.buttonText}>{placing ? 'Adding…' : 'Add to Diamond'}</Text>
@@ -1032,6 +1048,10 @@ const styles = StyleSheet.create({
   // Bin diamond inline quantity + format — labels in gold to signal the
   // bin-specific fields added to this shared screen.
   binFieldLabel: { color: colors.gold },
+  binPriceHint: { fontFamily: fonts.bodyRegular, fontStyle: 'italic', fontSize: 12, color: colors.textMuted, marginTop: 2, marginBottom: spacing.xs },
+  binPriceRow: { flexDirection: 'row', alignItems: 'center' },
+  binPriceSymbol: { fontFamily: fonts.bodySemibold, fontSize: 18, color: colors.text, marginRight: spacing.sm },
+  binPriceInput: { flex: 1 },
   binQtyInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface },
   button: {
     borderWidth: 1,

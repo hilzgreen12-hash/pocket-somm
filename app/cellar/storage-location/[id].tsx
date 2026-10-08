@@ -30,7 +30,6 @@ import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { effectiveMaturity } from '../../../src/utils/maturity';
 import { showAlert } from '../../../src/components/AppAlert';
 import { LabelThumb } from '../../../src/components/LabelThumb';
-import { MicButton } from '../../../src/components/MicButton';
 import { bottleSizeCl } from '../../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -1402,10 +1401,8 @@ export default function StorageLocationScreen() {
               <Text style={styles.caseModalLabel}>Name</Text>
               <TextInput style={styles.caseModalInput} value={caseEditName} onChangeText={setCaseEditName} placeholder="Case name" placeholderTextColor={colors.textSubtle} maxLength={12} />
               <Text style={styles.caseModalLabel}>Note</Text>
-              <View style={styles.caseModalNoteRow}>
-                <TextInput style={[styles.caseModalInput, styles.caseModalNoteInput]} value={caseEditNote} onChangeText={setCaseEditNote} placeholder="Ie. in the back next to the Petrus" placeholderTextColor={colors.textSubtle} multiline />
-                <MicButton value={caseEditNote} onChangeText={setCaseEditNote} onClear={() => setCaseEditNote('')} />
-              </View>
+              <TextInput style={[styles.caseModalInput, styles.caseModalNoteInput]} value={caseEditNote} onChangeText={setCaseEditNote} placeholder="e.g. next to the Pétrus" placeholderTextColor={colors.textSubtle} maxLength={20} multiline />
+              <Text style={styles.caseModalHint}>Up to 20 characters.</Text>
               <TouchableOpacity style={styles.caseModalSave} onPress={saveCaseEdit} activeOpacity={0.85}>
                 <Text style={styles.caseModalSaveText}>Save</Text>
               </TouchableOpacity>
@@ -1427,10 +1424,8 @@ export default function StorageLocationScreen() {
               <TextInput style={styles.caseModalInput} value={newCaseName} onChangeText={setNewCaseName} placeholder="e.g. Rhône reds" placeholderTextColor={colors.textSubtle} maxLength={12} autoFocus />
               <Text style={styles.caseModalHint}>Up to 12 characters.</Text>
               <Text style={styles.caseModalLabel}>Note</Text>
-              <View style={styles.caseModalNoteRow}>
-                <TextInput style={[styles.caseModalInput, styles.caseModalNoteInput]} value={newCaseNote} onChangeText={setNewCaseNote} placeholder="Ie. in the back next to the Petrus" placeholderTextColor={colors.textSubtle} multiline />
-                <MicButton value={newCaseNote} onChangeText={setNewCaseNote} onClear={() => setNewCaseNote('')} />
-              </View>
+              <TextInput style={[styles.caseModalInput, styles.caseModalNoteInput]} value={newCaseNote} onChangeText={setNewCaseNote} placeholder="e.g. next to the Pétrus" placeholderTextColor={colors.textSubtle} maxLength={20} multiline />
+              <Text style={styles.caseModalHint}>Up to 20 characters.</Text>
               <TouchableOpacity style={styles.caseModalSave} onPress={saveNewCase} activeOpacity={0.85}>
                 <Text style={styles.caseModalSaveText}>Create Case</Text>
               </TouchableOpacity>
