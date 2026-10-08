@@ -262,7 +262,38 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     setAction(act);
     setPhase('parsing');
     try {
-      const res = await parseCellarCommand(act, transcript, wines, locations, units);
+      let res = await parseCellarCommand(act, transcript, wines, locations, units);
+
+      // A MOVE here targets HOME storage, so a wine that lives ONLY in an
+      // external/offsite cellar can't be the one meant — drop it from the
+      // candidates (and from a lone resolved match) so it's never offered.
+      if (act === 'move') {
+        const externalLocIds = new Set(locations.filter((l) => l.is_external).map((l) => l.id));
+        if (externalLocIds.size > 0) {
+          const ids = Array.from(new Set([...(res.candidates ?? []), res.wineId].filter(Boolean))) as string[];
+          if (ids.length) {
+            const pls = await fetchPlacementsForWines(ids);
+            const extByWine = new Map<string, number>();
+            for (const p of pls) {
+              if (p.kind === 'location' && p.storage_location_id && externalLocIds.has(p.storage_location_id)) {
+                extByWine.set(p.cellar_wine_id, (extByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+              }
+            }
+            const externalOnly = (wid: string) => {
+              const w = wines.find((x) => x.id === wid);
+              const ext = extByWine.get(wid) ?? 0;
+              if (!!w?.storage_location_id && externalLocIds.has(w.storage_location_id) && ext === 0) return true;
+              return ext > 0 && (w?.quantity ?? 0) - ext <= 0;
+            };
+            res = {
+              ...res,
+              candidates: (res.candidates ?? []).filter((c) => !externalOnly(c)),
+              wineId: res.wineId && externalOnly(res.wineId) ? null : res.wineId,
+            };
+          }
+        }
+      }
+
       setResult(res);
 
       // Add is a NEW bottle — it doesn't resolve against the existing cellar, it
