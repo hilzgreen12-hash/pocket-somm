@@ -682,16 +682,18 @@ export default function CellarWineDetail() {
     const buttons = [
       // Existing unplaced bottles → select empty slots to place them (no count bump).
       ...racks.map((r) => ({ text: r.name, onPress: () => void placeUnplacedInRack(r.id) })),
-      ...storageLocations.map((l) => ({ text: `${l.name} (home storage)`, onPress: () => fileInStorageLocation(l.id) })),
-      ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => addWineToLocationFilter(l.id) })),
+      // Home-storage alt cellars only — a Full Cellar List wine can't be moved
+      // INTO external/offsite storage, so external locations are excluded.
+      ...storageLocations.filter((l) => !l.is_external).map((l) => ({ text: l.name, onPress: () => fileInStorageLocation(l.id) })),
+      ...locations.map((l) => ({ text: l.name, onPress: () => addWineToLocationFilter(l.id) })),
     ];
     if (buttons.length === 0) {
-      showAlert({ title: 'No locations yet', body: 'Create a rack, fridge, a home storage location, or a Cellar List location first, then you can add wines to it.' });
+      showAlert({ title: 'No locations yet', body: 'Create a rack, fridge or home storage location first, then you can add wines to it.' });
       return;
     }
     showAlert({
       title: 'Add to Location',
-      body: 'Place it in a rack/fridge, a home storage location, or file it under a Cellar List location:',
+      body: 'Place in a Home Storage Location.',
       buttons: [
         ...buttons,
         { text: 'Cancel', style: 'cancel' as const },
