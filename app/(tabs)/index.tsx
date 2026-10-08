@@ -412,7 +412,7 @@ export default function ScanLandingScreen() {
           Reviews carousel (reviews live in the Review tab) and consolidates the
           old "Drink Soon" carousel. */}
       <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Your Cellar Insights</Text>
+      <Text style={styles.carouselHeader}>Home Cellar Insights</Text>
       <View style={styles.carouselBleed}><DrinkNowCarousel /></View>
 
       {/* Cellar Insights — actionable "running low" bottles to replenish, then a

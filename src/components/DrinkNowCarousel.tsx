@@ -1,6 +1,10 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
+import { useAuth } from '../hooks/useAuth';
+import { fetchStorageLocations } from '../api/storageLocations';
+import { fetchPlacementsForWines } from '../api/placements';
 import { effectiveMaturity } from '../utils/maturity';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
@@ -84,8 +88,36 @@ export function useDrinkNowCounts(): { total: number; lastCall: number } {
 // "Your Cellar Insights" — Last Call / Running Low / Top Rated / Most Collected /
 // Oldest Vintage, each a badged wine tile. Tap → the wine card.
 export function DrinkNowCarousel() {
+  const { session } = useAuth();
+  const userId = session?.user.id;
   const { wines } = useCellar();
-  const tiles = buildCellarInsights(wines);
+  // Home Cellar Insights: exclude wines that live ONLY in an external/offsite
+  // cellar — this carousel is about the stock you keep at home.
+  const { data: locations = [] } = useQuery({
+    queryKey: ['cellar-locations-ext', userId],
+    queryFn: () => fetchStorageLocations(userId!),
+    enabled: !!userId,
+  });
+  const externalIds = new Set(locations.filter((l) => l.is_external).map((l) => l.id));
+  const wineIds = wines.map((w) => w.id);
+  const { data: placements = [] } = useQuery({
+    queryKey: ['home-insights-placements', userId, wineIds.length],
+    queryFn: () => fetchPlacementsForWines(wineIds),
+    enabled: !!userId && wineIds.length > 0 && externalIds.size > 0,
+  });
+  const extByWine = new Map<string, number>();
+  for (const p of placements) {
+    if (p.kind === 'location' && p.storage_location_id && externalIds.has(p.storage_location_id)) {
+      extByWine.set(p.cellar_wine_id, (extByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+    }
+  }
+  const homeWines = externalIds.size === 0 ? wines : wines.filter((w) => {
+    const ext = extByWine.get(w.id) ?? 0;
+    // Legacy single-location filing straight on the row.
+    if (!!w.storage_location_id && externalIds.has(w.storage_location_id) && ext === 0) return false;
+    return (w.quantity ?? 0) - ext > 0; // at least one home/loose bottle
+  });
+  const tiles = buildCellarInsights(homeWines);
   const fill = tiles.length < CELLAR_EXAMPLES.length ? CELLAR_EXAMPLES.slice(tiles.length) : [];
 
   return (
