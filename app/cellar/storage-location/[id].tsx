@@ -851,7 +851,7 @@ export default function StorageLocationScreen() {
     showAlert({
       title: `Add a wine to ${c.name}`,
       buttons: [
-        { text: 'Add from This Cellar List', onPress: () => openAddExistingToCase(c) },
+        { text: 'Select Wine From This Cellar', onPress: () => openAddExistingToCase(c) },
         { text: 'Scan a Label', onPress: () => handleScan(c.id) },
         { text: 'Upload a Label', onPress: () => handleUpload(c.id) },
         { text: 'Manual Input', onPress: () => handleManual(c.id) },
@@ -875,11 +875,54 @@ export default function StorageLocationScreen() {
       buttons: [
         ...candidates.slice(0, cap).map((w) => ({
           text: wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'Wine'),
-          onPress: () => void addExistingToCase(w, c),
+          onPress: () => promptCaseMoveQty(w, c),
         })),
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
+  }
+
+  // When the chosen wine has more than one bottle in this cellar, ask how many to
+  // file into the case; a single bottle moves straight away.
+  function promptCaseMoveQty(w: CellarWine, c: StorageCase) {
+    const max = w.quantity ?? 1;
+    if (max <= 1) { void moveBottlesIntoCase(w, c, 1); return; }
+    showAlert({
+      title: `How many bottles of ${w.wine_name} to add to ${c.name}?`,
+      buttons: [
+        ...Array.from({ length: Math.min(max, 12) }, (_, i) => ({
+          text: `${i + 1} bottle${i === 0 ? '' : 's'}`,
+          onPress: () => void moveBottlesIntoCase(w, c, i + 1),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
+  // File `n` of a wine's bottles into a case. Moving all of a placement just
+  // re-cases it; a partial move splits (decrement the source placement, add the
+  // moved bottles to the case). Confirms where the bottles came from and went.
+  async function moveBottlesIntoCase(w: CellarWine, c: StorageCase, n: number) {
+    const sourceCaseId = (w as unknown as { case_id?: string | null }).case_id ?? null;
+    const sourceName = sourceCaseId ? (cases.find((cc) => cc.id === sourceCaseId)?.name ?? 'another case') : 'loose bottles';
+    const placementId = (w as unknown as { placement_id?: string }).placement_id;
+    const total = w.quantity ?? 1;
+    try {
+      if (n >= total && placementId) {
+        await setPlacementCase(placementId, c.id);
+      } else if (placementId && id) {
+        await decrementPlacement(placementId, n);
+        await addLocationPlacement(w.id, id, c.id, n);
+      } else {
+        await assignWineToCase(w.id, c.id);
+      }
+      qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
+      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      showAlert({ title: 'Moved', body: `${n} bottle${n === 1 ? '' : 's'} of ${w.wine_name} moved from ${sourceName} to ${c.name}.` });
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
   // File a wine into a case (or out of one with null) by setting its placement's
   // case — the alt-cellar case membership lives on the placement, not the legacy
