@@ -19,6 +19,7 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { getBinCell } from '../../src/api/bins';
+import { addBinPlacement } from '../../src/api/placements';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { BottleSizePicker } from '../../src/components/BottleSizePicker';
 import { WineSearchInput } from '../../src/components/WineSearchInput';
@@ -572,79 +573,99 @@ export default function LabelConfirmScreen() {
     const qty = Math.max(1, parseInt(binQty) || 1);
     const priceNum = binPrice.trim() ? parseFloat(binPrice.replace(/[^0-9.]/g, '')) : NaN;
     const purchasePrice = Number.isFinite(priceNum) ? priceNum : null;
-    setPlacing(true);
-    try {
-      const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-      const { wines: cellWines } = await getBinCell(cellId);
-      const existing = cellWines.find((w) =>
-        norm(w.producer) === norm(confirmed.producer) &&
-        norm(w.wine_name) === norm(confirmed.wineName ?? confirmed.producer) &&
-        (w.vintage ?? '').trim() === confirmed.vintage.trim() &&
-        (w.bottle_size_ml ?? 750) === binFormat,
-      );
-      let savedId: string;
-      if (existing) {
-        await updateWine.mutateAsync({ id: existing.id, updates: { quantity: (existing.quantity ?? 0) + qty } });
-        savedId = existing.id;
-      } else {
-        const saved = await addWine.mutateAsync({
-          user_id: userId,
-          wine_name: confirmed.wineName?.trim() || confirmed.producer,
-          producer: confirmed.producer,
-          region: confirmed.region,
-          vintage: confirmed.vintage,
-          style: confirmed.style ?? null,
-          quantity: qty,
-          storage_location: null,
-          date_received: new Date().toISOString().split('T')[0],
-          critic_score: null,
-          critic_score_note: null,
-          drinking_window_from: null,
-          drinking_window_to: null,
-          drinking_window_status: 'unknown',
-          tasting_notes: null,
-          grape_variety: grape.trim() || null,
-          label_image_path: null,
-          user_notes: null,
-          is_wishlist: false,
-          estimated_value: null,
-          estimated_value_currency: null,
-          estimated_value_at: null,
-          estimated_value_source: null,
-          purchase_price: purchasePrice,
-          purchase_price_currency: purchasePrice != null ? (preferences?.defaultCurrency ?? 'GBP') : null,
-          bin_cell_id: cellId,
-          storage_location_id: null,
-          case_id: null,
-          bottle_size_ml: binFormat,
-        } as any);
-        savedId = saved.id;
-        // Attach the scanned label thumbnail when there was one (non-fatal).
-        const labelUri = useLabelStore.getState().imageUri;
-        if (labelUri) {
-          try {
-            const path = await uploadLabelImage(userId, labelUri, savedId);
-            await updateWine.mutateAsync({ id: savedId, updates: { label_image_path: path } });
-          } catch { /* placed without a thumbnail */ }
+    const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+    // A bin is just another home storage location now (mig 116): one wine = one
+    // cellar line, distributable across placements. So merge into an EXISTING
+    // same-identity + format row ANYWHERE in the cellar (not just this cell) and
+    // record the bin membership as a placement — never spawn a second listing.
+    const existing = cellarWines.find((w) =>
+      !w.is_wishlist && !w.archived_at &&
+      norm(w.producer) === norm(confirmed.producer) &&
+      norm(w.wine_name) === norm(confirmed.wineName ?? confirmed.producer) &&
+      (w.vintage ?? '').trim() === confirmed.vintage.trim() &&
+      (w.bottle_size_ml ?? 750) === binFormat,
+    );
+
+    const commit = async (mergeInto: typeof existing | null) => {
+      setPlacing(true);
+      try {
+        let savedId: string;
+        if (mergeInto) {
+          await updateWine.mutateAsync({ id: mergeInto.id, updates: { quantity: (mergeInto.quantity ?? 0) + qty } });
+          savedId = mergeInto.id;
+        } else {
+          const saved = await addWine.mutateAsync({
+            user_id: userId,
+            wine_name: confirmed.wineName?.trim() || confirmed.producer,
+            producer: confirmed.producer,
+            region: confirmed.region,
+            vintage: confirmed.vintage,
+            style: confirmed.style ?? null,
+            quantity: qty,
+            storage_location: null,
+            date_received: new Date().toISOString().split('T')[0],
+            critic_score: null,
+            critic_score_note: null,
+            drinking_window_from: null,
+            drinking_window_to: null,
+            drinking_window_status: 'unknown',
+            tasting_notes: null,
+            grape_variety: grape.trim() || null,
+            label_image_path: null,
+            user_notes: null,
+            is_wishlist: false,
+            estimated_value: null,
+            estimated_value_currency: null,
+            estimated_value_at: null,
+            estimated_value_source: null,
+            purchase_price: purchasePrice,
+            purchase_price_currency: purchasePrice != null ? (preferences?.defaultCurrency ?? 'GBP') : null,
+            storage_location_id: null,
+            case_id: null,
+            bottle_size_ml: binFormat,
+          } as any);
+          savedId = saved.id;
+          const labelUri = useLabelStore.getState().imageUri;
+          if (labelUri) {
+            try {
+              const path = await uploadLabelImage(userId, labelUri, savedId);
+              await updateWine.mutateAsync({ id: savedId, updates: { label_image_path: path } });
+            } catch { /* placed without a thumbnail */ }
+          }
         }
+        // Record the bin membership as a placement (kind='bin'), NOT via bin_cell_id.
+        await addBinPlacement(savedId, cellId, qty);
+        qc.invalidateQueries({ queryKey: ['bin-cell', cellId] });
+        qc.invalidateQueries({ queryKey: ['bin-cells', binId] });
+        qc.invalidateQueries({ queryKey: ['bins'] });
+        qc.invalidateQueries({ queryKey: ['cellar'] });
+        qc.invalidateQueries({ queryKey: ['placements', savedId] });
+        setPendingBinCell(null);
+        setBinPopupOpen(false);
+        if (router.canGoBack()) router.back();
+        else router.replace(`/cellar/bin/cell/${cellId}` as any);
+      } catch (err) {
+        showAlert({ title: 'Could not add wine', body: err instanceof Error ? err.message : 'Please try again.' });
+        setPlacing(false);
       }
-      qc.invalidateQueries({ queryKey: ['bin-cell', cellId] });
-      qc.invalidateQueries({ queryKey: ['bin-cells', binId] });
-      qc.invalidateQueries({ queryKey: ['bins'] });
-      qc.invalidateQueries({ queryKey: ['cellar'] });
-      setPendingBinCell(null);
+    };
+
+    if (existing) {
+      // Tell the user it's merging into their existing listing before it happens.
+      const name = [existing.producer, existing.wine_name, existing.vintage].filter(Boolean).join(' ');
+      const have = existing.quantity ?? 0;
       setBinPopupOpen(false);
-      // Pop back to the diamond cell we came from (it's always directly below the
-      // confirm frame — pendingBinCell is only ever set there) rather than
-      // router.replace, which stacked a SECOND cell screen on top of the
-      // original so the back sequence (diamond → bin → Other Home Storage) hit
-      // the diamond twice. The cell refreshes from the invalidated query above.
-      if (router.canGoBack()) router.back();
-      else router.replace(`/cellar/bin/cell/${cellId}` as any);
-    } catch (err) {
-      showAlert({ title: 'Could not add wine', body: err instanceof Error ? err.message : 'Please try again.' });
-      setPlacing(false);
+      showAlert({
+        title: 'Already in your cellar',
+        body: `You already have ${have} bottle${have === 1 ? '' : 's'} of ${name} in your cellar. These ${qty} will be added to that count in your Full Cellar List.`,
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add to that count', onPress: () => { void commit(existing); } },
+        ],
+      });
+      return;
     }
+    await commit(null);
   }
 
   // "Upload Again" — reopen the photo library, rescan a new label, and refresh

@@ -304,8 +304,16 @@ export interface CellarWine {
   case_id?: string | null;
   // Migration 072. The bin diamond/triangle cell this wine is filed into, if
   // any. Count-based (the row's quantity is how many bottles are in the cell).
-  // Optional/nullable — non-bin wines have none.
+  // Optional/nullable — non-bin wines have none. NB since mig 116 bin membership
+  // lives in cellar_placements (kind='bin'), not here — this legacy column is
+  // only kept for back-compat read hints; the lattice reads placements.
   bin_cell_id?: string | null;
+  // Transient (NOT DB columns): set by the bin read helpers so a cell row knows
+  // which 'bin' placement it came from (for per-cell remove/archive/decrement)
+  // and how many of its bottles sit IN THAT CELL. `quantity` stays the wine's
+  // TRUE whole-cellar total; `bin_cell_quantity` is the per-cell count.
+  bin_placement_id?: string | null;
+  bin_cell_quantity?: number | null;
   // Migration 100. True when the bottle was moved here (e.g. by Voice Command)
   // but not yet filed into its real slot/cell/case — shown distinctly until
   // placed. awaiting_placement_unit_id is the target rack/fridge/bin (a

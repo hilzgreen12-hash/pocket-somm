@@ -7,7 +7,8 @@ import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, rem
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { RenameModal } from '../../../src/components/RenameModal';
 import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
-import { updateCellarWine, archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
+import { updateCellarWine, archiveCellarWine, deleteCellarWine, addCellarWineRemoval } from '../../../src/api/cellar';
+import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, placedCount } from '../../../src/api/placements';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { showAlert } from '../../../src/components/AppAlert';
@@ -60,9 +61,9 @@ export default function BinDetailScreen() {
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
   // Permanent delete of a multi-bottle wine → ask how many first.
-  const [deleteWine, setDeleteWine] = useState<{ id: string; name: string; qty: number } | null>(null);
+  const [deleteWine, setDeleteWine] = useState<{ id: string; name: string; qty: number; cellId: string } | null>(null);
   const [deleteCountStr, setDeleteCountStr] = useState('1');
-  const [movingWine, setMovingWine] = useState<{ id: string; name: string } | null>(null);
+  const [movingWine, setMovingWine] = useState<{ id: string; name: string; fromCellId?: string; qty?: number } | null>(null);
   // Bottles moved into THIS bin (e.g. by Voice Command) that have no cell yet.
   const { wines: allWines } = useCellar();
   const awaitingWines = useMemo(() => allWines.filter((w) => w.awaiting_placement_unit_id === binId), [allWines, binId]);
@@ -168,16 +169,21 @@ export default function BinDetailScreen() {
     qc.invalidateQueries({ queryKey: ['cellar'] });
   }
 
-  // Permanent delete of `n` bottles: delete the whole row when it covers every
-  // bottle, else just decrement (the mirror trigger re-syncs the bin placement).
+  // Permanent delete of `n` bottles FROM THIS CELL: free them from the cell's bin
+  // placement, then drop the row's quantity by n (deleting the row only when that
+  // empties the wine entirely — it may still sit in a rack / another cell).
   async function runDeleteWine(n: number) {
     const d = deleteWine;
     if (!d) return;
     try {
-      if (n >= d.qty) await deleteCellarWine(d.id);
-      else await updateCellarWine(d.id, { quantity: d.qty - n });
+      await releaseFromBinCell(d.id, d.cellId, n);
+      const row = allWines.find((w) => w.id === d.id);
+      const newTotal = Math.max(0, (row?.quantity ?? n) - n);
+      if (newTotal <= 0) await deleteCellarWine(d.id);
+      else await updateCellarWine(d.id, { quantity: newTotal });
       setDeleteWine(null);
       invalidate();
+      qc.invalidateQueries({ queryKey: ['cellar'] });
     } catch (err) {
       showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
     }
@@ -235,9 +241,24 @@ export default function BinDetailScreen() {
   async function placeMoving(cell: BinCell) {
     if (!movingWine) return;
     try {
-      // Setting a cell also clears any awaiting-placement flag (the bottle is
-      // now filed), so it drops out of the awaiting list.
-      await updateCellarWine(movingWine.id, { bin_cell_id: cell.id, awaiting_placement: false, awaiting_placement_unit_id: null });
+      if (movingWine.fromCellId) {
+        // Move bottles from one diamond to another (bin placement → bin placement).
+        if (movingWine.fromCellId !== cell.id) {
+          const qty = Math.max(1, movingWine.qty ?? 1);
+          await addBinPlacement(movingWine.id, cell.id, qty);
+          await releaseFromBinCell(movingWine.id, movingWine.fromCellId, qty);
+        }
+      } else {
+        // Awaiting bottle (moved here but not yet filed) → file its loose bottles
+        // into this cell as a bin placement. Loose = total minus whatever is
+        // already placed (rack / other cells / alt cellars).
+        const pls = await fetchPlacementsForWine(movingWine.id);
+        const row = allWines.find((w) => w.id === movingWine.id);
+        const loose = Math.max(1, (row?.quantity ?? 1) - placedCount(pls));
+        await addBinPlacement(movingWine.id, cell.id, loose);
+      }
+      // Clear any awaiting-placement flag — the bottles are now filed.
+      await updateCellarWine(movingWine.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
       invalidate();
       qc.invalidateQueries({ queryKey: ['cellar'] });
       setMovingWine(null);
@@ -246,15 +267,36 @@ export default function BinDetailScreen() {
     }
   }
 
-  // Long-press a wine in the list → the same verbs as a rack slot.
-  function openWineMenu(w: CellarWine) {
+  // Archive this cell's bottles of a wine: log the removal, drop the row quantity
+  // by the cell count (archive the whole row only when that empties it), and free
+  // the cell's bin placement. Bottles elsewhere (a rack / another cell) stay put.
+  async function archiveFromCell(w: CellarWine, cellId: string) {
+    const cellQty = Math.max(1, w.bin_cell_quantity ?? w.quantity ?? 1);
+    const total = w.quantity ?? cellQty;
+    const removedAt = new Date().toISOString();
+    try {
+      await addCellarWineRemoval({ cellarWineId: w.id, removedAt, count: cellQty, note: 'Archived from a wine bin' });
+      await releaseFromBinCell(w.id, cellId, cellQty);
+      if (cellQty >= total) await updateCellarWine(w.id, { quantity: cellQty, archived_at: removedAt });
+      else await updateCellarWine(w.id, { quantity: total - cellQty });
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Long-press a wine in the list → the same verbs as a rack slot. `cellId` is the
+  // diamond this bottle sits in (so moves/archives/deletes are cell-scoped).
+  function openWineMenu(w: CellarWine, cellId: string) {
+    const cellQty = Math.max(1, w.bin_cell_quantity ?? w.quantity ?? 1);
     showAlert({
       title: [w.producer, w.wine_name, w.vintage].filter(Boolean).join(' '),
       body: 'What would you like to do?',
       buttons: [
         { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${w.id}` as any) },
         { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
-        { text: 'Move to Another Diamond', onPress: () => { setMovingWine({ id: w.id, name: w.wine_name }); setListOpen(false); setSearchQuery(''); setHighlightedWineId(null); } },
+        { text: 'Move to Another Diamond', onPress: () => { setMovingWine({ id: w.id, name: w.wine_name, fromCellId: cellId, qty: cellQty }); setListOpen(false); setSearchQuery(''); setHighlightedWineId(null); } },
         {
           text: 'Archive Wine',
           onPress: () => showAlert({
@@ -262,7 +304,7 @@ export default function BinDetailScreen() {
             body: 'It moves to Your Archive and leaves this bin. Your reviews and history stay.',
             buttons: [
               { text: 'Cancel', style: 'cancel' },
-              { text: 'Archive', onPress: async () => { try { await removeWineFromCell(w.id); await archiveCellarWine(w.id); invalidate(); } catch (err) { showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
+              { text: 'Archive', onPress: () => { void archiveFromCell(w, cellId); } },
             ],
           }),
         },
@@ -270,14 +312,21 @@ export default function BinDetailScreen() {
           text: 'Delete Wine (Permanent)',
           style: 'destructive',
           onPress: () => {
-            const qty = w.quantity ?? 1;
-            if (qty > 1) { setDeleteCountStr('1'); setDeleteWine({ id: w.id, name: w.wine_name, qty }); return; }
+            if (cellQty > 1) { setDeleteCountStr('1'); setDeleteWine({ id: w.id, name: w.wine_name, qty: cellQty, cellId }); return; }
             showAlert({
               title: 'Delete this wine?',
               body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
               buttons: [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: async () => { try { await deleteCellarWine(w.id); invalidate(); } catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
+                { text: 'Delete', style: 'destructive', onPress: async () => {
+                  try {
+                    await releaseFromBinCell(w.id, cellId, 1);
+                    const total = w.quantity ?? 1;
+                    if (total <= 1) await deleteCellarWine(w.id); else await updateCellarWine(w.id, { quantity: total - 1 });
+                    invalidate();
+                    qc.invalidateQueries({ queryKey: ['cellar'] });
+                  } catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); }
+                } },
               ],
             });
           },
@@ -507,11 +556,11 @@ export default function BinDetailScreen() {
                 <Text style={styles.emptyList}>{entries.length === 0 ? 'No wines in this bin yet.' : `No wines match "${searchQuery}"`}</Text>
               ) : (
                 <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                  {filteredEntries.map(({ wine, label }) => {
+                  {filteredEntries.map(({ wine, label, cellId }) => {
                     const active = highlightedWineId === wine.id;
                     return (
                       <TouchableOpacity
-                        key={wine.id}
+                        key={`${wine.id}-${cellId}`}
                         style={[styles.wineRow, active && styles.wineRowActive]}
                         onPress={() => {
                           // Toggle: tapping the highlighted wine again clears it.
@@ -520,7 +569,7 @@ export default function BinDetailScreen() {
                           setActiveCustomFilterId(null); setSearchQuery('');
                           if (!alreadyOn) setListOpen(false);
                         }}
-                        onLongPress={() => openWineMenu(wine)}
+                        onLongPress={() => openWineMenu(wine, cellId)}
                         delayLongPress={400}
                         activeOpacity={0.7}
                       >
@@ -529,7 +578,7 @@ export default function BinDetailScreen() {
                           <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}</Text>
                         </View>
                         <Text style={styles.wineMeta} numberOfLines={1}>
-                          {[wine.region, `${wine.quantity ?? 1} × ${bottleSizeLabel(wine.bottle_size_ml ?? 750)}`].filter(Boolean).join(' · ')}
+                          {[wine.region, `${wine.bin_cell_quantity ?? wine.quantity ?? 1} × ${bottleSizeLabel(wine.bottle_size_ml ?? 750)}`].filter(Boolean).join(' · ')}
                         </Text>
                       </TouchableOpacity>
                     );
