@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../../../src/hooks/useAuth';
 import { getBins, getBinCell, removeWineFromCell, binCellLabel } from '../../../../src/api/bins';
 import { addCellarWine, updateCellarWine } from '../../../../src/api/cellar';
+import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, decrementPlacement } from '../../../../src/api/placements';
 import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../../../../src/api/racks';
 import { fetchStorageLocations } from '../../../../src/api/storageLocations';
 import { useRacks } from '../../../../src/hooks/useRacks';
@@ -156,19 +157,23 @@ export default function BinCellScreen() {
     const N = w.quantity ?? 1;
     const M = Math.max(1, Math.min(count, N));
     try {
-      if (M >= N) {
-        await clearWineFromRacks(w.id);
-        await updateCellarWine(w.id, { bin_cell_id: cellId, storage_location_id: null, case_id: null });
-      } else {
-        await updateCellarWine(w.id, { quantity: N - M });
-        if (slotAssignments.some((s) => s.cellar_wine_id === w.id)) await removeSlotsForWine(w.id, M);
-        const { id: _id, created_at: _c, updated_at: _u, ...rest } = w;
-        await addCellarWine({ ...rest, quantity: M, bin_cell_id: cellId, storage_location_id: null, case_id: null, is_wishlist: false } as any);
+      // Move M bottles into THIS cell: add a bin placement, then free M from the
+      // wine's rack/location placements (loose bottles need no freeing — they just
+      // become placed-in-bin). Quantity is unchanged — the bottles don't leave the
+      // cellar, they move to a new spot. One row, many placements (mig 116).
+      await addBinPlacement(w.id, cellId!, M);
+      let toFree = M;
+      const freedRack = await removeSlotsForWine(w.id, toFree);
+      toFree -= freedRack;
+      if (toFree > 0) {
+        const locs = (await fetchPlacementsForWine(w.id)).filter((p) => p.kind === 'location');
+        for (const p of locs) { if (toFree <= 0) break; const take = Math.min(toFree, p.quantity ?? 0); if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; } }
       }
       invalidate();
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
       setMoveModal(null);
     } catch (err) {
       showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -180,7 +185,7 @@ export default function BinCellScreen() {
   const [saving, setSaving] = useState(false);
 
   const capacity = cell?.capacity ?? 0;
-  const bottleCount = wines.reduce((s, w) => s + (w.quantity ?? 1), 0);
+  const bottleCount = wines.reduce((s, w) => s + (w.bin_cell_quantity ?? w.quantity ?? 1), 0);
   const [viewerWine, setViewerWine] = useState<CellarWine | null>(null);
 
   // Long-press a wine's label → View or Change its photo (matches the wine card).
@@ -224,7 +229,7 @@ export default function BinCellScreen() {
       region: w.region ?? '',
       vintage: w.vintage ?? '',
       bottleSizeMl: w.bottle_size_ml ?? 750,
-      quantity: w.quantity ?? 1,
+      quantity: w.bin_cell_quantity ?? w.quantity ?? 1,
     });
   }
 
@@ -260,7 +265,7 @@ export default function BinCellScreen() {
 
     // Soft over-capacity warning (like the rack placement mismatch) — save either
     // way, since real diamonds get over-stuffed.
-    const others = wines.filter((w) => w.id !== draft.id).reduce((s, w) => s + (w.quantity ?? 0), 0);
+    const others = wines.filter((w) => w.id !== draft.id).reduce((s, w) => s + (w.bin_cell_quantity ?? w.quantity ?? 0), 0);
     if (cell && others + qty > cell.capacity) {
       const proceed = await new Promise<boolean>((resolve) => {
         showAlert({
@@ -278,18 +283,25 @@ export default function BinCellScreen() {
     setSaving(true);
     try {
       if (draft.id) {
+        // Editing a wine already in this cell. `qty` is the per-cell count, so
+        // adjust the row total by the delta and resize this cell's bin placement.
+        const row = wines.find((w) => w.id === draft.id);
+        const oldCell = row?.bin_cell_quantity ?? 0;
+        const delta = qty - oldCell;
         await updateCellarWine(draft.id, {
           producer: draft.producer.trim() || null,
           wine_name: name,
           region: draft.region.trim() || null,
           vintage: draft.vintage.trim() || null,
           bottle_size_ml: draft.bottleSizeMl,
-          quantity: qty,
+          quantity: Math.max(0, (row?.quantity ?? oldCell) + delta),
         });
+        if (delta > 0) await addBinPlacement(draft.id, cellId, delta);
+        else if (delta < 0) await releaseFromBinCell(draft.id, cellId, -delta);
       } else {
         // Merge into an existing row of the same wine + format already in this
-        // cell, so "12 x Diamond Creek" stays one line (mirrors lineup batching,
-        // extended to include format so sizes never merge).
+        // cell, so "12 x Diamond Creek" stays one line (mirrors lineup batching).
+        // Both the row total and this cell's bin placement grow by qty.
         const existing = wines.find((w) =>
           norm(w.producer) === norm(draft.producer) &&
           norm(w.wine_name) === norm(name) &&
@@ -298,8 +310,9 @@ export default function BinCellScreen() {
         );
         if (existing) {
           await updateCellarWine(existing.id, { quantity: (existing.quantity ?? 0) + qty });
+          await addBinPlacement(existing.id, cellId, qty);
         } else {
-          await addCellarWine({
+          const saved = await addCellarWine({
             user_id: userId,
             wine_name: name,
             producer: draft.producer.trim() || null,
@@ -325,11 +338,12 @@ export default function BinCellScreen() {
             purchase_price: null,
             purchase_price_currency: null,
             bottle_size_ml: draft.bottleSizeMl,
-            bin_cell_id: cellId,
           } as any);
+          if (saved?.id) await addBinPlacement(saved.id, cellId, qty);
         }
       }
       invalidate();
+      qc.invalidateQueries({ queryKey: ['cellar'] });
       setDraft(null);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -339,15 +353,16 @@ export default function BinCellScreen() {
   }
 
   function removeRow(w: CellarWine) {
+    if (!cellId) return;
     showAlert({
       title: 'Remove from bin',
-      body: `Take ${w.quantity ?? 1} × ${w.wine_name} out of this diamond? The bottles stay in your cellar.`,
+      body: `Take ${w.bin_cell_quantity ?? w.quantity ?? 1} × ${w.wine_name} out of this diamond? The bottles stay in your cellar.`,
       buttons: [
         {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            try { await removeWineFromCell(w.id); invalidate(); setDraft(null); }
+            try { await removeWineFromCell(w.id, cellId); invalidate(); qc.invalidateQueries({ queryKey: ['cellar'] }); setDraft(null); }
             catch (err) { showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' }); }
           },
         },
@@ -396,7 +411,7 @@ export default function BinCellScreen() {
                     align="left"
                   />
                   {/* Count × format sits below the region line. */}
-                  <Text style={styles.rowFormat}>{w.quantity ?? 1}×{bottleSizeCl(w.bottle_size_ml ?? 750)}cl</Text>
+                  <Text style={styles.rowFormat}>{w.bin_cell_quantity ?? w.quantity ?? 1}×{bottleSizeCl(w.bottle_size_ml ?? 750)}cl</Text>
                 </TouchableOpacity>
               </View>
             ))

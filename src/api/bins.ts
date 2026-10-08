@@ -212,7 +212,9 @@ async function resolveCellWines(cellIds: string[]): Promise<Record<string, Cella
     if (!p.bin_cell_id) continue;
     const w = wineById.get(p.cellar_wine_id);
     if (!w) continue; // archived / wishlist / deleted
-    (byCell[p.bin_cell_id] ??= []).push({ ...w, quantity: p.quantity ?? 0, bin_placement_id: p.id });
+    // Keep `quantity` the TRUE whole-cellar total; carry the per-cell count in
+    // bin_cell_quantity (what the lattice/cell screen display for this cubby).
+    (byCell[p.bin_cell_id] ??= []).push({ ...w, bin_cell_quantity: p.quantity ?? 0, bin_placement_id: p.id });
   }
   return byCell;
 }
@@ -235,7 +237,7 @@ export async function getBinCells(binId: string): Promise<BinCell[]> {
     return {
       ...c,
       wines: cellWines,
-      bottleCount: cellWines.reduce((sum, w) => sum + (w.quantity ?? 0), 0),
+      bottleCount: cellWines.reduce((sum, w) => sum + (w.bin_cell_quantity ?? 0), 0),
     };
   });
 }
