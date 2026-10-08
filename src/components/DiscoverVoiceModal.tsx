@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { MicButton } from './MicButton';
 import { useCellar } from '../hooks/useCellar';
 import { usePreferences } from '../hooks/usePreferences';
-import { classifyDiscoverVoice } from '../api/discoverVoice';
+import { classifyDiscoverVoice, askMyData } from '../api/discoverVoice';
 import { isNetworkError } from '../api/invokeResilient';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import { useConsultStore } from '../stores/consultStore';
@@ -20,6 +20,8 @@ const SUGGESTIONS = [
   "It's cold and I want something red — choose from my cellar",
   "I'm at a shop, help me choose between a Cabernet and a Syrah for steak frites",
   'Generate wine intel on Château Latour 2005',
+  'In which restaurant did I drink a Cornas recently?',
+  'What score did I give Château Latour 2003?',
 ];
 
 // Discovery-only voice concierge for the Discover tab: recommend from the user's
@@ -30,14 +32,15 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
   const { height: winH } = useWindowDimensions();
   const { wines } = useCellar();
   const { preferences } = usePreferences();
-  const [phase, setPhase] = useState<'speak' | 'thinking' | 'error'>('speak');
+  const [phase, setPhase] = useState<'speak' | 'thinking' | 'error' | 'answer'>('speak');
+  const [answer, setAnswer] = useState<string | null>(null);
   const [transcript, setTranscript] = useState('');
   const [thinkingText, setThinkingText] = useState('Vinster is listening…');
   const [unclearMsg, setUnclearMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
-    setPhase('speak'); setTranscript(''); setUnclearMsg(null); setThinkingText('Vinster is listening…');
+    setPhase('speak'); setTranscript(''); setUnclearMsg(null); setAnswer(null); setThinkingText('Vinster is listening…');
   }, [visible]);
 
   function handleClose() { onClose(); }
@@ -96,6 +99,14 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
         return;
       }
 
+      if (res.intent === 'my_data') {
+        setThinkingText('Looking through your records…');
+        const a = await askMyData(transcript.trim());
+        setAnswer(a);
+        setPhase('answer');
+        return;
+      }
+
       // unclear (or a payload we couldn't act on) — never guess.
       setUnclearMsg(res.message?.trim() || "Vinster wasn't sure what you meant. Try one of the examples below.");
       setPhase('speak');
@@ -114,6 +125,15 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
               <ActivityIndicator size="large" color={colors.gold} />
               <Text style={styles.centreText}>{thinkingText}</Text>
             </View>
+          ) : phase === 'answer' ? (
+            <View style={styles.centre}>
+              <Text style={styles.voiceHeader}>Vinster</Text>
+              <Text style={styles.answerText}>{answer}</Text>
+              <TouchableOpacity style={styles.primaryBtn} onPress={() => { setTranscript(''); setAnswer(null); setUnclearMsg(null); setPhase('speak'); }} activeOpacity={0.85}>
+                <Text style={styles.primaryBtnText}>Ask another</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Done</Text></TouchableOpacity>
+            </View>
           ) : phase === 'error' ? (
             <View style={styles.centre}>
               <Text style={styles.title}>{thinkingText}</Text>
@@ -125,7 +145,7 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
           ) : (
             <ScrollView style={{ maxHeight: winH * 0.82 }} contentContainerStyle={{ paddingBottom: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.voiceHeader}>Voice Command</Text>
-              <Text style={styles.introText}>Ask Vinster to recommend a wine from your cellar, help you choose between bottles while you're out, or generate Wine Intel on any wine.</Text>
+              <Text style={styles.introText}>Ask Vinster to recommend a wine from your cellar, help you choose between bottles while you're out, generate Wine Intel on any wine, or answer a question about your own reviews and visits.</Text>
 
               {unclearMsg ? <Text style={styles.unclear}>{unclearMsg}</Text> : null}
 
@@ -133,7 +153,7 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
 
               <Text style={styles.title}>Tap the mic and speak</Text>
               <View style={styles.micRow}>
-                <MicButton value={transcript} onChangeText={(t) => setTranscript(correctWineTerms(t))} onClear={() => setTranscript('')} />
+                <MicButton value={transcript} onChangeText={(t) => setTranscript(correctWineTerms(t))} onClear={() => setTranscript('')} serverCorrect />
               </View>
               <TextInput
                 style={[styles.inputField, styles.inputText]}
@@ -183,6 +203,7 @@ const styles = StyleSheet.create({
   editHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSubtle, textAlign: 'center', marginBottom: spacing.md },
   suggestions: { gap: spacing.sm, marginBottom: spacing.lg },
   suggestion: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 20 },
+  answerText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 23, marginBottom: spacing.lg, paddingHorizontal: spacing.sm },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   btnDisabled: { opacity: 0.5 },
   primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },

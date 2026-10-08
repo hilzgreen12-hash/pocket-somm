@@ -30,17 +30,18 @@ function wineLine(w: CmdWine, i: number): string {
 
 function buildPrompt(transcript: string, wines: CmdWine[]): string {
   const wineBlock = wines.length ? wines.map(wineLine).join('\n') : '(the cellar is empty)';
-  return `You are Vinster's voice concierge on the Discover tab. The user spoke ONE request. Classify it into EXACTLY ONE of these three DISCOVERY intents and respond with ONLY raw JSON (no markdown).
+  return `You are Vinster's voice concierge on the Discover tab. The user spoke ONE request. Classify it into EXACTLY ONE of these DISCOVERY intents and respond with ONLY raw JSON (no markdown).
 
 INTENTS
 1. "cellar_mood" — they want a recommendation of what to drink FROM THEIR OWN CELLAR, describing a mood, occasion, weather or food and clearly drawing on wine they already own (e.g. "it's cold and I want something red, choose from my cellar", "what should I open tonight"). Choose up to THREE bottles from the cellar list below, best first, using ONLY the exact ids. PREFER VARIETY: where the cellar allows, spread the picks across DIFFERENT countries / regions / styles rather than three of the same (e.g. not three Burgundies). Additionally, you MAY include ONE extra "Wild Card" pick — a bottle OUTSIDE what they literally asked for that you feel strongly would delight them given their mood/occasion (e.g. they asked for a refreshing red with no food, but a vibrant white would genuinely hit the spot). For a wild card set its "rank" to "Wild Card" and in "why" say plainly that it's outside their ask and why it still works. Only ever include a wild card when you feel strongly about it; use ONLY the exact ids.
 2. "consult" — they are OUT (a shop or restaurant) trying to DECIDE BETWEEN specific named wines/options for a dish or occasion, and want advice on which to pick (e.g. "I'm at a shop deciding between a Cabernet and a Syrah for steak frites", "the Rioja or the Chianti with lamb?"). They name the candidate wines and usually the food. Give a clear recommendation.
 3. "intel" — they want information / Wine Intel on ONE specific named wine (e.g. "generate wine intel on Chateau Latour 2005", "tell me about Cloudy Bay Sauvignon Blanc 2022"). Normalise the wine they named.
+4. "my_data" — they are asking a question about THEIR OWN history/records in the app: wines they have reviewed, the SCORE they gave a wine, WHICH RESTAURANT they drank something in, when they last had a wine, which restaurants they've visited (e.g. "in which restaurant did I drink a Cornas recently?", "what score did I give Château Latour 2003?", "have I reviewed any Barolo?", "where did I last have Champagne?"). These look BACKWARD at what the user has already done — not a recommendation or a wine lookup. Just return the intent; the question text is handled separately.
 
 STRICT RULES
 - Choose the SINGLE best-fitting intent. If the request is ambiguous, could plausibly be two intents, is empty/garbled, or you are not confident, return {"intent":"unclear","message":"<one friendly sentence asking them to rephrase, naming the three things they can ask>"}. NEVER guess between intents.
 - This voice is for discovery ONLY. If they ask to MOVE, ARCHIVE, ADD, or otherwise manage/organise bottles, return "unclear" and tell them voice here is for cellar recommendations, shop/restaurant advice, or wine intel (cellar changes are done on the Cellar tab).
-- Distinguish carefully: "from my cellar / what should I open" ⇒ cellar_mood. "deciding between X and Y / which should I buy/order" ⇒ consult. "wine intel on / tell me about <one wine>" ⇒ intel.
+- Distinguish carefully: "from my cellar / what should I open" ⇒ cellar_mood. "deciding between X and Y / which should I buy/order" ⇒ consult. "wine intel on / tell me about <one wine>" ⇒ intel. A question about what the user HAS DONE — their score, the restaurant they drank it in, their past reviews/visits ⇒ my_data.
 
 CELLAR (for cellar_mood only — use exact ids):
 ${wineBlock}
@@ -51,6 +52,7 @@ Respond with ONLY one of these JSON shapes:
 {"intent":"cellar_mood","picks":[{"id":"<id from the list>","rank":"<short evocative label e.g. 'Vinster's First Choice'>","why":"<1-2 sentences tying this wine to their mood>"}]}
 {"intent":"consult","question":"<a concise restatement of what they're deciding, e.g. 'Cabernet vs Syrah with steak frites'>","advice":"<2-4 sentences recommending which to choose and why, considering the dish/occasion; name the winner clearly>"}
 {"intent":"intel","wine":{"producer":"<producer>","wineName":<cuvée or null>,"region":<region or null>,"vintage":"<4-digit year or NV>","style":<style or null>,"grape":<grape or null>}}
+{"intent":"my_data"}
 {"intent":"unclear","message":"<friendly rephrase prompt>"}`;
 }
 

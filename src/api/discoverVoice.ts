@@ -1,7 +1,7 @@
 import { invokeResilient } from './invokeResilient';
 import type { CellarWine } from '../types/wine';
 
-export type DiscoverIntent = 'cellar_mood' | 'consult' | 'intel' | 'unclear';
+export type DiscoverIntent = 'cellar_mood' | 'consult' | 'intel' | 'my_data' | 'unclear';
 
 export interface DiscoverVoiceResult {
   intent: DiscoverIntent;
@@ -39,4 +39,11 @@ export async function classifyDiscoverVoice(transcript: string, wines: CellarWin
     })),
   }) as DiscoverVoiceResult;
   return data;
+}
+
+// Answer a question about the user's OWN records (reviews + restaurant visits).
+// Scoped server-side to the signed-in user. Returns a short natural answer.
+export async function askMyData(question: string): Promise<string> {
+  const data = await invokeResilient('ask-my-data', { question }) as { answer?: string | null; error?: string };
+  return (data?.answer ?? '').trim() || "I couldn't find that in your records.";
 }
