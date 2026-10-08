@@ -1,7 +1,7 @@
 import { invokeResilient } from './invokeResilient';
 import type { CellarWine, StorageLocation, WineRack } from '../types/wine';
 
-export type CellarCommandAction = 'move' | 'archive' | 'add';
+export type CellarCommandAction = 'move' | 'archive' | 'add' | 'delete';
 
 // The trimmed cellar/location context we send the parser — just enough to
 // resolve a spoken command, no images or notes.

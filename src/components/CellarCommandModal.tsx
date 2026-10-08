@@ -7,7 +7,7 @@ import { showAlert } from './AppAlert';
 import { useAuth } from '../hooks/useAuth';
 import { useCellar } from '../hooks/useCellar';
 import { fetchStorageLocations } from '../api/storageLocations';
-import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/cellar';
+import { addCellarWine, addCellarWineRemoval, updateCellarWine, deleteCellarWine } from '../api/cellar';
 import { getRacks, clearWineFromRacks, removeSlotsForWine } from '../api/racks';
 import { getBins } from '../api/bins';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
@@ -65,11 +65,11 @@ function mentionsCellarList(text: string): boolean {
 // Default intro copy + examples (the Cellar-tab, full-scope voice command).
 // A caller (e.g. a home-storage location screen) can override these to present
 // a scoped explainer — the underlying move/archive/add engine is unchanged.
-const DEFAULT_INTRO_TEXT = 'Vinster has been trained in four Cellar voice commands: Move wines between storage locations, Archive bottles or Add them to your cellar list for you to place into a specific location later, or ask Vinster to recommend wines to drink based on your mood and occasion.';
+const DEFAULT_INTRO_TEXT = 'Vinster has been trained in your Cellar voice commands: Move wines between storage locations, Archive bottles, Add them to your cellar list to place later, permanently Delete bottles, or ask Vinster to recommend wines to drink based on your mood and occasion.';
 const DEFAULT_SUGGESTIONS = [
   'Move my Lafite 1982 from my wine fridge to my small wine rack',
   'Archive 3 bottles of Harlan 1990',
-  'Add a bottle of Sassicaia 2007 to my cellar',
+  'Delete two bottles of Sassicaia 2007',
   "It's cold and raining, I want a smooth red wine for the fireside.",
 ];
 
@@ -78,12 +78,13 @@ const DEFAULT_SUGGESTIONS = [
 // examples. Spread into <CellarCommandModal {...HOME_STORAGE_VOICE} /> so all
 // four screen types stay identical.
 export const HOME_STORAGE_VOICE: { introText: string; suggestions: string[]; allowedActions: CellarCommandAction[] } = {
-  introText: 'Through your home storage locations you can use voice command to: Move wines from this location to another, and Archive bottles.',
+  introText: 'Through your home storage locations you can use voice command to: Move wines from this location to another, Archive bottles, and permanently Delete bottles.',
   suggestions: [
     'Move two bottles of Rousseau 1999 to My Small Wine Bin',
     'Archive one bottle of Lafite 1961',
+    'Delete three bottles of Barbaresco 2017 from this bin',
   ],
-  allowedActions: ['move', 'archive'],
+  allowedActions: ['move', 'archive', 'delete'],
 };
 
 export function CellarCommandModal({ visible, onClose, introText, suggestions, allowedActions }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[]; allowedActions?: CellarCommandAction[] }) {
@@ -115,7 +116,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   const [moveToCellarList, setMoveToCellarList] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [success, setSuccess] = useState<{
-    action: 'move' | 'archive' | 'add';
+    action: 'move' | 'archive' | 'add' | 'delete';
     wine: string;        // producer + name
     meta: string;        // region · vintage
     detail: string;      // "from X to Y" (move) / "N bottles archived" (archive)
@@ -158,8 +159,8 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     const s = t.trim();
     // 1. Leading command, allowing a polite/desire preamble before the verb.
     const preamble = '(please\\s+|can you\\s+|could you\\s+|would you\\s+|will you\\s+|vinster,?\\s+|i\\s+want\\s+to\\s+|i\\s+wanna\\s+|i\'?d\\s+like\\s+to\\s+|i\\s+would\\s+like\\s+to\\s+|i\\s+need\\s+to\\s+|i\'?d\\s+want\\s+to\\s+|let\'?s\\s+|please\\s+can\\s+you\\s+)';
-    if (new RegExp(`^(${preamble})*(move|archive|add)\\b`, 'i').test(s)) return false;
-    const hasCommandVerb = /\bmove(s|d|ing)?\b/i.test(s) || /\barchiv/i.test(s) || /\badd(s|ed|ing)?\b/i.test(s);
+    if (new RegExp(`^(${preamble})*(move|archive|add|delete|remove)\\b`, 'i').test(s)) return false;
+    const hasCommandVerb = /\bmove(s|d|ing)?\b/i.test(s) || /\barchiv/i.test(s) || /\badd(s|ed|ing)?\b/i.test(s) || /\bdelet/i.test(s) || /\bremove(s|d|ing)?\b/i.test(s);
     // 2. A command verb plus a source/destination preposition is an unambiguous
     //    action ("…move… from… to…", "…add… into…").
     if (hasCommandVerb && /\b(from|to|into|out of|onto)\b/i.test(s)) return false;
@@ -227,7 +228,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
       if (allowedActions) {
         showAlert({
           title: 'Not available here',
-          body: 'From a home storage location you can move bottles to another location or archive them. For a recommendation, use Vinster on the Cellar or Pair tab.',
+          body: 'From a home storage location you can move bottles to another location, archive them, or delete them. For a recommendation, use Vinster on the Cellar or Pair tab.',
         });
         return;
       }
@@ -238,6 +239,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     // user pick it up front. "add" (a new bottle) first, then archive, else move.
     const act: CellarCommandAction = /\badd(s|ed|ing)?\b/i.test(transcript)
       ? 'add'
+      : /\bdelet/i.test(transcript) ? 'delete'
       : /\barchiv/i.test(transcript) ? 'archive' : 'move';
     // A move whose destination is the Full Cellar List = unplace (take the bottles out
     // of an alt cellar / rack and leave them loose). Not a resolvable parser
@@ -262,7 +264,9 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     setAction(act);
     setPhase('parsing');
     try {
-      let res = await parseCellarCommand(act, transcript, wines, locations, units);
+      // 'delete' resolves identically to 'archive' (a wine + a count, no
+      // destination) — only the end action differs — so parse it as archive.
+      let res = await parseCellarCommand(act === 'delete' ? 'archive' : act, transcript, wines, locations, units);
 
       // A MOVE here targets HOME storage, so a wine that lives ONLY in an
       // external/offsite cellar can't be the one meant — drop it from the
@@ -461,6 +465,38 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           viewLabel: 'View in Your Cellar Archive',
           viewRoute: '/cellar/list?archived=1',
         });
+      } else if (action === 'delete') {
+        if (!chosenWine) return;
+        // Permanent delete — no archive, no removal log. Takes a count; delete
+        // the whole row when it covers every bottle, else just decrement. Free
+        // the deleted bottles from any placements first (loose-first, mirroring
+        // archive) so a rack/bin/alt-cellar count never lingers above quantity.
+        const count = Math.min(chosenWine.quantity, Math.max(1, result?.quantity ?? chosenWine.quantity));
+        if (count >= (chosenWine.quantity ?? 0)) {
+          await deleteCellarWine(chosenWine.id);
+        } else {
+          const winePlacements = await fetchPlacementsForWine(chosenWine.id);
+          const unplaced = Math.max(0, (chosenWine.quantity ?? 0) - placedCount(winePlacements));
+          const toRelease = Math.max(0, count - unplaced);
+          if (toRelease > 0) await releaseBottlesFromPlacements(chosenWine.id, toRelease);
+          await updateCellarWine(chosenWine.id, { quantity: chosenWine.quantity - count });
+        }
+        qc.invalidateQueries({ queryKey: ['cellar', userId] });
+        qc.invalidateQueries({ queryKey: ['placements', chosenWine.id] });
+        qc.invalidateQueries({ queryKey: ['placements-list'] });
+        qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+        qc.invalidateQueries({ queryKey: ['rack-slots'] });
+        qc.invalidateQueries({ queryKey: ['bins', userId] });
+        qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+        qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+        setSuccess({
+          action: 'delete',
+          wine: [chosenWine.producer, chosenWine.wine_name].filter(Boolean).join(' '),
+          meta: [chosenWine.region, chosenWine.vintage].filter(Boolean).join(' · '),
+          detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} permanently deleted`,
+          viewLabel: 'View your Cellar List',
+          viewRoute: '/cellar/list',
+        });
       } else {
         // add — a brand-new bottle straight to Your Cellar List, awaiting
         // placement so the user slots it into storage later.
@@ -539,6 +575,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     const count = Math.min(chosenWine?.quantity ?? 1, Math.max(1, result?.quantity ?? (chosenWine?.quantity ?? 1)));
     const bottles = `${count} ${count === 1 ? 'bottle' : 'bottles'}`;
     if (action === 'move') return `Move ${bottles} of ${wineLabel(chosenWine)} to ${destName ?? 'the chosen location'}?`;
+    if (action === 'delete') return `Permanently delete ${bottles} of ${wineLabel(chosenWine)}? This can't be undone.`;
     return `Archive ${bottles} of ${wineLabel(chosenWine)}?`;
   }
 
@@ -617,7 +654,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
               <Text style={styles.title}>Confirm</Text>
               <Text style={styles.confirmBody}>{confirmText()}</Text>
               <TouchableOpacity style={[styles.primaryBtn, executing && styles.btnDisabled]} onPress={execute} disabled={executing} activeOpacity={0.8}>
-                {executing ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.primaryBtnText}>{action === 'archive' ? 'Archive' : action === 'add' ? 'Add' : 'Move'}</Text>}
+                {executing ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.primaryBtnText}>{action === 'archive' ? 'Archive' : action === 'add' ? 'Add' : action === 'delete' ? 'Delete' : 'Move'}</Text>}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setPhase('speak')} style={styles.cancelRow}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
             </>
@@ -643,7 +680,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
           {phase === 'success' && success && (
             <>
-              <Text style={styles.successAction}>{success.action === 'archive' ? 'Archived' : success.action === 'add' ? 'Added' : 'Moved'}</Text>
+              <Text style={styles.successAction}>{success.action === 'archive' ? 'Archived' : success.action === 'add' ? 'Added' : success.action === 'delete' ? 'Deleted' : 'Moved'}</Text>
               <Text style={styles.successWine}>{success.wine}</Text>
               {success.meta ? <Text style={styles.successMeta}>{success.meta}</Text> : null}
               <Text style={styles.successDetail}>{success.detail}</Text>
