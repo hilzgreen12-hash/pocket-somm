@@ -20,6 +20,7 @@ import { LabelPhotoViewer } from '../../../../src/components/LabelPhotoViewer';
 import { WineIdentityHeader } from '../../../../src/components/WineIdentityHeader';
 import { uploadLabelImage } from '../../../../src/api/labelPhotos';
 import { showAlert } from '../../../../src/components/AppAlert';
+import { WineSearchModal } from '../../../../src/components/WineSearchModal';
 import { colors, spacing } from '../../../../src/constants/theme';
 import { fonts } from '../../../../src/constants/fonts';
 import type { CellarWine } from '../../../../src/types/wine';
@@ -45,12 +46,10 @@ export default function BinCellScreen() {
   const userId = session?.user.id;
   const [chooserOpen, setChooserOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [wineSearchOpen, setWineSearchOpen] = useState(false);
   // Arrived via a tap on the diamond/triangle (?add=1) → open the add chooser
   // straight away, mirroring tapping an empty rack slot.
   const autoOpenedRef = useRef(false);
-  useEffect(() => {
-    if (add === '1' && !autoOpenedRef.current) { autoOpenedRef.current = true; setChooserOpen(true); }
-  }, [add]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['bin-cell', cellId],
@@ -62,6 +61,18 @@ export default function BinCellScreen() {
   const { setPendingBinCell } = useRackStore();
   const { setImage: setLabelImage, setWineDetails } = useLabelStore();
 
+  // Open the add chooser on arrival for an empty diamond — whether we got here
+  // via ?add=1 or the user simply tapped an empty cell. Fires once (guarded) so
+  // cancelling doesn't immediately reopen it, and only after the cell has loaded
+  // so we don't flash the chooser over a cell that turns out to hold wine.
+  useEffect(() => {
+    if (autoOpenedRef.current || isLoading || !data) return;
+    if (add === '1' || (data.wines?.length ?? 0) === 0) {
+      autoOpenedRef.current = true;
+      setChooserOpen(true);
+    }
+  }, [add, data, isLoading]);
+
   // Route a bin-diamond add through the shared Confirm screen (context=place-bin),
   // where the quantity + format are collected inline. `source` picks camera vs
   // library; 'manual' opens Confirm blank.
@@ -72,6 +83,17 @@ export default function BinCellScreen() {
     if (source === 'manual') { router.push('/label/confirm?context=place-bin&manual=1' as any); return; }
     if (source === 'camera') { router.push('/label/camera?context=place-bin' as any); return; }
     void uploadForBin();
+  }
+
+  // Catalog Search → pre-fill the place-bin Confirm screen with the chosen wine
+  // (replaces free-text Manual Input). WineSearchInput's own 'Use <typed>'
+  // escape hatch still covers a wine genuinely absent from the catalog.
+  function handleBinSearchSelect(r: { producer: string; wineName: string | null; region: string | null; style: string | null; vintage: string | null }) {
+    setWineSearchOpen(false);
+    if (!cell || !cellId) return;
+    setPendingBinCell({ binId: cell.bin_id, cellId });
+    setWineDetails({ producer: r.producer, region: r.region ?? '', wineName: r.wineName, vintage: r.vintage ?? '', style: r.style ?? null } as any);
+    router.push('/label/confirm?context=place-bin' as any);
   }
 
   // Library upload → scan → Confirm (mirrors the rack slot's upload path).
@@ -440,8 +462,8 @@ export default function BinCellScreen() {
             <TouchableOpacity style={styles.chooserBtn} onPress={() => startBinAdd('library')} activeOpacity={0.8}>
               <Text style={styles.chooserBtnText}>Upload a Label</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.chooserBtn} onPress={() => startBinAdd('manual')} activeOpacity={0.8}>
-              <Text style={styles.chooserBtnText}>Manual Input</Text>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setChooserOpen(false); setWineSearchOpen(true); }} activeOpacity={0.8}>
+              <Text style={styles.chooserBtnText}>Search a Wine</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.chooserCancel} onPress={() => setChooserOpen(false)}>
               <Text style={styles.chooserCancelText}>Cancel</Text>
@@ -449,6 +471,10 @@ export default function BinCellScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Catalog Search — replaces free-text Manual Input. Picking a wine routes
+          to the same place-bin Confirm screen, pre-filled. */}
+      <WineSearchModal visible={wineSearchOpen} onClose={() => setWineSearchOpen(false)} onSelect={handleBinSearchSelect} />
 
       {/* "Reading the label…" swirl while a photo is being scanned — keeps the
           user on a loading state instead of flashing the bin behind it (matches

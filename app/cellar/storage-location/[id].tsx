@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,6 +9,7 @@ import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation,
 import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement, setPlacementCase } from '../../../src/api/placements';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
+import { WineSearchModal } from '../../../src/components/WineSearchModal';
 import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine, addCellarWineRemoval, getCellarWineById } from '../../../src/api/cellar';
 import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../../../src/api/racks';
 import { fetchStorageLocations } from '../../../src/api/storageLocations';
@@ -170,6 +171,8 @@ export default function StorageLocationScreen() {
   // Set after a wine lands in this location so the "How is this wine packaged?"
   // prompt opens for it. Also driven by the long-press "Update Packaging".
   const [packagingWineId, setPackagingWineId] = useState<string | null>(null);
+  const [wineSearchOpen, setWineSearchOpen] = useState(false);
+  const wineSearchCaseRef = useRef<string | null>(null);
 
   async function executeMove(w: CellarWine, count: number, _fromName: string | null) {
     const N = w.quantity ?? 1;
@@ -304,6 +307,20 @@ export default function StorageLocationScreen() {
     useLabelStore.getState().reset();
     router.push('/label/confirm?manual=1&context=add-location' as any);
   }
+  // Catalog Search replaces free-text Manual Input across the add-a-wine flows.
+  // WineSearchInput's 'Use <typed>' escape hatch still covers absent wines.
+  function handleSearch(caseId: string | null = null) {
+    wineSearchCaseRef.current = caseId;
+    setWineSearchOpen(true);
+  }
+  function handleSearchSelect(r: { producer: string; wineName: string | null; region: string | null; style: string | null; vintage: string | null }) {
+    setWineSearchOpen(false);
+    if (!id) return;
+    setPendingStorageLocationId(id);
+    setPendingCaseId(wineSearchCaseRef.current);
+    setWineDetails({ producer: r.producer, region: r.region ?? '', wineName: r.wineName, vintage: r.vintage ?? '', style: r.style ?? null } as any);
+    router.push('/label/confirm?context=add-location' as any);
+  }
   async function handleUpload(caseId: string | null = null) {
     if (!id) return;
     if (!(await ensureMediaPermission('library'))) return;
@@ -367,7 +384,7 @@ export default function StorageLocationScreen() {
         { text: 'Scan a Label', onPress: () => handleScan() },
         { text: 'Upload a Label', onPress: () => handleUpload() },
         { text: 'Select from Cellar List', onPress: () => setCellarPickerOpen(true) },
-        { text: 'Manual Input', onPress: () => handleManual() },
+        { text: 'Search a Wine', onPress: () => handleSearch() },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -854,7 +871,7 @@ export default function StorageLocationScreen() {
         { text: 'Select Wine From This Cellar', onPress: () => openAddExistingToCase(c) },
         { text: 'Scan a Label', onPress: () => handleScan(c.id) },
         { text: 'Upload a Label', onPress: () => handleUpload(c.id) },
-        { text: 'Manual Input', onPress: () => handleManual(c.id) },
+        { text: 'Search a Wine', onPress: () => handleSearch(c.id) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -1457,6 +1474,9 @@ export default function StorageLocationScreen() {
 
       {/* Select from Cellar List — pick an existing wine to place/move here. */}
       <CellarWinePicker visible={cellarPickerOpen} allowPlaced onClose={() => setCellarPickerOpen(false)} onSelect={onPickCellarWine} />
+
+      {/* Catalog Search → prefilled Confirm (replaces free-text Manual Input). */}
+      <WineSearchModal visible={wineSearchOpen} onClose={() => setWineSearchOpen(false)} onSelect={handleSearchSelect} />
 
       {/* Voice Command — same engine as the Cellar tab, scoped copy for home storage. */}
       <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} />
