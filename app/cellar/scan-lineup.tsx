@@ -575,6 +575,20 @@ export default function ScanLineupScreen() {
       }
       for (const b of kept) {
         const count = b.quantity ?? 1;
+        // If this wine is already in the cellar, merge into that listing (bump its
+        // quantity + mark it awaiting a slot HERE) instead of spawning a duplicate
+        // row. Mirrors the rack-placement path; keeps one wine = one cellar line.
+        const match = findCellarMatch(b) ?? findFuzzyCellarMatch(b);
+        if (match) {
+          const choice = await askMergeChoice(b, match);
+          if (choice === 'merge') {
+            await updateWine.mutateAsync({
+              id: match.id,
+              updates: { quantity: (match.quantity ?? 0) + count, awaiting_placement: true, awaiting_placement_unit_id: originRackId },
+            });
+            continue; // existing listing keeps its label + intel; nothing new to create
+          }
+        }
         const saved = await addWine.mutateAsync({
           user_id: userId,
           wine_name: b.wineName || b.producer,

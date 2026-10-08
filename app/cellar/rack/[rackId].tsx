@@ -16,7 +16,7 @@ import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
 import { addCellarWineRemoval, addCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { fetchStorageLocations, assignWineToStorageLocation } from '../../../src/api/storageLocations';
-import { addLocationPlacement, fetchPlacementsForWine, decrementPlacement, clearLocationPlacements } from '../../../src/api/placements';
+import { addLocationPlacement, fetchPlacementsForWine, fetchPlacementsForWines, decrementPlacement, clearLocationPlacements } from '../../../src/api/placements';
 import { getBins } from '../../../src/api/bins';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -528,6 +528,20 @@ export default function RackGridScreen() {
   // Total bottles = occupied slots (each slot is one bottle).
   const rackBottleCount = useMemo(() => winesInRack.reduce((sum, w) => sum + w.count, 0), [winesInRack]);
 
+  // Count this wine's slots across BOTH the fetched slotMap and the optimistic
+  // (just-tapped, not-yet-persisted) slots, deduped by position — so the placed
+  // count is correct in real time even before the DB round-trip lands.
+  const slotsForWine = (wineId: string) => {
+    const keys = new Set<string>();
+    for (const [k, s] of Object.entries(slotMap)) {
+      if ((s as { cellar_wine_id?: string } | undefined)?.cellar_wine_id === wineId) keys.add(k);
+    }
+    for (const [k, w] of Object.entries(optimisticSlots)) {
+      if ((w as CellarWine | undefined)?.id === wineId) keys.add(k);
+    }
+    return keys.size;
+  };
+
   // Bottles moved into THIS rack (e.g. by Voice Command, or a scanned Lineup)
   // that have no slot yet. Ordered oldest-first so a Lineup's bottles queue up in
   // the order they were scanned (left to right) — each tap fills the next one.
@@ -537,7 +551,26 @@ export default function RackGridScreen() {
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
     [wines, rackId],
   );
-  const awaitingBottles = awaitingWines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+  // How many of each awaiting wine's bottles are already placed ELSEWHERE (other
+  // racks / alt cellars). A merged wine (e.g. 4 of 5 bottles already in another
+  // location) must only ask to place its NEW bottles HERE, not its whole quantity.
+  const awaitingIds = useMemo(() => awaitingWines.map((w) => w.id).sort().join(','), [awaitingWines]);
+  const { data: awaitingPlaced = {} } = useQuery({
+    queryKey: ['awaiting-placed-elsewhere', rackId, awaitingIds],
+    enabled: awaitingWines.length > 0,
+    queryFn: async () => {
+      const pls = await fetchPlacementsForWines(awaitingWines.map((w) => w.id));
+      const byWine: Record<string, number> = {};
+      for (const p of pls) {
+        if (p.kind === 'rack' && p.rack_id === rackId) continue; // bottles in THIS rack aren't "elsewhere"
+        byWine[p.cellar_wine_id] = (byWine[p.cellar_wine_id] ?? 0) + (p.quantity ?? 0);
+      }
+      return byWine;
+    },
+  });
+  // Bottles of this wine still to place in THIS rack = quantity − placed elsewhere.
+  const awaitingToPlace = (w: CellarWine) => Math.max(0, (w.quantity ?? 1) - (awaitingPlaced[w.id] ?? 0));
+  const awaitingBottles = awaitingWines.reduce((sum, w) => sum + Math.max(0, awaitingToPlace(w) - slotsForWine(w.id)), 0);
 
   // Enter "place unplaced bottles" mode when the wine card sends us here with a
   // wine + a limit (the unplaced count). Once only, after the cellar has loaded.
@@ -564,32 +597,22 @@ export default function RackGridScreen() {
   // Bottles awaiting a slot are placed ONE at a time — each tapped empty slot
   // takes the next bottle, and the awaiting flag clears only once every bottle
   // of the wine has a slot. No "how many?" prompt, no second instruction bubble.
-  // Count this wine's slots across BOTH the fetched slotMap and the optimistic
-  // (just-tapped, not-yet-persisted) slots, deduped by position. Without the
-  // optimistic ones, tapping the next slot before the DB round-trip landed read a
-  // stale count and the awaiting flow asked for an extra bottle (the off-by-one).
-  const slotsForWine = (wineId: string) => {
-    const keys = new Set<string>();
-    for (const [k, s] of Object.entries(slotMap)) {
-      if ((s as { cellar_wine_id?: string } | undefined)?.cellar_wine_id === wineId) keys.add(k);
-    }
-    for (const [k, w] of Object.entries(optimisticSlots)) {
-      if ((w as CellarWine | undefined)?.id === wineId) keys.add(k);
-    }
-    return keys.size;
-  };
   async function placeAwaitingBottle(w: typeof wines[number], row: number, col: number) {
     const key = `${row},${col}`;
     // Show the bottle in the slot straight away (with a placing swirl).
     setOptimisticSlots((m) => ({ ...m, [key]: w as unknown as CellarWine }));
     const placedNow = slotsForWine(w.id) + 1;
-    const remaining = Math.max(0, (w.quantity ?? 1) - placedNow);
+    // Only the bottles destined for THIS rack (quantity minus any already placed
+    // elsewhere) count toward "done" — a merged wine with 4 of 5 elsewhere needs
+    // just 1 here.
+    const toPlaceHere = awaitingToPlace(w);
+    const remaining = Math.max(0, toPlaceHere - placedNow);
     setSavedMsg(remaining > 0 ? `Bottle placed — ${remaining} to go` : 'Bottle placed');
     try {
       await assignSlot(rackId, row, col, w.id);
       // Clearing the awaiting flag isn't needed for the thumbnail — fire it off
       // in the background so the swirl doesn't wait on a second round-trip.
-      if (placedNow >= (w.quantity ?? 1)) {
+      if (placedNow >= toPlaceHere) {
         void updateWine.mutateAsync({ id: w.id, updates: { awaiting_placement: false, awaiting_placement_unit_id: null } })
           .then(() => qc.invalidateQueries({ queryKey: ['cellar'] }))
           .catch(() => {});
@@ -834,8 +857,8 @@ export default function RackGridScreen() {
       if (slotMap[`${row},${col}`]) return;
       // Place a bottle of the TICKED wine (fall back to the first with bottles
       // still to place). No ticked wine with room → nudge the user to pick one.
-      const target = awaitingWines.find((w) => w.id === selectedAwaitingId && slotsForWine(w.id) < (w.quantity ?? 1))
-        ?? awaitingWines.find((w) => slotsForWine(w.id) < (w.quantity ?? 1));
+      const target = awaitingWines.find((w) => w.id === selectedAwaitingId && slotsForWine(w.id) < awaitingToPlace(w))
+        ?? awaitingWines.find((w) => slotsForWine(w.id) < awaitingToPlace(w));
       if (!target) { setSavedMsg('Tick a wine below first'); return; }
       void placeAwaitingBottle(target, row, col);
       return;
@@ -1979,7 +2002,7 @@ export default function RackGridScreen() {
               remove it from its slot(s). Place every wine to finish. */}
           <Text style={styles.awaitingTitle}>Tick a wine, then tap an empty slot to place it</Text>
           {awaitingWines.map((w) => {
-            const total = w.quantity ?? 1;
+            const total = awaitingToPlace(w);
             const placed = Math.min(slotsForWine(w.id), total);
             const done = placed >= total;
             const active = selectedAwaitingId === w.id;
