@@ -30,6 +30,8 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
+import { generateServingSuggestion } from '../../src/api/wineExtras';
+import type { WineServingSuggestion } from '../../src/types/wine';
 import { peekIntelCurrency } from '../../src/utils/localCurrency';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { updateLabelIntel } from '../../src/api/labels';
@@ -252,6 +254,32 @@ export default function LabelResultsScreen() {
   const [vintageRows, setVintageRows] = useState<VintageComparisonRow[] | null>(null);
   const [vintagesLoading, setVintagesLoading] = useState(false);
   const vintagesTriedRef = useRef(false);
+  // Serving Suggestions — a fourth collapsible (same gold-bubble layout as the
+  // wine card), generated on first expand from the confirmed wine details.
+  const [servingExpanded, setServingExpanded] = useState(false);
+  const [serving, setServing] = useState<WineServingSuggestion | null>(null);
+  const [servingLoading, setServingLoading] = useState(false);
+  const servingTriedRef = useRef(false);
+  async function toggleServing() {
+    const next = !servingExpanded;
+    setServingExpanded(next);
+    if (next && !serving && !servingTriedRef.current && wineDetailsConfirmed) {
+      servingTriedRef.current = true;
+      setServingLoading(true);
+      try {
+        const w = {
+          producer: wineDetailsConfirmed.producer,
+          wine_name: wineDetailsConfirmed.wineName,
+          region: wineDetailsConfirmed.region,
+          vintage: wineDetailsConfirmed.vintage,
+          grape_variety: wineDetailsConfirmed.grape ?? null,
+          style: wineDetailsConfirmed.style ?? null,
+        } as unknown as Parameters<typeof generateServingSuggestion>[0];
+        setServing(await generateServingSuggestion(w));
+      } catch { servingTriedRef.current = false; }
+      finally { setServingLoading(false); }
+    }
+  }
   // Vintage prompt — shown when the scan couldn't read a vintage, so the user
   // enters it (or confirms NV) rather than the intel silently assuming non-vintage.
   const [vintagePromptOpen, setVintagePromptOpen] = useState(false);
@@ -2272,6 +2300,35 @@ export default function LabelResultsScreen() {
             </View>
           ) : null}
 
+          {/* Serving Suggestions — same gold-bubble layout as the wine card,
+              generated on first expand from the confirmed wine details. */}
+          {isIntelOnlyFlow ? (
+            <View style={styles.vintageSection}>
+              <TouchableOpacity style={styles.vintageHeadingRow} onPress={toggleServing} activeOpacity={0.7}>
+                <Text style={styles.mapTitle}>Serving Suggestions</Text>
+                <Text style={styles.mapChevron}>{servingExpanded ? '⌃' : '⌄'}</Text>
+              </TouchableOpacity>
+              {servingExpanded ? (
+                servingLoading ? (
+                  <View style={styles.vintageLoading}>
+                    <ActivityIndicator color={colors.gold} />
+                    <Text style={styles.vintageLoadingText}>Thinking about how best to serve this…</Text>
+                  </View>
+                ) : serving ? (
+                  <View style={styles.servingBubble}>
+                    {serving.temperature ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Temperature · </Text>{serving.temperature}</Text> : null}
+                    {serving.decant ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Decanting · </Text>{serving.decant}</Text> : null}
+                    {serving.glassware ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Glassware · </Text>{serving.glassware}</Text> : null}
+                    {serving.aperitif?.style ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Drink Before · </Text>{serving.aperitif.style}{serving.aperitif.reason ? ` — ${serving.aperitif.reason}` : ''}</Text> : null}
+                    {serving.digestif?.style ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Drink After · </Text>{serving.digestif.style}{serving.digestif.reason ? ` — ${serving.digestif.reason}` : ''}</Text> : null}
+                  </View>
+                ) : (
+                  <Text style={styles.vintageEmpty}>Couldn't load serving suggestions — tap the header to try again.</Text>
+                )
+              ) : null}
+            </View>
+          ) : null}
+
           {/* The Inside Line — the "sommelier best friend" verdict: how this
               vintage actually fared and how this producer stacked up against its
               peers that year. Real in-the-know context, not a dictionary entry. */}
@@ -3026,6 +3083,10 @@ const styles = StyleSheet.create({
   vintageColScore: { flex: 1, textAlign: 'center' },
   vintageColPrice: { flex: 1, textAlign: 'right' },
   vintageFootnote: { fontSize: 11, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
+  // Serving Suggestions bubble — matches the wine card.
+  servingBubble: { backgroundColor: 'rgba(224,184,74,0.06)', borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.lg, marginTop: spacing.md },
+  servingLine: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22, marginBottom: spacing.md },
+  servingTitle: { fontFamily: fonts.bodySemibold, color: colors.gold },
   // Compact 2-column stat grid mirroring the cellar wine card.
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   statCell: { width: '50%', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
