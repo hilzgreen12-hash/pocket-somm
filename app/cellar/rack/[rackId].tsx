@@ -323,6 +323,82 @@ export default function RackGridScreen() {
   const zBase = useRef({ scale: 1, tx: 0, ty: 0 }).current;
   const zCur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
 
+  // ---- Long-press-and-drag to move a thumbnail (DRAFT — needs device tuning) ---
+  // Enabled only at REST (!isZoomed): when zoomed, one finger pans the grid, so a
+  // drag there would conflict. At rest the canvas transform is identity, so we can
+  // hit-test the finger against each cell's measured layout rect (handles gaps /
+  // padding / the large-format row automatically — no transform maths).
+  const [drag, setDrag] = useState<{ row: number; col: number; wine: CellarWine } | null>(null);
+  const [dragHoverKey, setDragHoverKey] = useState<string | null>(null);
+  const dragPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  // Measured geometry: each row's rect (canvas-relative) + each cell's x/width
+  // (row-relative); combined in cellAt(). Canvas window origin for abs→local.
+  const rowRectsRef = useRef<Record<number, { x: number; y: number; w: number; h: number }>>({});
+  const cellXRef = useRef<Record<string, { x: number; w: number }>>({});
+  const canvasRef = useRef<any>(null);
+  const canvasWin = useRef({ x: 0, y: 0 });
+  // Live mirrors so the memoised gesture's callbacks never read stale closures.
+  const dragRef = useRef<{ row: number; col: number; wine: CellarWine } | null>(null);
+  const slotMapRef = useRef<Record<string, RackSlot>>({});
+  const gridRowsRef = useRef<Array<{ rowIndex: number; cols: number; slotWidth: number }>>([]);
+  const handleDropRef = useRef<(toRow: number, toCol: number, src?: { row: number; col: number; wineId: string; wineName: string }) => void>(() => {});
+  const onLongPressSlotRef = useRef<(row: number, col: number) => void>(() => {});
+  const slotSizeRef = useRef(40);
+
+  // Which cell is under this absolute (screen) point, using measured rects.
+  function cellAt(absX: number, absY: number): { row: number; col: number } | null {
+    const lx = absX - canvasWin.current.x;
+    const ly = absY - canvasWin.current.y;
+    for (const rd of gridRowsRef.current) {
+      const r = rowRectsRef.current[rd.rowIndex];
+      if (!r || ly < r.y || ly > r.y + r.h) continue;
+      for (let col = 0; col < rd.cols; col++) {
+        const c = cellXRef.current[`${rd.rowIndex},${col}`];
+        if (!c) continue;
+        const cx = r.x + c.x;
+        if (lx >= cx && lx <= cx + c.w) return { row: rd.rowIndex, col };
+      }
+    }
+    return null;
+  }
+
+  const dragGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!isZoomed)
+        .activateAfterLongPress(350)
+        .runOnJS(true)
+        .onStart((e) => {
+          const cell = cellAt(e.absoluteX, e.absoluteY);
+          if (!cell) return;
+          const w = slotMapRef.current[`${cell.row},${cell.col}`]?.wine as CellarWine | undefined;
+          if (!w) return; // empty cell — nothing to pick up
+          const picked = { row: cell.row, col: cell.col, wine: w };
+          dragRef.current = picked;
+          setDrag(picked);
+          dragPos.setValue({ x: e.absoluteX, y: e.absoluteY });
+        })
+        .onUpdate((e) => {
+          if (!dragRef.current) return;
+          dragPos.setValue({ x: e.absoluteX, y: e.absoluteY });
+          const cell = cellAt(e.absoluteX, e.absoluteY);
+          setDragHoverKey(cell ? `${cell.row},${cell.col}` : null);
+        })
+        .onEnd((e) => {
+          const picked = dragRef.current;
+          if (!picked) return;
+          const target = cellAt(e.absoluteX, e.absoluteY);
+          if (target && !(target.row === picked.row && target.col === picked.col)) {
+            handleDropRef.current(target.row, target.col, { row: picked.row, col: picked.col, wineId: picked.wine.id, wineName: picked.wine.wine_name });
+          } else {
+            // Released in place → open the slot action sheet (move / archive / …).
+            onLongPressSlotRef.current(picked.row, picked.col);
+          }
+        })
+        .onFinalize(() => { dragRef.current = null; setDrag(null); setDragHoverKey(null); }),
+    [isZoomed],
+  );
+
   function resetZoom() {
     zBase.scale = 1; zCur.scale = 1; zBase.tx = 0; zBase.ty = 0; zCur.tx = 0; zCur.ty = 0;
     Animated.parallel([
@@ -1675,12 +1751,15 @@ export default function RackGridScreen() {
     }
   }
 
-  async function handleDrop(toRow: number, toCol: number) {
-    if (!moving) return;
-    const sourceWine = moving.wineId;
-    const sourceRackId = moving.sourceRackId;
-    const srcRow = moving.row;
-    const srcCol = moving.col;
+  async function handleDrop(toRow: number, toCol: number, srcOverride?: { row: number; col: number; wineId: string; wineName: string }) {
+    // `srcOverride` comes from the long-press-drag gesture (which knows its own
+    // source cell); the tap-to-move flow uses the `moving` store value.
+    const src = srcOverride ?? (moving ? { row: moving.row, col: moving.col, wineId: moving.wineId, wineName: moving.wineName } : null);
+    if (!src) return;
+    const sourceWine = src.wineId;
+    const sourceRackId = srcOverride ? rackId : moving!.sourceRackId;
+    const srcRow = src.row;
+    const srcCol = src.col;
     const destSlot = slotMap[`${toRow},${toCol}`];
     const destWine = destSlot?.cellar_wine_id ?? null;
     setPendingMove(null);
@@ -1897,6 +1976,7 @@ export default function RackGridScreen() {
       return (
         <View
           key={rowDef.rowIndex}
+          onLayout={(e) => { const l = e.nativeEvent.layout; rowRectsRef.current[rowDef.rowIndex] = { x: l.x, y: l.y, w: l.width, h: l.height }; }}
           style={[styles.gridRow, { gap: GAP, marginBottom: GAP }, isLargeFormat && { marginBottom: GAP * 2 }]}
         >
           {Array.from({ length: rowDef.cols }, (_, col) => {
@@ -1911,9 +1991,12 @@ export default function RackGridScreen() {
             const isDimmed = highlightedIds.size > 0 && !!wine && !highlightedIds.has(wine.id);
             const isMovingSource = !!moving && moving.sourceRackId === rackId && moving.row === rowDef.rowIndex && moving.col === col;
             const isMultiSelected = multiSlots.has(`${rowDef.rowIndex},${col}`);
+            const isDragSource = !!drag && drag.row === rowDef.rowIndex && drag.col === col;
+            const isDropTarget = dragHoverKey === slotKey && !isDragSource;
             return (
               <TouchableOpacity
                 key={col}
+                onLayout={(e) => { cellXRef.current[slotKey] = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width }; }}
                 style={[
                   styles.slot,
                   { width: rowDef.slotWidth, height: rowDef.slotWidth },
@@ -1922,6 +2005,8 @@ export default function RackGridScreen() {
                   isDimmed && styles.slotDimmed,
                   isMovingSource && styles.slotMovingSource,
                   isMultiSelected && styles.slotMultiSelected,
+                  isDragSource && styles.slotDragging,
+                  isDropTarget && styles.slotDropTarget,
                 ]}
                 onPress={() => openSlot(rowDef.rowIndex, col)}
                 onLongPress={() => onLongPressSlot(rowDef.rowIndex, col)}
@@ -1954,6 +2039,14 @@ export default function RackGridScreen() {
       );
     });
   }
+
+  // Keep the drag gesture's refs pointing at the latest values/functions each
+  // render (the gesture object itself is memoised on [isZoomed]).
+  slotMapRef.current = slotMap;
+  gridRowsRef.current = gridRows;
+  slotSizeRef.current = slotSize;
+  handleDropRef.current = handleDrop;
+  onLongPressSlotRef.current = onLongPressSlot;
 
   return (
     <GestureDetector gesture={swipeGesture}>
@@ -2293,10 +2386,15 @@ export default function RackGridScreen() {
           style={styles.rackViewport}
           onLayout={(e) => { vpSize.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }; }}
         >
-          <GestureDetector gesture={inlineZoomGesture}>
+          <GestureDetector gesture={Gesture.Simultaneous(inlineZoomGesture, dragGesture)}>
             <Animated.View
+              ref={canvasRef}
               style={[styles.rackCanvas, { transform: [{ translateX: zTx }, { translateY: zTy }, { scale: zScale }] }]}
-              onLayout={(e) => { contentSize.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }; }}
+              onLayout={(e) => {
+                contentSize.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height };
+                // Cache the canvas' window origin so a drag can map abs→local at rest.
+                canvasRef.current?.measureInWindow((x: number, y: number) => { canvasWin.current = { x, y }; });
+              }}
             >
             {!fullScreen && renderRackRows()}
             </Animated.View>
@@ -2306,7 +2404,18 @@ export default function RackGridScreen() {
 
       </KeyboardAwareScrollView>
 
-
+      {/* Follow-finger ghost while dragging a thumbnail to a new slot. */}
+      {drag ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.dragGhost,
+            { width: slotSize, height: slotSize, transform: [{ translateX: Animated.subtract(dragPos.x, slotSize / 2) }, { translateY: Animated.subtract(dragPos.y, slotSize / 2) }] },
+          ]}
+        >
+          <LabelThumb path={drag.wine.label_image_path} fallbackText={drag.wine.wine_name} style={styles.dragGhostThumb} radius={4} frame={2} />
+        </Animated.View>
+      ) : null}
 
       {/* Placement modal — opens when the user taps an empty slot while a
           pending wine is set. Asks how many bottles to place; orientation
@@ -3003,6 +3112,11 @@ const styles = StyleSheet.create({
   counterBtnText: { fontSize: 22, color: colors.text, fontFamily: fonts.headingRegular },
   counterValue: { fontSize: 24, fontFamily: fonts.bodyBold, color: colors.text, minWidth: 40, textAlign: 'center' },
   slotMovingSource: { borderColor: colors.gold, borderWidth: 2, opacity: 0.4 },
+  // Drag-to-move: the picked-up cell dims; the hovered drop cell gets a gold ring.
+  slotDragging: { opacity: 0.3 },
+  slotDropTarget: { borderColor: colors.gold, borderWidth: 2.5 },
+  dragGhost: { position: 'absolute', left: 0, top: 0, zIndex: 50, borderRadius: 6, borderWidth: 2, borderColor: colors.gold, backgroundColor: colors.surface, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
+  dragGhostThumb: { width: '100%', height: '100%' },
   movingBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, padding: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)' },
   // Inter — banner body
   movingBannerText: { flex: 1, fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 18 },
