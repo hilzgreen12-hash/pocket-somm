@@ -25,6 +25,7 @@ import { fetchPlacementsForWines, fetchPlacementsForWine, placedCount, releaseBo
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { RenameModal } from '../../src/components/RenameModal';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import { foldAccents } from '../../src/utils/wineIdentity';
@@ -1255,10 +1256,16 @@ export default function FullCellarListScreen() {
               >
                 <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} />
                 <View style={styles.rowMain}>
-                  <Text style={styles.rowName}>
-                    {headerLine}
-                  </Text>
-                  {subParts.length > 0 && <Text style={styles.rowDetail} numberOfLines={1}>{subParts.join(' · ')}</Text>}
+                  {/* White producer+name, gold region + grape beneath (shared header). */}
+                  <WineIdentityHeader
+                    producer={w.producer}
+                    wineName={w.wine_name}
+                    vintage={w.vintage}
+                    region={w.region}
+                    grape={w.grape_variety}
+                    size="sm"
+                    align="left"
+                  />
                   {isArchiveView && w.archived_at ? (
                     <Text style={styles.rowArchivedDate}>Archived {new Date(w.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
                   ) : null}

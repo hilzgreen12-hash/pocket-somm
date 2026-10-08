@@ -10,6 +10,7 @@ import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement, s
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
 import { WineSearchModal } from '../../../src/components/WineSearchModal';
+import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
 import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine, addCellarWineRemoval, getCellarWineById } from '../../../src/api/cellar';
 import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../../../src/api/racks';
 import { fetchStorageLocations } from '../../../src/api/storageLocations';
@@ -1083,12 +1084,17 @@ export default function StorageLocationScreen() {
         ) : null}
         <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.thumb} />
         <View style={styles.wineMain}>
-          <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
-          <View style={styles.wineMetaRow}>
-            {w.region ? <Text style={styles.wineMeta} numberOfLines={1}>{w.region}</Text> : null}
-            {w.region ? <Text style={styles.wineMetaDot}>·</Text> : null}
-            <Text style={styles.wineMeta}>{w.quantity ?? 0} x {bottleSizeCl(w.bottle_size_ml ?? 750)}cl</Text>
-          </View>
+          {/* White producer+name, gold region + grape beneath (shared header). */}
+          <WineIdentityHeader
+            producer={w.producer}
+            wineName={w.wine_name}
+            vintage={w.vintage}
+            region={w.region}
+            grape={w.grape_variety}
+            size="sm"
+            align="left"
+          />
+          <Text style={[styles.wineMeta, { marginTop: 2 }]}>{w.quantity ?? 0} x {bottleSizeCl(w.bottle_size_ml ?? 750)}cl</Text>
         </View>
       </TouchableOpacity>
     );

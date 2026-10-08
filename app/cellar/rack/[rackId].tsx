@@ -27,6 +27,7 @@ import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { ArchiveNoteModal } from '../../../src/components/ArchiveNoteModal';
 import { foldAccents } from '../../../src/utils/wineIdentity';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
+import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
 import { effectiveMaturity } from '../../../src/utils/maturity';
 import { RenameModal } from '../../../src/components/RenameModal';
 import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
@@ -2219,9 +2220,17 @@ export default function RackGridScreen() {
                           delayLongPress={400}
                         >
                           <View style={styles.wineRowMain}>
-                            <Text style={[styles.wineRowName, active && styles.wineRowNameActive]} numberOfLines={2}>
-                              {wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}
-                            </Text>
+                            {/* White producer+name, gold region + grape beneath. */}
+                            <WineIdentityHeader
+                              producer={wine.producer}
+                              wineName={wine.wine_name}
+                              vintage={wine.vintage}
+                              region={wine.region}
+                              grape={wine.grape_variety}
+                              size="sm"
+                              align="left"
+                              numberOfLinesName={2}
+                            />
                           </View>
                           <Text style={[styles.wineRowCount, active && styles.wineRowCountActive]}>
                             {count} {count === 1 ? 'bottle' : 'bottles'}
