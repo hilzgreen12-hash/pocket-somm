@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { searchWines, type WineSearchResult } from '../api/label';
-import { formatWineTitle } from '../utils/wineTitle';
+import { WineIdentityHeader } from './WineIdentityHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -82,12 +82,16 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
             <>
               {results.map((r, i) => (
                 <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.option} onPress={() => choose(r)} activeOpacity={0.7}>
-                  <Text style={styles.optionName}>
-                    {formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}
-                  </Text>
-                  {r.style ? (
-                    <Text style={styles.optionMeta} numberOfLines={1}>{r.style}</Text>
-                  ) : null}
+                  {/* White producer+name, gold region + grape beneath (shared header). */}
+                  <WineIdentityHeader
+                    producer={r.producer}
+                    wineName={r.wineName}
+                    vintage={r.vintage}
+                    region={r.region}
+                    grape={r.grape}
+                    size="sm"
+                    align="left"
+                  />
                 </TouchableOpacity>
               ))}
               {/* Always-present escape hatch: rare bottles Vinster doesn't know

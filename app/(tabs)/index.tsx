@@ -21,6 +21,8 @@ import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { prepareImageBase64, scanLabel, searchWines, searchLabelImages, type WineSearchResult } from '../../src/api/label';
 import { File, Paths } from 'expo-file-system';
 import { formatWineTitle } from '../../src/utils/wineTitle';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { tidyWineRegion } from '../../src/utils/regionFormat';
 import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
@@ -518,9 +520,10 @@ export default function ScanLandingScreen() {
                             the full wine + vintage the user searched. */}
                         <View style={styles.searchOptionNameRow}>
                           {r.colour ? <View style={[styles.colourDot, { backgroundColor: colourDotColour(r.colour) }]} /> : null}
-                          <Text style={styles.searchOptionName}>{`${formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}${r.vintage ? ` ${r.vintage}` : ''}`}</Text>
+                          <Text style={styles.searchOptionName}>{wineHeaderLine(r.producer, r.wineName, r.vintage)}</Text>
                         </View>
-                        {r.region || r.style ? <Text style={styles.searchOptionMeta} numberOfLines={1}>{[r.region, r.style].filter(Boolean).join(' · ')}</Text> : null}
+                        {/* Region + grape in gold beneath the white name (shared style). */}
+                        {tidyWineRegion(r.region) || r.grape ? <Text style={[styles.searchOptionMeta, { color: colors.gold }]} numberOfLines={1}>{[tidyWineRegion(r.region), r.grape].filter(Boolean).join(' · ')}</Text> : null}
                       </TouchableOpacity>
                     ))}
                     {!searchLoading && wineSearch.trim().length >= 3 ? (
