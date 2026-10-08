@@ -1,53 +1,94 @@
-// Wine disambiguation candidates.
+// Wine disambiguation candidates — "which wine is this?" after a weak scan.
 //
-// When a scanned label is identified weakly (Wine Intel came back with no
-// critic score and no market price — a strong sign the identity was off, e.g. a
-// cuvée name missed on the label), the app auto-surfaces a "which wine is this?"
-// list. This function asks Claude — which knows producers' ranges — for the
-// real, distinct wines that producer makes that could match the label, so the
-// user can confirm the exact one and intel regenerates for it.
+// GROUNDED-FIRST: we look the producer up in the real wines_catalog and offer
+// those actual bottlings. Only when the catalog has nothing for that producer do
+// we fall back to the LLM (which can mis-remember a range). This stops invented
+// cuvées (e.g. a fake "Le Roteboeuf" for Roc de Cambes) from ever being offered.
 //
 // Producer is treated as reliable (it reads consistently off a label); the
 // ambiguity is in the specific bottling/cuvée.
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { createClient } from 'npm:@supabase/supabase-js';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
 interface Candidate {
-  wineName: string;   // full distinguishing bottling/cuvée name
+  wineName: string;
   region: string | null;
   style: string | null;
+}
+
+// Generic winery-type words dropped from the producer before the catalog search,
+// so "Château Roc de Cambes" / "Kellerei Cantina Terlan" still match the stored
+// producer. (search_wines_catalog is token-AND, so an extra "Château" would
+// otherwise exclude every real row.)
+const WINERY_WORDS = new Set([
+  'chateau', 'château', 'domaine', 'domaines', 'weingut', 'kellerei', 'cantina', 'cantine',
+  'bodega', 'bodegas', 'tenuta', 'tenute', 'azienda', 'maison', 'estate', 'winery',
+  'vineyard', 'vineyards', 'wines', 'wine', 'family', 'champagne',
+]);
+
+function producerQuery(producer: string): string {
+  return producer
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t && !WINERY_WORDS.has(t))
+    .join(' ')
+    .trim() || producer.trim();
+}
+
+// Strip a leading repeat of the producer from a catalog wine_name, so the tile
+// shows just the distinguishing cuvée.
+function cuveeOnly(producer: string, wineName: string): string {
+  const p = producer.trim().toLowerCase();
+  const n = wineName.trim();
+  if (p && n.toLowerCase().startsWith(p + ' ')) return n.slice(p.length).trim();
+  return n;
 }
 
 Deno.serve(async (req) => {
   try {
     const { producer, region, wineName, vintage } = await req.json().catch(() => ({}));
-    if (!producer || !String(producer).trim()) {
-      return json({ candidates: [] }, 200);
-    }
+    if (!producer || !String(producer).trim()) return json({ candidates: [] }, 200);
 
+    // 1) GROUNDED: real bottlings for this producer from the catalog.
+    try {
+      const q = producerQuery(String(producer));
+      const { data: rows } = await db.rpc('search_wines_catalog', { q, lim: 12 });
+      if (Array.isArray(rows) && rows.length) {
+        const seen = new Set<string>();
+        const grounded: Candidate[] = [];
+        for (const r of rows as any[]) {
+          const name = cuveeOnly(String(r.producer ?? ''), String(r.wine_name ?? '')).trim();
+          const key = name.toLowerCase();
+          if (!name || seen.has(key)) continue;
+          seen.add(key);
+          grounded.push({ wineName: name, region: r.region ?? null, style: r.style ?? null });
+          if (grounded.length >= 8) break;
+        }
+        if (grounded.length) return json({ candidates: grounded, source: 'catalog' }, 200);
+      }
+    } catch (_e) { /* fall through to the LLM */ }
+
+    // 2) FALLBACK: LLM, only when the catalog knows nothing of this producer.
     const prompt = `A wine label was scanned and identified as:
 - Producer: "${producer ?? ''}"
 - Region: "${region ?? ''}"
 - Wine name / cuvée: "${wineName ?? ''}"
 - Vintage: "${vintage ?? ''}"
 
-First, if the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans).
-
-Then decide how WIDE the list should be, using what was actually read from the label — be thoughtful, not exhaustive:
-- If the Region/appellation OR the Wine name/cuvée was clearly read (e.g. Region "Cornas", or a legible cuvée), list ONLY the bottlings this producer makes that MATCH that appellation/cuvée. The ambiguity is just WHICH of those it is — e.g. a grower's two different Cornas cuvées. Do NOT include their wines from OTHER appellations or ranges; that only adds noise and confuses the user.
-- ONLY when BOTH the appellation and the cuvée are blank/unreadable should you fall back to the producer's broader core range (up to 8), so the user can still find it. A well-known range is easy to recall (e.g. Pazo de Señoráns makes the standard Albariño, the aged Selección de Añada, and the sweet Sol de Señoráns).
-
-List the REAL, DISTINCT wines that fit the above (up to 8), ordered by how likely each is given the partial reading.
+If the producer text is a misspelling/OCR misread, silently correct it to the real producer. Then list the REAL, DISTINCT wines that producer makes that could match the label (up to 8), most likely first. If a region/cuvée was clearly read, list ONLY bottlings matching it.
 
 ACCURACY IS CRITICAL — a wrong list is worse than a short one:
-- Do NOT invent bottlings. Only real wines this producer actually makes.
-- Do NOT list the same wine under several near-identical names (e.g. never "Clos d'Ambonnay", "Clos d'Ambonnay Brut" and "Clos d'Ambonnay Vintage" — that is ONE wine). One entry per distinct wine.
-- If unsure of the full range, list FEWER wines you are certain of rather than padding with guesses.
+- NEVER invent a bottling. Only real wines this producer genuinely makes. If unsure, return FEWER.
+- One entry per distinct wine (don't split one wine across near-identical names).
+- For Bordeaux, give the appellation (+ cru only if real) then "Bordeaux", no "France"; for Burgundy give appellation/sub/cru then "Burgundy", no "France".
 
-Return ONLY a JSON array (no markdown, no prose) of objects with exactly these keys:
-- "wineName": ONLY the distinguishing cuvée/bottling name — NEVER repeat the producer's name in it (e.g. for Pazo de Señorans return "Rosal", not "Pazo de Señorans Rosal"; return "Grange", "Bin 707 Cabernet Sauvignon", "Cuvée Sir Winston Churchill"). For a flagship wine sold simply under the producer's own name, use its grape or appellation as the name (e.g. "Albariño")
+Return ONLY a JSON array (no markdown) of objects with keys:
+- "wineName": ONLY the distinguishing cuvée/bottling name, never repeating the producer
 - "region": the wine's region/appellation, or null
 - "style": one of "Red", "White", "Rosé", "Sparkling", "Fortified", or null`;
 
@@ -58,7 +99,7 @@ Return ONLY a JSON array (no markdown, no prose) of objects with exactly these k
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = resp.content[0]?.type === 'text' ? resp.content[0].text : '';
+    const text = (resp.content.find((b) => b.type === 'text') as { text?: string } | undefined)?.text ?? '';
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const match = cleaned.match(/\[[\s\S]*\]/);
     if (!match) return json({ candidates: [] }, 200);
@@ -75,17 +116,13 @@ Return ONLY a JSON array (no markdown, no prose) of objects with exactly these k
       .filter((c) => c.wineName)
       .slice(0, 8);
 
-    return json({ candidates }, 200);
+    return json({ candidates, source: 'llm' }, 200);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('wine-candidates error:', message);
+    console.error('wine-candidates error:', err instanceof Error ? err.message : String(err));
     return json({ candidates: [] }, 200);
   }
 });
 
 function json(payload: unknown, status: number): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
 }
