@@ -3089,7 +3089,7 @@ const styles = StyleSheet.create({
   destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
   // The single divider between "Another slot in this rack" and the first home
   // storage destination is gold, to set the in-rack option apart from the rest.
-  destRowGoldSep: { borderBottomColor: colors.gold, borderBottomWidth: 1.5 },
+  destRowGoldSep: { borderBottomColor: colors.goldDim, borderBottomWidth: 1.5 },
   destName: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, flexShrink: 1 },
   destType: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6 },
   // Top-right header "Edit" link — opens the rack-management modal, consistent

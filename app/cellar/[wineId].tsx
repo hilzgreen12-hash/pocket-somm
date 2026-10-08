@@ -1864,6 +1864,13 @@ export default function CellarWineDetail() {
               </TouchableOpacity>
             );
           })()}
+          {/* Archive bottles FROM the cellar lives here, beneath View in Cellar —
+              asks how many (and which location if split), then confirms. */}
+          {bottlesInCellar > 0 && !isArchived ? (
+            <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}>
+              <Text style={styles.statAction}>Add to Archive →</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Archive</Text>
@@ -1875,14 +1882,11 @@ export default function CellarWineDetail() {
               {lastArchivedAt ? `, ${new Date(lastArchivedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
             </Text>
           )}
-          {/* Archive bottles from the cellar — asks how many (and which location
-              if the wine is filed in several), then confirms. Replaces the old
-              "I drank some" wording on the cellar side. */}
-          {bottlesInCellar > 0 && !isArchived ? (
-            <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}>
-              <Text style={styles.statAction}>Add to Archive →</Text>
-            </TouchableOpacity>
-          ) : null}
+          {/* View the global Cellar Archive (the Add-to-Archive action now lives
+              under Bottles in My Cellar). */}
+          <TouchableOpacity onPress={() => router.push('/cellar/archive' as any)} activeOpacity={0.7}>
+            <Text style={styles.statAction}>View Archive →</Text>
+          </TouchableOpacity>
           {/* Quick access to this wine's archive/removal history — only when there
               is one. */}
           {removals.length > 0 ? (
