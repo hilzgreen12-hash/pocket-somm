@@ -616,10 +616,20 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
               <Text style={styles.successWine}>{success.wine}</Text>
               {success.meta ? <Text style={styles.successMeta}>{success.meta}</Text> : null}
               <Text style={styles.successDetail}>{success.detail}</Text>
-              <TouchableOpacity onPress={() => { handleClose(); router.push(success.viewRoute as any); }} activeOpacity={0.7} style={styles.viewLinkRow}>
-                <Text style={styles.viewLink}>{success.viewLabel} →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={reset} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Another Command</Text></TouchableOpacity>
+              {success.action === 'move' ? (
+                // Move: the destination is a primary BUTTON, and no "Another
+                // Command" — just View in <destination> + Done.
+                <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={() => { handleClose(); router.push(success.viewRoute as any); }} activeOpacity={0.8}>
+                  <Text style={styles.primaryBtnText}>{success.viewLabel}</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity onPress={() => { handleClose(); router.push(success.viewRoute as any); }} activeOpacity={0.7} style={styles.viewLinkRow}>
+                    <Text style={styles.viewLink}>{success.viewLabel} →</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={reset} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Another Command</Text></TouchableOpacity>
+                </>
+              )}
               <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Done</Text></TouchableOpacity>
             </>
           )}
