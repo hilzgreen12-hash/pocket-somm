@@ -141,6 +141,11 @@ export default function RackGridScreen() {
   // (mode 'move') and "Add More Bottles" (mode 'addMore'). Carries the tapped slot so
   // a move to another slot in this rack knows its source.
   const [destPicker, setDestPicker] = useState<{ mode: 'move' | 'addMore'; wineId: string; wineName: string; row: number; col: number } | null>(null);
+  // "How many bottles to move?" — shown when moving to a DIFFERENT home storage
+  // location (any destination except another slot in this rack) and more than one
+  // bottle of the wine sits in this rack. `run` carries the chosen destination.
+  const [moveQty, setMoveQty] = useState<{ wineName: string; movable: number; run: (n: number) => void } | null>(null);
+  const [moveQtyStr, setMoveQtyStr] = useState('1');
   // "Add More Bottles to <alt cellar / bin / Full Cellar List>" → how many? prompt.
   const [addMoreDest, setAddMoreDest] = useState<{ wineId: string; wineName: string; kind: 'location' | 'bin' | 'cellarList'; id?: string; name: string } | null>(null);
   const [addMoreCountStr, setAddMoreCountStr] = useState('1');
@@ -1060,13 +1065,23 @@ export default function RackGridScreen() {
   // Move a placed wine OUT of the rack grid into an Alt Cellar (loose) — clears
   // its rack slots and files those bottles as a location PLACEMENT (unified
   // model). The wine's total is unchanged; its bottles just relocate.
-  async function moveWineToLocation(wineId: string, locId: string) {
+  // Gate a move to a DIFFERENT home storage location behind a "how many?" prompt
+  // when more than one bottle of the wine sits in this rack. One bottle → move it
+  // straight away. (Moving to another slot in THIS rack skips this — it's 1:1.)
+  function startMove(wineId: string, wineName: string, run: (n: number) => void) {
+    const movable = slotsForWine(wineId);
+    setDestPicker(null);
+    if (movable > 1) { setMoveQtyStr(String(movable)); setMoveQty({ wineName, movable, run }); }
+    else run(movable || 1);
+  }
+
+  async function moveWineToLocation(wineId: string, locId: string, count?: number) {
     try {
       // Move only the bottles that are in THIS rack (a wine can also sit in another
       // rack/fridge), and free only this rack's slots — not every rack it's in.
       // If somehow there are no slots here, bail rather than fall back to `|| 1` and
       // add a phantom location bottle (placed would exceed quantity → heal inflates).
-      const movedCount = slotsForWine(wineId);
+      const movedCount = Math.min(count ?? slotsForWine(wineId), slotsForWine(wineId));
       if (movedCount <= 0) { setLocBinPicker(null); setDestPicker(null); return; }
       await removeSlotsForWine(wineId, movedCount, rackId);
       await addLocationPlacement(wineId, locId, null, movedCount);
@@ -1104,8 +1119,8 @@ export default function RackGridScreen() {
 
   // MOVE this rack's bottles of a wine into ANOTHER rack/fridge: free them here (they
   // become loose), then open the target rack in select-slots mode to place them.
-  async function moveToAnotherRack(wineId: string, targetRackId: string) {
-    const movedCount = slotsForWine(wineId);
+  async function moveToAnotherRack(wineId: string, targetRackId: string, count?: number) {
+    const movedCount = Math.min(count ?? slotsForWine(wineId), slotsForWine(wineId));
     if (movedCount <= 0) { setDestPicker(null); return; }
     try {
       await removeSlotsForWine(wineId, movedCount, rackId);
@@ -1123,8 +1138,8 @@ export default function RackGridScreen() {
 
   // MOVE this rack's bottles of a wine to the Full Cellar List (unplace): free the
   // slots here, quantity unchanged so the bottles sit loose in the cellar.
-  async function unplaceFromRack(wineId: string, wineName: string) {
-    const movedCount = slotsForWine(wineId);
+  async function unplaceFromRack(wineId: string, wineName: string, count?: number) {
+    const movedCount = Math.min(count ?? slotsForWine(wineId), slotsForWine(wineId));
     if (movedCount <= 0) { setDestPicker(null); return; }
     try {
       await removeSlotsForWine(wineId, movedCount, rackId);
@@ -1393,11 +1408,11 @@ export default function RackGridScreen() {
       buttons: [
         {
           text: 'Add More Bottles',
-          onPress: () => setDestPicker({ mode: 'addMore', wineId, wineName: wine.wine_name, row, col }),
+          onPress: () => setDestPicker({ mode: 'addMore', wineId, wineName: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name, row, col }),
         },
         {
           text: 'Move Bottles',
-          onPress: () => setDestPicker({ mode: 'move', wineId, wineName: wine.wine_name, row, col }),
+          onPress: () => setDestPicker({ mode: 'move', wineId, wineName: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name, row, col }),
         },
         {
           text: 'Edit Wine',
@@ -2299,11 +2314,11 @@ export default function RackGridScreen() {
       <Modal visible={destPicker !== null} transparent animationType="fade" onRequestClose={() => setDestPicker(null)}>
         <View style={styles.placeOverlay}>
           <View style={styles.placeSheet}>
-            <Text style={styles.placeTitle}>{destPicker?.mode === 'move' ? 'Move to' : 'Add More Bottles to'}</Text>
-            <Text style={styles.placeBody} numberOfLines={2}>{destPicker?.wineName}</Text>
+            <Text style={styles.placeTitle} numberOfLines={2}>{destPicker?.mode === 'move' ? `Move ${destPicker?.wineName}` : 'Add More Bottles to'}</Text>
+            {destPicker?.mode === 'move' ? null : <Text style={styles.placeBody} numberOfLines={2}>{destPicker?.wineName}</Text>}
             <ScrollView style={{ maxHeight: 360, alignSelf: 'stretch' }}>
               {destPicker?.mode === 'move' ? (
-                <TouchableOpacity style={styles.destRow} activeOpacity={0.7} onPress={() => {
+                <TouchableOpacity style={[styles.destRow, styles.destRowGoldSep]} activeOpacity={0.7} onPress={() => {
                   if (!destPicker) return;
                   setPendingMove({ sourceRackId: rackId, row: destPicker.row, col: destPicker.col, wineId: destPicker.wineId, wineName: destPicker.wineName });
                   setDestPicker(null);
@@ -2325,7 +2340,7 @@ export default function RackGridScreen() {
               {racks.filter((r) => r.id !== rackId).map((r) => (
                 <TouchableOpacity key={r.id} style={styles.destRow} activeOpacity={0.7} onPress={() => {
                   if (!destPicker) return;
-                  if (destPicker.mode === 'move') void moveToAnotherRack(destPicker.wineId, r.id);
+                  if (destPicker.mode === 'move') { const wid = destPicker.wineId, wn = destPicker.wineName; startMove(wid, wn, (n) => void moveToAnotherRack(wid, r.id, n)); }
                   else { router.push(`/cellar/rack/${r.id}?addMoreWine=${destPicker.wineId}` as any); setDestPicker(null); }
                 }}>
                   <Text style={styles.destName} numberOfLines={1}>{r.name}</Text>
@@ -2345,7 +2360,7 @@ export default function RackGridScreen() {
               {allLocations.map((l) => (
                 <TouchableOpacity key={l.id} style={styles.destRow} activeOpacity={0.7} onPress={() => {
                   if (!destPicker) return;
-                  if (destPicker.mode === 'move') void moveWineToLocation(destPicker.wineId, l.id);
+                  if (destPicker.mode === 'move') { const wid = destPicker.wineId, wn = destPicker.wineName; startMove(wid, wn, (n) => void moveWineToLocation(wid, l.id, n)); }
                   else { setAddMoreDest({ wineId: destPicker.wineId, wineName: destPicker.wineName, kind: 'location', id: l.id, name: l.name }); setAddMoreCountStr('1'); setDestPicker(null); }
                 }}>
                   <Text style={styles.destName} numberOfLines={1}>{l.name}</Text>
@@ -2354,7 +2369,7 @@ export default function RackGridScreen() {
               ))}
               <TouchableOpacity style={styles.destRow} activeOpacity={0.7} onPress={() => {
                 if (!destPicker) return;
-                if (destPicker.mode === 'move') void unplaceFromRack(destPicker.wineId, destPicker.wineName);
+                if (destPicker.mode === 'move') { const wid = destPicker.wineId, wn = destPicker.wineName; startMove(wid, wn, (n) => void unplaceFromRack(wid, wn, n)); }
                 else { setAddMoreDest({ wineId: destPicker.wineId, wineName: destPicker.wineName, kind: 'cellarList', name: 'your Full Cellar List' }); setAddMoreCountStr('1'); setDestPicker(null); }
               }}>
                 <Text style={styles.destName}>Full Cellar List (unplaced)</Text>
@@ -2366,6 +2381,38 @@ export default function RackGridScreen() {
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* "How many bottles to move?" — shown when moving to a different home
+          storage location and more than one bottle sits in this rack. */}
+      <Modal visible={moveQty !== null} transparent animationType="fade" onRequestClose={() => setMoveQty(null)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
+          <View style={styles.placeSheet}>
+            <Text style={styles.placeTitle}>How many bottles?</Text>
+            <Text style={styles.placeBody}>You have {moveQty?.movable} bottle{moveQty?.movable === 1 ? '' : 's'} of {moveQty?.wineName} in this rack. How many would you like to move?</Text>
+            <TextInput
+              style={styles.placeInput}
+              value={moveQtyStr}
+              onChangeText={(t) => setMoveQtyStr(t.replace(/[^0-9]/g, '').slice(0, 3))}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              selectTextOnFocus
+            />
+            <TouchableOpacity style={styles.placeConfirmBtn} onPress={() => {
+              const q = moveQty; if (!q) return;
+              const n = Math.max(1, Math.min(q.movable, parseInt(moveQtyStr, 10) || 1));
+              setMoveQty(null);
+              q.run(n);
+            }}>
+              <Text style={styles.placeConfirmText}>Move Bottles</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setMoveQty(null)} style={styles.placeCancel}>
+              <Text style={styles.placeCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* "How many bottles to add?" for a non-rack Add More destination. */}
@@ -2860,6 +2907,9 @@ const styles = StyleSheet.create({
   placeCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   // Destination rows in the "Move to a Cellar or Bin" picker.
   destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
+  // The single divider between "Another slot in this rack" and the first home
+  // storage destination is gold, to set the in-rack option apart from the rest.
+  destRowGoldSep: { borderBottomColor: colors.gold, borderBottomWidth: 1.5 },
   destName: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, flexShrink: 1 },
   destType: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6 },
   // Top-right header "Edit" link — opens the rack-management modal, consistent
