@@ -97,7 +97,28 @@ export function CellarInsightsCarousel() {
     });
   }
 
-  // 2) Bottles archived last month (collage of their labels).
+  // 2) Your Favourite Chef — the chef inspiration referenced most across saved
+  // recipe pairings. Only shown once there's a genuine favourite (≥2 references),
+  // so it reflects real engagement rather than a single one-off recipe.
+  const chefCounts = new Map<string, number>();
+  for (const s of recipeSessions as any[]) {
+    for (const p of (s.pairings ?? []) as { chefInspiration?: string | null }[]) {
+      const c = (p.chefInspiration ?? '').trim();
+      if (c) chefCounts.set(c, (chefCounts.get(c) ?? 0) + 1);
+    }
+  }
+  let favChef: string | null = null;
+  let favCount = 0;
+  for (const [c, n] of chefCounts) { if (n > favCount) { favCount = n; favChef = c; } }
+  if (favChef && favCount >= 2) {
+    tiles.push({
+      key: 'fav-chef', icon: 'ribbon-outline',
+      title: 'Your Favourite Chef', meta: favChef,
+      onTap: () => router.push('/chef/archive' as any),
+    });
+  }
+
+  // 3) Bottles archived last month (collage of their labels).
   const archivedBottles = archivedLM.reduce((s: number, w: any) => s + (w.quantity ?? 0), 0);
   if (archivedBottles > 0) {
     tiles.push({
