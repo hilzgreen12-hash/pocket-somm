@@ -386,6 +386,9 @@ export default function CellarWineDetail() {
   const [marketOpen, setMarketOpen] = useState(false);
   // Live per-vintage Wine-Searcher table (same as the Wine Intel screen).
   const [vintageRows, setVintageRows] = useState<VintageComparisonRow[] | null>(null);
+  // Written market & vintage summary — the fallback when Wine-Searcher has no
+  // per-vintage listings to table.
+  const [marketNote, setMarketNote] = useState<Awaited<ReturnType<typeof generateMarketVintage>> | null>(null);
   const [generatingServing, setGeneratingServing] = useState(false);
   const [generatingMarket, setGeneratingMarket] = useState(false);
 
@@ -792,6 +795,12 @@ export default function CellarWineDetail() {
         Number.isFinite(scanned) ? scanned : null,
       );
       setVintageRows(rows);
+      // Wine-Searcher had no per-vintage data → fall back to Vinster's written
+      // market & vintage summary (comparing vintages either side) instead of a
+      // dead end.
+      if (rows.length === 0) {
+        try { setMarketNote(await generateMarketVintage(wine, currency)); } catch { /* leave null */ }
+      }
     } catch {
       showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
     } finally {
@@ -2177,13 +2186,15 @@ export default function CellarWineDetail() {
                     <Text style={styles.diveDeeperLink}>Refresh →</Text>
                   </TouchableOpacity>
                 </View>
+              ) : vintageRows && marketNote ? (
+                // No Wine-Searcher per-vintage data → Vinster's written summary.
+                <View style={styles.servingBubble}>
+                  <Text style={styles.marketMissingNote}>Wine-Searcher has no per-vintage market data for this wine, so here's Vinster's assessment:</Text>
+                  {marketNote.vintage ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Vintage · </Text>{marketNote.vintage}</Text> : null}
+                  {marketNote.market ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Market · </Text>{marketNote.market}</Text> : null}
+                </View>
               ) : vintageRows ? (
-                <>
-                  <Text style={styles.tastingNotes}>Wine-Searcher has no per-vintage listings for this wine.</Text>
-                  <TouchableOpacity onPress={handleGenerateMarket} activeOpacity={0.7}>
-                    <Text style={styles.diveDeeperLink}>Try again →</Text>
-                  </TouchableOpacity>
-                </>
+                <Text style={styles.tastingNotes}>Wine-Searcher has no per-vintage market data for this wine.</Text>
               ) : (
                 <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateMarket} activeOpacity={0.7}>
                   <Text style={styles.generateNoteBtnText}>Generate</Text>
@@ -2821,6 +2832,7 @@ const styles = StyleSheet.create({
   // in gold, with a clear gap between items.
   servingBubble: { backgroundColor: 'rgba(224,184,74,0.06)', borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.lg },
   servingTitle: { fontFamily: fonts.bodySemibold, color: colors.gold },
+  marketMissingNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.md },
   servingSubhead: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   // Per-vintage Wine-Searcher table — mirrors the Wine Intel screen.
   vintageLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
