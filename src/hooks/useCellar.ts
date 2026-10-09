@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
 import { getCellarWines, getWishListWines, addCellarWine, updateCellarWine, deleteCellarWine, archiveCellarWine, getArchivedWines, shareCellar, getCellarShares, removeCellarShare } from '../api/cellar';
+import { fetchAutoLabelUri } from '../api/label';
+import { uploadLabelImage } from '../api/labelPhotos';
 import type { CellarWine } from '../types/wine';
 
 // Review fields that should trigger a community-feed publish when they
@@ -38,7 +40,24 @@ export function useCellar() {
   // background from the Full Cellar List (see services/maturityBackfill) so the
   // maturity filter still works without slowing down the add.
   const addWine = useMutation({
-    mutationFn: (wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>) => addCellarWine(wine),
+    mutationFn: async (wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>) => {
+      const saved = await addCellarWine(wine);
+      // Best-effort: give an imageless, non-wishlist wine a web label thumbnail so
+      // it never shows as a blank tile. Fire-and-forget — never blocks the add;
+      // any failure is silently ignored.
+      if (saved?.id && !saved.label_image_path && !saved.is_wishlist && saved.producer) {
+        void (async () => {
+          try {
+            const uri = await fetchAutoLabelUri(saved.producer, saved.wine_name);
+            if (!uri) return;
+            const path = await uploadLabelImage(userId, uri, saved.id);
+            await updateCellarWine(saved.id, { label_image_path: path });
+            qc.invalidateQueries({ queryKey: ['cellar', userId] });
+          } catch { /* best-effort thumbnail */ }
+        })();
+      }
+      return saved;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar', userId] }),
   });
 
