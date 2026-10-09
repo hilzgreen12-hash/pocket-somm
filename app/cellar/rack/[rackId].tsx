@@ -368,11 +368,22 @@ export default function RackGridScreen() {
         .enabled(!isZoomed)
         .activateAfterLongPress(350)
         .runOnJS(true)
+        .onBegin(() => {
+          // Re-measure the canvas window at touch time — it drifts as the page
+          // scrolls, so measuring only on layout made the drop cell mis-compute
+          // (the "move popup but nothing moved" bug). Resolves well before the
+          // 350ms long-press activation.
+          canvasRef.current?.measureInWindow((x: number, y: number) => { canvasWin.current = { x, y }; });
+        })
         .onStart((e) => {
           const cell = cellAt(e.absoluteX, e.absoluteY);
           if (!cell) return;
           const w = slotMapRef.current[`${cell.row},${cell.col}`]?.wine as CellarWine | undefined;
-          if (!w) return; // empty cell — nothing to pick up
+          if (!w) {
+            // Empty cell long-press → start/extend multi-select (unchanged).
+            setMultiSlots((prev) => { const n = new Set(prev); n.add(`${cell.row},${cell.col}`); return n; });
+            return;
+          }
           const picked = { row: cell.row, col: cell.col, wine: w };
           dragRef.current = picked;
           setDrag(picked);
@@ -390,10 +401,8 @@ export default function RackGridScreen() {
           const target = cellAt(e.absoluteX, e.absoluteY);
           if (target && !(target.row === picked.row && target.col === picked.col)) {
             handleDropRef.current(target.row, target.col, { row: picked.row, col: picked.col, wineId: picked.wine.id, wineName: picked.wine.wine_name });
-          } else {
-            // Released in place → open the slot action sheet (move / archive / …).
-            onLongPressSlotRef.current(picked.row, picked.col);
           }
+          // Released in place → nothing (the action popup is a short tap now).
         })
         .onFinalize(() => { dragRef.current = null; setDrag(null); setDragHoverKey(null); }),
     [isZoomed],
@@ -968,13 +977,9 @@ export default function RackGridScreen() {
     const slot = slotMap[`${row},${col}`];
     const wine = slot?.wine as CellarWine | null | undefined;
     if (wine) {
-      // Navigate to the same wine detail card that Cellar List uses, so
-      // there's a single source of truth for the wine UI. The from=rack
-      // hint tells the wine card to hide the "In {rack} →" affordance
-      // (which would just point back to where we came from). Pass the exact
-      // slot so archiving/removing from the card frees THIS bottle's slot, not
-      // an arbitrary one of the same wine.
-      router.push(`/cellar/${wine.id}?from=rack&fromRackId=${rackId}&fromRow=${row}&fromCol=${col}` as any);
+      // A short tap on a filled slot opens the action popup (View Wine Intel,
+      // Edit, Add More, Move, Archive/Delete). Long-press is reserved for drag.
+      pickUpSlot(row, col);
     } else if (pendingWineId) {
       if (placePrechosen) {
         // "Add More Bottles" already asked how many up front — place straight
@@ -1497,28 +1502,21 @@ export default function RackGridScreen() {
     const wine = slot?.wine as CellarWine | null | undefined;
     if (!wine || !slot?.cellar_wine_id) return;
     const wineId = slot.cellar_wine_id;
-    // Slimmed to FOUR grouped actions, each opening a focused second step, so the
-    // sheet isn't overwhelming. Order: Add More / Move / Edit / Archive-or-Delete.
+    const title = wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name;
+    // Opened by a SHORT TAP now (long-press is reserved for drag). Grouped with
+    // separators: identity actions, then placement actions, then archive/delete.
     showAlert({
-      title: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name,
-      body: 'What would you like to do?',
+      title,
       buttons: [
-        {
-          text: 'Add More Bottles',
-          onPress: () => setDestPicker({ mode: 'addMore', wineId, wineName: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name, row, col }),
-        },
-        {
-          text: 'Move Bottles',
-          onPress: () => setDestPicker({ mode: 'move', wineId, wineName: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name, row, col }),
-        },
-        {
-          text: 'Edit Wine',
-          onPress: () => router.push(`/cellar/edit-wine/${wineId}` as any),
-        },
-        {
-          text: 'Archive or Delete Bottles',
-          onPress: () => promptArchiveOrDelete(wine),
-        },
+        { separator: true, text: '' },
+        { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${wineId}?from=rack&fromRackId=${rackId}&fromRow=${row}&fromCol=${col}` as any) },
+        { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${wineId}` as any) },
+        { separator: true, text: '' },
+        { text: 'Add More Bottles', onPress: () => setDestPicker({ mode: 'addMore', wineId, wineName: title, row, col }) },
+        { text: 'Move to Another Location', onPress: () => setDestPicker({ mode: 'move', wineId, wineName: title, row, col }) },
+        { separator: true, text: '' },
+        { text: 'Archive or Delete Bottles', onPress: () => promptArchiveOrDelete(wine) },
+        { separator: true, text: '' },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -2009,8 +2007,6 @@ export default function RackGridScreen() {
                   isDropTarget && styles.slotDropTarget,
                 ]}
                 onPress={() => openSlot(rowDef.rowIndex, col)}
-                onLongPress={() => onLongPressSlot(rowDef.rowIndex, col)}
-                delayLongPress={400}
                 activeOpacity={0.8}
               >
                 {wine ? (
@@ -2410,7 +2406,9 @@ export default function RackGridScreen() {
           pointerEvents="none"
           style={[
             styles.dragGhost,
-            { width: slotSize, height: slotSize, transform: [{ translateX: Animated.subtract(dragPos.x, slotSize / 2) }, { translateY: Animated.subtract(dragPos.y, slotSize / 2) }] },
+            // Grows ~35% larger than the slot so the picked-up bottle visibly
+            // lifts under the finger; centred on the touch point.
+            { width: Math.round(slotSize * 1.35), height: Math.round(slotSize * 1.35), transform: [{ translateX: Animated.subtract(dragPos.x, Math.round(slotSize * 1.35) / 2) }, { translateY: Animated.subtract(dragPos.y, Math.round(slotSize * 1.35) / 2) }] },
           ]}
         >
           <LabelThumb path={drag.wine.label_image_path} fallbackText={drag.wine.wine_name} style={styles.dragGhostThumb} radius={4} frame={2} />

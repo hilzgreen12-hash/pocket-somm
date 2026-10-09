@@ -9,6 +9,8 @@ export type AppAlertButton = {
   text: string;
   onPress?: () => void;
   style?: AppAlertButtonStyle;
+  // A divider line between button groups (renders a rule, not a tappable row).
+  separator?: boolean;
 };
 
 export type AppAlertOptions = {
@@ -104,6 +106,7 @@ export function AppAlertHost() {
 
           <View style={styles.primaryStack}>
             {primary.map((btn, i) => {
+              if (btn.separator) return <View key={i} style={styles.alertSep} />;
               const isDestructive = btn.style === 'destructive';
               return (
                 <TouchableOpacity
@@ -177,6 +180,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   primaryStack: { gap: spacing.sm },
+  alertSep: { height: 1, backgroundColor: colors.goldDim, opacity: 0.5, marginVertical: spacing.xs, alignSelf: 'stretch' },
   primaryBtn: {
     borderWidth: 1,
     borderColor: colors.gold,
