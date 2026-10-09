@@ -202,12 +202,19 @@ export function CellarInsightsCarousel() {
     });
   }
 
-  // 6) Wines scanned / searched.
-  if (archive.length > 0) {
-    tiles.push({
-      key: 'scans', icon: 'scan-outline', value: String(archive.length),
-      title: 'Wines Scanned', meta: 'Labels & lists',
-    });
+  // 6) Labels scanned last month — count + a collage of those label thumbnails.
+  {
+    const since = Date.now() - MONTH_MS;
+    const recentLabels = (labels as any[]).filter((l) => l.created_at && new Date(l.created_at).getTime() >= since);
+    const labelThumbs = recentLabels.filter((l) => l.label_image_path).map((l) => l.label_image_path as string).slice(0, 4);
+    if (recentLabels.length > 0) {
+      tiles.push({
+        key: 'labels-month', icon: 'scan-outline',
+        value: labelThumbs.length > 0 ? undefined : String(recentLabels.length),
+        title: 'Labels Scanned Last Month', meta: `${recentLabels.length} Wine Label${recentLabels.length === 1 ? '' : 's'}`,
+        collage: labelThumbs.length > 0 ? labelThumbs : undefined,
+      });
+    }
   }
 
   const shown = tiles.slice(0, MAX_TILES);
