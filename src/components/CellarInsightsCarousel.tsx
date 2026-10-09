@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../api/supabase';
 import { useChefPairingHistory, useChefLabelHistory } from '../hooks/useChefHistory';
 import { useScanHistory } from '../hooks/useScanHistory';
+import { useCellar } from '../hooks/useCellar';
 import { LabelThumb } from './LabelThumb';
 import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
@@ -40,6 +41,10 @@ export function CellarInsightsCarousel() {
   const { sessions: pairingSessions } = useChefPairingHistory();
   const { sessions: recipeSessions } = useChefLabelHistory();
   const { archive } = useScanHistory();
+  const { wines } = useCellar();
+  // Cellar wine thumbnails, by id and as a recent sample — for tile collages.
+  const thumbById = new Map(wines.filter((w) => w.label_image_path).map((w) => [w.id, w.label_image_path as string]));
+  const sampleThumbs = wines.filter((w) => w.label_image_path).slice(0, 4).map((w) => w.label_image_path as string);
 
   // Personality sketch (whichever exists).
   const { data: sketches } = useQuery({
@@ -93,6 +98,8 @@ export function CellarInsightsCarousel() {
     tiles.push({
       key: 'personality', icon: 'person-circle-outline',
       title: 'Your Personality Sketch', meta: splitPersonality(sketchText).title ?? 'Tap to read',
+      // A collage of bottles from the collection the sketch is drawn from.
+      collage: sampleThumbs.length > 0 ? sampleThumbs : undefined,
       onTap: () => router.push(`/profile/personality?category=${sketchCat}` as any),
     });
   }
@@ -144,11 +151,21 @@ export function CellarInsightsCarousel() {
     });
   }
 
-  // 4) Pairings generated.
+  // 4) Pairings generated — collage of the cellar wines that were paired.
   if (pairingSessions.length > 0) {
+    const pairedThumbs: string[] = [];
+    for (const s of pairingSessions as any[]) {
+      for (const r of (s.cellar_result ?? []) as { cellarWineId?: string }[]) {
+        const t = r.cellarWineId ? thumbById.get(r.cellarWineId) : undefined;
+        if (t && !pairedThumbs.includes(t)) pairedThumbs.push(t);
+        if (pairedThumbs.length >= 4) break;
+      }
+      if (pairedThumbs.length >= 4) break;
+    }
     tiles.push({
-      key: 'pairings', icon: 'wine-outline', value: String(pairingSessions.length),
+      key: 'pairings', icon: 'wine-outline', value: pairedThumbs.length > 0 ? undefined : String(pairingSessions.length),
       title: 'Pairings Generated', meta: 'Across your dishes',
+      collage: pairedThumbs.length > 0 ? pairedThumbs : undefined,
       onTap: () => router.push('/(tabs)/chef' as any),
     });
   }
