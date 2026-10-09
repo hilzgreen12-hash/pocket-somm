@@ -7,6 +7,7 @@ import { supabase } from '../api/supabase';
 import { useChefPairingHistory, useChefLabelHistory } from '../hooks/useChefHistory';
 import { useScanHistory } from '../hooks/useScanHistory';
 import { useCellar } from '../hooks/useCellar';
+import { useLabels } from '../hooks/useLabels';
 import { LabelThumb } from './LabelThumb';
 import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
@@ -42,9 +43,9 @@ export function CellarInsightsCarousel() {
   const { sessions: recipeSessions } = useChefLabelHistory();
   const { archive } = useScanHistory();
   const { wines } = useCellar();
-  // Cellar wine thumbnails, by id and as a recent sample — for tile collages.
+  const { labels } = useLabels();
+  // Cellar wine thumbnails by id — for the pairings collage.
   const thumbById = new Map(wines.filter((w) => w.label_image_path).map((w) => [w.id, w.label_image_path as string]));
-  const sampleThumbs = wines.filter((w) => w.label_image_path).slice(0, 4).map((w) => w.label_image_path as string);
 
   // Personality sketch — the LATEST from the history table (personality_sketches),
   // so Home always matches the top of the You-page carousel. Reading
@@ -98,12 +99,33 @@ export function CellarInsightsCarousel() {
   // 1) Personality Sketch.
   const sketchText = latestSketch?.text ?? null;
   const sketchCat: 'wine' | 'recipe' = latestSketch?.category === 'recipe' ? 'recipe' : 'wine';
+  // Collage for the Personality tile — label scans + restaurant thumbnails whose
+  // name actually appears in the sketch (so the pictures relate to the words).
+  // Falls back to the user's recent label scans + a restaurant photo when nothing
+  // matches, rather than unrelated cellar bottles.
+  const sketchLower = (sketchText ?? '').toLowerCase();
+  const nameMentioned = (name: string) =>
+    name.toLowerCase().split(/[^a-zà-ÿ0-9]+/).filter((w) => w.length >= 4).some((w) => sketchLower.includes(w));
+  const matchedThumbs: string[] = [];
+  if (sketchLower) {
+    for (const l of labels as any[]) {
+      if (l.label_image_path && nameMentioned(`${l.producer ?? ''} ${l.wine_name ?? ''} ${l.region ?? ''}`)) matchedThumbs.push(l.label_image_path);
+    }
+    for (const a of archive as any[]) {
+      if (a.restaurantPhotoPath && a.restaurantName && nameMentioned(a.restaurantName)) matchedThumbs.push(a.restaurantPhotoPath);
+    }
+  }
+  const fallbackThumbs = [
+    ...(labels as any[]).filter((l) => l.label_image_path).slice(0, 3).map((l) => l.label_image_path as string),
+    ...(archive as any[]).filter((a) => a.restaurantPhotoPath).slice(0, 1).map((a) => a.restaurantPhotoPath as string),
+  ];
+  const personalityCollage = (matchedThumbs.length > 0 ? matchedThumbs : fallbackThumbs).filter(Boolean).slice(0, 4);
   if (sketchText) {
     tiles.push({
       key: 'personality', icon: 'person-circle-outline',
       title: 'Your Personality Sketch', meta: splitPersonality(sketchText).title ?? 'Tap to read',
       // A collage of bottles from the collection the sketch is drawn from.
-      collage: sampleThumbs.length > 0 ? sampleThumbs : undefined,
+      collage: personalityCollage.length > 0 ? personalityCollage : undefined,
       onTap: () => router.push(`/profile/personality?category=${sketchCat}` as any),
     });
   }
