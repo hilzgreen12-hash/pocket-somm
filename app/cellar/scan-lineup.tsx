@@ -716,21 +716,19 @@ export default function ScanLineupScreen() {
             </>
           ) : (
             <>
-              {/* Yellow stats bar below the header, then the lineup photo. */}
+              {/* Placement target, centred, above the stats — then the photo. */}
+              <Text style={styles.placeInHeader}>Place in {lineupRackName}</Text>
               <View style={styles.statsBar}>
                 <Text style={styles.statsBarText}>
                   {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {lineupWines.length} {lineupWines.length === 1 ? 'Wine' : 'Wines'}
                 </Text>
               </View>
               {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewSmall} resizeMode="contain" /> : null}
-              <View style={styles.listHeadRow}>
-                <Text style={styles.sectionLabel}>Place in {lineupRackName}</Text>
-                {!allConfirmed ? (
-                  <TouchableOpacity onPress={() => setConfirmed(new Set(lineupWines.map((_, i) => i)))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={styles.confirmAllLink}>Confirm all</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
+              {!allConfirmed ? (
+                <TouchableOpacity style={styles.confirmAllRow} onPress={() => setConfirmed(new Set(lineupWines.map((_, i) => i)))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.confirmAllLink}>Confirm all</Text>
+                </TouchableOpacity>
+              ) : null}
               {lineupWines.map((b, i) => {
                 const isOn = confirmed.has(i);
                 const name = [b.producer, b.wineName].filter(Boolean).join(' ') || 'Unreadable bottle';
@@ -764,23 +762,13 @@ export default function ScanLineupScreen() {
                 activeOpacity={0.85}
               >
                 <Text style={styles.primaryBtnText}>
-                  {placing
-                    ? (isManualPlace ? 'Adding…' : 'Placing…')
-                    : `Add ${totalBottles} ${totalBottles === 1 ? 'Bottle' : 'Bottles'}`}
+                  {placing ? (isManualPlace ? 'Adding…' : 'Placing…') : 'Add Wines'}
                 </Text>
-              </TouchableOpacity>
-              {isManualPlace ? (
-                <Text style={styles.hint}>Next you'll tap an empty slot for each bottle, in order.</Text>
-              ) : null}
-              {flipped ? (
-                <Text style={styles.hint}>Photo turned 180° so the labels read the right way up. Note this also reverses the left‑to‑right order — flip back if the preview looks wrong.</Text>
-              ) : null}
-              <TouchableOpacity style={styles.secondaryBtn} onPress={handleFlip} disabled={!rawUri || placing} activeOpacity={0.85}>
-                <Text style={styles.secondaryBtnText}>{flipped ? 'Flip back & re‑read' : 'Labels upside down? Flip & re‑read'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
                 <Text style={styles.secondaryBtnText}>Retake</Text>
               </TouchableOpacity>
+              <Text style={styles.placementHintItalic}>Select the bottle placement on the next screen</Text>
             </>
           )}
         </ScrollView>
@@ -964,6 +952,10 @@ const styles = StyleSheet.create({
   // Rack-placement quick-confirm rows + edit modal.
   listHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs },
   confirmAllLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
+  // "Place in <location>" — centred gold header above the stats.
+  placeInHeader: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center', marginBottom: spacing.xs },
+  confirmAllRow: { alignSelf: 'flex-end', marginBottom: spacing.sm },
+  placementHintItalic: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm },
   lineupRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   checkbox: { width: 28, alignItems: 'center' },
   checkboxText: { fontSize: 24, color: colors.textMuted },
