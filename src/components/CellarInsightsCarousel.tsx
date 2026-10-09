@@ -46,18 +46,22 @@ export function CellarInsightsCarousel() {
   const thumbById = new Map(wines.filter((w) => w.label_image_path).map((w) => [w.id, w.label_image_path as string]));
   const sampleThumbs = wines.filter((w) => w.label_image_path).slice(0, 4).map((w) => w.label_image_path as string);
 
-  // Personality sketch (whichever exists).
-  const { data: sketches } = useQuery({
-    queryKey: ['personality-generated', userId],
+  // Personality sketch — the LATEST from the history table (personality_sketches),
+  // so Home always matches the top of the You-page carousel. Reading
+  // profiles.last_*_personality went stale: several flows (wine card, review
+  // modals) append a new sketch to the history without updating that column.
+  const { data: latestSketch } = useQuery({
+    queryKey: ['latest-personality-sketch', userId],
     enabled: !!userId,
     queryFn: async () => {
-      const { data } = await supabase.from('profiles')
-        .select('last_wine_personality, last_recipe_personality')
-        .eq('user_id', userId!).maybeSingle();
-      return {
-        wine: (data?.last_wine_personality as string | null) ?? null,
-        recipe: (data?.last_recipe_personality as string | null) ?? null,
-      };
+      const { data } = await supabase.from('personality_sketches')
+        .select('text, category, created_at')
+        .eq('user_id', userId!)
+        .in('category', ['wine', 'recipe'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data as { text: string | null; category: string | null } | null;
     },
   });
 
@@ -92,8 +96,8 @@ export function CellarInsightsCarousel() {
   const tiles: Tile[] = [];
 
   // 1) Personality Sketch.
-  const sketchText = sketches?.wine ?? sketches?.recipe ?? null;
-  const sketchCat: 'wine' | 'recipe' = sketches?.wine ? 'wine' : 'recipe';
+  const sketchText = latestSketch?.text ?? null;
+  const sketchCat: 'wine' | 'recipe' = latestSketch?.category === 'recipe' ? 'recipe' : 'wine';
   if (sketchText) {
     tiles.push({
       key: 'personality', icon: 'person-circle-outline',
