@@ -475,17 +475,23 @@ export default function LabelConfirmScreen() {
 
       let merge = false;
       if (dupe) {
-        merge = await new Promise<boolean>((resolve) => {
+        const fullName = [producer.trim(), (wineName.trim() && wineName.trim() !== producer.trim()) ? wineName.trim() : '', vintage.trim()].filter(Boolean).join(' ');
+        const have = dupe.quantity ?? 0;
+        const choice = await new Promise<'merge' | 'separate' | 'cancel'>((resolve) => {
           showAlert({
-            title: 'You already have this wine',
-            body: `You already have ${dupe.quantity} bottle${dupe.quantity === 1 ? '' : 's'} of this wine in your cellar. Add these ${free.length} to that entry so your total stays correct, or keep this as a separate listing?`,
+            title: 'YOU ALREADY HAVE THIS WINE IN YOUR CELLAR',
+            body: `${fullName}\n\nYou already have ${have} bottle${have === 1 ? '' : 's'} of this wine in your cellar. Should Vinster add these to your overall bottle count or keep these bottles as a separate listing?`,
             dismissable: false,
             buttons: [
-              { text: 'Add to existing', onPress: () => resolve(true) },
-              { text: 'Keep separate', style: 'cancel', onPress: () => resolve(false) },
+              // Both are real choices (equal weight), with a true Cancel below.
+              { text: 'Add to Existing', onPress: () => resolve('merge') },
+              { text: 'Keep Separate', onPress: () => resolve('separate') },
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve('cancel') },
             ],
           });
         });
+        if (choice === 'cancel') { setPlacing(false); return; }
+        merge = choice === 'merge';
       }
 
       const labelUri = useLabelStore.getState().imageUri;
@@ -651,16 +657,18 @@ export default function LabelConfirmScreen() {
     };
 
     if (existing) {
-      // Tell the user it's merging into their existing listing before it happens.
+      // Same choice as the rack flow: merge into the existing listing, keep a
+      // separate one, or cancel.
       const name = [existing.producer, existing.wine_name, existing.vintage].filter(Boolean).join(' ');
       const have = existing.quantity ?? 0;
       setBinPopupOpen(false);
       showAlert({
-        title: 'Already in your cellar',
-        body: `You already have ${have} bottle${have === 1 ? '' : 's'} of ${name} in your cellar. These ${qty} will be added to that count in your Full Cellar List.`,
+        title: 'YOU ALREADY HAVE THIS WINE IN YOUR CELLAR',
+        body: `${name}\n\nYou already have ${have} bottle${have === 1 ? '' : 's'} of this wine in your cellar. Should Vinster add these to your overall bottle count or keep these bottles as a separate listing?`,
         buttons: [
+          { text: 'Add to Existing', onPress: () => { void commit(existing); } },
+          { text: 'Keep Separate', onPress: () => { void commit(null); } },
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Add to that count', onPress: () => { void commit(existing); } },
         ],
       });
       return;

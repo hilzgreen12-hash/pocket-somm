@@ -1531,7 +1531,7 @@ export default function RackGridScreen() {
       buttons: [
         // Both ask HOW MANY bottles (a wine can have several) rather than acting on
         // the whole listing — matching the wine-list menu and the delete flow.
-        { text: 'Archive', onPress: () => setSingleArchive({ wineId: wine.id, wineName: wine.wine_name, qty: wine.quantity ?? 1 }) },
+        { text: 'Archive', onPress: () => setSingleArchive({ wineId: wine.id, wineName: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name, qty: wine.quantity ?? 1 }) },
         { text: 'Delete (permanent)', style: 'destructive', onPress: () => openDeleteFlow(wine) },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -1689,7 +1689,7 @@ export default function RackGridScreen() {
         { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${wine.id}` as any) },
         {
           text: 'Archive Wine',
-          onPress: () => setSingleArchive({ wineId: wine.id, wineName: wine.wine_name, qty: wine.quantity ?? 1 }),
+          onPress: () => setSingleArchive({ wineId: wine.id, wineName: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name, qty: wine.quantity ?? 1 }),
         },
         {
           text: 'Delete Wine (Permanent)',
@@ -2737,7 +2737,7 @@ export default function RackGridScreen() {
       <ArchiveNoteModal
         visible={!!singleArchive}
         title="Archive wine?"
-        body={singleArchive ? `Move ${singleArchive.wineName} to your Cellar Archive. It'll leave the Cellar List and this rack but stay in your records.` : ''}
+        body={singleArchive ? `Move ${singleArchive.wineName} to your archive.` : ''}
         busy={archiving}
         maxCount={singleArchive?.qty ?? 1}
         onConfirm={handleSingleArchive}
