@@ -8,6 +8,7 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { useAuth } from '../../src/hooks/useAuth';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { formatWineTitle } from '../../src/utils/wineTitle';
 import { showAlert } from '../../src/components/AppAlert';
 import { RecipeShareCard } from '../../src/components/RecipeShareCard';
 import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../../src/constants/share';
@@ -52,9 +53,9 @@ export default function RecipeFullScreen() {
     return { pairing: p, wine: wineDetailsConfirmed ?? null };
   }, [sessionId, labelSessions, index, freshPairings, wineDetailsConfirmed]);
 
-  // Wine header line used both on-screen and in the print HTML.
+  // Full "to pair with" identity: producer · wine name · origin · vintage.
   const wineLine = wine
-    ? wineHeaderLine(wine.producer, wine.wineName, wine.vintage)
+    ? formatWineTitle({ producer: wine.producer, wineName: wine.wineName, region: wine.region, vintage: wine.vintage })
     : '';
 
   // "Add to Cookbook" — the bottom-of-card save. Already saved if we opened this
@@ -164,14 +165,16 @@ export default function RecipeFullScreen() {
           <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleShare} disabled={sharing || printing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={[styles.actionLink, (sharing || printing) && { opacity: 0.4 }]}>
+          {/* Notes live in a popup now (not inline on the recipe). Only on a
+              saved recipe, which has a session to attach them to. */}
+          {sessionId ? (
+            <TouchableOpacity onPress={() => { setNotesDraft(userNotes); setNotesOpen(true); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.actionLink}>{userNotes ? '+ VIEW NOTES' : '+ ADD NOTES'}</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={[styles.actionLink, sharing && { opacity: 0.4 }]}>
               {sharing ? 'PREPARING…' : '+ EXPORT'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handlePrint} disabled={sharing || printing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={[styles.actionLink, (sharing || printing) && { opacity: 0.4 }]}>
-              {printing ? 'PRINTING…' : '+ PRINT'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -190,31 +193,11 @@ export default function RecipeFullScreen() {
         <Text style={styles.toPair}>To pair with</Text>
         <Text style={styles.wineHeader}>{wineLine}</Text>
 
-        {/* The user's own pairing notes — only on a saved recipe (needs a
-            session to attach them to). Centred gold link above the divider. */}
-        {sessionId ? (
-          userNotes ? (
-            <>
-              <Text style={styles.yourNotesBody}>{userNotes}</Text>
-              <TouchableOpacity onPress={() => { setNotesDraft(userNotes); setNotesOpen(true); }} activeOpacity={0.7}>
-                <Text style={styles.addNotesLink}>Edit Your Pairing Notes</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity onPress={() => { setNotesDraft(''); setNotesOpen(true); }} activeOpacity={0.7}>
-              <Text style={styles.addNotesLink}>Add Your Pairing Notes</Text>
-            </TouchableOpacity>
-          )
-        ) : null}
-
         <View style={styles.shortDivider} />
 
         <Text style={styles.dishName}>{pairing.dishName}</Text>
         <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}{pairing.chefCountry ? `, ${pairing.chefCountry}` : ''}</Text>
         <Text style={styles.meta}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
-
-        <Text style={styles.sectionLabel}>Vinster's Pairing Notes</Text>
-        <Text style={styles.body}>{pairing.pairingNotes}</Text>
 
         <Text style={styles.sectionLabel}>Introduction</Text>
         <Text style={styles.body}>{pairing.introduction}</Text>
