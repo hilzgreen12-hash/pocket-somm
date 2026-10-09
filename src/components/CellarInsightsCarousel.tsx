@@ -54,18 +54,18 @@ export function CellarInsightsCarousel() {
   for (const w of wines) if (w.label_image_path) thumbByKey.set(wineNameKey(w.producer, w.wine_name), w.label_image_path);
   for (const l of labels as any[]) if (l.label_image_path && !thumbByKey.has(wineNameKey(l.producer, l.wine_name))) thumbByKey.set(wineNameKey(l.producer, l.wine_name), l.label_image_path);
 
-  // Personality sketch — the LATEST from the history table (personality_sketches),
-  // so Home always matches the top of the You-page carousel. Reading
-  // profiles.last_*_personality went stale: several flows (wine card, review
-  // modals) append a new sketch to the history without updating that column.
+  // Personality sketch — the LATEST ALTER-EGO sketch, the exact same source +
+  // category the You-page "About You" carousel (AlterEgoCarousel) shows, so the
+  // two always match. (Earlier this read profiles.last_* / the wine+recipe
+  // categories, which are a different sketch type and drifted out of sync.)
   const { data: latestSketch } = useQuery({
-    queryKey: ['latest-personality-sketch', userId],
+    queryKey: ['latest-alter-ego-sketch', userId],
     enabled: !!userId,
     queryFn: async () => {
       const { data } = await supabase.from('personality_sketches')
         .select('text, category, created_at')
         .eq('user_id', userId!)
-        .in('category', ['wine', 'recipe'])
+        .eq('category', 'alter-ego')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -105,7 +105,6 @@ export function CellarInsightsCarousel() {
 
   // 1) Personality Sketch.
   const sketchText = latestSketch?.text ?? null;
-  const sketchCat: 'wine' | 'recipe' = latestSketch?.category === 'recipe' ? 'recipe' : 'wine';
   // Collage for the Personality tile — label scans + restaurant thumbnails whose
   // name actually appears in the sketch (so the pictures relate to the words).
   // Falls back to the user's recent label scans + a restaurant photo when nothing
@@ -133,7 +132,7 @@ export function CellarInsightsCarousel() {
       title: 'Your Personality Sketch', meta: splitPersonality(sketchText).title ?? 'Tap to read',
       // A collage of bottles from the collection the sketch is drawn from.
       collage: personalityCollage.length > 0 ? personalityCollage : undefined,
-      onTap: () => router.push(`/profile/personality?category=${sketchCat}` as any),
+      onTap: () => router.push('/profile/personality?category=alter-ego' as any),
     });
   }
 
@@ -164,28 +163,24 @@ export function CellarInsightsCarousel() {
     });
   }
 
-  // 4) Recipes Generated — how many of the user's OWN wines have a recipe, with a
-  // collage of those wines' label thumbnails. (A recipe in Pair is generated for a
-  // specific wine, stored as details — matched to a thumbnail by identity.)
+  // 4) Recipes Generated — how many of the user's OWN wines have a recipe, shown
+  // with the label thumbnail of the LAST wine paired. (A recipe in Pair is
+  // generated for a specific wine, stored as details — matched by identity.)
   {
     const recipeWineKeys = new Set<string>();
-    const recipeThumbs: string[] = [];
     for (const s of recipeSessions as any[]) {
       const w = s.wine;
-      if (!w) continue;
-      const k = wineNameKey(w.producer, w.wineName);
-      if (recipeWineKeys.has(k)) continue;
-      recipeWineKeys.add(k);
-      const t = thumbByKey.get(k);
-      if (t && recipeThumbs.length < 4) recipeThumbs.push(t);
+      if (w) recipeWineKeys.add(wineNameKey(w.producer, w.wineName));
     }
     const recipeWineCount = recipeWineKeys.size;
+    const lastPairedWine = (recipeSessions as any[])[0]?.wine;
+    const lastPairedThumb = lastPairedWine ? thumbByKey.get(wineNameKey(lastPairedWine.producer, lastPairedWine.wineName)) : undefined;
     if (recipeWineCount > 0) {
       tiles.push({
         key: 'recipes-generated', icon: 'restaurant-outline',
-        value: recipeThumbs.length > 0 ? undefined : String(recipeWineCount),
+        value: lastPairedThumb ? undefined : String(recipeWineCount),
         title: 'Recipes Generated', meta: `${recipeWineCount} of your wine${recipeWineCount === 1 ? '' : 's'}`,
-        collage: recipeThumbs.length > 0 ? recipeThumbs : undefined,
+        collage: lastPairedThumb ? [lastPairedThumb] : undefined,
         onTap: () => router.push('/chef/archive' as any),
       });
     }

@@ -345,10 +345,11 @@ export default function RackGridScreen() {
   const onLongPressSlotRef = useRef<(row: number, col: number) => void>(() => {});
   const slotSizeRef = useRef(40);
 
-  // Which cell is under this absolute (screen) point, using measured rects.
-  function cellAt(absX: number, absY: number): { row: number; col: number } | null {
-    const lx = absX - canvasWin.current.x;
-    const ly = absY - canvasWin.current.y;
+  // Which cell is under a point. (lx, ly) are LOCAL to the grid canvas — the
+  // GestureDetector is on the canvas, so gesture e.x/e.y are already in this
+  // space, matching the onLayout rects. No window-measure needed (measureInWindow
+  // on an Animated.View ref was unreliable and left the drop mis-computed).
+  function cellAt(lx: number, ly: number): { row: number; col: number } | null {
     for (const rd of gridRowsRef.current) {
       const r = rowRectsRef.current[rd.rowIndex];
       if (!r || ly < r.y || ly > r.y + r.h) continue;
@@ -2382,7 +2383,11 @@ export default function RackGridScreen() {
           style={styles.rackViewport}
           onLayout={(e) => { vpSize.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }; }}
         >
-          <GestureDetector gesture={Gesture.Simultaneous(inlineZoomGesture, dragGesture)}>
+          {/* Long-press-drag disabled: it mis-computed the drop cell on-device
+              (looked moved, wasn't) and its empty-cell branch fired a spurious
+              "add multiples" popup. Needs live on-device gesture debugging. Moving
+              is via the tap popup's "Move to Another Location" meanwhile. */}
+          <GestureDetector gesture={inlineZoomGesture}>
             <Animated.View
               ref={canvasRef}
               style={[styles.rackCanvas, { transform: [{ translateX: zTx }, { translateY: zTy }, { scale: zScale }] }]}
