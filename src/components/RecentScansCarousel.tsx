@@ -120,7 +120,9 @@ export function RecentScansCarousel() {
       kind: 'label',
       ts: new Date(l.created_at).getTime(),
       title: formatWineTitle({ producer: l.producer, wineName: l.wine_name, vintage: l.vintage != null ? String(l.vintage) : null }),
-      stamp: [stampDate(new Date(l.created_at)), (l.region ?? '').trim(), (l.captured_place ?? '').trim()].filter(Boolean).slice(0, 2).join(' · '),
+      // Just the scan date beneath the full wine name (name/date/origin used to
+      // jumble together). Shown gold via cardStamp.
+      stamp: stampDate(new Date(l.created_at)),
       path: l.label_image_path,
       producer: l.producer,
       wineName: l.wine_name,
@@ -221,7 +223,7 @@ const styles = StyleSheet.create({
   addImageThumb: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 6 },
   addImageText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
-  cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, marginTop: 3 },
+  cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
   emptyCard: { height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', padding: spacing.md },
   emptyText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textAlign: 'center', lineHeight: 18 },
 });

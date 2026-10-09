@@ -5,6 +5,8 @@ import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
 import { fetchStorageLocations } from '../api/storageLocations';
 import { fetchPlacementsForWines } from '../api/placements';
+import { getArchivedWines } from '../api/cellar';
+import { wineNameKey } from '../utils/wineIdentity';
 import { effectiveMaturity } from '../utils/maturity';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
@@ -38,7 +40,10 @@ type InsightTile = { wine: CellarWine; badge: string; meta: string };
 // Build the "Your Cellar Insights" tiles: Last Call, then Running Low, then the
 // three cellar facts (top-rated, most-collected, oldest). Deduped by wine so a
 // bottle only appears once, under its highest-priority badge.
-function buildCellarInsights(wines: CellarWine[]): InsightTile[] {
+// Identity key for the archive cross-reference (producer+name + vintage).
+const rlKey = (w: CellarWine) => `${wineNameKey(w.producer, w.wine_name)}|${(w.vintage ?? '').toString().trim()}`;
+
+function buildCellarInsights(wines: CellarWine[], archivedKeys?: Set<string> | null): InsightTile[] {
   const nowYear = new Date().getFullYear();
   const owned = wines.filter((w) => (w.quantity ?? 0) > 0);
   const tiles: InsightTile[] = [];
@@ -55,8 +60,11 @@ function buildCellarInsights(wines: CellarWine[]): InsightTile[] {
       add(w, 'Last Call', to < nowYear ? `Drink now · past ${to}` : to === nowYear ? 'Drink now · final year' : `Drink by ${to}`);
     });
 
-  // Running Low — fewest bottles first.
-  owned.filter((w) => (w.quantity ?? 0) <= RUNNING_LOW_MAX)
+  // Running Low — fewest bottles first. Only for wines that were once better
+  // stocked: require at least one bottle of that wine in the archive (i.e. it's
+  // genuinely been drunk DOWN), so a wine you only ever owned one of isn't tagged
+  // "running low". When archivedKeys is absent (back-compat count) the gate is off.
+  owned.filter((w) => (w.quantity ?? 0) <= RUNNING_LOW_MAX && (!archivedKeys || archivedKeys.has(rlKey(w))))
     .sort((a, b) => (a.quantity ?? 0) - (b.quantity ?? 0))
     .forEach((w) => add(w, 'Running Low', `${w.quantity} bottle${w.quantity === 1 ? '' : 's'} left`));
 
@@ -117,7 +125,14 @@ export function DrinkNowCarousel() {
     if (!!w.storage_location_id && externalIds.has(w.storage_location_id) && ext === 0) return false;
     return (w.quantity ?? 0) - ext > 0; // at least one home/loose bottle
   });
-  const tiles = buildCellarInsights(homeWines);
+  // Archive identities, so "Running Low" only tags wines actually drunk down.
+  const { data: archived = [] } = useQuery({
+    queryKey: ['archived-wines', userId],
+    queryFn: () => getArchivedWines(userId!),
+    enabled: !!userId,
+  });
+  const archivedKeys = new Set(archived.map(rlKey));
+  const tiles = buildCellarInsights(homeWines, archivedKeys);
   const fill = tiles.length < CELLAR_EXAMPLES.length ? CELLAR_EXAMPLES.slice(tiles.length) : [];
 
   return (
