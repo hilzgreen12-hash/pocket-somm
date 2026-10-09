@@ -21,10 +21,11 @@ import { fonts } from '../constants/fonts';
 const MAX_TILES = 6;
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
+const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
 const INSIGHT_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'icon', icon: 'person-circle-outline', title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: 'Your insights appear here as you use Vinster' },
-  { kind: 'icon', icon: 'albums-outline', title: 'Archived Last Month', stamp: '6 bottles', overlay: 'Your insights appear here as you use Vinster' },
-  { kind: 'icon', icon: 'restaurant-outline', title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: 'Your insights appear here as you use Vinster' },
+  { kind: 'label', producer: 'Château Montrose', wineName: 'Saint-Estèphe', title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY },
+  { kind: 'label', producer: 'Penfolds', wineName: 'Grange', title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY },
+  { kind: 'label', producer: 'Cloudy Bay', wineName: 'Sauvignon Blanc', title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY },
 ];
 
 type Tile = {

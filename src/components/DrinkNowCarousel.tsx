@@ -17,9 +17,9 @@ import { fonts } from '../constants/fonts';
 
 // Example cards shown when the cellar has nothing to surface yet.
 const CELLAR_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'label', producer: 'Charles Heidsieck', wineName: 'Brut Vintage', title: 'Charles Heidsieck 1995', stamp: 'Last Call · final year', overlay: 'Your cellar insights replace this content' },
-  { kind: 'label', producer: "Dow's", wineName: 'Vintage Port', title: "Dow's 1994", stamp: 'Running Low · 1 left', overlay: 'Your cellar insights replace this content' },
-  { kind: 'label', producer: 'Giacomo Conterno', wineName: 'Monfortino', title: 'Conterno 2010', stamp: 'Top Rated · 98 pts', overlay: 'Your cellar insights replace this content' },
+  { kind: 'label', producer: 'Charles Heidsieck', wineName: 'Brut Vintage', title: 'Charles Heidsieck 1995', stamp: 'Last Call · final year', overlay: 'Cellar Insights appear here as you use Vinster' },
+  { kind: 'label', producer: "Dow's", wineName: 'Vintage Port', title: "Dow's 1994", stamp: 'Running Low · 1 left', overlay: 'Cellar Insights appear here as you use Vinster' },
+  { kind: 'label', producer: 'Giacomo Conterno', wineName: 'Monfortino', title: 'Conterno 2010', stamp: 'Top Rated · 98 pts', overlay: 'Cellar Insights appear here as you use Vinster' },
 ];
 
 // Last Call now = drinkable now AND the window closes within the next 3 years

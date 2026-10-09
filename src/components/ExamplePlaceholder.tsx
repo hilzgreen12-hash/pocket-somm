@@ -47,7 +47,11 @@ export function PlaceholderCardView({ card }: { card: PlaceholderCard }) {
     <View style={styles.card}>
       <View style={styles.thumbWrap}>
         {card.kind === 'label' ? (
-          <WineCardThumb producer={card.producer} wineName={card.wineName} fallbackText={card.title} resizeMode="contain" />
+          // Faded real label (fetched for the named wine) so empty tiles still
+          // look like the cards they'll become, under the "appears here" overlay.
+          <View style={styles.fadedImg}>
+            <WineCardThumb producer={card.producer} wineName={card.wineName} fallbackText={card.title} resizeMode="contain" />
+          </View>
         ) : card.kind === 'winelist' ? (
           <WineListMock />
         ) : (
@@ -67,6 +71,7 @@ const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   card: { width: 220 },
   thumbWrap: { width: 220, height: 165 },
+  fadedImg: { width: 220, height: 165, opacity: 0.45 },
   iconThumb: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   icon: { opacity: 0.5 },
   // Faux wine-list "menu" tile for the wine-list scan placeholder.
