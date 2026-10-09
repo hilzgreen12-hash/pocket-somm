@@ -8,6 +8,7 @@ import { useChefPairingHistory, useChefLabelHistory } from '../hooks/useChefHist
 import { useScanHistory } from '../hooks/useScanHistory';
 import { useCellar } from '../hooks/useCellar';
 import { useLabels } from '../hooks/useLabels';
+import { wineNameKey } from '../utils/wineIdentity';
 import { LabelThumb } from './LabelThumb';
 import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
@@ -46,6 +47,11 @@ export function CellarInsightsCarousel() {
   const { labels } = useLabels();
   // Cellar wine thumbnails by id — for the pairings collage.
   const thumbById = new Map(wines.filter((w) => w.label_image_path).map((w) => [w.id, w.label_image_path as string]));
+  // Thumbnail by wine IDENTITY (producer + name) — so a recipe's wine (stored as
+  // details, not an id) can find its label image from the cellar or a label scan.
+  const thumbByKey = new Map<string, string>();
+  for (const w of wines) if (w.label_image_path) thumbByKey.set(wineNameKey(w.producer, w.wine_name), w.label_image_path);
+  for (const l of labels as any[]) if (l.label_image_path && !thumbByKey.has(wineNameKey(l.producer, l.wine_name))) thumbByKey.set(wineNameKey(l.producer, l.wine_name), l.label_image_path);
 
   // Personality sketch — the LATEST from the history table (personality_sketches),
   // so Home always matches the top of the You-page carousel. Reading
@@ -130,26 +136,6 @@ export function CellarInsightsCarousel() {
     });
   }
 
-  // 2) Your Favourite Chef — the chef inspiration referenced most across saved
-  // recipe pairings. Only shown once there's a genuine favourite (≥2 references),
-  // so it reflects real engagement rather than a single one-off recipe.
-  const chefCounts = new Map<string, number>();
-  for (const s of recipeSessions as any[]) {
-    for (const p of (s.pairings ?? []) as { chefInspiration?: string | null }[]) {
-      const c = (p.chefInspiration ?? '').trim();
-      if (c) chefCounts.set(c, (chefCounts.get(c) ?? 0) + 1);
-    }
-  }
-  let favChef: string | null = null;
-  let favCount = 0;
-  for (const [c, n] of chefCounts) { if (n > favCount) { favCount = n; favChef = c; } }
-  if (favChef && favCount >= 2) {
-    tiles.push({
-      key: 'fav-chef', icon: 'ribbon-outline',
-      title: 'Your Favourite Chef', meta: favChef,
-      onTap: () => router.push('/chef/archive' as any),
-    });
-  }
 
   // 3) Bottles archived last month (collage of their labels).
   const archivedBottles = archivedLM.reduce((s: number, w: any) => s + (w.quantity ?? 0), 0);
@@ -177,30 +163,41 @@ export function CellarInsightsCarousel() {
     });
   }
 
-  // 4) Pairings generated — collage of the cellar wines that were paired.
-  if (pairingSessions.length > 0) {
-    const pairedThumbs: string[] = [];
-    for (const s of pairingSessions as any[]) {
-      for (const r of (s.cellar_result ?? []) as { cellarWineId?: string }[]) {
-        const t = r.cellarWineId ? thumbById.get(r.cellarWineId) : undefined;
-        if (t && !pairedThumbs.includes(t)) pairedThumbs.push(t);
-        if (pairedThumbs.length >= 4) break;
-      }
-      if (pairedThumbs.length >= 4) break;
+  // 4) Recipes Generated — how many of the user's OWN wines have a recipe, with a
+  // collage of those wines' label thumbnails. (A recipe in Pair is generated for a
+  // specific wine, stored as details — matched to a thumbnail by identity.)
+  {
+    const recipeWineKeys = new Set<string>();
+    const recipeThumbs: string[] = [];
+    for (const s of recipeSessions as any[]) {
+      const w = s.wine;
+      if (!w) continue;
+      const k = wineNameKey(w.producer, w.wineName);
+      if (recipeWineKeys.has(k)) continue;
+      recipeWineKeys.add(k);
+      const t = thumbByKey.get(k);
+      if (t && recipeThumbs.length < 4) recipeThumbs.push(t);
     }
-    tiles.push({
-      key: 'pairings', icon: 'wine-outline', value: pairedThumbs.length > 0 ? undefined : String(pairingSessions.length),
-      title: 'Pairings Generated', meta: 'Across your dishes',
-      collage: pairedThumbs.length > 0 ? pairedThumbs : undefined,
-      onTap: () => router.push('/(tabs)/chef' as any),
-    });
+    const recipeWineCount = recipeWineKeys.size;
+    if (recipeWineCount > 0) {
+      tiles.push({
+        key: 'recipes-generated', icon: 'restaurant-outline',
+        value: recipeThumbs.length > 0 ? undefined : String(recipeWineCount),
+        title: 'Recipes Generated', meta: `${recipeWineCount} of your wine${recipeWineCount === 1 ? '' : 's'}`,
+        collage: recipeThumbs.length > 0 ? recipeThumbs : undefined,
+        onTap: () => router.push('/chef/archive' as any),
+      });
+    }
   }
 
-  // 5) Recipes saved to Your Cookbook.
+  // 5) Recipes saved to Your Cookbook — previewed with the last recipe's wine.
   if (recipeSessions.length > 0) {
+    const lastWine = (recipeSessions as any[])[0]?.wine;
+    const lastThumb = lastWine ? thumbByKey.get(wineNameKey(lastWine.producer, lastWine.wineName)) : undefined;
     tiles.push({
-      key: 'recipes', icon: 'book-outline', value: String(recipeSessions.length),
+      key: 'recipes', icon: 'book-outline', value: lastThumb ? undefined : String(recipeSessions.length),
       title: 'Recipes in Your Cookbook', meta: 'Saved for later',
+      collage: lastThumb ? [lastThumb] : undefined,
       onTap: () => router.push('/chef/archive' as any),
     });
   }
