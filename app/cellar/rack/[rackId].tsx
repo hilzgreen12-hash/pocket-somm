@@ -2158,9 +2158,9 @@ export default function RackGridScreen() {
         <>
           <View style={styles.rackHintBlock}>
             <Text style={styles.rackHintBullet}>•  Short Press a slot: Add a bottle</Text>
-            <Text style={styles.rackHintBullet}>•  Short press a thumbnail: Wine Intel</Text>
+            <Text style={styles.rackHintBullet}>•  Short Press a thumbnail: Wine Intel & Edit</Text>
             <Text style={styles.rackHintBullet}>•  Long Press a slot: Add same-wine multiples</Text>
-            <Text style={styles.rackHintBullet}>•  Long Press a thumbnail: Edit</Text>
+            <Text style={styles.rackHintBullet}>•  Long Press a thumbnail: Move to another slot</Text>
             <Text style={styles.rackHintBullet}>•  Add A Lineup (up to 6 bottles): <Text style={styles.rackHintLink} onPress={startLineup}>Scan</Text></Text>
           </View>
         </>
