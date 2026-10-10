@@ -1,5 +1,4 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
@@ -10,7 +9,7 @@ import { useCellar } from '../hooks/useCellar';
 import { useLabels } from '../hooks/useLabels';
 import { wineNameKey } from '../utils/wineIdentity';
 import { LabelThumb } from './LabelThumb';
-import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -25,16 +24,16 @@ const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
 const INSIGHT_EXAMPLES: PlaceholderCard[] = [
   { kind: 'label', producer: 'Château Montrose', wineName: 'Saint-Estèphe', title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY },
   { kind: 'label', producer: 'Penfolds', wineName: 'Grange', title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY },
-  { kind: 'label', producer: 'Cloudy Bay', wineName: 'Sauvignon Blanc', title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY },
+  { kind: 'image', uri: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY },
 ];
 
+// Every insight tile shows a real IMAGE — a label collage or a photo. Tiles with
+// no image to show are omitted (we never render a plain brown/icon tile).
 type Tile = {
   key: string;
-  icon: keyof typeof Ionicons.glyphMap;
   title: string;
   meta: string;
-  value?: string;       // big number/word for an icon tile
-  collage?: string[];   // storage paths for a 2×2 thumbnail collage
+  collage: string[];   // storage paths for a 1- or 2×2 thumbnail collage (required)
   onTap?: () => void;
 };
 
@@ -126,39 +125,45 @@ export function CellarInsightsCarousel() {
     ...(archive as any[]).filter((a) => a.restaurantPhotoPath).slice(0, 1).map((a) => a.restaurantPhotoPath as string),
   ];
   const personalityCollage = (matchedThumbs.length > 0 ? matchedThumbs : fallbackThumbs).filter(Boolean).slice(0, 4);
-  if (sketchText) {
+  // Only show the sketch tile once we have labels to build its collage from —
+  // never a bare brown tile.
+  if (sketchText && personalityCollage.length > 0) {
     tiles.push({
-      key: 'personality', icon: 'person-circle-outline',
+      key: 'personality',
       title: 'Your Personality Sketch', meta: splitPersonality(sketchText).title ?? 'Tap to read',
       // A collage of bottles from the collection the sketch is drawn from.
-      collage: personalityCollage.length > 0 ? personalityCollage : undefined,
+      collage: personalityCollage,
       onTap: () => router.push('/profile/personality?category=alter-ego' as any),
     });
   }
 
 
-  // 3) Bottles archived last month (collage of their labels).
+  // 2) Bottles archived last month (collage of their labels). Needs ≥1 label.
   const archivedBottles = archivedLM.reduce((s: number, w: any) => s + (w.quantity ?? 0), 0);
-  if (archivedBottles > 0) {
+  const archivedThumbs = archivedLM.map((w: any) => w.label_image_path).filter(Boolean) as string[];
+  if (archivedBottles > 0 && archivedThumbs.length > 0) {
     tiles.push({
-      key: 'archived', icon: 'albums-outline',
+      key: 'archived',
       title: 'Archived Last Month', meta: `${archivedBottles} bottle${archivedBottles === 1 ? '' : 's'}`,
-      collage: archivedLM.map((w: any) => w.label_image_path).filter(Boolean),
+      collage: archivedThumbs,
       onTap: () => router.push('/cellar/archive' as any),
     });
   }
 
-  // 3) Restaurants dined at last month (collage of venue photos).
+  // 3) Restaurants dined at last month — the venue photos the user saved (newest
+  // first). Only shown when at least one photo exists; otherwise the empty-state
+  // placeholder (a faded restaurant image) covers it.
   const distinctRestos = new Map<string, string | null>();
   for (const r of restosLM as any[]) {
     const k = (r.restaurant_name ?? '').trim().toLowerCase();
     if (k && !distinctRestos.has(k)) distinctRestos.set(k, r.restaurant_photo_path ?? null);
   }
-  if (distinctRestos.size > 0) {
+  const restoPhotos = [...distinctRestos.values()].filter(Boolean) as string[];
+  if (distinctRestos.size > 0 && restoPhotos.length > 0) {
     tiles.push({
-      key: 'restaurants', icon: 'restaurant-outline',
+      key: 'restaurants',
       title: 'Dined Out Last Month', meta: `${distinctRestos.size} restaurant${distinctRestos.size === 1 ? '' : 's'}`,
-      collage: [...distinctRestos.values()].filter(Boolean) as string[],
+      collage: restoPhotos,
       onTap: () => router.push('/restaurants/reviews' as any),
     });
   }
@@ -175,59 +180,44 @@ export function CellarInsightsCarousel() {
     const recipeWineCount = recipeWineKeys.size;
     const lastPairedWine = (recipeSessions as any[])[0]?.wine;
     const lastPairedThumb = lastPairedWine ? thumbByKey.get(wineNameKey(lastPairedWine.producer, lastPairedWine.wineName)) : undefined;
-    if (recipeWineCount > 0) {
+    // Only shown when we have the paired wine's label to picture it — never a
+    // bare brown/count tile.
+    if (recipeWineCount > 0 && lastPairedThumb) {
       tiles.push({
-        key: 'recipes-generated', icon: 'restaurant-outline',
-        value: lastPairedThumb ? undefined : String(recipeWineCount),
+        key: 'recipes-generated',
         title: 'Recipes Generated', meta: `${recipeWineCount} of your wine${recipeWineCount === 1 ? '' : 's'}`,
-        collage: lastPairedThumb ? [lastPairedThumb] : undefined,
+        collage: [lastPairedThumb],
         onTap: () => router.push('/chef/archive' as any),
       });
     }
   }
 
-  // 5) Recipes saved to Your Cookbook — previewed with the last recipe's wine.
-  if (recipeSessions.length > 0) {
-    const lastWine = (recipeSessions as any[])[0]?.wine;
-    const lastThumb = lastWine ? thumbByKey.get(wineNameKey(lastWine.producer, lastWine.wineName)) : undefined;
-    tiles.push({
-      key: 'recipes', icon: 'book-outline', value: lastThumb ? undefined : String(recipeSessions.length),
-      title: 'Recipes in Your Cookbook', meta: 'Saved for later',
-      collage: lastThumb ? [lastThumb] : undefined,
-      onTap: () => router.push('/chef/archive' as any),
-    });
-  }
+  // (The "Recipes in Your Cookbook" tile is retired for now — no artwork for it.)
 
-  // 6) Labels scanned last month — count + a collage of those label thumbnails.
+  // 4) Labels scanned last month — a collage of those label thumbnails. Only
+  // shown when we have at least one label image.
   {
     const since = Date.now() - MONTH_MS;
     const recentLabels = (labels as any[]).filter((l) => l.created_at && new Date(l.created_at).getTime() >= since);
     const labelThumbs = recentLabels.filter((l) => l.label_image_path).map((l) => l.label_image_path as string).slice(0, 4);
-    if (recentLabels.length > 0) {
+    if (recentLabels.length > 0 && labelThumbs.length > 0) {
       tiles.push({
-        key: 'labels-month', icon: 'scan-outline',
-        value: labelThumbs.length > 0 ? undefined : String(recentLabels.length),
+        key: 'labels-month',
         title: 'Labels Scanned Last Month', meta: `${recentLabels.length} Wine Label${recentLabels.length === 1 ? '' : 's'}`,
-        collage: labelThumbs.length > 0 ? labelThumbs : undefined,
+        collage: labelThumbs,
       });
     }
   }
 
-  const shown = tiles.slice(0, MAX_TILES);
+  // Only tiles with a real image (collage) ever render — no brown/icon tiles.
+  const shown = tiles.filter((t) => t.collage.length > 0).slice(0, MAX_TILES);
   const fill = shown.length < INSIGHT_EXAMPLES.length ? INSIGHT_EXAMPLES.slice(shown.length) : [];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {shown.map((t) => (
         <TouchableOpacity key={t.key} style={styles.card} onPress={t.onTap} activeOpacity={t.onTap ? 0.85 : 1}>
-          {t.collage && t.collage.length > 0 ? (
-            <Collage paths={t.collage} />
-          ) : (
-            <View style={styles.factBox}>
-              <Ionicons name={t.icon} size={30} color={colors.gold} />
-              {t.value ? <Text style={styles.factValue}>{t.value}</Text> : null}
-            </View>
-          )}
+          <Collage paths={t.collage} />
           <Text style={styles.cardName} numberOfLines={2}>{t.title}</Text>
           <Text style={styles.cardMeta} numberOfLines={1}>{t.meta}</Text>
         </TouchableOpacity>
@@ -257,8 +247,6 @@ const styles = StyleSheet.create({
   card: { width: 220 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  factBox: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: 10 },
-  factValue: { fontFamily: fonts.headingSemibold, fontSize: 34, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
   collageBox: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden' },
   collageFull: { width: 220, height: 165 },
   collageGrid: { width: 220, height: 165, flexDirection: 'row', flexWrap: 'wrap' },

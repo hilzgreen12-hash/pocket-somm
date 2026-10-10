@@ -817,12 +817,22 @@ export default function RackGridScreen() {
     return { fontSize, lineHeight: fontSize + 2, maxChars: Math.max(10, Math.floor(size / 3.5)) };
   }
 
-  // Long-press a slot: an occupied slot opens its action sheet (add-more /
-  // move / archive); an empty slot starts (or extends) a multi-slot selection.
+  // Long-press a slot:
+  //  • a FILLED slot "lifts" the bottle to move it — it enters move mode and the
+  //    next slot tapped (here, or on any storage screen) drops it. This is the
+  //    reliable alternative to a follow-finger drag: no coordinate hit-testing,
+  //    the drop target is simply the slot the user taps (its row/col is known).
+  //  • an EMPTY slot starts (or extends) a multi-slot selection.
+  // A short TAP still opens the action sheet (View Intel / Edit / Add More / Move
+  // / Archive); long-press is the shortcut straight into a move.
   function onLongPressSlot(row: number, col: number) {
-    if (moving || awaitingBottles > 0) return;
+    if (moving || awaitingBottles > 0 || placeExisting || multiSelectMode || addMoreWine) return;
     const slot = slotMap[`${row},${col}`];
-    if (slot?.cellar_wine_id) { pickUpSlot(row, col); return; }
+    if (slot?.cellar_wine_id) {
+      const wine = slot.wine as CellarWine | undefined;
+      setPendingMove({ sourceRackId: rackId, row, col, wineId: slot.cellar_wine_id, wineName: wine?.wine_name ?? 'this wine' });
+      return;
+    }
     setMultiSlots((prev) => {
       const next = new Set(prev);
       next.add(`${row},${col}`);
@@ -2008,6 +2018,8 @@ export default function RackGridScreen() {
                   isDropTarget && styles.slotDropTarget,
                 ]}
                 onPress={() => openSlot(rowDef.rowIndex, col)}
+                onLongPress={() => onLongPressSlot(rowDef.rowIndex, col)}
+                delayLongPress={300}
                 activeOpacity={0.8}
               >
                 {wine ? (
@@ -2339,7 +2351,7 @@ export default function RackGridScreen() {
         {moving && (
           <View style={styles.movingBanner}>
             <Text style={styles.movingBannerText} numberOfLines={2}>
-              {`Moving ${moving.wineName} — tap an empty slot to place it, or navigate to the storage location you'd like to move it to.`}
+              {`Moving ${moving.wineName} — tap a slot to drop it (tap a filled slot to swap), or open the storage location you'd like to move it to.`}
             </Text>
             <TouchableOpacity onPress={() => setPendingMove(null)}>
               <Text style={styles.movingCancelLink}>Cancel</Text>

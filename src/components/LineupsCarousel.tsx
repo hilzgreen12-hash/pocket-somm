@@ -5,16 +5,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { listLineupArchives, lineupSignedUrl, deleteLineupArchive, type LineupArchive } from '../api/lineups';
 import { showAlert } from './AppAlert';
-import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, LINEUP_IMG } from './ExamplePlaceholder';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-// Placeholder tiles shown until the user saves their first lineup — faded bottle
-// glyphs with a scrim overlay, mirroring the empty "Your Recent Scans" carousel.
+// Placeholder tiles shown until the user saves their first lineup — a faded
+// generic bottle-lineup photo under a scrim, mirroring the empty "Your Recent
+// Scans" carousel.
 const LINEUP_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'icon', icon: 'wine', title: 'Your Lineup', stamp: '20 Dec 2029 · La Steakhouse', overlay: 'Your first lineup replaces this content' },
-  { kind: 'icon', icon: 'wine', title: 'Your Lineup', stamp: '18 Dec 2029 · At Home', overlay: 'Your second lineup replaces this content' },
-  { kind: 'icon', icon: 'wine', title: 'Your Lineup', stamp: '02 Dec 2029 · The Cellar Door', overlay: 'Your third lineup replaces this content' },
+  { kind: 'image', uri: LINEUP_IMG, title: 'Your Lineup', stamp: '20 Dec 2029 · La Steakhouse', overlay: 'Your first lineup appears here as you use Vinster' },
+  { kind: 'image', uri: LINEUP_IMG, title: 'Your Lineup', stamp: '18 Dec 2029 · At Home', overlay: 'Your first lineup appears here as you use Vinster' },
+  { kind: 'image', uri: LINEUP_IMG, title: 'Your Lineup', stamp: '02 Dec 2029 · The Cellar Door', overlay: 'Your first lineup appears here as you use Vinster' },
 ];
 
 // One lineup in the carousel — a large thumbnail with a date · location stamp.
@@ -117,8 +118,9 @@ const styles = StyleSheet.create({
   card: { width: 220 },
   cardImageWrap: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   cardImage: { width: 220, height: 165 },
-  cardName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: 6, letterSpacing: 0.3 },
-  cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 6 },
+  // Lineup title white; date · location gold beneath it.
+  cardName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, marginTop: 6, letterSpacing: 0.3 },
+  cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginTop: 6 },
   cardStampTight: { marginTop: 2 },
   addCard: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', gap: 6 },
   addCardIcon: { fontFamily: fonts.headingBold, fontSize: 30, color: colors.gold },
