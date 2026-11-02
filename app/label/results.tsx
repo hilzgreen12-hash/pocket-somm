@@ -220,6 +220,16 @@ export default function LabelResultsScreen() {
   const runGenerate = useCallback(async (detailsOverride?: WineDetailsComplete) => {
     const details = detailsOverride ?? wineDetailsConfirmed;
     if (!details) return;
+    // Hard gate: never generate intel for a FRESH scan whose vintage couldn't be
+    // read — the score, value and drinking window all depend on the year. Open the
+    // vintage prompt instead (the user enters the year or NV); its submit calls
+    // runGenerate again with a vintage set. Catches any path that reaches
+    // generation bypassing the mount-time prompt (e.g. after the confirm step).
+    if (fresh === '1' && !(details.vintage ?? '').trim()) {
+      vintagePromptedRef.current = true;
+      setVintagePromptOpen(true);
+      return;
+    }
     setGenError(false);
     try {
       const generated = await generateWineIntel(details, userCurrency);
