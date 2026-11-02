@@ -559,20 +559,22 @@ export default function CellarWineDetail() {
     Keyboard.dismiss();
     setSavingTitle(true);
     try {
-      await updateWine.mutateAsync({
-        id: wine.id,
-        updates: {
-          producer: producerDraft.trim() || null,
-          wine_name: wineNameDraft.trim() || wine.wine_name,
-          region: regionDraft.trim() || null,
-          vintage: vintageDraft.trim() || null,
-          grape_variety: grapeDraft.trim() || null,
-          is_spirit: spiritDraft,
-          // A spirit has no drinking window — clear it so the card shows NA and
-          // no maturity rating applies (and it drops out of maturity surfacing).
-          ...(spiritDraft ? { drinking_window_from: null, drinking_window_to: null, drinking_window_status: null } : {}),
-        },
-      });
+      const updates: Partial<CellarWine> = {
+        producer: producerDraft.trim() || null,
+        wine_name: wineNameDraft.trim() || wine.wine_name,
+        region: regionDraft.trim() || null,
+        vintage: vintageDraft.trim() || null,
+        grape_variety: grapeDraft.trim() || null,
+        is_spirit: spiritDraft,
+      };
+      // A spirit has no drinking window — clear it so the card shows NA and no
+      // maturity rating applies (and it drops out of maturity surfacing).
+      if (spiritDraft) {
+        updates.drinking_window_from = null;
+        updates.drinking_window_to = null;
+        updates.drinking_window_status = null;
+      }
+      await updateWine.mutateAsync({ id: wine.id, updates });
       setTitleEditOpen(false);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
