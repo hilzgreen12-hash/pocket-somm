@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { MicButton } from './MicButton';
+import { VoiceAnswerView } from './VoiceAnswerView';
 import { useCellar } from '../hooks/useCellar';
 import { usePreferences } from '../hooks/usePreferences';
 import { classifyDiscoverVoice, askMyData } from '../api/discoverVoice';
@@ -126,14 +127,13 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
               <Text style={styles.centreText}>{thinkingText}</Text>
             </View>
           ) : phase === 'answer' ? (
-            <View style={styles.centre}>
-              <Text style={styles.voiceHeader}>Vinster</Text>
-              <Text style={styles.answerText}>{answer}</Text>
+            <ScrollView style={{ maxHeight: winH * 0.82 }} showsVerticalScrollIndicator={false}>
+              <VoiceAnswerView query={transcript} answer={answer ?? ''} />
               <TouchableOpacity style={styles.primaryBtn} onPress={() => { setTranscript(''); setAnswer(null); setUnclearMsg(null); setPhase('speak'); }} activeOpacity={0.85}>
                 <Text style={styles.primaryBtnText}>Ask another</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Done</Text></TouchableOpacity>
-            </View>
+            </ScrollView>
           ) : phase === 'error' ? (
             <View style={styles.centre}>
               <Text style={styles.title}>{thinkingText}</Text>
