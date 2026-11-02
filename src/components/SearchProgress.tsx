@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { View, Text, Animated, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -6,8 +6,14 @@ import { fonts } from '../constants/fonts';
 interface Props {
   title: string;
   subtitle: string;
-  body: string;
+  body?: string;
   durationMs?: number;
+  // Optional: replace the "Vinster" wordmark with a bespoke header (e.g.
+  // "Generating Wine Intel"), show a thumbnail above the bar, and suppress the
+  // rotating encouragement line. Defaults keep the original wine-list-scan look.
+  header?: string;
+  thumbnail?: ReactNode;
+  hideRotatingTitle?: boolean;
 }
 
 // Encouraging lines that rotate in as the progress bar fills, so the user
@@ -39,7 +45,7 @@ function pickTitle(initial: string, pct: number): string {
   return ENCOURAGEMENT[3];
 }
 
-export function SearchProgress({ title, subtitle, body, durationMs = 50000 }: Props) {
+export function SearchProgress({ title, subtitle, body, durationMs = 50000, header, thumbnail, hideRotatingTitle }: Props) {
   const progress = useRef(new Animated.Value(0)).current;
   const [pct, setPct] = useState(0);
   const [pastCap, setPastCap] = useState(false);
@@ -83,7 +89,8 @@ export function SearchProgress({ title, subtitle, body, durationMs = 50000 }: Pr
 
   return (
     <View style={styles.container}>
-      <Text style={styles.brand}>Vinster</Text>
+      {header ? <Text style={styles.header}>{header}</Text> : <Text style={styles.brand}>Vinster</Text>}
+      {thumbnail ? <View style={styles.thumbWrap}>{thumbnail}</View> : null}
 
       <View style={styles.progressWrap}>
         <View style={styles.track}>
@@ -92,9 +99,9 @@ export function SearchProgress({ title, subtitle, body, durationMs = 50000 }: Pr
         <Text style={styles.percent}>{pct}%</Text>
       </View>
 
-      <Text style={styles.title}>{dynamicTitle}</Text>
+      {!hideRotatingTitle ? <Text style={styles.title}>{dynamicTitle}</Text> : null}
       <Text style={styles.timing}>{subtitle}</Text>
-      <Text style={styles.body}>{body}</Text>
+      {body ? <Text style={styles.body}>{body}</Text> : null}
       <Text style={styles.stayNote}>Please keep this page open</Text>
     </View>
   );
@@ -115,6 +122,16 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: spacing.xxl,
   },
+  // Bespoke header (e.g. "Generating Wine Intel") in place of the wordmark.
+  header: {
+    fontSize: 24,
+    fontFamily: fonts.headingBold,
+    color: colors.text,
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  thumbWrap: { alignItems: 'center', marginBottom: spacing.xl },
   progressWrap: {
     width: '100%',
     alignItems: 'center',

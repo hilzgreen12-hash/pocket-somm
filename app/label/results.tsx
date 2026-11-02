@@ -7,6 +7,7 @@ import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/componen
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { NaturalWineBadge } from '../../src/components/NaturalWineBadge';
+import { SearchProgress } from '../../src/components/SearchProgress';
 import { ReviewCardHeader, ReviewedStamp } from '../../src/components/ReviewCardHeader';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
@@ -1161,6 +1162,31 @@ export default function LabelResultsScreen() {
     // about to build intel directly, so show the building loader instead of a
     // pointless one-row list.
     const willAutoSkip = !intelligence && !confirmLoading && confirmExtraOptions.length === 0;
+    // Generating Wine Intel — a dedicated full-screen loader: header, a larger
+    // label thumbnail, then the Vinster % counter (no rotating line / blurb).
+    if (confirmGenerating || willAutoSkip) {
+      const genUri = imageUri ?? heroUri;
+      return (
+        <View style={styles.genContainer}>
+          <TouchableOpacity
+            style={styles.backRow}
+            onPress={() => {
+              if (intelligence) setAwaitingConfirm(false);
+              else router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan');
+            }}
+          >
+            <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
+          </TouchableOpacity>
+          <SearchProgress
+            header="Generating Wine Intel"
+            thumbnail={genUri ? <Image source={{ uri: genUri }} style={styles.genThumb} resizeMode="cover" /> : null}
+            hideRotatingTitle
+            title=""
+            subtitle="Vinster needs a few more seconds for your result"
+          />
+        </View>
+      );
+    }
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
         <TouchableOpacity
@@ -2987,6 +3013,9 @@ const styles = StyleSheet.create({
   // wine identity in the header row.
   heroFrame: { backgroundColor: colors.cream, padding: 5, borderRadius: 12, marginRight: spacing.md, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
   heroImage: { width: 120, aspectRatio: 3 / 4, borderRadius: 7, backgroundColor: colors.surface },
+  // Generating-intel screen: full-screen container + a larger label thumbnail.
+  genContainer: { flex: 1, backgroundColor: colors.background },
+  genThumb: { width: 200, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface },
   headerText: { flex: 1 },
   candOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   candSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%', maxWidth: 440 },
