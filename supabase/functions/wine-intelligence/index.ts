@@ -32,12 +32,14 @@ Deno.serve(async (req) => {
       ? `\n\nIMPORTANT — criticScore anchoring: Wine-Searcher's aggregated critic score for this exact wine is ${wsScoreNum}/100. Use this as your PRIMARY anchor ("north star") for the "criticScore" field. Default to returning ${wsScoreNum} unchanged. Only adjust it when you have a specific, well-founded reason (e.g. you confidently recall major published critic scores that materially shift the consensus), and even then keep it within a few points of ${wsScoreNum} and reflect that reasoning in criticScores. The result is a Vinster score grounded in real market data. Never set criticScore to null when this anchor is provided.`
       : '';
 
-    const prompt = `You are a wine expert with encyclopaedic knowledge of wines, producers, vintages, and critic scores.
-
-Provide intelligence on this wine:
-- Producer: ${producer}
-- Region: ${region}${wineNameStr}
-- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}
+    // FIXED instruction template → cached `system` prefix so repeat intel calls
+    // skip reprocessing it. Only the per-request wine identity (and the
+    // WS-score-dependent scoreGuidance) stay in the user message below.
+    // `${cur}`/`${currentYear}` remain inline in the fixed text: pulling them
+    // out would reword the schema sentences, so they ride in the cached prefix
+    // (a distinct currency/year yields its own cache entry; the common case is
+    // stable and caches fully).
+    const systemPrompt = `You are a wine expert with encyclopaedic knowledge of wines, producers, vintages, and critic scores.
 
 Return ONLY a valid JSON object with exactly this structure:
 {
@@ -67,9 +69,16 @@ NEVER-DEFAULT-TO-CHEAP RULE: when you do NOT genuinely recognise a producer, do 
 
 PRODUCER-SCALE DISCIPLINE: in tastingNotes and criticScoreNote, only describe the producer's size or production scale (e.g. "small artisanal grower", "boutique estate", "large négociant") when you are genuinely certain it is accurate. Many well-known estates are mistaken for small producers — when unsure of scale, describe the wine's character, reputation or style WITHOUT making a size claim. Never guess production scale.
 
-INSIDER NOTE — this is the "sommelier best friend" line, the payoff of the whole card, so make it earn its place. It must carry REAL, specific, comparative knowledge (this vintage vs other years, this producer vs its peers that year), never a generic platitude. Only assert a comparison you actually know to be true; when your specific knowledge is thin, narrow to what you genuinely know (the region's character in that year, the estate's general standing) rather than inventing a peer comparison. Accuracy over colour — but colour wherever you have the facts to back it. Keep it to 2 sentences (3 at the very most) — a sharp remark, not a paragraph.${scoreGuidance}
+INSIDER NOTE — this is the "sommelier best friend" line, the payoff of the whole card, so make it earn its place. It must carry REAL, specific, comparative knowledge (this vintage vs other years, this producer vs its peers that year), never a generic platitude. Only assert a comparison you actually know to be true; when your specific knowledge is thin, narrow to what you genuinely know (the region's character in that year, the estate's general standing) rather than inventing a peer comparison. Accuracy over colour — but colour wherever you have the facts to back it. Keep it to 2 sentences (3 at the very most) — a sharp remark, not a paragraph.
 
 Return only the raw JSON — no markdown, no explanation.`;
+
+    // VARIABLE per-request content: the specific wine identity plus the
+    // WS-score-anchoring guidance (both change every call).
+    const userContent = `Provide intelligence on this wine:
+- Producer: ${producer}
+- Region: ${region}${wineNameStr}
+- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}${scoreGuidance}`;
 
     // Up to 2 attempts. Claude is non-deterministic, so an occasional response
     // that leads with a non-text block, wraps the JSON in prose/markdown, or gets
@@ -83,7 +92,8 @@ Return only the raw JSON — no markdown, no explanation.`;
         model: 'claude-sonnet-5-5',
         thinking: { type: 'between_tools' },
         max_tokens: 10000,
-        messages: [{ role: 'user', content: prompt }],
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: userContent }],
       });
       const textBlock = response.content.find((b) => b.type === 'text');
       const text = textBlock?.type === 'text' ? textBlock.text : '';

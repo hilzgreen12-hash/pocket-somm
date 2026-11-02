@@ -76,11 +76,15 @@ Deno.serve(async (req) => {
       model: 'claude-sonnet-5-5',
       thinking: { type: 'between_tools' },
       max_tokens: 8000,
+      // The large FIXED instruction block lives in `system` as a cached prefix
+      // so repeat scans skip reprocessing it. Only the per-request image stays
+      // in the user message (images can't go in system). System text is sent
+      // before the user turn, so the model reads the instructions first.
+      system: [{ type: 'text', text: LABEL_SCAN_PROMPT, cache_control: { type: 'ephemeral' } }],
       messages: [{
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Image } },
-          { type: 'text', text: LABEL_SCAN_PROMPT },
         ],
       }],
     });
