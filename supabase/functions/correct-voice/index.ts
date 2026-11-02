@@ -39,8 +39,7 @@ Deno.serve(async (req) => {
     if (original.length > 240) return new Response(JSON.stringify({ text: original }), { headers: { 'Content-Type': 'application/json' } });
 
     const resp = await client.messages.create({
-      model: 'claude-sonnet-5-5',
-      thinking: { type: 'between_tools' },
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
       messages: [{ role: 'user', content: buildPrompt(original, domain) }],
     });

@@ -70,8 +70,7 @@ QUESTION: ${question}
 Answer:`;
 
     const resp = await client.messages.create({
-      model: 'claude-sonnet-5-5',
-      thinking: { type: 'between_tools' },
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 700,
       messages: [{ role: 'user', content: prompt }],
     });

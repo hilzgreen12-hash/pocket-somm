@@ -38,8 +38,7 @@ Deno.serve(async (req) => {
     }
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-5-5',
-      thinking: { type: 'between_tools' },
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 4000,
       messages: [{ role: 'user', content: buildPrompt({ producer, wineName, region, vintage, grape, currency }) }],
     });
