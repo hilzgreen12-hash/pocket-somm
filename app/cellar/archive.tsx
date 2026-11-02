@@ -6,6 +6,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { showAlert } from '../../src/components/AppAlert';
 import { foldAccents } from '../../src/utils/wineIdentity';
+import { groupWinesByIdentity } from '../../src/utils/wineMatch';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
@@ -38,15 +39,21 @@ export default function CellarArchiveScreen() {
   const { wines, isLoading, deleteWine } = useArchive();
   const [search, setSearch] = useState('');
 
+  // Collapse the same wine stored under slightly-different titles into one
+  // card, using the same fuzzy identity matcher the reviews use. Rows arrive
+  // ordered by archived_at desc, so each group's rep (its first row) is the
+  // most-recently-archived member — its archived_at is the date we show.
   const q = foldAccents(search.trim());
-  const filtered = q
-    ? wines.filter((w) => {
-        const hay = foldAccents([w.producer, w.wine_name, w.region, w.vintage]
-          .filter(Boolean)
-          .join(' '));
-        return hay.includes(q);
-      })
-    : wines;
+  const matchesQuery = (w: CellarWine) => {
+    if (!q) return true;
+    const hay = foldAccents([w.producer, w.wine_name, w.region, w.vintage]
+      .filter(Boolean)
+      .join(' '));
+    return hay.includes(q);
+  };
+  const groups = groupWinesByIdentity(wines);
+  // Search still matches any member — keep a group if its rep OR any row matches.
+  const filtered = q ? groups.filter((g) => g.rows.some(matchesQuery)) : groups;
 
   function handleLongPressWine(wine: CellarWine) {
     const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
@@ -115,12 +122,12 @@ export default function CellarArchiveScreen() {
             </View>
           ) : (
             <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-              {filtered.map((wine) => (
+              {filtered.map((g) => (
                 <ArchiveCard
-                  key={wine.id}
-                  wine={wine}
-                  onPress={() => router.push(`/cellar/${wine.id}` as any)}
-                  onLongPress={() => handleLongPressWine(wine)}
+                  key={g.rep.id}
+                  wine={g.rep}
+                  onPress={() => router.push(`/cellar/${g.rep.id}` as any)}
+                  onLongPress={() => handleLongPressWine(g.rep)}
                 />
               ))}
             </ScrollView>

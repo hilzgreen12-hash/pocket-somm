@@ -18,7 +18,7 @@ import type { CellarWine } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'error';
+type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'archiveNote' | 'error';
 
 
 function wineLabel(w: CellarWine | undefined): string {
@@ -122,7 +122,11 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     detail: string;      // "from X to Y" (move) / "N bottles archived" (archive)
     viewLabel: string;   // "View in <destination>"
     viewRoute: string;
+    wineId?: string;     // cellar_wine id of the acted-on wine (archive note target)
   } | null>(null);
+  // Draft archive note typed on the post-archive success screen.
+  const [archiveNote, setArchiveNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   const chosenWine = wines.find((w) => w.id === chosenWineId);
   const targetLocation = locations.find((l) => l.id === result?.locationId);
@@ -136,6 +140,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     setChosenWineId(null);
     setMoveToCellarList(false);
     setSuccess(null);
+    setArchiveNote('');
   }
 
   function handleClose() {
@@ -464,6 +469,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} moved to Your Cellar Archive`,
           viewLabel: 'View in Your Cellar Archive',
           viewRoute: '/cellar/list?archived=1',
+          wineId: chosenWine.id,
         });
       } else if (action === 'delete') {
         if (!chosenWine) return;
@@ -561,6 +567,26 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
       setPhase('error');
     } finally {
       setExecuting(false);
+    }
+  }
+
+  // Save the typed note onto the just-archived wine, then close. Guards against a
+  // missing id (nothing to attach the note to) and a double-tap while saving.
+  async function saveArchiveNote() {
+    if (savingNote) return;
+    const id = success?.wineId;
+    if (!id) { handleClose(); return; }
+    setSavingNote(true);
+    try {
+      const note = archiveNote.trim().slice(0, 100) || null;
+      await updateCellarWine(id, { archive_note: note });
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
+      handleClose();
+    } catch {
+      setPhase('error');
+    } finally {
+      setSavingNote(false);
     }
   }
 
@@ -695,10 +721,38 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
                   <TouchableOpacity onPress={() => { handleClose(); router.push(success.viewRoute as any); }} activeOpacity={0.7} style={styles.viewLinkRow}>
                     <Text style={styles.viewLink}>{success.viewLabel} →</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={reset} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Another Command</Text></TouchableOpacity>
+                  {success.action === 'archive' ? (
+                    // Archive: offer a quick note on the bottle just archived instead
+                    // of "Another Command".
+                    <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={() => setPhase('archiveNote')} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Add Archive Note</Text></TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={reset} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Another Command</Text></TouchableOpacity>
+                  )}
                 </>
               )}
               <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Done</Text></TouchableOpacity>
+            </>
+          )}
+
+          {phase === 'archiveNote' && success && (
+            <>
+              <Text style={styles.title}>Add Archive Note</Text>
+              <Text style={styles.successWine}>{success.wine}</Text>
+              {success.meta ? <Text style={styles.successMeta}>{success.meta}</Text> : null}
+              <TextInput
+                style={[styles.inputField, styles.inputText]}
+                value={archiveNote}
+                onChangeText={setArchiveNote}
+                placeholder="e.g. Drunk at Anna's 40th — still singing…"
+                placeholderTextColor={colors.textSubtle}
+                maxLength={100}
+                multiline
+              />
+              <Text style={styles.editHint}>{`${archiveNote.length}/100`}</Text>
+              <TouchableOpacity style={[styles.primaryBtn, savingNote && styles.btnDisabled]} onPress={saveArchiveNote} disabled={savingNote} activeOpacity={0.8}>
+                {savingNote ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.primaryBtnText}>Save Note</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setPhase('success')} style={styles.cancelRow}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
             </>
           )}
         </View>

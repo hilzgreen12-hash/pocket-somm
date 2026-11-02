@@ -326,6 +326,10 @@ export interface CellarWine {
   // on the wine card, never in Your Wine Reviews or the review card. Distinct
   // from a review; edited via a small dictate/type popup on the card.
   cellar_note?: string | null;
+  // Archive Note — the archive-context sibling of cellar_note (migration 117).
+  // Editable like cellar_note (card-only, <=100 chars); intended for notes added
+  // once a wine is archived.
+  archive_note?: string | null;
   // Migration 043. The user's WRITTEN REVIEW — sharable to community
   // and outside the app. Distinct from user_notes (Personal Notes,
   // private). Null on legacy rows; the wine card prefers review_note

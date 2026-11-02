@@ -34,7 +34,7 @@ import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBo
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { generateServingSuggestion, generateMarketVintage } from '../../src/api/wineExtras';
-import { wineNameKey } from '../../src/utils/wineIdentity';
+import { wineNameKey, looseWineMatch } from '../../src/utils/wineIdentity';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -228,6 +228,12 @@ export default function CellarWineDetail() {
   const [cellarViewOpen, setCellarViewOpen] = useState(false);
   const [noteText, setNoteText] = useState(wine?.cellar_note ?? '');
   const [savingNote, setSavingNote] = useState(false);
+  // Archive Note — the archive-context sibling of Cellar Note (migration 117).
+  // Behaves IDENTICALLY to Cellar Note: a short private note (<=100 chars) shown
+  // only on the wine card, with the same edit + read-only popups.
+  const [archiveNoteOpen, setArchiveNoteOpen] = useState(false);
+  const [archiveNoteViewOpen, setArchiveNoteViewOpen] = useState(false);
+  const [archiveNoteText, setArchiveNoteText] = useState(wine?.archive_note ?? '');
 
   const [removeCount, setRemoveCount] = useState('1');
   const [removeDate, setRemoveDate] = useState(todayISO());
@@ -764,6 +770,11 @@ export default function CellarWineDetail() {
     setCellarNoteOpen(true);
   }
 
+  function openArchiveNote() {
+    setArchiveNoteText(wine?.archive_note ?? '');
+    setArchiveNoteOpen(true);
+  }
+
   // On-demand Serving Suggestions — generate once, cache on the wine. Never part
   // of the auto wine-card generation or "update intel", so it doesn't slow those.
   async function handleGenerateServing() {
@@ -835,6 +846,41 @@ export default function CellarWineDetail() {
       setNoteText('');
       setCellarNoteOpen(false);
       setCellarNoteViewOpen(false);
+    } catch {
+      showAlert({ title: 'Error', body: 'Could not delete note.' });
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  // Archive Note — the exact parallel of the Cellar Note save/delete above,
+  // writing the archive_note column instead of cellar_note.
+  async function handleSaveArchiveNote() {
+    Keyboard.dismiss();
+    setSavingNote(true);
+    try {
+      await updateWine.mutateAsync({
+        id: wine!.id,
+        updates: { archive_note: archiveNoteText.trim().slice(0, 100) || null },
+      });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      setArchiveNoteOpen(false);
+    } catch {
+      showAlert({ title: 'Error', body: 'Could not save note.' });
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  async function handleDeleteArchiveNote() {
+    Keyboard.dismiss();
+    setSavingNote(true);
+    try {
+      await updateWine.mutateAsync({ id: wine!.id, updates: { archive_note: null } });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      setArchiveNoteText('');
+      setArchiveNoteOpen(false);
+      setArchiveNoteViewOpen(false);
     } catch {
       showAlert({ title: 'Error', body: 'Could not delete note.' });
     } finally {
@@ -1593,9 +1639,17 @@ export default function CellarWineDetail() {
   // scan vs a re-add) is still recognised as the same wine and remembered in
   // "Bottles in My Archive". Mirrors the review/search dedup hardening.
   const wineKey = wineNameKey(wine.producer, wine.wine_name);
+  // A row is the same wine when the exact identity KEY + vintage match OR the
+  // looser subset-token match does (same vintage, one side's tokens a subset of
+  // the other's) — so a bottle archived under a slightly different name-split is
+  // still summed into "Bottles in My Archive". Mirrors the review dedup matcher.
   const matchesIdentity = (w: typeof wine) =>
-    wineNameKey(w.producer, w.wine_name) === wineKey &&
-    norm(w.vintage) === norm(wine.vintage);
+    (wineNameKey(w.producer, w.wine_name) === wineKey &&
+      norm(w.vintage) === norm(wine.vintage)) ||
+    looseWineMatch(
+      { producer: wine.producer, wineName: wine.wine_name, grape: wine.grape_variety, vintage: wine.vintage },
+      { producer: w.producer, wineName: w.wine_name, grape: w.grape_variety, vintage: w.vintage },
+    );
   const bottlesInCellar = wines.filter(matchesIdentity).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
   const archivedMatches = archivedWines.filter(matchesIdentity);
   const bottlesInArchive = archivedMatches.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
@@ -1891,11 +1945,6 @@ export default function CellarWineDetail() {
               {lastArchivedAt ? `, ${new Date(lastArchivedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
             </Text>
           )}
-          {/* View the global Cellar Archive (the Add-to-Archive action now lives
-              under Bottles in My Cellar). */}
-          <TouchableOpacity onPress={() => router.push('/cellar/archive' as any)} activeOpacity={0.7}>
-            <Text style={styles.statAction}>View Archive →</Text>
-          </TouchableOpacity>
           {/* Quick access to this wine's archive/removal history — only when there
               is one. */}
           {removals.length > 0 ? (
@@ -1911,44 +1960,32 @@ export default function CellarWineDetail() {
         <Text style={[styles.rackRemovalMsg, { marginHorizontal: spacing.xl }]}>{rackRemovalMsg}</Text>
       )}
 
-      {/* Your Review (left) beside Cellar Note (right); each header stays in its
-          column, but its expanded body lays out FULL WIDTH below the row. */}
+      {/* Archive Note (left) beside Cellar Note (right); each header stays in its
+          column. Archive Note only shows when the wine has archived bottles or is
+          itself archived; otherwise the left column is an empty spacer so Cellar
+          Note keeps its right-hand slot. */}
       <View style={styles.reviewRow}>
+        {(bottlesInArchive > 0 || isArchived) ? (
         <View style={styles.reviewCol}>
-          {/* Your Review — the chevron opens this wine's review in Your Wine
-              Reviews when one exists, or jumps straight to the review input
-              when it doesn't. No in-card expand; no yellow prompt. */}
-          {(() => {
-            const hasReview = wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window;
-            const reviewHref = hasReview
-              ? `/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}`
-              : `/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}`;
-            return (
-              <>
-                <View style={styles.vinsterHeaderRow}>
-                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-                    <Text style={styles.vinsterReviewTitle}>Your Review</Text>
-                    <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-                  </TouchableOpacity>
-                </View>
-                {/* Collapsed summary when a review exists — also opens the card. */}
-                {hasReview ? (
-                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7}>
-                    <Text style={styles.reviewScoreLine} numberOfLines={1}>
-                      {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
-                      {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
-                      {wine.review_date ? (
-                        <Text style={styles.reviewScoreDate}>
-                          {new Date(wine.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </Text>
-                      ) : null}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </>
-            );
-          })()}
+          {/* Archive Note — the archive sibling of Cellar Note. The chevron opens
+              a read-only popup (Edit / Delete) when a note exists, or the manual
+              input popup when it doesn't. Card-only, <=100 chars. */}
+          <View style={styles.vinsterHeaderRow}>
+            <TouchableOpacity onPress={() => wine.archive_note ? setArchiveNoteViewOpen(true) : openArchiveNote()} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <Text style={styles.vinsterReviewTitle}>Archive Note</Text>
+              <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
+            </TouchableOpacity>
+          </View>
+          {/* One-line preview when a note exists — tapping it opens the popup. */}
+          {wine.archive_note ? (
+            <TouchableOpacity onPress={() => setArchiveNoteViewOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.cellarNotePreview} numberOfLines={1}>{wine.archive_note}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
+        ) : (
+          <View style={styles.reviewCol} />
+        )}
 
         {!isWishlist && (
         <View style={styles.reviewCol}>
@@ -1998,20 +2035,62 @@ export default function CellarWineDetail() {
         </View>
       </View>
 
-      {/* On-demand Serving Suggestions — temperature, decant, glassware and a wine
-          to enjoy before/after. Generated on command (not during wine-card
-          generation or "update intel") and cached on the wine. */}
-      {!isWishlist ? (
-        <>
-          <View style={styles.reviewRow}>
-            <View style={styles.vinsterHeaderRow}>
-              <TouchableOpacity onPress={() => setServingOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-                <Text style={styles.vinsterReviewTitle}>Serving Suggestions</Text>
-                <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-              </TouchableOpacity>
-            </View>
+      {/* Your Review (left) beside Serving Suggestions (right); each header stays
+          in its column, but the Serving body lays out FULL WIDTH below the row.
+          Your Review sits beneath Avg Critic Score, Serving beneath Drinking Window. */}
+      <View style={styles.reviewRow}>
+        <View style={styles.reviewCol}>
+          {/* Your Review — the chevron opens this wine's review in Your Wine
+              Reviews when one exists, or jumps straight to the review input
+              when it doesn't. No in-card expand; no yellow prompt. */}
+          {(() => {
+            const hasReview = wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window;
+            const reviewHref = hasReview
+              ? `/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}`
+              : `/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}`;
+            return (
+              <>
+                <View style={styles.vinsterHeaderRow}>
+                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+                    <Text style={styles.vinsterReviewTitle}>Your Review</Text>
+                    <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
+                  </TouchableOpacity>
+                </View>
+                {/* Collapsed summary when a review exists — also opens the card. */}
+                {hasReview ? (
+                  <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7}>
+                    <Text style={styles.reviewScoreLine} numberOfLines={1}>
+                      {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
+                      {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
+                      {wine.review_date ? (
+                        <Text style={styles.reviewScoreDate}>
+                          {new Date(wine.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </Text>
+                      ) : null}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            );
+          })()}
+        </View>
+
+        {/* On-demand Serving Suggestions — temperature, decant, glassware and a
+            wine to enjoy before/after. Generated on command (not during wine-card
+            generation or "update intel") and cached on the wine. Header lives in
+            this column; its expanded body renders full-width below the row. */}
+        {!isWishlist && (
+        <View style={styles.reviewCol}>
+          <View style={styles.vinsterHeaderRow}>
+            <TouchableOpacity onPress={() => setServingOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <Text style={styles.vinsterReviewTitle}>Serving Suggestions</Text>
+              <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
+            </TouchableOpacity>
           </View>
-          {servingOpen ? (
+        </View>
+        )}
+      </View>
+      {!isWishlist && servingOpen ? (
             <View style={styles.reviewExpandedFull}>
               {wine.serving_suggestion ? (
                 <View style={styles.servingBubble}>
@@ -2029,8 +2108,6 @@ export default function CellarWineDetail() {
                 </TouchableOpacity>
               )}
             </View>
-          ) : null}
-        </>
       ) : null}
 
       <View style={styles.cardDivider} />
@@ -2644,6 +2721,60 @@ export default function CellarWineDetail() {
               <Text style={styles.cnSaveText}>Edit</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.cnCancel} onPress={handleDeleteCellarNote} disabled={savingNote}>
+              <Text style={styles.cnDeleteText}>{savingNote ? 'Deleting…' : 'Delete'}</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Archive Note popup — exact clone of the Cellar Note input popup, writing
+          archive_note. Card-only, <=100 chars. */}
+      <Modal visible={archiveNoteOpen} transparent animationType="fade" onRequestClose={() => setArchiveNoteOpen(false)}>
+        <View style={styles.cnOverlay}>
+          <View style={styles.cnSheet}>
+            <View style={styles.cnHeaderRow}>
+              <Text style={styles.cnTitle}>Archive Note</Text>
+              <View style={styles.cnHeaderRight}>
+                <TouchableOpacity onPress={() => setArchiveNoteOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
+                  <Text style={styles.cnCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <Text style={styles.cnBody}>A short private note, shown only here on the wine card — 100 characters or less.</Text>
+            <TextInput
+              style={styles.cnInput}
+              value={archiveNoteText}
+              onChangeText={(t) => setArchiveNoteText(t.slice(0, 100))}
+              placeholder="e.g. Drunk at our anniversary dinner — stunning"
+              placeholderTextColor={colors.textMuted}
+              maxLength={100}
+              multiline
+              autoFocus
+            />
+            <Text style={styles.cnCount}>{archiveNoteText.length}/100</Text>
+            <TouchableOpacity style={styles.cnSaveBtn} onPress={handleSaveArchiveNote} disabled={savingNote} activeOpacity={0.85}>
+              <Text style={styles.cnSaveText}>{savingNote ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+            {wine.archive_note ? (
+              <TouchableOpacity style={styles.cnCancel} onPress={handleDeleteArchiveNote} disabled={savingNote}>
+                <Text style={styles.cnDeleteText}>Delete Note</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Archive Note read-only popup — clone of the Cellar Note view popup. */}
+      <Modal visible={archiveNoteViewOpen} transparent animationType="fade" onRequestClose={() => setArchiveNoteViewOpen(false)}>
+        <TouchableOpacity style={styles.cnOverlay} activeOpacity={1} onPress={() => setArchiveNoteViewOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.cnSheet} onPress={() => {}}>
+            <Text style={styles.cnViewWineName} numberOfLines={2}>{[wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ')}</Text>
+            <Text style={styles.cnViewSub}>Archive Note</Text>
+            <Text style={styles.cnViewNote}>{wine.archive_note}</Text>
+            <TouchableOpacity style={styles.cnSaveBtn} onPress={() => { setArchiveNoteViewOpen(false); openArchiveNote(); }} activeOpacity={0.85}>
+              <Text style={styles.cnSaveText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cnCancel} onPress={handleDeleteArchiveNote} disabled={savingNote}>
               <Text style={styles.cnDeleteText}>{savingNote ? 'Deleting…' : 'Delete'}</Text>
             </TouchableOpacity>
           </TouchableOpacity>

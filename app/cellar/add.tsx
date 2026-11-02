@@ -11,6 +11,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker } from '../../src/components/BottleSizePicker';
+import { sameWineIdentity } from '../../src/utils/wineMatch';
 
 export default function AddWineScreen() {
   const { wines, addWine, updateWine } = useCellar();
@@ -32,16 +33,12 @@ export default function AddWineScreen() {
   const [saving, setSaving] = useState(false);
 
   function findMatchingExisting() {
-    const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-    const wantedName = norm(wineName);
-    const wantedProducer = norm(producer || wineName);
-    const wantedVintage = vintage.trim();
-    if (!wantedName) return null;
-    return wines.find((w) =>
-      norm(w.wine_name) === wantedName &&
-      norm(w.producer) === wantedProducer &&
-      (w.vintage ?? '').trim() === wantedVintage
-    ) ?? null;
+    if (!wineName.trim()) return null;
+    // Fuzzy identity match (same predicate the reviews use) against the ACTIVE
+    // cellar — so a near-identical title now triggers the merge prompt instead
+    // of silently spawning a duplicate line. `wines` already excludes archived.
+    const candidate = { producer, wineName, vintage };
+    return wines.find((w) => sameWineIdentity(candidate, w)) ?? null;
   }
 
   async function performNewEntry() {
