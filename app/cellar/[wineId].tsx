@@ -572,7 +572,6 @@ export default function CellarWineDetail() {
       if (spiritDraft) {
         updates.drinking_window_from = null;
         updates.drinking_window_to = null;
-        updates.drinking_window_status = null;
       }
       await updateWine.mutateAsync({ id: wine.id, updates });
       setTitleEditOpen(false);
