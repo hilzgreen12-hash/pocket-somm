@@ -172,21 +172,29 @@ export function CellarInsightsCarousel() {
   // with the label thumbnail of the LAST wine paired. (A recipe in Pair is
   // generated for a specific wine, stored as details — matched by identity.)
   {
+    // Up to FOUR of the most recently paired wines' labels (newest first, deduped
+    // by identity) — a collage, like the other Insights tiles.
     const recipeWineKeys = new Set<string>();
+    const recipeThumbs: string[] = [];
+    const seenThumbKeys = new Set<string>();
     for (const s of recipeSessions as any[]) {
       const w = s.wine;
-      if (w) recipeWineKeys.add(wineNameKey(w.producer, w.wineName));
+      if (!w) continue;
+      const key = wineNameKey(w.producer, w.wineName);
+      recipeWineKeys.add(key);
+      if (!seenThumbKeys.has(key)) {
+        const thumb = thumbByKey.get(key);
+        if (thumb && recipeThumbs.length < 4) { seenThumbKeys.add(key); recipeThumbs.push(thumb); }
+      }
     }
     const recipeWineCount = recipeWineKeys.size;
-    const lastPairedWine = (recipeSessions as any[])[0]?.wine;
-    const lastPairedThumb = lastPairedWine ? thumbByKey.get(wineNameKey(lastPairedWine.producer, lastPairedWine.wineName)) : undefined;
-    // Only shown when we have the paired wine's label to picture it — never a
-    // bare brown/count tile.
-    if (recipeWineCount > 0 && lastPairedThumb) {
+    // Only shown when we have at least one paired wine's label to picture it —
+    // never a bare brown/count tile.
+    if (recipeWineCount > 0 && recipeThumbs.length > 0) {
       tiles.push({
         key: 'recipes-generated',
         title: 'Recipes Generated', meta: `${recipeWineCount} of your wine${recipeWineCount === 1 ? '' : 's'}`,
-        collage: [lastPairedThumb],
+        collage: recipeThumbs,
         onTap: () => router.push('/chef/archive' as any),
       });
     }
