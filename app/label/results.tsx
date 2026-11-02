@@ -13,6 +13,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
+import { useAutoLabel } from '../../src/hooks/useAutoLabel';
 import { useLabels } from '../../src/hooks/useLabels';
 import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
 import { captureCity } from '../../src/utils/captureCity';
@@ -126,6 +127,12 @@ export default function LabelResultsScreen() {
   // on "No results available" and the wine never saves (regression from 7e9deec).
   const isAddFlow = context === 'add' || context === 'add-location';
   const { wineDetailsConfirmed, intelligence, imageUri, setImage, setImageUri, setWineDetails, setWineDetailsConfirmed, setIntelligence } = useLabelStore();
+  // When the intel card has no stored/selected photo — e.g. a wine named by Voice
+  // Command or typed in manually — fall back to a web-fetched label for the wine's
+  // identity so the card always shows a thumbnail (same source the Discover
+  // carousels use). Only runs when there's no real photo.
+  const autoLabelUri = useAutoLabel(wineDetailsConfirmed?.producer, wineDetailsConfirmed?.wineName, !imageUri);
+  const heroUri = imageUri ?? autoLabelUri;
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
@@ -2039,9 +2046,9 @@ export default function LabelResultsScreen() {
           {/* Wine-card layout: the scanned/uploaded label photo on the left, the
               wine identity (name · region · grape) on its right. Manual entries
               have no imageUri, so the text column simply fills the row. */}
-          {imageUri ? (
+          {heroUri ? (
             <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85} style={styles.heroFrame}>
-              <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
+              <Image source={{ uri: heroUri }} style={styles.heroImage} resizeMode="cover" />
             </TouchableOpacity>
           ) : null}
           <View style={styles.headerText}>
@@ -2064,7 +2071,7 @@ export default function LabelResultsScreen() {
       </View>
 
       {/* Tap the label photo to view it full-screen with pinch/zoom + pan. */}
-      <LabelPhotoViewer visible={zoomOpen} uri={imageUri} onClose={() => setZoomOpen(false)} />
+      <LabelPhotoViewer visible={zoomOpen} uri={heroUri} onClose={() => setZoomOpen(false)} />
 
       {/* "Edit Wine" — manual edit of photo + identity + grape + bottle size,
           then regenerate the intel card. */}
@@ -2420,7 +2427,7 @@ export default function LabelResultsScreen() {
             <Text style={styles.saveReviewBtnText}>Find me a Recipe</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.saveReviewBtn, { marginTop: spacing.sm }]} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
-            <Text style={styles.saveReviewBtnText}>{sharing ? 'Exporting…' : 'Export'}</Text>
+            <Text style={styles.saveReviewBtnText}>{sharing ? 'Exporting…' : 'Export Wine Intel'}</Text>
           </TouchableOpacity>
         </View>
       ) : null}

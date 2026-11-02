@@ -2373,7 +2373,7 @@ export default function CellarWineDetail() {
       {/* Export (share the wine card) — moved here from the top-right, as a
           yellow button sitting directly above Archive / Delete. */}
       <TouchableOpacity style={styles.exportBtn} onPress={handleShareIntel} disabled={sharingIntel} activeOpacity={0.85}>
-        <Text style={styles.exportBtnText}>{sharingIntel ? 'Preparing…' : 'Export'}</Text>
+        <Text style={styles.exportBtnText}>{sharingIntel ? 'Preparing…' : 'Export Wine Intel'}</Text>
       </TouchableOpacity>
 
       {!isArchived && !isWishlist && (
