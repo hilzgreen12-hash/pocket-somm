@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
-import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, placeholderLabelImages } from './ExamplePlaceholder';
 import { useLabels } from '../hooks/useLabels';
 import { useLabelStore } from '../stores/labelStore';
 import { useScanStore } from '../stores/scanStore';
@@ -37,9 +37,9 @@ function stampDate(d: Date): string {
 
 // Example cards shown when a new user has no scans yet.
 const SCAN_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'label', producer: 'Domaine de la Romanée-Conti', wineName: 'La Romanée-Conti', title: 'La Romanée-Conti 2002', stamp: '01 Jan 2030', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
-  { kind: 'label', producer: 'Biondi-Santi', wineName: 'Brunello di Montalcino', title: 'Biondi-Santi Brunello di Montalcino 2010', stamp: '20 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
-  { kind: 'label', producer: 'Kistler', wineName: 'Chardonnay', title: 'Kistler Chardonnay 2020', stamp: '18 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
+  { kind: 'labelCollage', images: placeholderLabelImages(0, 1), title: 'La Romanée-Conti 2002', stamp: '01 Jan 2030', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
+  { kind: 'labelCollage', images: placeholderLabelImages(1, 1), title: 'Biondi-Santi Brunello di Montalcino 2010', stamp: '20 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
+  { kind: 'labelCollage', images: placeholderLabelImages(2, 1), title: 'Kistler Chardonnay 2020', stamp: '18 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
 ];
 
 // Identity key for de-duping re-scans of the same wine (newest kept).

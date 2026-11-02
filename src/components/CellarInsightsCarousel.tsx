@@ -9,7 +9,7 @@ import { useCellar } from '../hooks/useCellar';
 import { useLabels } from '../hooks/useLabels';
 import { wineNameKey } from '../utils/wineIdentity';
 import { LabelThumb } from './LabelThumb';
-import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, placeholderLabelImages } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -21,10 +21,14 @@ const MAX_TILES = 6;
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
+// Order mirrors the real tiles so a populated tile replaces its own placeholder.
+// Wine tiles are label collages; Dined Out stays a restaurant photo.
 const INSIGHT_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'label', producer: 'Château Montrose', wineName: 'Saint-Estèphe', title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY },
-  { kind: 'label', producer: 'Penfolds', wineName: 'Grange', title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY },
+  { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY },
+  { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY },
   { kind: 'image', uri: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY },
+  { kind: 'labelCollage', images: placeholderLabelImages(2, 4), title: 'Recipes Generated', stamp: '4 of your wines', overlay: INSIGHT_OVERLAY },
+  { kind: 'labelCollage', images: placeholderLabelImages(6, 4), title: 'Labels Scanned Last Month', stamp: '12 wine labels', overlay: INSIGHT_OVERLAY },
 ];
 
 // Every insight tile shows a real IMAGE — a label collage or a photo. Tiles with
