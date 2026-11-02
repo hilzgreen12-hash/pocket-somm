@@ -1,6 +1,7 @@
-// Answer a user's question about their OWN Vinster records — reviews (with their
-// scores, the restaurant and date) and restaurant visits. e.g. "which restaurant
-// did I drink a Cornas in recently?", "what score did I give Château Latour 2003?".
+// Answer a user's question about their OWN Vinster records — their written reviews
+// (their score, restaurant, date), their CELLAR wines (critic score + any review
+// score/note of their own, incl. archived), and restaurant visits. e.g. "which
+// restaurant did I drink a Cornas in recently?", "what's my score for Latour 2005?".
 //
 // Retrieval is scoped to the caller via their JWT (RLS), so a user only ever sees
 // their own data. We build a compact digest and let the model answer from it.
@@ -43,6 +44,15 @@ Deno.serve(async (req) => {
       .order('captured_at', { ascending: false })
       .limit(150);
 
+    // The user's CELLAR — each wine row carries the critic score AND the user's
+    // own review score/note, so "what's my score for X" must look here too, not
+    // only in written reviews. Includes archived bottles.
+    const { data: cellar } = await db
+      .from('cellar_wines')
+      .select('producer, wine_name, vintage, region, critic_score, review_score, review_note, quantity, archived_at')
+      .order('created_at', { ascending: false })
+      .limit(400);
+
     const reviewLines = (reviews ?? []).map((r: any) => {
       const wine = [r.producer, r.wine_name, r.vintage].filter(Boolean).join(' ');
       const score = r.user_score ?? r.review_score;
@@ -52,15 +62,33 @@ Deno.serve(async (req) => {
     });
     const visitLines = (visits ?? []).map((v: any) => `- ${[v.restaurant_name, v.city].filter(Boolean).join(', ')}${v.captured_at ? ` · ${String(v.captured_at).slice(0, 10)}` : ''}`);
 
-    if (reviewLines.length === 0 && visitLines.length === 0) {
-      return json({ answer: "I don't have any of your reviews or restaurant visits recorded yet, so there's nothing to look this up in." });
+    const cellarLines = (cellar ?? []).map((c: any) => {
+      const wine = [c.producer, c.wine_name, c.vintage].filter(Boolean).join(' ');
+      const mine = c.review_score != null ? ` · my review score ${c.review_score}` : '';
+      const critic = c.critic_score != null ? ` · critic score ${c.critic_score}` : '';
+      const note = c.review_note ? ` · my note: ${String(c.review_note).slice(0, 120)}` : '';
+      const status = c.archived_at ? ' · (archived)' : '';
+      return `- ${wine}${c.region ? ` (${c.region})` : ''}${mine}${critic}${note}${status}`;
+    });
+
+    if (reviewLines.length === 0 && visitLines.length === 0 && cellarLines.length === 0) {
+      return json({ answer: "I don't have any of your reviews, cellar wines or restaurant visits recorded yet, so there's nothing to look this up in." });
     }
 
     const todayIso = new Date().toISOString().slice(0, 10);
-    const prompt = `Today is ${todayIso}. Answer the user's question using ONLY their own Vinster records below. Be specific and concise (1–3 sentences) — name the wine, the restaurant, the date and/or their score as relevant. If the records don't contain the answer, say so plainly ("I don't have a record of that"). Do not invent anything not in the data. When the user says "recently", prefer the most recent matching entry.
+    const prompt = `Today is ${todayIso}. Answer the user's question using ONLY their own Vinster records below. Be specific and concise (1–3 sentences) — name the wine, the restaurant, the date and/or the score as relevant. If the records don't contain the answer, say so plainly ("I don't have a record of that"). Do not invent anything not in the data. When the user says "recently", prefer the most recent matching entry.
+
+A wine can appear in their written REVIEWS and/or in their CELLAR — always check BOTH before concluding anything. When the user asks what THEIR score is (or what they gave) for a specific wine:
+- If a review score for that wine is in the records, state it (you may add the critic score for context).
+- If the wine IS in their cellar/reviews but has no review score of their own, reply exactly: "Sorry but it appears that this wine hasn't been reviewed by you yet." If that wine has a critic score, you may append " Its critic score is N." (with the number).
+- If the wine is NOT found in their cellar or reviews at all, reply exactly: "Sorry but I can't find this wine in your cellar."
+For any other question not about a wine's score, if the records don't contain the answer, say "I don't have a record of that."
 
 THEIR WINE REVIEWS (wine · region · my score · where · date):
 ${reviewLines.join('\n') || '(none)'}
+
+THEIR CELLAR (wine · region · my review score · critic score · my note · status):
+${cellarLines.join('\n') || '(none)'}
 
 THEIR RESTAURANT VISITS:
 ${visitLines.join('\n') || '(none)'}
