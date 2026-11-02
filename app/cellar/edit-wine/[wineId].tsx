@@ -204,6 +204,27 @@ export default function EditWineScreen() {
       qc.invalidateQueries({ queryKey: ['bin-cells'] });
       qc.invalidateQueries({ queryKey: ['bins'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+
+      // Bottles were ADDED here, so they exist in the Full Cellar List but sit
+      // in no rack, fridge, diamond or alt cellar yet. Offer to file them now
+      // rather than letting them quietly become "awaiting placement".
+      const added = (typeof updates.quantity === 'number' ? updates.quantity : (wine.quantity ?? 0)) - (wine.quantity ?? 0);
+      if (added > 0) {
+        // The save itself is finished — drop the spinner before the popup, so
+        // dismissing it by tapping outside doesn't leave Save stuck saving.
+        setSaving(false);
+        showAlert({
+          title: 'Bottles Added',
+          body: `${added} ${added === 1 ? 'wine' : 'wines'} added to your bottle count. You can place the ${added === 1 ? 'wine' : 'wines'} in a home location now, or leave them in your Full Cellar List to place later.`,
+          buttons: [
+            // Straight to the wine card's placement chooser for the loose bottles.
+            { text: 'Place Now', onPress: () => router.replace(`/cellar/${wine.id}?place=1` as any) },
+            { text: 'Place Later', onPress: () => router.back() },
+            { text: 'Done', style: 'cancel', onPress: () => router.back() },
+          ],
+        });
+        return;
+      }
       router.back();
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
