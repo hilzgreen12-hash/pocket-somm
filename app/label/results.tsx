@@ -7,6 +7,7 @@ import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/componen
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { NaturalWineBadge } from '../../src/components/NaturalWineBadge';
+import { SpiritBadge } from '../../src/components/SpiritBadge';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { ReviewCardHeader, ReviewedStamp } from '../../src/components/ReviewCardHeader';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
@@ -1352,6 +1353,9 @@ export default function LabelResultsScreen() {
       drinking_window_from: intel.drinkingWindowFrom,
       drinking_window_to: intel.drinkingWindowTo,
       drinking_window_status: intel.drinkingWindowStatus,
+      // Persist the spirit flag so the cellar card shows the Spirit badge / "NA"
+      // window and the wine is kept out of maturity surfacing.
+      is_spirit: intel.isSpirit ?? false,
       tasting_notes: intel.tastingNotes,
       // The grape the user CONFIRMED wins — the intel grape only fills in when
       // none was pinned. Previously the intel grape overrode a confirmed one
@@ -2103,6 +2107,8 @@ export default function LabelResultsScreen() {
             {/* Natural-wine badge — tappable, below the identity. Shown only when
                 the intel flags the wine as natural. */}
             {intel?.isNatural ? <NaturalWineBadge /> : null}
+            {/* Spirit badge — a spirit won't also be natural; show whichever applies. */}
+            {intel?.isSpirit ? <SpiritBadge /> : null}
           </View>
         </View>
 
@@ -2284,8 +2290,11 @@ export default function LabelResultsScreen() {
               )}
             </TouchableOpacity>
             <Text style={styles.statBarSepGold}>·</Text>
-            <TouchableOpacity style={styles.statBarItem} onPress={openWindowInfo} disabled={intelLoading || (!(intel.drinkingWindowFrom && intel.drinkingWindowTo) && intel.drinkingWindowStatus === 'unknown')} activeOpacity={0.7}>
-              {intelLoading ? <ActivityIndicator size="small" color={colors.gold} /> : (
+            <TouchableOpacity style={styles.statBarItem} onPress={openWindowInfo} disabled={intelLoading || intel.isSpirit || (!(intel.drinkingWindowFrom && intel.drinkingWindowTo) && intel.drinkingWindowStatus === 'unknown')} activeOpacity={0.7}>
+              {intelLoading ? <ActivityIndicator size="small" color={colors.gold} /> : intel.isSpirit ? (
+                // Spirits don't mature — no drinking window applies.
+                <Text style={[styles.statBarValueGold, styles.statBarValueMuted]}>NA</Text>
+              ) : (
                 <Text style={[styles.statBarValueGold, !(intel.drinkingWindowFrom && intel.drinkingWindowTo) && styles.statBarValueMuted]}>
                   {intel.drinkingWindowFrom && intel.drinkingWindowTo ? `${intel.drinkingWindowFrom} - ${intel.drinkingWindowTo}` : '—'}
                 </Text>

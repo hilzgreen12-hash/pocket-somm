@@ -157,6 +157,9 @@ export interface WineIntelligence {
   // True when the wine is specifically a NATURAL / low-intervention wine — drives
   // the "Natural Wine" badge on the intel card. Conservative (default false).
   isNatural?: boolean | null;
+  // True when the bottle is a SPIRIT (whisky, gin, rum, brandy…), not a wine —
+  // drives the "Spirit" badge, an NA drinking window, and no maturity rating.
+  isSpirit?: boolean | null;
   // Genuine grape ambiguity: this exact producer + wine name is released as more
   // than one wine under the identical name (e.g. a single-vineyard sold as both a
   // Syrah and a Chenin Blanc, or a Hermitage name existing as both red and white),
@@ -333,6 +336,9 @@ export interface CellarWine {
   // Editable like cellar_note (card-only, <=100 chars); intended for notes added
   // once a wine is archived.
   archive_note?: string | null;
+  // Spirit flag (migration 118): true for whisky/gin/rum/brandy etc. Drives the
+  // "Spirit" badge, an NA drinking window, and suppresses maturity ratings.
+  is_spirit?: boolean | null;
   // Migration 043. The user's WRITTEN REVIEW — sharable to community
   // and outside the app. Distinct from user_notes (Personal Notes,
   // private). Null on legacy rows; the wine card prefers review_note

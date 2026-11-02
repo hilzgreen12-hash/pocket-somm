@@ -47,7 +47,12 @@ export function effectiveMaturity(wine: {
   drinking_window_from: number | null;
   drinking_window_to: number | null;
   drinking_window_status?: string | null;
+  is_spirit?: boolean | null;
 }): string {
+  // Spirits don't mature in the bottle — return a sentinel that matches none of
+  // the real maturity statuses, so a spirit never gets a maturity tag/colour and
+  // is never surfaced as "peak now" or caught by a maturity filter.
+  if (wine.is_spirit) return 'spirit';
   if (wine.drinking_window_from != null || wine.drinking_window_to != null) {
     return deriveMaturityStatus(wine.drinking_window_from, wine.drinking_window_to);
   }

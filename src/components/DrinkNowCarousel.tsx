@@ -28,6 +28,8 @@ const LAST_CALL_HORIZON = 3;
 const RUNNING_LOW_MAX = 2;
 
 function isLastCall(w: CellarWine, nowYear: number): boolean {
+  // Spirits don't mature — never surface them as Last Call / peak-now.
+  if (w.is_spirit) return false;
   const to = w.drinking_window_to;
   if (to == null) return false;
   if (to > nowYear + LAST_CALL_HORIZON) return false;

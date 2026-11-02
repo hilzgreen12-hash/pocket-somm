@@ -16,6 +16,7 @@ import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
+import { SpiritBadge } from '../../src/components/SpiritBadge';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { hasRealInsiderNote } from '../../src/constants/insiderNote';
 import { COMMUNITY_ENABLED } from '../../src/constants/features';
@@ -1626,8 +1627,13 @@ export default function CellarWineDetail() {
   // filter puts the wine in. It derives from the from/to years when present
   // (always current) and falls back to the stored status only when there are none.
   const effectiveWindowStatus = effectiveMaturity(wine);
-  const windowColor = STATUS_COLORS[effectiveWindowStatus] ?? colors.textMuted;
-  const windowLabel = STATUS_LABELS[effectiveWindowStatus] ?? 'Unknown';
+  // Spirits don't mature — show "NA" with no maturity colour or window sub-line.
+  const windowColor = wine.is_spirit
+    ? colors.textMuted
+    : STATUS_COLORS[effectiveWindowStatus] ?? colors.textMuted;
+  const windowLabel = wine.is_spirit
+    ? 'NA'
+    : STATUS_LABELS[effectiveWindowStatus] ?? 'Unknown';
 
   // Count bottles across all rows (cellar + archive) that match this wine's
   // identity. Producer + wine name + vintage normalised so 'NV' / null /
@@ -1772,6 +1778,7 @@ export default function CellarWineDetail() {
             />
             {/* Bottle format is NOT shown here — it lives in the "Bottles in My
                 Cellar" count below (e.g. "1x75cl"). */}
+            {wine.is_spirit ? <SpiritBadge /> : null}
           </TouchableOpacity>
         </View>
         {uploadingPhoto ? <Text style={styles.photoSaving}>Saving photo…</Text> : null}
@@ -2029,7 +2036,7 @@ export default function CellarWineDetail() {
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Drinking Window</Text>
           <Text style={[styles.statValue, { color: windowColor }]}>{windowLabel}</Text>
-          {wine.drinking_window_from && wine.drinking_window_to && (
+          {!wine.is_spirit && wine.drinking_window_from && wine.drinking_window_to && (
             <Text style={styles.statSub}>{wine.drinking_window_from}–{wine.drinking_window_to}</Text>
           )}
         </View>
