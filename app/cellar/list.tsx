@@ -475,6 +475,8 @@ export default function FullCellarListScreen() {
         // Full archive.
         await clearWineFromRacks(w.id);
         await archiveCellarWine(w.id);
+        // The archive pop-up's note becomes the archived card's Archive Note.
+        if (note.trim()) await updateWine.mutateAsync({ id: w.id, updates: { archive_note: note.trim().slice(0, 35) } });
       } else {
         // Partial — decrement the live row, clone an archive row for the removed
         // bottles, and free that many bottles taking LOOSE ones first, then rack
@@ -482,7 +484,7 @@ export default function FullCellarListScreen() {
         // rack-only (removeSlotsForWine) left ghost bottles in alt cellars.
         await updateWine.mutateAsync({ id: w.id, updates: { quantity: total - count } });
         const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = w;
-        await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false } as any);
+        await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false, archive_note: note.trim().slice(0, 35) || null } as any);
         const wp = await fetchPlacementsForWine(w.id);
         const unplaced = Math.max(0, total - placedCount(wp));
         const toFree = Math.max(0, count - unplaced);

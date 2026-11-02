@@ -1574,7 +1574,7 @@ export default function RackGridScreen() {
 
       if (count >= qty) {
         // Full archive — mark the row archived and clear all its slots.
-        await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z` } });
+        await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z`, archive_note: note.trim().slice(0, 35) || null } });
         await clearWineFromRacks(wineId);
         if (session?.user.id) {
           qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wineId));
@@ -1587,7 +1587,7 @@ export default function RackGridScreen() {
         await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty - count } });
         if (wine) {
           const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
-          await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
+          await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false, archive_note: note.trim().slice(0, 35) || null });
         }
         await removeSlotsForWine(wineId, count, rackId); // scope to THIS rack (a wine can span units)
         if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });

@@ -978,8 +978,9 @@ export default function CellarWineDetail() {
     }
 
     const newQuantity = wine!.quantity - count;
-    const wineLabel = [wine!.producer, wine!.wine_name].filter(Boolean).join(' ') || (wine!.wine_name ?? 'this wine');
-    const confirmMsg = `${count} bottle${count === 1 ? '' : 's'} of ${wineLabel} ${count === 1 ? 'has' : 'have'} been archived from your cellar.`;
+    // "Wine Archived" confirmation: the full wine identity, then what moved.
+    const wineLine = formatWineTitle({ producer: wine!.producer, wineName: wine!.wine_name, region: wine!.region, vintage: wine!.vintage });
+    const confirmBody = `${wineLine}\n\n${count} bottle${count === 1 ? ' has' : 's have'} been moved from your cellar to your archive.`;
 
     setRemoving(true);
     try {
@@ -1002,6 +1003,8 @@ export default function CellarWineDetail() {
           updates: {
             quantity: count,
             archived_at: `${removeDate}T12:00:00.000Z`,
+            // The archive pop-up's note becomes the archived card's Archive Note.
+            archive_note: removeNote.trim().slice(0, 35) || null,
           },
         });
         await clearWineFromRacks(wine!.id);
@@ -1035,10 +1038,15 @@ export default function CellarWineDetail() {
         qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
         qc.invalidateQueries({ queryKey: ['storage-location-cases'] });
         qc.invalidateQueries({ queryKey: ['storage-locations'] });
+        // The whole row is now the archived record, so View In Archive reopens
+        // this same id as an archived card.
         showAlert({
-          title: 'Archived',
-          body: confirmMsg,
-          buttons: [{ text: 'OK', onPress: () => router.back() }],
+          title: 'Wine Archived',
+          body: confirmBody,
+          buttons: [
+            { text: 'View In Archive', onPress: () => router.replace(`/cellar/${wine!.id}` as any) },
+            { text: 'Done', style: 'cancel', onPress: () => router.back() },
+          ],
         });
       } else {
         // Partial removal. FREE THE PHYSICAL BOTTLES FIRST, then decrement the
@@ -1095,11 +1103,13 @@ export default function CellarWineDetail() {
           updates: { quantity: newQuantity },
         });
         const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine!;
-        await addCellarWine({
+        const archivedRow = await addCellarWine({
           ...rest,
           quantity: count,
           archived_at: `${removeDate}T12:00:00.000Z`,
           is_wishlist: false,
+          // The archive pop-up's note becomes the archived card's Archive Note.
+          archive_note: removeNote.trim().slice(0, 35) || null,
         });
         if (session?.user.id) {
           qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
@@ -1115,7 +1125,15 @@ export default function CellarWineDetail() {
         setRemoveCount('1');
         setRemoveNote('');
         setArchiveModalOpen(false);
-        showAlert({ title: 'Archived', body: confirmMsg });
+        // View In Archive opens the archive row cloned above for these bottles.
+        showAlert({
+          title: 'Wine Archived',
+          body: confirmBody,
+          buttons: [
+            { text: 'View In Archive', onPress: () => router.push(`/cellar/${archivedRow.id}` as any) },
+            { text: 'Done', style: 'cancel' },
+          ],
+        });
       }
       // Removal was scoped to a location → untag the wine from it. Single-row
       // delete (not a full set-replace), so other members are never touched.
@@ -1927,8 +1945,8 @@ export default function CellarWineDetail() {
             </TouchableOpacity>
             <Text style={styles.titleEditHeading}>Archive History</Text>
             <View style={[styles.ahRow, styles.ahHeadRow]}>
-              <Text style={[styles.ahCell, styles.ahColDate, styles.ahHeadCell]}>Date</Text>
-              <Text style={[styles.ahCell, styles.ahColCount, styles.ahHeadCell]}>Bottles</Text>
+              <Text style={[styles.ahCell, styles.ahColDate, styles.ahHeadCell]} numberOfLines={1}>Date</Text>
+              <Text style={[styles.ahCell, styles.ahColCount, styles.ahHeadCell]} numberOfLines={1}>Bottles</Text>
               <Text style={[styles.ahCell, styles.ahColNote, styles.ahHeadCell]}>Archive Note</Text>
             </View>
             <ScrollView style={{ maxHeight: 360 }}>
@@ -2597,12 +2615,12 @@ export default function CellarWineDetail() {
             <TextInput
               style={styles.input}
               value={removeNote}
-              onChangeText={(t) => setRemoveNote(t.slice(0, 50))}
+              onChangeText={(t) => setRemoveNote(t.slice(0, 35))}
               placeholder="e.g. dinner with the Smiths"
               placeholderTextColor={colors.textMuted}
-              maxLength={50}
+              maxLength={35}
             />
-            <Text style={styles.removeNoteHint}>{removeNote.length}/50 — where or with whom you drank it.</Text>
+            <Text style={styles.removeNoteHint}>{removeNote.length}/35 — where or with whom you drank it.</Text>
 
             <TouchableOpacity
               style={[styles.removeBtn, removing && styles.buttonDisabled]}
@@ -2914,7 +2932,7 @@ const styles = StyleSheet.create({
   ahCell: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, lineHeight: 19 },
   ahHeadCell: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   ahColDate: { width: 68 },
-  ahColCount: { width: 52, textAlign: 'center' },
+  ahColCount: { width: 74, textAlign: 'center' },
   ahColNote: { flex: 1 },
   photoSaving: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: spacing.sm },
   // Match the Wine Intel card's label image (larger, 3:4 portrait).

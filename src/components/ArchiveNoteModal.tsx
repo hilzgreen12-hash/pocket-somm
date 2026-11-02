@@ -24,7 +24,7 @@ function todayISO(): string {
 
 // Shared archive confirmation — consistent across every archive flow (wine card,
 // Full Cellar List, rack). When the user owns more than one bottle it asks how
-// many to archive (manual input), plus an optional 50-char removal note (where /
+// many to archive (manual input), plus an optional 35-char removal note (where /
 // with whom you drank it), and Save / Cancel.
 export function ArchiveNoteModal({ visible, title, body, busy, confirmLabel = 'Save', maxCount = 1, onConfirm, onClose }: Props) {
   const asksCount = maxCount > 1;
@@ -72,12 +72,12 @@ export function ArchiveNoteModal({ visible, title, body, busy, confirmLabel = 'S
           <TextInput
             style={styles.input}
             value={note}
-            onChangeText={(t) => setNote(t.slice(0, 50))}
+            onChangeText={(t) => setNote(t.slice(0, 35))}
             placeholder="e.g. dinner with the Smiths"
             placeholderTextColor={colors.textMuted}
-            maxLength={50}
+            maxLength={35}
           />
-          <Text style={styles.hint}>{note.length}/50 — where or with whom you drank it.</Text>
+          <Text style={styles.hint}>{note.length}/35 — where or with whom you drank it.</Text>
 
           <TouchableOpacity style={[styles.confirmBtn, busy && styles.disabled]} onPress={confirm} disabled={busy} activeOpacity={0.85}>
             {busy ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.confirmText}>{confirmLabel}</Text>}
