@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Text, TextInput, TouchableOpacity, StyleSheet, Modal, View, ScrollView, ActivityIndicator } from 'react-native';
+import { Text, TextInput, TouchableOpacity, StyleSheet, Modal, View, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
@@ -82,7 +82,7 @@ export default function LabelConfirmScreen() {
   // Reached from Scan a Lineup — Back returns to the lineup list to continue
   // onboarding the remaining bottles.
   const isLineup = context === 'lineup';
-  const { wineDetails, setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setPairings, setError } = useLabelStore();
+  const { wineDetails, imageUri, setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setPairings, setError } = useLabelStore();
   const { preferences } = usePreferences();
   // Rack-placement context: when the user reached here by tapping an empty rack
   // slot, we skip Wine Intel and drop the bottle straight into the slot.
@@ -705,13 +705,28 @@ export default function LabelConfirmScreen() {
     }
   }
 
+  // The header's back arrow leaves by the same route as this mode's bottom
+  // link, so the new header bar replaces the old floating "← Back" (upload only)
+  // without changing where any flow returns to.
+  function goBack() {
+    if (isLineup) router.replace('/cellar/scan-lineup');
+    else if (isUpload) router.replace('/(tabs)/scan');
+    else if (isManual) router.dismissTo(((backTo as string) || '/(tabs)/scan') as any);
+    else router.replace(`/label/camera${contextQuery}`);
+  }
+
   return (
     <>
-    {isUpload ? (
-      <TouchableOpacity style={styles.topBack} onPress={() => router.replace('/(tabs)/scan')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-        <Text style={styles.topBackText}>← Back</Text>
-      </TouchableOpacity>
-    ) : null}
+    <View style={styles.container}>
+      {/* Same header bar as Edit Wine Details — only the title differs, because
+          here the wine isn't in the cellar yet and IS being confirmed. */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={goBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Text accessibilityLabel="Back" style={styles.back}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>{isPureInput ? 'Input Wine Details' : 'Confirm Wine Details'}</Text>
+        <View style={{ width: 40 }} />
+      </View>
     <KeyboardAwareScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
@@ -720,18 +735,20 @@ export default function LabelConfirmScreen() {
       keyboardDismissMode="interactive"
       bottomOffset={24}
     >
-      <Text style={styles.heading}>{isPureInput ? 'Input Wine Details' : 'Confirm Wine Details'}</Text>
-      <Text style={styles.subheading}>
-        {isPureInput
-          ? 'Enter your wine details below.'
-          : isManual
-          ? 'Search for your wine, or enter the details below.'
-          : 'Correct anything that looks wrong.'}
-      </Text>
+      {/* The label just scanned, shown at the same size as the edit screen's
+          thumbnail — the wine's identity is easier to check against the bottle
+          in front of you. Manual entry has no photo yet, so no block. */}
+      {imageUri ? (
+        <View style={styles.thumbBlock}>
+          <View style={styles.thumbFrame}>
+            <Image source={{ uri: imageUri }} style={styles.thumbImg} resizeMode="cover" />
+          </View>
+        </View>
+      ) : null}
 
-      {/* Bottling picker — sits directly under the blurb so a misread cuvée can
-          be fixed before touching the fields. Label-derived flows only (manual
-          entry has the predictive search below instead). */}
+      {/* Bottling picker — sits directly under the label shot so a misread cuvée
+          can be fixed before touching the fields. Label-derived flows only
+          (manual entry has the predictive search below instead). */}
       {!isManual && (loadingCandidates || hasAlternativeBottlings) ? (
         <TouchableOpacity
           style={styles.candLink}
@@ -854,8 +871,8 @@ export default function LabelConfirmScreen() {
           <Text style={styles.backText}>Back to Lineup</Text>
         </TouchableOpacity>
       ) : isUpload ? (
-        <TouchableOpacity style={styles.uploadAgainButton} onPress={handleUploadAgain} disabled={scanning}>
-          <Text style={styles.uploadAgainText}>{scanning ? 'Reading…' : 'Upload Again'}</Text>
+        <TouchableOpacity style={styles.backButton} onPress={handleUploadAgain} disabled={scanning}>
+          <Text style={styles.backText}>{scanning ? 'Reading…' : 'Upload Again'}</Text>
         </TouchableOpacity>
       ) : isManual ? (
         <TouchableOpacity style={styles.backButton} onPress={() => router.dismissTo(((backTo as string) || '/(tabs)/scan') as any)}>
@@ -998,6 +1015,7 @@ export default function LabelConfirmScreen() {
         </View>
       </Modal>
     </KeyboardAwareScrollView>
+    </View>
 
     {/* Full-screen overlay while a re-uploaded label is being read. */}
     <Modal visible={scanning} transparent animationType="fade">
@@ -1014,38 +1032,26 @@ export default function LabelConfirmScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.xl, paddingTop: 130, paddingBottom: 60 },
-  // Top-left Back link (upload flow) — returns to the Scan tab.
-  topBack: { position: 'absolute', top: 56, left: spacing.xl, zIndex: 20, paddingVertical: 4, paddingRight: 12 },
-  topBackText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
-  // "Upload Again" secondary button (upload flow) — gold outline to sit apart
-  // from the white Confirm button above it.
-  uploadAgainButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  uploadAgainText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
+  content: { padding: spacing.xl, paddingBottom: 60 },
+  // Header bar — identical to the Edit Wine Details screen so the confirm and
+  // edit surfaces read as one screen with two titles.
+  header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
+  title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  // Scanned label, framed in the cream mat the cellar thumbnails use.
+  thumbBlock: { alignItems: 'center', marginBottom: spacing.lg },
+  thumbFrame: { backgroundColor: colors.cream, padding: 4, borderRadius: 12, overflow: 'hidden' },
+  thumbImg: { width: 160, height: 210, borderRadius: 8 },
   scanOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   scanSheet: { backgroundColor: colors.surface, borderRadius: 16, padding: spacing.xl, alignItems: 'center', gap: spacing.md, borderWidth: 1, borderColor: colors.gold },
   scanText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
-  heading: {
-    fontSize: 26,
-    fontFamily: fonts.headingBold,
-    color: colors.text,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  subheading: {
-    fontSize: 14,
-    fontFamily: fonts.headingRegular,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  // Form field label — body. Compact so five fields don't fill the screen.
+  // Form field label — identical metrics to the Edit Wine Details screen.
   label: {
     fontSize: 12,
     fontFamily: fonts.bodySemibold,
     color: colors.textMuted,
-    marginBottom: 2,
+    marginBottom: 6,
+    marginTop: spacing.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -1060,15 +1066,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  // Form input — body. Reduced height/gap so all five fields fit comfortably.
+  // Form input — identical metrics to the Edit Wine Details screen (the gap
+  // below each field comes from the next label's marginTop).
   input: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.sm,
-    fontSize: 15,
+    padding: spacing.md,
+    fontSize: 16,
     fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: colors.surface,
@@ -1084,26 +1089,30 @@ const styles = StyleSheet.create({
   binPriceSymbol: { fontFamily: fonts.bodySemibold, fontSize: 18, color: colors.text, marginRight: spacing.sm },
   binPriceInput: { flex: 1 },
   binQtyInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface },
+  // Primary action — the gold outline the Edit Wine Details screen uses, so
+  // Save and Confirm are the same button in both places.
   button: {
     borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: spacing.md,
+    borderColor: colors.gold,
+    borderRadius: 14,
+    paddingVertical: spacing.md,
     alignItems: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.xl,
   },
-  buttonDisabled: { opacity: 0.6 },
+  buttonDisabled: { opacity: 0.5 },
   buttonText: {
-    color: '#FFFFFF',
+    color: colors.gold,
     fontFamily: fonts.headingSemibold,
-    fontSize: 16,
+    fontSize: 17,
   },
-  backButton: { alignItems: 'center', marginTop: spacing.lg },
-  // Back/nav link — body.
+  // Secondary link under it (Scan Again / Upload Again / Cancel) — the edit
+  // screen's underlined "Cancel" treatment.
+  backButton: { alignItems: 'center', paddingVertical: spacing.md },
   backText: {
     color: colors.textMuted,
     fontFamily: fonts.bodyRegular,
     fontSize: 14,
+    textDecorationLine: 'underline',
   },
   // "Not this wine? Choose from other bottlings" — a gold link under the fields.
   candLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },

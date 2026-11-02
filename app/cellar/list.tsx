@@ -9,7 +9,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { useRacks } from '../../src/hooks/useRacks';
-import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { updateCellarIntelBatch, isMissingIntel } from '../../src/services/bulkIntel';
@@ -94,7 +93,6 @@ export default function FullCellarListScreen() {
   const { wines, isLoading, isError, addWine, updateWine } = useCellar();
   const { wines: archivedWines } = useArchive();
   const { racks } = useRacks();
-  const attachPhoto = useAttachLabelPhoto();
   const qc = useQueryClient();
 
   const userId = session?.user.id;
@@ -365,7 +363,7 @@ export default function FullCellarListScreen() {
   }
 
   // Long-press a wine → a per-wine action popup (replaces the bottom select
-  // bar). Edit opens the Confirm Wine Details screen (updates the wine wherever
+  // bar). Edit opens the Edit Wine Details screen (updates the wine wherever
   // it's placed); the rest act on this one wine.
   // External placements of this wine (bottles held in an offsite/external cellar).
   function externalPlacementsOf(w: CellarWine): CellarPlacement[] {
@@ -379,15 +377,10 @@ export default function FullCellarListScreen() {
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name,
       buttons: [
-        // Edit the wine's identity OR its label photo — one entry, a small chooser.
-        { text: 'Update Label or Wine Name', onPress: () => showAlert({
-          title: 'Update this wine',
-          buttons: [
-            { text: 'Edit Wine Name / Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
-            { text: 'Update Label Photo', onPress: () => attachPhoto.present({ kind: 'cellar', wineId: w.id, producer: w.producer, wineName: w.wine_name }) },
-            { text: 'Cancel', style: 'cancel' },
-          ],
-        }) },
+        // Straight into the Edit Wine Details screen — it carries BOTH the label
+        // photo and the wine's details, so the old "photo or details?" chooser
+        // was a step with nothing to choose.
+        { text: 'Edit Label or Wine Info', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
         // Only for wines held in an external cellar — bring them home.
         ...(externalPls.length > 0 ? [{ text: 'Deliver to Home Storage', onPress: () => deliverToHome(w, externalPls) }] : []),
         { text: 'View Location', onPress: () => viewWineLocation(w) },

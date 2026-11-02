@@ -55,6 +55,11 @@ function buildPrompt(
   const vintageStr = wine.vintage === 'NV' ? 'Non-Vintage (NV)' : wine.vintage;
   const wineNameStr = wine.wineName ? `\n- Wine Name: ${wine.wineName}` : '';
   const colourStr = wine.style ? `\n- Style: ${wine.style} (confirmed by user — treat this as definitive)` : '';
+  // The grape drives acidity, tannin and weight, so it's the biggest lever on a
+  // pairing after the colour. The Chef confirm screen collects it, so take it as
+  // read rather than inferring a variety from the region (which goes wrong for
+  // any producer working outside their region's classic grape).
+  const grapeStr = wine.grape ? `\n- Grape Variety: ${wine.grape} (confirmed by user — treat this as definitive)` : '';
 
   const constraints: string[] = [];
   const dietary = filters.dietary as string | undefined;
@@ -191,7 +196,7 @@ function buildPrompt(
 Wine Details:
 - Producer: ${wine.producer}
 - Region: ${wine.region}${wineNameStr}
-- Vintage: ${vintageStr}${colourStr}
+- Vintage: ${vintageStr}${colourStr}${grapeStr}
 ${courseBlock}${constraintBlock}${servingsBlock}${softBlock}${asianBlock}${regionalDiversityBlock}${chefPoolBlock}${excludeChefsBlock}${additionalRequestBlock}${difficultyBlock}${diversityBlock}${timeBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 

@@ -264,17 +264,7 @@ export default function CellarWineDetail() {
   const [refreshingValue, setRefreshingValue] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
-  const [titleEditOpen, setTitleEditOpen] = useState(false);
   const [archiveHistoryOpen, setArchiveHistoryOpen] = useState(false);
-  const [producerDraft, setProducerDraft] = useState('');
-  const [wineNameDraft, setWineNameDraft] = useState('');
-  const [regionDraft, setRegionDraft] = useState('');
-  const [vintageDraft, setVintageDraft] = useState('');
-  const [grapeDraft, setGrapeDraft] = useState('');
-  // Edit-sheet "this is a spirit" toggle (whisky/gin/rum…) — lets the user flag
-  // an existing/imported bottle so maturity/drinking windows don't apply.
-  const [spiritDraft, setSpiritDraft] = useState(false);
-  const [savingTitle, setSavingTitle] = useState(false);
 
   // "Confirm this wine" grape prompt. Fires before the intel card is committed
   // when the wine is genuinely ambiguous — the same producer + name sold as more
@@ -542,44 +532,14 @@ export default function CellarWineDetail() {
     }
   }
 
-  // Edit the wine's title identity — name + grape variety (not the date).
-  function openTitleEdit() {
+  // Editing the wine's identity (and its label photo, bottles held and spirit
+  // flag) is one screen now — Edit Wine Details. The card's old inline edit
+  // sheet held a strict subset of those fields, so it was retired rather than
+  // kept in parallel: tapping the identity block (and the no-intel prompt) opens
+  // the same screen the Full Cellar List long-press does.
+  function openWineEdit() {
     if (!wine) return;
-    setProducerDraft(wine.producer ?? '');
-    setWineNameDraft(wine.wine_name ?? '');
-    setRegionDraft(wine.region ?? '');
-    setVintageDraft(wine.vintage ?? '');
-    setGrapeDraft(wine.grape_variety ?? '');
-    setSpiritDraft(!!wine.is_spirit);
-    setTitleEditOpen(true);
-  }
-
-  async function handleSaveTitle() {
-    if (!wine) return;
-    Keyboard.dismiss();
-    setSavingTitle(true);
-    try {
-      const updates: Partial<CellarWine> = {
-        producer: producerDraft.trim() || null,
-        wine_name: wineNameDraft.trim() || wine.wine_name,
-        region: regionDraft.trim() || null,
-        vintage: vintageDraft.trim() || null,
-        grape_variety: grapeDraft.trim() || null,
-        is_spirit: spiritDraft,
-      };
-      // A spirit has no drinking window — clear it so the card shows NA and no
-      // maturity rating applies (and it drops out of maturity surfacing).
-      if (spiritDraft) {
-        updates.drinking_window_from = null;
-        updates.drinking_window_to = null;
-      }
-      await updateWine.mutateAsync({ id: wine.id, updates });
-      setTitleEditOpen(false);
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingTitle(false);
-    }
+    router.push(`/cellar/edit-wine/${wine.id}` as any);
   }
 
   // Brief "Wine removed from your records" toast — shown for ~1.4s after
@@ -1608,12 +1568,16 @@ export default function CellarWineDetail() {
     // The screen reads wineDetailsConfirmed from the label store, so we set
     // it here. from=cellar lets the results screen know to route Back to
     // the wine card on tap rather than to the Chef tab.
+    // Colour and grape are already stored against this wine and the pairing
+    // prompt treats both as definitive, so pass them rather than leaving Claude
+    // to infer a variety from the region.
     const confirmed: WineDetailsComplete = {
       producer: wine.producer || '',
       region: wine.region || '',
       wineName: wine.wine_name || null,
       vintage: wine.vintage || 'NV',
-      style: null,
+      style: wine.style || null,
+      grape: wine.grape_variety || null,
     };
     setWineDetailsConfirmed(confirmed);
     router.push(`/chef/review-requirements?from=cellar&wineId=${wine.id}`);
@@ -1773,7 +1737,7 @@ export default function CellarWineDetail() {
               — the standalone "Edit" link was removed in favour of this. */}
           <TouchableOpacity
             style={styles.headerTextCol}
-            onPress={() => router.push(`/cellar/edit-wine/${wine.id}` as any)}
+            onPress={openWineEdit}
             activeOpacity={0.7}
           >
             <WineIdentityHeader
@@ -1857,52 +1821,6 @@ export default function CellarWineDetail() {
         </View>
       </Modal>
 
-      {/* Edit the title — name + grape variety. */}
-      <Modal visible={titleEditOpen} transparent animationType="fade" onRequestClose={() => setTitleEditOpen(false)}>
-        <KeyboardAvoidingView behavior="padding" style={styles.titleEditOverlay}>
-          <View style={styles.titleEditSheet}>
-            <Text style={styles.titleEditHeading}>Edit wine</Text>
-            {/* Label photo — add / change / remove without leaving the Edit sheet.
-                Closes this modal first so the picker/menu isn't stacked behind it. */}
-            <Text style={styles.fieldLabel}>Label photo</Text>
-            <View style={styles.editPhotoRow}>
-              <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.editThumb} />
-              <TouchableOpacity
-                onPress={() => { setTitleEditOpen(false); void handleAddPhoto(); }}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={styles.editPhotoLink}>{wine.label_image_path ? 'Change label photo' : '+ Add label photo'}</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.fieldLabel}>Producer</Text>
-            <TextInput style={styles.input} value={producerDraft} onChangeText={setProducerDraft} placeholder="Producer" placeholderTextColor={colors.textMuted} />
-            <Text style={styles.fieldLabel}>Wine name</Text>
-            <TextInput style={styles.input} value={wineNameDraft} onChangeText={setWineNameDraft} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
-            <Text style={styles.fieldLabel}>Region</Text>
-            <TextInput style={styles.input} value={regionDraft} onChangeText={setRegionDraft} placeholder="Region" placeholderTextColor={colors.textMuted} />
-            <Text style={styles.fieldLabel}>Vintage</Text>
-            <TextInput style={styles.input} value={vintageDraft} onChangeText={setVintageDraft} placeholder="Vintage (e.g. 2019 or NV)" placeholderTextColor={colors.textMuted} maxLength={7} />
-            <Text style={styles.fieldLabel}>Grape variety</Text>
-            <TextInput style={styles.input} value={grapeDraft} onChangeText={setGrapeDraft} placeholder="Grape variety" placeholderTextColor={colors.textMuted} />
-            <TouchableOpacity style={styles.spiritToggleRow} onPress={() => setSpiritDraft((v) => !v)} activeOpacity={0.7}>
-              <View style={[styles.spiritCheckbox, spiritDraft && styles.spiritCheckboxOn]}>
-                {spiritDraft ? <Text style={styles.spiritCheckMark}>✓</Text> : null}
-              </View>
-              <Text style={styles.spiritToggleLabel}>This is a spirit (whisky, gin, rum…)</Text>
-            </TouchableOpacity>
-            <View style={styles.noteActions}>
-              <TouchableOpacity onPress={() => setTitleEditOpen(false)}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveTitle} disabled={savingTitle}>
-                <Text style={styles.saveBtnText}>{savingTitle ? 'Saving…' : 'Save'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
       {/* Couldn't-generate-intel prompt. Shows after a failed auto-generate
           (no critic score and no value) — usually a misspelt or wrongly-split
           name. Offers a jump straight into the Edit sheet. */}
@@ -1913,7 +1831,7 @@ export default function CellarWineDetail() {
           !noIntelDismissed
         }
         onDismiss={() => setNoIntelDismissed(true)}
-        onEdit={() => { setNoIntelDismissed(true); openTitleEdit(); }}
+        onEdit={() => { setNoIntelDismissed(true); openWineEdit(); }}
         editLabel="Edit Wine"
       />
 
@@ -2861,9 +2779,6 @@ const styles = StyleSheet.create({
   // Right-edge spacer balancing the Back arrow so the card-type label centres.
   topBarSpacer: { width: 24 },
   topBarShareText: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.gold },
-  editPhotoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
-  editThumb: { width: 44, height: 56 },
-  editPhotoLink: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.gold },
   favouriteStar: { fontSize: 28, color: 'rgba(255,255,255,0.55)', lineHeight: 28 },
   favouriteStarActive: { color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -3020,15 +2935,6 @@ const styles = StyleSheet.create({
   cellarNoteEditInline: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold },
   noteInput: { minHeight: 90, textAlignVertical: 'top' },
   noteActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },
-  saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md },
-  // Cormorant — button text
-  saveBtnText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
-  // "This is a spirit" toggle row in the Edit sheet.
-  spiritToggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, marginBottom: spacing.sm },
-  spiritCheckbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
-  spiritCheckboxOn: { backgroundColor: 'rgba(224,184,74,0.18)' },
-  spiritCheckMark: { fontSize: 14, color: colors.gold, fontFamily: fonts.headingBold, lineHeight: 16 },
-  spiritToggleLabel: { flex: 1, fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text },
   removeBlock: { paddingTop: spacing.sm },
   removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   // Cormorant — button text
