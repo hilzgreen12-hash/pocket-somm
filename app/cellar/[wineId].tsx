@@ -271,6 +271,9 @@ export default function CellarWineDetail() {
   const [regionDraft, setRegionDraft] = useState('');
   const [vintageDraft, setVintageDraft] = useState('');
   const [grapeDraft, setGrapeDraft] = useState('');
+  // Edit-sheet "this is a spirit" toggle (whisky/gin/rum…) — lets the user flag
+  // an existing/imported bottle so maturity/drinking windows don't apply.
+  const [spiritDraft, setSpiritDraft] = useState(false);
   const [savingTitle, setSavingTitle] = useState(false);
 
   // "Confirm this wine" grape prompt. Fires before the intel card is committed
@@ -547,6 +550,7 @@ export default function CellarWineDetail() {
     setRegionDraft(wine.region ?? '');
     setVintageDraft(wine.vintage ?? '');
     setGrapeDraft(wine.grape_variety ?? '');
+    setSpiritDraft(!!wine.is_spirit);
     setTitleEditOpen(true);
   }
 
@@ -563,6 +567,10 @@ export default function CellarWineDetail() {
           region: regionDraft.trim() || null,
           vintage: vintageDraft.trim() || null,
           grape_variety: grapeDraft.trim() || null,
+          is_spirit: spiritDraft,
+          // A spirit has no drinking window — clear it so the card shows NA and
+          // no maturity rating applies (and it drops out of maturity surfacing).
+          ...(spiritDraft ? { drinking_window_from: null, drinking_window_to: null, drinking_window_status: null } : {}),
         },
       });
       setTitleEditOpen(false);
@@ -1876,6 +1884,12 @@ export default function CellarWineDetail() {
             <TextInput style={styles.input} value={vintageDraft} onChangeText={setVintageDraft} placeholder="Vintage (e.g. 2019 or NV)" placeholderTextColor={colors.textMuted} maxLength={7} />
             <Text style={styles.fieldLabel}>Grape variety</Text>
             <TextInput style={styles.input} value={grapeDraft} onChangeText={setGrapeDraft} placeholder="Grape variety" placeholderTextColor={colors.textMuted} />
+            <TouchableOpacity style={styles.spiritToggleRow} onPress={() => setSpiritDraft((v) => !v)} activeOpacity={0.7}>
+              <View style={[styles.spiritCheckbox, spiritDraft && styles.spiritCheckboxOn]}>
+                {spiritDraft ? <Text style={styles.spiritCheckMark}>✓</Text> : null}
+              </View>
+              <Text style={styles.spiritToggleLabel}>This is a spirit (whisky, gin, rum…)</Text>
+            </TouchableOpacity>
             <View style={styles.noteActions}>
               <TouchableOpacity onPress={() => setTitleEditOpen(false)}>
                 <Text style={styles.cancelText}>Cancel</Text>
@@ -3008,6 +3022,12 @@ const styles = StyleSheet.create({
   saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md },
   // Cormorant — button text
   saveBtnText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
+  // "This is a spirit" toggle row in the Edit sheet.
+  spiritToggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  spiritCheckbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  spiritCheckboxOn: { backgroundColor: 'rgba(224,184,74,0.18)' },
+  spiritCheckMark: { fontSize: 14, color: colors.gold, fontFamily: fonts.headingBold, lineHeight: 16 },
+  spiritToggleLabel: { flex: 1, fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text },
   removeBlock: { paddingTop: spacing.sm },
   removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   // Cormorant — button text
