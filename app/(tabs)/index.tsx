@@ -366,14 +366,14 @@ export default function ScanLandingScreen() {
             onLongPress={() => requireAccount(handleViewLastIntel)}
             activeOpacity={0.85}
           >
-            <Ionicons name="camera-outline" size={30} color="#FFFFFF" style={styles.tileIcon} />
-            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Label</Text>
+            <Ionicons name="camera-outline" size={30} color="#FFFFFF" style={styles.tileIcon} allowFontScaling={false} />
+            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} allowFontScaling={false}>Scan a Label</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Generate Wine Intel{'\n'}Review &amp; Cellar</Text>
+            <Text style={styles.tileDesc} numberOfLines={2} allowFontScaling={false}>Generate Wine Intel{'\n'}Review &amp; Cellar</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
-            <Feather name="upload" size={11} color="#FFFFFF" />
-            <Text style={styles.tileBannerText}>upload instead</Text>
+            <Feather name="upload" size={11} color="#FFFFFF" allowFontScaling={false} />
+            <Text style={styles.tileBannerText} allowFontScaling={false}>upload instead</Text>
           </TouchableOpacity>
         </View>
 
@@ -385,14 +385,14 @@ export default function ScanLandingScreen() {
             onLongPress={() => requireAccount(handleViewLastListResult)}
             activeOpacity={0.85}
           >
-            <Ionicons name="camera-outline" size={30} color="#FFFFFF" style={styles.tileIcon} />
-            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a List</Text>
+            <Ionicons name="camera-outline" size={30} color="#FFFFFF" style={styles.tileIcon} allowFontScaling={false} />
+            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} allowFontScaling={false}>Scan a List</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Tailored bottle picks from a wine menu</Text>
+            <Text style={styles.tileDesc} numberOfLines={2} allowFontScaling={false}>Tailored bottle picks from a wine menu</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
-            <Feather name="upload" size={11} color="#FFFFFF" />
-            <Text style={styles.tileBannerText}>upload instead</Text>
+            <Feather name="upload" size={11} color="#FFFFFF" allowFontScaling={false} />
+            <Text style={styles.tileBannerText} allowFontScaling={false}>upload instead</Text>
           </TouchableOpacity>
         </View>
 
