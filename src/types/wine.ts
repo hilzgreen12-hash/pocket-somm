@@ -154,6 +154,9 @@ export interface WineIntelligence {
   // facts) — surfaced so bulk "Update all" can backfill a region-less cellar wine.
   region?: string | null;
   grapeVariety: string | null;
+  // True when the wine is specifically a NATURAL / low-intervention wine — drives
+  // the "Natural Wine" badge on the intel card. Conservative (default false).
+  isNatural?: boolean | null;
   // Genuine grape ambiguity: this exact producer + wine name is released as more
   // than one wine under the identical name (e.g. a single-vineyard sold as both a
   // Syrah and a Chenin Blanc, or a Hermitage name existing as both red and white),

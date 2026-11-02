@@ -6,6 +6,7 @@ import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/components/VinstersNoteHeading';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
+import { NaturalWineBadge } from '../../src/components/NaturalWineBadge';
 import { ReviewCardHeader, ReviewedStamp } from '../../src/components/ReviewCardHeader';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
@@ -2063,6 +2064,9 @@ export default function LabelResultsScreen() {
               align="left"
               size="md"
             />
+            {/* Natural-wine badge — tappable, below the identity. Shown only when
+                the intel flags the wine as natural. */}
+            {intel?.isNatural ? <NaturalWineBadge /> : null}
           </View>
         </View>
 
