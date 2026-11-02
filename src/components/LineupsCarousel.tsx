@@ -52,8 +52,8 @@ function LineupCard({ item }: { item: LineupArchive }) {
       <View style={styles.cardImageWrap}>
         {url ? <Image source={{ uri: url }} style={styles.cardImage} resizeMode="cover" /> : <ActivityIndicator color={colors.gold} />}
       </View>
-      {item.name?.trim() ? <Text style={styles.cardName} numberOfLines={1}>{item.name.trim()}</Text> : null}
-      <Text style={[styles.cardStamp, item.name?.trim() ? styles.cardStampTight : null]} numberOfLines={1}>{date}{place ? ` · ${place}` : ''}</Text>
+      {item.name?.trim() ? <Text style={styles.cardName} numberOfLines={1} allowFontScaling={false}>{item.name.trim()}</Text> : null}
+      <Text style={[styles.cardStamp, item.name?.trim() ? styles.cardStampTight : null]} numberOfLines={1} allowFontScaling={false}>{date}{place ? ` · ${place}` : ''}</Text>
     </TouchableOpacity>
   );
 }
@@ -86,8 +86,8 @@ export function LineupsCarousel({ requireAccount }: { requireAccount?: (action: 
         {/* Empty state → three faded bottle placeholders (like the scan carousel). */}
         {lineups.length === 0 ? LINEUP_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />) : null}
         <TouchableOpacity style={styles.addCard} onPress={() => gate(() => setAddOpen(true))} activeOpacity={0.85}>
-          <Text style={styles.addCardIcon}>＋</Text>
-          <Text style={styles.addCardText}>Add</Text>
+          <Text style={styles.addCardIcon} allowFontScaling={false}>＋</Text>
+          <Text style={styles.addCardText} allowFontScaling={false}>Add</Text>
         </TouchableOpacity>
       </ScrollView>
 

@@ -218,8 +218,8 @@ export function CellarInsightsCarousel() {
       {shown.map((t) => (
         <TouchableOpacity key={t.key} style={styles.card} onPress={t.onTap} activeOpacity={t.onTap ? 0.85 : 1}>
           <Collage paths={t.collage} />
-          <Text style={styles.cardName} numberOfLines={2}>{t.title}</Text>
-          <Text style={styles.cardMeta} numberOfLines={1}>{t.meta}</Text>
+          <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{t.title}</Text>
+          <Text style={styles.cardMeta} numberOfLines={1} allowFontScaling={false}>{t.meta}</Text>
         </TouchableOpacity>
       ))}
       {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />)}

@@ -63,8 +63,8 @@ function RecentCard({ item }: { item: Recent }) {
     <TouchableOpacity style={styles.card} onPress={item.open} onLongPress={item.onLongPress} delayLongPress={400} activeOpacity={0.85}>
       {showAddImage ? (
         <TouchableOpacity style={styles.addImageThumb} onPress={item.onAddImage} activeOpacity={0.8}>
-          <Ionicons name="camera-outline" size={26} color={colors.gold} />
-          <Text style={styles.addImageText}>+ Add Image</Text>
+          <Ionicons name="camera-outline" size={26} color={colors.gold} allowFontScaling={false} />
+          <Text style={styles.addImageText} allowFontScaling={false}>+ Add Image</Text>
         </TouchableOpacity>
       ) : (
         <WineCardThumb
@@ -74,8 +74,8 @@ function RecentCard({ item }: { item: Recent }) {
           fallbackText={item.title}
         />
       )}
-      <Text style={styles.cardName} numberOfLines={2}>{item.title}</Text>
-      {item.stamp ? <Text style={styles.cardStamp} numberOfLines={1}>{item.stamp}</Text> : null}
+      <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{item.title}</Text>
+      {item.stamp ? <Text style={styles.cardStamp} numberOfLines={1} allowFontScaling={false}>{item.stamp}</Text> : null}
     </TouchableOpacity>
   );
 }

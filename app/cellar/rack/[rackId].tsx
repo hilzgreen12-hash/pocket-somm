@@ -68,11 +68,11 @@ function Counter({ label, value, onChange }: { label: string; value: number; onC
       <Text style={styles.counterLabel}>{label}</Text>
       <View style={styles.counterControls}>
         <TouchableOpacity style={styles.counterBtn} onPress={() => onChange(Math.max(1, value - 1))}>
-          <Text style={styles.counterBtnText}>−</Text>
+          <Text style={styles.counterBtnText} allowFontScaling={false}>−</Text>
         </TouchableOpacity>
         <Text style={styles.counterValue}>{value}</Text>
         <TouchableOpacity style={styles.counterBtn} onPress={() => onChange(Math.min(30, value + 1))}>
-          <Text style={styles.counterBtnText}>+</Text>
+          <Text style={styles.counterBtnText} allowFontScaling={false}>+</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -2041,7 +2041,7 @@ export default function RackGridScreen() {
                     )}
                   </>
                 ) : (
-                  <Text style={[styles.slotPlus, isMultiSelected && styles.slotPlusSelected]}>{isMultiSelected ? '✓' : '+'}</Text>
+                  <Text style={[styles.slotPlus, isMultiSelected && styles.slotPlusSelected]} allowFontScaling={false}>{isMultiSelected ? '✓' : '+'}</Text>
                 )}
               </TouchableOpacity>
             );
@@ -2224,7 +2224,7 @@ export default function RackGridScreen() {
                 onPress={() => { setBottleListOpen((v) => !v); setMaturityOpen(false); }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.filterChipText, bottleListOpen && styles.filterChipTextActive]}>List {bottleListOpen ? '▴' : '▾'}</Text>
+                <Text style={[styles.filterChipText, bottleListOpen && styles.filterChipTextActive]} allowFontScaling={false}>List {bottleListOpen ? '▴' : '▾'}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -2232,7 +2232,7 @@ export default function RackGridScreen() {
                 onPress={() => { setMaturityOpen((v) => !v); setBottleListOpen(false); }}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.filterChipText, maturityHighlight ? styles.filterChipTextActive : null]}>
+                <Text style={[styles.filterChipText, maturityHighlight ? styles.filterChipTextActive : null]} allowFontScaling={false}>
                   {maturityHighlight ? (MATURITY_OPTIONS.find((o) => o.value === maturityHighlight)?.label ?? 'Maturity') : 'Maturity'} ▾
                 </Text>
               </TouchableOpacity>
@@ -2248,13 +2248,13 @@ export default function RackGridScreen() {
                     delayLongPress={400}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1}>{f.name}</Text>
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1} allowFontScaling={false}>{f.name}</Text>
                   </TouchableOpacity>
                 );
               })}
 
               <TouchableOpacity style={styles.filterChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
-                <Text style={styles.filterChipAddText}>+ Add</Text>
+                <Text style={styles.filterChipAddText} allowFontScaling={false}>+ Add</Text>
               </TouchableOpacity>
             </ScrollView>
 

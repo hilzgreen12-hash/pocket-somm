@@ -525,18 +525,18 @@ export default function BinDetailScreen() {
               that highlights its diamonds; + Add builds a bespoke one. */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
             <TouchableOpacity style={[styles.filterChip, listOpen && styles.filterChipActive]} onPress={() => setListOpen((v) => !v)} activeOpacity={0.7}>
-              <Text style={[styles.filterChipText, listOpen && styles.filterChipTextActive]}>List {listOpen ? '▴' : '▾'}</Text>
+              <Text style={[styles.filterChipText, listOpen && styles.filterChipTextActive]} allowFontScaling={false}>List {listOpen ? '▴' : '▾'}</Text>
             </TouchableOpacity>
             {customFilters.map((f) => {
               const active = activeCustomFilterId === f.id;
               return (
                 <TouchableOpacity key={f.id} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => applyCustomFilter(f.id)} onLongPress={() => openFilterOptions(f)} delayLongPress={400} activeOpacity={0.7}>
-                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1}>{f.name}</Text>
+                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1} allowFontScaling={false}>{f.name}</Text>
                 </TouchableOpacity>
               );
             })}
             <TouchableOpacity style={styles.filterChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
-              <Text style={styles.filterChipAddText}>+ Add</Text>
+              <Text style={styles.filterChipAddText} allowFontScaling={false}>+ Add</Text>
             </TouchableOpacity>
           </ScrollView>
 
@@ -639,6 +639,7 @@ export default function BinDetailScreen() {
                         <Text
                           key={`lbl-${p.cell.id}`}
                           style={{ position: 'absolute', left: p.x * d - 20 + nx * nudge, top: p.y * d - 7 + ny * nudge, width: 40, textAlign: 'center', fontSize: 10, fontFamily: fonts.bodySemibold, color: '#FFFFFF', opacity: dim ? 0.3 : 1, textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2.5 }}
+                          allowFontScaling={false}
                         >
                           {p.label}
                         </Text>
@@ -651,9 +652,9 @@ export default function BinDetailScreen() {
           </View>
 
           <View style={styles.legend}>
-            <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.surfaceElevated }]} /><Text style={styles.legendText}>Empty</Text></View>
-            <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.gold + '66' }]} /><Text style={styles.legendText}>Part full</Text></View>
-            <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.gold }]} /><Text style={styles.legendText}>Full</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.surfaceElevated }]} /><Text style={styles.legendText} allowFontScaling={false}>Empty</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.gold + '66' }]} /><Text style={styles.legendText} allowFontScaling={false}>Part full</Text></View>
+            <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.gold }]} /><Text style={styles.legendText} allowFontScaling={false}>Full</Text></View>
           </View>
         </ScrollView>
         </>

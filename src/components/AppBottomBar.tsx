@@ -90,8 +90,8 @@ export function AppBottomBar() {
             accessibilityRole="button"
             accessibilityLabel={t.label}
           >
-            <MaterialCommunityIcons name="bottle-wine-outline" size={20} color={tint} />
-            <Text style={[styles.label, { color: tint }]}>{t.label}</Text>
+            <MaterialCommunityIcons name="bottle-wine-outline" size={20} color={tint} allowFontScaling={false} />
+            <Text style={[styles.label, { color: tint }]} allowFontScaling={false}>{t.label}</Text>
           </TouchableOpacity>
         );
       })}

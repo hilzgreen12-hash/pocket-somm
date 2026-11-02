@@ -1195,7 +1195,7 @@ export default function StorageLocationScreen() {
             onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); setPackagingOpen(false); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.filterChipText, (listView !== 'bottles' || !!packaging) && styles.filterChipTextActive]}>
+            <Text style={[styles.filterChipText, (listView !== 'bottles' || !!packaging) && styles.filterChipTextActive]} allowFontScaling={false}>
               {packaging === 'loose' ? 'Loose Bottles'
                 : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'All Wines')} {listOpen ? '▴' : '▾'}
             </Text>
@@ -1205,7 +1205,7 @@ export default function StorageLocationScreen() {
             onPress={() => { setMaturityOpen((v) => !v); setPackagingOpen(false); setListOpen(false); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.filterChipText, maturity ? styles.filterChipTextActive : null]}>
+            <Text style={[styles.filterChipText, maturity ? styles.filterChipTextActive : null]} allowFontScaling={false}>
               {maturity ? (MATURITY_OPTIONS.find((o) => o.value === maturity)?.label ?? 'Maturity') : 'Maturity'} {maturityOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
@@ -1222,14 +1222,14 @@ export default function StorageLocationScreen() {
                 delayLongPress={400}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1}>{c.name}</Text>
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1} allowFontScaling={false}>{c.name}</Text>
               </TouchableOpacity>
             );
           })}
           {/* "+ Add Case" — the carousel only creates cases; no other bespoke
               filters are made here. */}
           <TouchableOpacity style={styles.filterChipAdd} onPress={openCreateCase} activeOpacity={0.7}>
-            <Text style={styles.filterChipAddText}>+ Add Case</Text>
+            <Text style={styles.filterChipAddText} allowFontScaling={false}>+ Add Case</Text>
           </TouchableOpacity>
         </ScrollView>
 

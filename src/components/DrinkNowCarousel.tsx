@@ -141,10 +141,10 @@ export function DrinkNowCarousel() {
         <TouchableOpacity key={`${w.id}-${badge}`} style={styles.card} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.85}>
           <View>
             <WineCardThumb path={w.label_image_path} producer={w.producer} wineName={w.wine_name} fallbackText={w.wine_name} />
-            <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View>
+            <View style={styles.badge}><Text style={styles.badgeText} allowFontScaling={false}>{badge}</Text></View>
           </View>
-          <Text style={styles.cardName} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
-          <Text style={styles.cardMeta} numberOfLines={1}>{meta}</Text>
+          <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+          <Text style={styles.cardMeta} numberOfLines={1} allowFontScaling={false}>{meta}</Text>
         </TouchableOpacity>
       ))}
       {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />)}

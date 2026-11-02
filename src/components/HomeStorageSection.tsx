@@ -279,9 +279,9 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   activeOpacity={0.85}
                 >
                   <CardBg path={tileThumbs?.rack[rack.id]} />
-                  <Text style={styles.storageCardType}>{rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
-                  <Text style={styles.storageCardName} numberOfLines={2}>{rack.name}</Text>
-                  <Text style={styles.storageCardCount}>{bottleLabel(rackCounts[rack.id] ?? 0)}</Text>
+                  <Text style={styles.storageCardType} allowFontScaling={false}>{rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
+                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{rack.name}</Text>
+                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(rackCounts[rack.id] ?? 0)}</Text>
                 </TouchableOpacity>
               ))}
               {bins.map((bin) => (
@@ -294,9 +294,9 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   activeOpacity={0.85}
                 >
                   <CardBg path={tileThumbs?.bin[bin.id]} />
-                  <Text style={styles.storageCardType}>Bin</Text>
-                  <Text style={styles.storageCardName} numberOfLines={2}>{bin.name}</Text>
-                  <Text style={styles.storageCardCount}>{bottleLabel(binCounts[bin.id] ?? 0)}</Text>
+                  <Text style={styles.storageCardType} allowFontScaling={false}>Bin</Text>
+                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{bin.name}</Text>
+                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(binCounts[bin.id] ?? 0)}</Text>
                 </TouchableOpacity>
               ))}
               {homeLocations.map((loc) => (
@@ -309,9 +309,9 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   activeOpacity={0.85}
                 >
                   <CardBg path={tileThumbs?.location[loc.id]} />
-                  <Text style={styles.storageCardType}>Alt Cellar</Text>
-                  <Text style={styles.storageCardName} numberOfLines={2}>{loc.name}</Text>
-                  <Text style={styles.storageCardCount}>{bottleLabel(loc.wineCount ?? 0)}</Text>
+                  <Text style={styles.storageCardType} allowFontScaling={false}>Alt Cellar</Text>
+                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{loc.name}</Text>
+                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(loc.wineCount ?? 0)}</Text>
                 </TouchableOpacity>
               ))}
             </>
@@ -324,14 +324,14 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                 onPress={() => requireAuth(() => addByKind(t.kind))}
                 activeOpacity={0.85}
               >
-                <Text style={styles.storageCardType}>{t.type}</Text>
-                <Text style={styles.storageCardName} numberOfLines={2}>{t.name}</Text>
-                <Text style={styles.storageCardCount}>Tap to set up</Text>
+                <Text style={styles.storageCardType} allowFontScaling={false}>{t.type}</Text>
+                <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{t.name}</Text>
+                <Text style={styles.storageCardCount} allowFontScaling={false}>Tap to set up</Text>
               </TouchableOpacity>
             ))
           )}
           <TouchableOpacity style={styles.addTile} onPress={() => requireAuth(handleAddAnyStorage)} activeOpacity={0.85}>
-            <Text style={styles.addTilePlus}>+ Add</Text>
+            <Text style={styles.addTilePlus} allowFontScaling={false}>+ Add</Text>
           </TouchableOpacity>
         </ScrollView>
       )}

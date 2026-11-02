@@ -44,7 +44,7 @@ export function LabelThumb({ path, fallbackText, style, radius = 6, frame = 4, f
         </View>
       ) : (
         <View style={[styles.fallback, { borderRadius: radius }]}>
-          <Text style={[styles.fallbackText, { fontSize: fallbackFontSize }]} numberOfLines={3}>
+          <Text style={[styles.fallbackText, { fontSize: fallbackFontSize }]} numberOfLines={3} allowFontScaling={false}>
             {fallbackText?.trim() || 'No photo'}
           </Text>
         </View>

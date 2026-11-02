@@ -38,11 +38,11 @@ export function PlaceholderCardView({ card }: { card: PlaceholderCard }) {
           <Image source={{ uri: card.uri }} style={styles.genericImg} resizeMode="cover" />
         )}
         <View style={styles.overlay} pointerEvents="none">
-          <Text style={styles.overlayText}>{card.overlay}</Text>
+          <Text style={styles.overlayText} allowFontScaling={false}>{card.overlay}</Text>
         </View>
       </View>
-      <Text style={styles.cardName} numberOfLines={2}>{card.title}</Text>
-      <Text style={styles.cardStamp} numberOfLines={1}>{card.stamp}</Text>
+      <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{card.title}</Text>
+      <Text style={styles.cardStamp} numberOfLines={1} allowFontScaling={false}>{card.stamp}</Text>
     </View>
   );
 }
