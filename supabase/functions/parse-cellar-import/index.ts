@@ -57,9 +57,14 @@ Return ONLY a JSON object: {"wines": [ ... ]}. No markdown, no commentary.`;
 
 Deno.serve(async (req) => {
   try {
-    const { text, pdfBase64, source } = await req.json().catch(() => ({}));
+    const { text, pdfBase64, source, stream } = await req.json().catch(() => ({}));
     const hint = typeof source === 'string' && source ? source : 'unknown';
 
+    // The whole parse (input selection → Claude read → normalisation). Extracted
+    // so the buffered and streamed paths produce the identical { wines } result
+    // for EITHER input (pdfBase64 or text). Returns the exact object the buffered
+    // path returned today.
+    async function run(): Promise<{ wines: any[] }> {
     // Two inputs: a PDF invoice/statement (sent as a document block Claude reads
     // directly) or decoded spreadsheet rows as text.
     let content: unknown;
@@ -70,7 +75,7 @@ Deno.serve(async (req) => {
       ];
     } else {
       const body = typeof text === 'string' ? text : '';
-      if (!body.trim()) return json({ wines: [] }, 200);
+      if (!body.trim()) return { wines: [] };
       // Guard against a runaway payload — cap the characters we forward.
       content = `Source hint: ${hint}\n\nList rows:\n${body.length > 120000 ? body.slice(0, 120000) : body}`;
     }
@@ -86,10 +91,10 @@ Deno.serve(async (req) => {
     const raw = resp.content[0]?.type === 'text' ? resp.content[0].text : '';
     const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) return json({ wines: [] }, 200);
+    if (!match) return { wines: [] };
 
     let parsed: any;
-    try { parsed = JSON.parse(match[0]); } catch { return json({ wines: [] }, 200); }
+    try { parsed = JSON.parse(match[0]); } catch { return { wines: [] }; }
     const winesIn = Array.isArray(parsed?.wines) ? parsed.wines : [];
 
     // Normalise + sanity-clamp every field so the client can trust the shape.
@@ -132,7 +137,47 @@ Deno.serve(async (req) => {
       };
     }).filter((w: any) => w.producer || w.wineName);
 
-    return json({ wines }, 200);
+      return { wines };
+    }
+
+    // Buffered path (stream !== true): unchanged single-JSON response. Kept as
+    // the fallback the current app build uses when streaming isn't available.
+    if (stream !== true) {
+      const result = await run();
+      return json(result, 200);
+    }
+
+    // Streamed path: parsing a long import list/PDF can take long enough for a
+    // mobile connection to be severed mid-flight. Keep the connection alive with
+    // an SSE heartbeat every few seconds, then emit one final `data:` frame with
+    // the same { wines } object the buffered path returns (or an error). Mirrors ocr.
+    const encoder = new TextEncoder();
+    const streamBody = new ReadableStream({
+      async start(controller) {
+        const send = (s: string) => {
+          try { controller.enqueue(encoder.encode(s)); } catch { /* closed */ }
+        };
+        send(': open\n\n');
+        const heartbeat = setInterval(() => send(': ping\n\n'), 8000);
+        try {
+          const result = await run();
+          send(`data: ${JSON.stringify(result)}\n\n`);
+        } catch (err) {
+          console.error('parse-cellar-import stream error:', err instanceof Error ? err.message : String(err));
+          send(`data: ${JSON.stringify({ error: 'Something went wrong. Please try again.' })}\n\n`);
+        } finally {
+          clearInterval(heartbeat);
+          controller.close();
+        }
+      },
+    });
+    return new Response(streamBody, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
   } catch (err) {
     console.error('parse-cellar-import error:', err instanceof Error ? err.message : String(err));
     return json({ error: 'Something went wrong. Please try again.' }, 500);

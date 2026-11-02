@@ -4,9 +4,12 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 Deno.serve(async (req) => {
   try {
-    const { base64Image } = await req.json();
+    const { base64Image, stream } = await req.json();
 
-    const response = await client.messages.create({
+    // The single Claude round-trip for this import. Extracted so the buffered
+    // and streamed paths run the identical read + JSON extraction.
+    async function run(): Promise<any> {
+      const response = await client.messages.create({
       // Sonnet, not Haiku: photo/screenshot cellar imports write straight into
       // the user's permanent cellar, so a misread vintage/producer is a sticky
       // error. Matches the Sonnet-5 text/PDF import path (parse-cellar-import) —
@@ -60,13 +63,51 @@ Return raw JSON only. No markdown. No explanation.`,
       ],
     });
 
-    const text = response.content.find((b) => b.type === 'text')?.text ?? '';
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
+      const text = response.content.find((b) => b.type === 'text')?.text ?? '';
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
+      return JSON.parse(match[0]);
+    }
 
-    const parsed = JSON.parse(match[0]);
-    return new Response(JSON.stringify(parsed), {
-      headers: { 'Content-Type': 'application/json' },
+    // Buffered path (stream !== true): unchanged single-JSON response. Kept as
+    // the fallback the current app build uses when streaming isn't available.
+    if (stream !== true) {
+      const parsed = await run();
+      return new Response(JSON.stringify(parsed), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Streamed path: a long cellar screenshot/list can take long enough for a
+    // mobile connection to be severed mid-flight. Keep the connection alive with
+    // an SSE heartbeat every few seconds, then emit one final `data:` frame with
+    // the same { wines } object the buffered path returns (or an error). Mirrors ocr.
+    const encoder = new TextEncoder();
+    const streamBody = new ReadableStream({
+      async start(controller) {
+        const send = (s: string) => {
+          try { controller.enqueue(encoder.encode(s)); } catch { /* closed */ }
+        };
+        send(': open\n\n');
+        const heartbeat = setInterval(() => send(': ping\n\n'), 8000);
+        try {
+          const parsed = await run();
+          send(`data: ${JSON.stringify(parsed)}\n\n`);
+        } catch (err) {
+          console.error('import-cellar stream error:', err instanceof Error ? err.message : String(err));
+          send(`data: ${JSON.stringify({ error: 'Something went wrong. Please try again.' })}\n\n`);
+        } finally {
+          clearInterval(heartbeat);
+          controller.close();
+        }
+      },
+    });
+    return new Response(streamBody, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -2,6 +2,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { invokeResilient, isNetworkError } from './invokeResilient';
 import { streamPairings } from './pairingsStream';
+import { streamEdgeFunction } from './streamEdge';
 import { supabase } from './supabase';
 import type { WineDetails, WineIntelligence, Pairing, WineDetailsComplete, DietaryFilters } from '../types/wine';
 import { withBordeauxInfo } from '../constants/bordeauxClassification';
@@ -419,7 +420,15 @@ export interface ImportedCellarWine {
 }
 
 export async function importCellarDocument(base64Image: string): Promise<{ wines: ImportedCellarWine[] }> {
-  return invokeFunction('import-cellar', { base64Image }) as Promise<{ wines: ImportedCellarWine[] }>;
+  // Prefer the streamed path (heartbeat-kept SSE survives a cellular blip on
+  // this long read); fall back to the buffered invoke on a transport drop. A
+  // real application error (not a transport drop) propagates without falling back.
+  try {
+    return await streamEdgeFunction('import-cellar', { base64Image }) as { wines: ImportedCellarWine[] };
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    return invokeFunction('import-cellar', { base64Image }) as Promise<{ wines: ImportedCellarWine[] }>;
+  }
 }
 
 // Intelligent spreadsheet import: one already-decoded list (clean TSV) → real
@@ -455,8 +464,17 @@ export async function parseCellarImport(text: string, source?: string): Promise<
 // PDF invoices / statements: the base64 PDF is read directly by Claude (as a
 // document) rather than decoded to rows on-device.
 export async function parseCellarPdf(pdfBase64: string, source?: string): Promise<CellarImportWine[]> {
-  const data = await invokeFunction('parse-cellar-import', { pdfBase64, source: source ?? '' }) as { wines?: CellarImportWine[] };
-  return data.wines ?? [];
+  // Prefer the streamed path (heartbeat-kept SSE survives a cellular blip on
+  // this long PDF read); fall back to the buffered invoke on a transport drop.
+  // A real application error (not a transport drop) propagates without falling back.
+  try {
+    const data = await streamEdgeFunction('parse-cellar-import', { pdfBase64, source: source ?? '' }) as { wines?: CellarImportWine[] };
+    return data.wines ?? [];
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    const data = await invokeFunction('parse-cellar-import', { pdfBase64, source: source ?? '' }) as { wines?: CellarImportWine[] };
+    return data.wines ?? [];
+  }
 }
 
 // "Archive a Night" — identify each bottle in a lineup photo.
@@ -487,7 +505,15 @@ export interface DetectedBottle {
   overrideImageUri?: string | null;
 }
 export async function detectLineup(base64Image: string): Promise<{ bottles: DetectedBottle[] }> {
-  return invokeFunction('detect-lineup', { base64Image }) as Promise<{ bottles: DetectedBottle[] }>;
+  // Prefer the streamed path (heartbeat-kept SSE survives a cellular blip on
+  // this long lineup read); fall back to the buffered invoke on a transport drop.
+  // A real application error (not a transport drop) propagates without falling back.
+  try {
+    return await streamEdgeFunction('detect-lineup', { base64Image }) as { bottles: DetectedBottle[] };
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    return invokeFunction('detect-lineup', { base64Image }) as Promise<{ bottles: DetectedBottle[] }>;
+  }
 }
 
 export async function generatePersonality(category: 'wine' | 'recipe' | 'restaurant' | 'alter-ego', payload: {
