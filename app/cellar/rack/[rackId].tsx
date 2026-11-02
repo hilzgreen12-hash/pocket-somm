@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWin
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { showAlert } from '../../../src/components/AppAlert';
+import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
 import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
 import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -1020,6 +1021,7 @@ export default function RackGridScreen() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
       if (result.canceled || !result.assets[0]) return;
+      if (!(await ensureConnectionForUpload())) return;
       setSlotUploading(true);
       const uri = result.assets[0].uri;
       const base64 = await prepareImageBase64(uri);

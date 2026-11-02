@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal, Image, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as ImagePicker from 'expo-image-picker';
@@ -191,6 +192,7 @@ export default function ReviewRequirementsScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
+    if (!(await ensureConnectionForUpload())) return;
     // Show the picked photo + a "Reading the label…" overlay during the
     // base64-prepare + Claude scan call, mirroring the camera flow.
     setUploadingImage(uri);

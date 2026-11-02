@@ -9,6 +9,7 @@ import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { DateInput } from '../../src/components/DateInput';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { fetchCellarLocations, removeWineFromFilter } from '../../src/api/customFilters';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { detectLineup, prepareImageBase64, type DetectedBottle } from '../../src/api/label';
@@ -200,6 +201,7 @@ export default function ArchiveNightScreen() {
   }
 
   async function analyze(uri: string, mode: 'review' | 'later' = 'review') {
+    if (!(await ensureConnectionForUpload())) return;
     setFlowMode(mode);
     setStage('analyzing');
     try {
@@ -247,6 +249,7 @@ export default function ArchiveNightScreen() {
   // is archived or reviewed here — that all happens later in the lineup detail.
   async function saveLineup(uri: string) {
     if (!session?.user.id) return;
+    if (!(await ensureConnectionForUpload())) return;
     setStage('analyzing');
     try {
       const base64 = await prepareImageBase64(uri);

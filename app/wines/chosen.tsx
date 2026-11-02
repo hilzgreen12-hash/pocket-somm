@@ -8,6 +8,7 @@ import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { clearChosenReview, patchChosenWine, bulkDeleteChosenWines } from '../../src/api/chosenWines';
 import { deleteLibraryFilter } from '../../src/api/libraryFilters';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
@@ -1167,6 +1168,7 @@ export default function ChosenWinesScreen() {
       // runs on a visible false→true toggle). No-op on the first scan.
       setAddOpen(false);
       let ocr: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null = null;
+      if (!(await ensureConnectionForUpload())) return;
       setUploading(true);
       try {
         const base64 = await prepareImageBase64(uri);

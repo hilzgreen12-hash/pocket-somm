@@ -30,6 +30,7 @@ import { RestaurantReviewShareCard } from './RestaurantReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { COMMUNITY_ENABLED } from '../constants/features';
 import { showAlert } from './AppAlert';
+import { ensureConnectionForUpload } from '../utils/connectionGuard';
 import { MicButton } from './MicButton';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -270,6 +271,7 @@ export function RestaurantReviewModal({
         ? await ImagePicker.launchCameraAsync(opts)
         : await ImagePicker.launchImageLibraryAsync(opts);
       if (res.canceled || !res.assets.length) return;
+      if (!(await ensureConnectionForUpload())) return;
       setBottleBusy(true);
       const uri = res.assets[0].uri;
       try {

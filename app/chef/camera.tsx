@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { View, Text, Image, ActivityIndicator, StyleSheet, Dimensions } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { router, useFocusEffect } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -78,6 +79,7 @@ export default function ChefCameraScreen() {
     }
 
     try {
+      if (!(await ensureConnectionForUpload())) { setPreviewUri(null); return; }
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
       const details = await scanLabel(base64);

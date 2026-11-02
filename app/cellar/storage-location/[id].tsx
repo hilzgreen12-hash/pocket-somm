@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, createStorageCase, updateStorageCase, deleteStorageCase, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
+import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
 import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement, setPlacementCase, releaseBottlesFromPlacements } from '../../../src/api/placements';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
@@ -332,6 +333,7 @@ export default function StorageLocationScreen() {
     if (!(await ensureMediaPermission('library'))) return;
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (res.canceled || !res.assets[0]) return;
+    if (!(await ensureConnectionForUpload())) return;
     setPendingStorageLocationId(id);
     setPendingCaseId(caseId);
     setUploading(true);

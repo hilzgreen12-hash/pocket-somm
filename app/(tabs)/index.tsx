@@ -5,6 +5,7 @@ import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../src/components/AppAlert';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { MicButton } from '../../src/components/MicButton';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
@@ -286,6 +287,7 @@ export default function ScanLandingScreen() {
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
     const backTo = encodeURIComponent('/(tabs)');
+    if (!(await ensureConnectionForUpload())) return;
     setScanningLabel(true);
     try {
       const base64 = await prepareImageBase64(uri);

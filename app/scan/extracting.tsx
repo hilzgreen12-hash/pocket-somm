@@ -9,6 +9,7 @@ import { prepareScanImageBase64 } from '../../src/services/ocr';
 import { finalizeRecommendation } from '../../src/services/recommender';
 import { startScanJob, pollScanJob } from '../../src/api/scanJob';
 import { isNetworkError } from '../../src/api/invokeResilient';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { detectLocalCurrency, askUseLocalCurrency } from '../../src/utils/localCurrency';
@@ -34,6 +35,9 @@ export default function ExtractingScreen() {
 
   async function run(token: { active: boolean }) {
     try {
+      // Pre-flight the connection before the heavy upload: block if offline,
+      // warn+confirm on a weak signal, otherwise proceed as usual.
+      if (!(await ensureConnectionForUpload())) { router.dismissTo('/scan/wine-list'); return; }
       // Step 1: prepare the image(s) locally (resize/compress to base64). Only
       // the prep is client-side now; the OCR itself runs server-side in the job.
       setStage('reading');

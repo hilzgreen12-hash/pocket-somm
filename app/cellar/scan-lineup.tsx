@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useLineupStore } from '../../src/stores/lineupStore';
@@ -191,6 +192,7 @@ export default function ScanLineupScreen() {
   }
 
   async function analyze(uri: string, flip = false) {
+    if (!(await ensureConnectionForUpload())) return;
     setStage('analyzing');
     try {
       // Normalise to ONE upright, EXIF-baked image used for BOTH detection and
@@ -318,6 +320,7 @@ export default function ScanLineupScreen() {
       const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
       if (res.canceled || !res.assets[0]) return;
       const uri = res.assets[0].uri;
+      if (!(await ensureConnectionForUpload())) return;
       setScanningEdit(true);
       try {
         const base64 = await prepareImageBase64(uri);

@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { importCellarDocument, prepareImageBase64, parseCellarImport, parseCellarPdf, type ImportedCellarWine, type CellarImportWine } from '../../src/api/label';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { fileToSheets, type ImportSheet } from '../../src/utils/cellarImportDecode';
 import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
@@ -198,6 +199,7 @@ export default function ImportCellarScreen() {
   }
 
   async function analyze(uris: string[]) {
+    if (!(await ensureConnectionForUpload())) return;
     setStage('analyzing');
     try {
       // Read each screenshot in parallel; merge the extracted wines (cellar
@@ -332,6 +334,7 @@ export default function ImportCellarScreen() {
       // rather than decoded — no rows to split, so no sheet picker.
       const isPdf = /\.pdf$/.test(name) || (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46); // %PDF
       if (isPdf) {
+        if (!(await ensureConnectionForUpload())) { setStage('capture'); return; }
         const wines = await parseCellarPdf(await new File(asset.uri).base64(), asset.name ?? 'PDF');
         if (wines.length === 0) {
           showAlert({ title: "Couldn't read that PDF", body: "Vinster couldn't find any wine holdings in that document. If it's a scanned image, try a clearer copy or a spreadsheet export instead." });

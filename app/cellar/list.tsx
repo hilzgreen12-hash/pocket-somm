@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -746,6 +747,7 @@ export default function FullCellarListScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
+    if (!(await ensureConnectionForUpload())) return;
     setScanningLabel(true);
     try {
       const base64 = await prepareImageBase64(uri);

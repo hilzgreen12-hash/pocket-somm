@@ -4,6 +4,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../../../src/hooks/useAuth';
+import { ensureConnectionForUpload } from '../../../../src/utils/connectionGuard';
 import { getBins, getBinCell, removeWineFromCell, binCellLabel } from '../../../../src/api/bins';
 import { addCellarWine, updateCellarWine } from '../../../../src/api/cellar';
 import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, decrementPlacement } from '../../../../src/api/placements';
@@ -103,6 +104,7 @@ export default function BinCellScreen() {
     try {
       const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
       if (res.canceled || !res.assets[0]) return;
+      if (!(await ensureConnectionForUpload())) return;
       setScanning(true);
       try {
         const base64 = await prepareImageBase64(res.assets[0].uri);

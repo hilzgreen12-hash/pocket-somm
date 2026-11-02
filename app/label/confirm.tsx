@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Text, TextInput, TouchableOpacity, StyleSheet, Modal, View, ScrollView, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
@@ -684,6 +685,7 @@ export default function LabelConfirmScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
+    if (!(await ensureConnectionForUpload())) return;
     setScanning(true);
     try {
       const base64 = await prepareImageBase64(uri);

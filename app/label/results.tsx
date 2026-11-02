@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef, useCallback, type ComponentProps 
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, Share, BackHandler } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/components/VinstersNoteHeading';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
@@ -295,6 +296,7 @@ export default function LabelResultsScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
+    if (!(await ensureConnectionForUpload())) return;
     setReReading(true);
     try {
       const base64 = await prepareImageBase64(uri);
@@ -538,6 +540,7 @@ export default function LabelResultsScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
+    if (!(await ensureConnectionForUpload())) return;
     setReReading(true);
     try {
       const base64 = await prepareImageBase64(uri);

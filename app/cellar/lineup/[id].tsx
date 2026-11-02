@@ -7,6 +7,7 @@ import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
+import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLineupArchive, lineupSignedUrl, setLineupNote, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupWine } from '../../../src/api/lineups';
 import * as ImagePicker from 'expo-image-picker';
@@ -428,6 +429,7 @@ export default function LineupDetailScreen() {
 
   async function identifyWines() {
     if (!lineup || identifying) return;
+    if (!(await ensureConnectionForUpload())) return;
     setIdentifying(true);
     try {
       const url = photoUrl ?? (await lineupSignedUrl(lineup.image_path));
