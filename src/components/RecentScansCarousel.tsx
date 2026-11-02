@@ -38,7 +38,7 @@ function stampDate(d: Date): string {
 // Example cards shown when a new user has no scans yet.
 const SCAN_EXAMPLES: PlaceholderCard[] = [
   { kind: 'label', producer: 'Domaine de la Romanée-Conti', wineName: 'La Romanée-Conti', title: 'La Romanée-Conti 2002', stamp: '01 Jan 2030', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
-  { kind: 'label', producer: 'Château Margaux', wineName: 'Château Margaux', title: 'Château Margaux 2015', stamp: '20 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
+  { kind: 'label', producer: 'Biondi-Santi', wineName: 'Brunello di Montalcino', title: 'Biondi-Santi Brunello di Montalcino 2010', stamp: '20 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
   { kind: 'label', producer: 'Kistler', wineName: 'Chardonnay', title: 'Kistler Chardonnay 2020', stamp: '18 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
 ];
 
