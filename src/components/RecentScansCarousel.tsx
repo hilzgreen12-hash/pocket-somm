@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
-import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
 import { useLabels } from '../hooks/useLabels';
 import { useLabelStore } from '../stores/labelStore';
 import { useScanStore } from '../stores/scanStore';
@@ -37,9 +37,9 @@ function stampDate(d: Date): string {
 
 // Example cards shown when a new user has no scans yet.
 const SCAN_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'label', producer: 'Domaine de la Romanée-Conti', wineName: 'La Romanée-Conti', title: 'La Romanée-Conti 2002', stamp: '01 Jan 2030 · At Home', overlay: 'Your Recent Scans appear here as you use Vinster' },
-  { kind: 'image', uri: RESTAURANT_IMG, title: 'Wine list', stamp: '20 Dec 2029 · La Steakhouse', overlay: 'Your Recent Scans appear here as you use Vinster' },
-  { kind: 'label', producer: 'Kistler', wineName: 'Chardonnay', title: 'Kistler Chardonnay 2020', stamp: '18 Dec 2029', overlay: 'Your Recent Scans appear here as you use Vinster' },
+  { kind: 'label', producer: 'Domaine de la Romanée-Conti', wineName: 'La Romanée-Conti', title: 'La Romanée-Conti 2002', stamp: '01 Jan 2030', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
+  { kind: 'label', producer: 'Château Margaux', wineName: 'Château Margaux', title: 'Château Margaux 2015', stamp: '20 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
+  { kind: 'label', producer: 'Kistler', wineName: 'Chardonnay', title: 'Kistler Chardonnay 2020', stamp: '18 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
 ];
 
 // Identity key for de-duping re-scans of the same wine (newest kept).
@@ -198,7 +198,9 @@ export function RecentScansCarousel() {
     };
   });
 
-  const merged = [...labelItems, ...listItems].sort((a, b) => b.ts - a.ts).slice(0, 8);
+  // Label scans only — wine-list scans were dropped from this carousel (it's now
+  // "Your Recent Label Scans"). listItems is still built above but not surfaced here.
+  const merged = [...labelItems].sort((a, b) => b.ts - a.ts).slice(0, 8);
   // Real scans fill the carousel from the left, replacing placeholder tiles in
   // order; the remaining example tiles stay until there are at least three.
   const fill = merged.length < SCAN_EXAMPLES.length ? SCAN_EXAMPLES.slice(merged.length) : [];

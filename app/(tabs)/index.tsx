@@ -406,7 +406,7 @@ export default function ScanLandingScreen() {
 
       {/* Recent Scans — mixed label + list scans, most recent first. */}
       <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Your Recent Scans</Text>
+      <Text style={styles.carouselHeader}>Your Recent Label Scans</Text>
       <View style={styles.carouselBleed}><RecentScansCarousel /></View>
 
       {/* Drink Now — cellar bottles at last call (drinkable now, window closes
