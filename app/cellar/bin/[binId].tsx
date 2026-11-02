@@ -219,22 +219,27 @@ export default function BinDetailScreen() {
     const kind = c.kind === 'triangle' ? 'triangle' : 'diamond';
     const label = labelFor(c);
     const heading = label ? (c.kind === 'triangle' ? `Half Diamond ${label}` : `Diamond ${label}`) : `This ${kind}`;
+    // Gesture-parity with the alt-cellar case long-press: offer Add Wines, plus
+    // Empty Contents when the cubby actually holds something. "Add Wines" routes
+    // through the same add flow a tap on an empty diamond uses.
+    const occupied = (c.wines?.length ?? 0) > 0;
     showAlert({
       title: heading,
       buttons: [
-        {
-          text: 'Empty',
-          style: 'destructive',
+        { text: 'Add Wines', onPress: () => router.push(`/cellar/bin/cell/${c.id}?add=1` as any) },
+        ...(occupied ? [{
+          text: 'Empty Contents',
+          style: 'destructive' as const,
           onPress: () => showAlert({
             title: `Empty this ${kind}?`,
             body: 'The wines stay in your cellar as loose bottles — this only clears them out of this cubby.',
             buttons: [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Empty', style: 'destructive', onPress: async () => { try { await emptyBinCell(c.id); invalidate(); } catch (err) { showAlert({ title: 'Could not empty', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
+              { text: 'Cancel', style: 'cancel' as const },
+              { text: 'Empty', style: 'destructive' as const, onPress: async () => { try { await emptyBinCell(c.id); invalidate(); } catch (err) { showAlert({ title: 'Could not empty', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
             ],
           }),
-        },
-        { text: 'Cancel', style: 'cancel' },
+        }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
