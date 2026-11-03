@@ -482,11 +482,7 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
             <Q>What would you like to know?</Q>
             <Q small>Ask about anything you've reviewed: scores, restaurants, dates, what you drank where.</Q>
             {answerRow(question, setQuestion, 'Tap the mic and ask', 'query')}
-            <View style={styles.options}>
-              <Option first label="“Where did I drink a Cornas recently?”" onPress={() => runReviews('Where did I drink a Cornas recently?')} />
-              <Option label="“What did I score Château Latour?”" onPress={() => runReviews('What did I score Château Latour?')} />
-              <Option label="“My highest-scored wines this year”" onPress={() => runReviews('My highest-scored wines this year')} />
-            </View>
+            <Text style={styles.note}>For example, 'where did I drink a Cornas recently?' or 'What's my highest rated wine this year?'</Text>
           </>
         );
       case 'r_working':
