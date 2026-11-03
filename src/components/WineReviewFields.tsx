@@ -160,7 +160,7 @@ export function WineReviewFields({
       {/* Your Review */}
       <View style={styles.dictateRow}>
         <Text style={styles.sectionTitle}>Your Review</Text>
-        <MicButton value={review} onChangeText={onReview} onClear={() => onReview('')} />
+        <MicButton value={review} onChangeText={onReview} onClear={() => onReview('')} domain="note" serverCorrect />
       </View>
       <TextInput
         style={[styles.input, styles.noteInput]}
@@ -176,7 +176,7 @@ export function WineReviewFields({
         <>
           <View style={styles.dictateRow}>
             <Text style={styles.sectionTitle}>Personal Notes</Text>
-            <MicButton value={personalNotes} onChangeText={onPersonalNotes} onClear={() => onPersonalNotes('')} />
+            <MicButton value={personalNotes} onChangeText={onPersonalNotes} onClear={() => onPersonalNotes('')} domain="note" serverCorrect />
           </View>
           <TextInput
             style={[styles.input, styles.noteInput]}

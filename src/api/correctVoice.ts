@@ -6,7 +6,7 @@ import { invokeResilient } from './invokeResilient';
 // function ignores anything long) so a whole tasting note is never rewritten.
 export async function correctVoiceTranscript(
   text: string,
-  domain: 'wine' | 'food' | 'query' = 'wine',
+  domain: 'wine' | 'food' | 'query' | 'note' = 'wine',
 ): Promise<string> {
   const input = (text ?? '').trim();
   if (!input) return text;

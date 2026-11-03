@@ -20,7 +20,9 @@ interface Props {
   // Which vocabulary to correct the dictation against. 'wine' (default) nudges
   // producer/region/grape names + fuzzy-matches the user's cellar; 'food' nudges
   // dish/ingredient/technique names (e.g. the Find A Wine Pairing dish field).
-  domain?: 'wine' | 'food';
+  // wine = names; query = a question about wine records; note = free-text
+  // tasting note / memory; food = dishes. All but food get wine correction.
+  domain?: 'wine' | 'food' | 'query' | 'note';
   // When true, the FINAL transcript is additionally sent to the server-side LLM
   // corrector (correct-voice) — catches the long tail of mangled wine/food names
   // the on-device dictionary misses ("corn-ass" → "Cornas"). Best-effort: the
@@ -86,7 +88,7 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
       // returns something different. Re-joins onto the SAME base so a slow
       // response can't clobber text typed/dictated afterwards being rare here.
       if (serverCorrect && refined.trim()) {
-        correctVoiceTranscript(refined, domain === 'food' ? 'food' : 'wine')
+        correctVoiceTranscript(refined, domain)
           .then((corrected) => {
             const c = (corrected ?? '').trim();
             if (c && c !== refined.trim() && baseRef.current === joined) {

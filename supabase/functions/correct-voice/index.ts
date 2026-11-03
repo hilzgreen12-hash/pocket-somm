@@ -37,6 +37,8 @@ async function soundsLike(text: string): Promise<string[]> {
 function buildPrompt(text: string, domain: string, candidates: string[] = []): string {
   const scope = domain === 'food'
     ? 'a dish, ingredient or cooking term'
+    : domain === 'note'
+    ? 'a personal tasting note or memory about wine and food (it may mention wine producers, appellations/regions, grapes, restaurants and dishes)'
     : domain === 'query'
     ? "a question the user is asking about their own wine records (it may mention wine producers, appellations/regions, grapes, restaurants and foods)"
     : 'a wine — its producer, appellation/region, grape or cuvée';
@@ -59,7 +61,7 @@ Deno.serve(async (req) => {
     if (!original.trim()) return new Response(JSON.stringify({ text: original }), { headers: { 'Content-Type': 'application/json' } });
     // Guard against rewriting long free-text (e.g. a whole tasting note) — only
     // short, name-heavy utterances are corrected here.
-    if (original.length > 240) return new Response(JSON.stringify({ text: original }), { headers: { 'Content-Type': 'application/json' } });
+    if (original.length > (domain === 'note' ? 600 : 240)) return new Response(JSON.stringify({ text: original }), { headers: { 'Content-Type': 'application/json' } });
 
     // Wine names get catalogue grounding and the stronger model — the long tail
     // of producers (e.g. "Even CD Colmela" → "Eben Sadie Columella") is beyond the

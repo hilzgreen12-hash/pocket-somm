@@ -30,35 +30,43 @@ Deno.serve(async (req) => {
 
     // Reviews the user has written (the richest source: wine identity + their
     // score + where/when they drank it). Most recent first, capped.
-    const { data: reviews } = await db
+    // NB column names must match chosen_wines exactly — a wrong one (this used
+    // to ask for review_score / review_date) fails the WHOLE query silently and
+    // the model then sees no reviews at all.
+    const { data: reviews, error: reviewsErr } = await db
       .from('chosen_wines')
-      .select('producer, wine_name, vintage, region, user_score, review_score, restaurant_name, city, review_date, chosen_at, tasting_note')
+      .select('producer, wine_name, vintage, region, appellation, grape, style, user_score, restaurant_name, city, reviewed_at, chosen_at, wishlist, review_dismissed')
       .order('chosen_at', { ascending: false })
       .limit(300);
+    if (reviewsErr) console.error('ask-my-data reviews query failed:', reviewsErr.message);
 
     // Restaurant visits (even those without a written wine review).
-    const { data: visits } = await db
+    const { data: visits, error: visitsErr } = await db
       .from('scan_sessions')
       .select('restaurant_name, city, captured_at')
       .not('restaurant_name', 'is', null)
       .order('captured_at', { ascending: false })
       .limit(150);
+    if (visitsErr) console.error('ask-my-data visits query failed:', visitsErr.message);
 
     // The user's CELLAR — each wine row carries the critic score AND the user's
     // own review score/note, so "what's my score for X" must look here too, not
     // only in written reviews. Includes archived bottles.
-    const { data: cellar } = await db
+    const { data: cellar, error: cellarErr } = await db
       .from('cellar_wines')
-      .select('producer, wine_name, vintage, region, critic_score, review_score, review_note, quantity, archived_at')
+      .select('producer, wine_name, vintage, region, grape_variety, style, critic_score, review_score, review_note, quantity, archived_at, is_wishlist')
       .order('created_at', { ascending: false })
       .limit(400);
+    if (cellarErr) console.error('ask-my-data cellar query failed:', cellarErr.message);
 
-    const reviewLines = (reviews ?? []).map((r: any) => {
+    const reviewLines = (reviews ?? []).filter((r: any) => !r.wishlist && !r.review_dismissed).map((r: any) => {
       const wine = [r.producer, r.wine_name, r.vintage].filter(Boolean).join(' ');
-      const score = r.user_score ?? r.review_score;
+      const score = r.user_score;
       const where = [r.restaurant_name, r.city].filter(Boolean).join(', ');
-      const when = (r.review_date ?? r.chosen_at ?? '').slice(0, 10);
-      return `- ${wine}${r.region ? ` (${r.region})` : ''}${score != null ? ` · my score ${score}` : ''}${where ? ` · at ${where}` : ''}${when ? ` · ${when}` : ''}`;
+      const when = String(r.reviewed_at ?? r.chosen_at ?? '').slice(0, 10);
+      const place = [r.appellation, r.region].filter(Boolean).join(', ');
+      const kind = [r.style, r.grape].filter(Boolean).join(', ');
+      return `- ${wine}${place ? ` (${place})` : ''}${kind ? ` [${kind}]` : ''}${score != null ? ` · my score ${score}` : ''}${where ? ` · at ${where}` : ''}${when ? ` · ${when}` : ''}`;
     });
     const visitLines = (visits ?? []).map((v: any) => `- ${[v.restaurant_name, v.city].filter(Boolean).join(', ')}${v.captured_at ? ` · ${String(v.captured_at).slice(0, 10)}` : ''}`);
 
@@ -67,8 +75,9 @@ Deno.serve(async (req) => {
       const mine = c.review_score != null ? ` · my review score ${c.review_score}` : '';
       const critic = c.critic_score != null ? ` · critic score ${c.critic_score}` : '';
       const note = c.review_note ? ` · my note: ${String(c.review_note).slice(0, 120)}` : '';
-      const status = c.archived_at ? ' · (archived)' : '';
-      return `- ${wine}${c.region ? ` (${c.region})` : ''}${mine}${critic}${note}${status}`;
+      const kind = [c.style, c.grape_variety].filter(Boolean).join(', ');
+      const status = c.archived_at ? ' · (archived)' : c.is_wishlist ? ' · (wishlist — not owned)' : '';
+      return `- ${wine}${c.region ? ` (${c.region})` : ''}${kind ? ` [${kind}]` : ''}${mine}${critic}${note}${status}`;
     });
 
     if (reviewLines.length === 0 && visitLines.length === 0 && cellarLines.length === 0) {
@@ -77,6 +86,9 @@ Deno.serve(async (req) => {
 
     const todayIso = new Date().toISOString().slice(0, 10);
     const prompt = `Today is ${todayIso}. Answer the user's question using ONLY their own Vinster records below. Be specific and concise (1–3 sentences) — name the wine, the restaurant, the date and/or the score as relevant. If the records don't contain the answer, say so plainly ("I don't have a record of that"). Do not invent anything not in the data. When the user says "recently", prefer the most recent matching entry.
+
+USE YOUR WINE KNOWLEDGE TO MATCH (the records often name only an appellation): a question about a region, country, colour, grape or style matches every record that belongs to it — e.g. "a red Rhône" includes Cornas, Hermitage, Côte-Rôtie, Crozes-Hermitage, Saint-Joseph, Châteauneuf-du-Pape, Gigondas; "Burgundy" includes Gevrey-Chambertin, Meursault, Chablis; "a Syrah" includes Cornas and Hermitage; "Italian" includes Barolo and Brunello. Never say there's no record just because the exact word isn't printed in it.
+THE QUESTION WAS SPOKEN: wine words may be misheard by sound — read them as the wine term they sound like ("Roan" = Rhône, "Shablee" = Chablis, "corn ass" = Cornas, "Bar a low" = Barolo). Never repeat the misheard spelling back to the user; use the correct wine term.
 
 A wine can appear in their written REVIEWS and/or in their CELLAR — always check BOTH before concluding anything. When the user asks what THEIR score is (or what they gave) for a specific wine:
 - If a review score for that wine is in the records, state it (you may add the critic score for context).
@@ -98,7 +110,7 @@ QUESTION: ${question}
 Answer:`;
 
     const resp = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-5-5',
       max_tokens: 700,
       messages: [{ role: 'user', content: prompt }],
     });

@@ -240,7 +240,7 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
   );
 
   // An answer row: speak (mic) or type, tied to ONE question.
-  function answerRow(value: string, set: (t: string) => void, placeholder = 'Tap the mic and tell me', domain: 'wine' | 'food' = 'food', label?: string) {
+  function answerRow(value: string, set: (t: string) => void, placeholder = 'Tap the mic and tell me', domain: 'wine' | 'food' | 'query' = 'food', label?: string) {
     return (
       <View style={styles.answerRow}>
         <View style={{ flex: 1 }}>
@@ -481,7 +481,7 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
             <Said lines={['Ask about my reviews']} />
             <Q>What would you like to know?</Q>
             <Q small>Ask about anything you've reviewed: scores, restaurants, dates, what you drank where.</Q>
-            {answerRow(question, setQuestion, 'Tap the mic and ask', 'wine')}
+            {answerRow(question, setQuestion, 'Tap the mic and ask', 'query')}
             <View style={styles.options}>
               <Option first label="“Where did I drink a Cornas recently?”" onPress={() => runReviews('Where did I drink a Cornas recently?')} />
               <Option label="“What did I score Château Latour?”" onPress={() => runReviews('What did I score Château Latour?')} />

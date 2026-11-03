@@ -128,7 +128,7 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
 
               <Text style={styles.title}>Tap the mic and speak</Text>
               <View style={styles.micRow}>
-                <MicButton value={transcript} onChangeText={(t) => setTranscript(correctWineTerms(t))} onClear={() => setTranscript('')} />
+                <MicButton value={transcript} onChangeText={(t) => setTranscript(correctWineTerms(t))} onClear={() => setTranscript('')} domain="query" serverCorrect />
               </View>
               <TextInput
                 style={[styles.inputField, styles.inputText]}

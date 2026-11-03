@@ -622,7 +622,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
               <View style={styles.micRow}>
                 {/* MicButton corrects misheard wine terms on the dictated text itself;
                     manual edits in the field below are left as typed. */}
-                <MicButton value={transcript} onChangeText={setTranscript} onClear={() => setTranscript('')} />
+                <MicButton value={transcript} onChangeText={setTranscript} onClear={() => setTranscript('')} domain="query" serverCorrect />
               </View>
               {/* Editable so the user can fix any mis-hearing before confirming. */}
               <TextInput

@@ -871,7 +871,7 @@ export default function LineupDetailScreen() {
             <View style={styles.dictateRowFlush}>
               <Text style={[styles.stampTitle, styles.noteEditorTitle]} numberOfLines={2}>Your Lineup Notes & Musings</Text>
               <View style={styles.noteHeaderRight}>
-                <MicButton value={noteDraft} onChangeText={setNoteDraft} onClear={() => setNoteDraft('')} />
+                <MicButton value={noteDraft} onChangeText={setNoteDraft} onClear={() => setNoteDraft('')} domain="note" serverCorrect />
                 <TouchableOpacity onPress={() => setNoteEditorOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Cancel">
                   <Text style={styles.closeX}>✕</Text>
                 </TouchableOpacity>

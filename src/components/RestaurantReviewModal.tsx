@@ -765,7 +765,7 @@ export function RestaurantReviewModal({
             <View style={styles.dictateRow}>
               <Text style={styles.fieldLabel}>Your review</Text>
               {noteEditing ? (
-                <MicButton value={note} onChangeText={setNote} onClear={() => setNote('')} />
+                <MicButton value={note} onChangeText={setNote} onClear={() => setNote('')} domain="note" serverCorrect />
               ) : (
                 <TouchableOpacity onPress={() => setNoteEditing(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
                   <Text style={styles.editNoteLink}>Edit</Text>

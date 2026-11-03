@@ -452,7 +452,7 @@ export default function LineupLibraryScreen() {
                 multiline
                 textAlignVertical="top"
               />
-              <MicButton value={noteDraft} onChangeText={setNoteDraft} />
+              <MicButton value={noteDraft} onChangeText={setNoteDraft} domain="note" serverCorrect />
             </View>
             <View style={styles.letterActions}>
               <TouchableOpacity onPress={() => setNoteTarget(null)}>

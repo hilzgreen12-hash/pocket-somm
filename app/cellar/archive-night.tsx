@@ -872,6 +872,8 @@ export default function ArchiveNightScreen() {
                     value={note}
                     onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }}
                     onClear={() => { setNote(''); if (noteSaved) setNoteSaved(false); }}
+                    domain="note"
+                    serverCorrect
                   />
                 </View>
               </View>
@@ -920,7 +922,7 @@ export default function ArchiveNightScreen() {
                   to the Lineup Library entry alongside the date/city/venue. */}
               <View style={styles.archiveNoteHead}>
                 <Text style={styles.archiveFieldLabel}>Your Note</Text>
-                <MicButton value={note} onChangeText={setNote} onClear={() => setNote('')} />
+                <MicButton value={note} onChangeText={setNote} onClear={() => setNote('')} domain="note" serverCorrect />
               </View>
               <TextInput
                 style={styles.archiveNoteInput}
@@ -1039,7 +1041,7 @@ export default function ArchiveNightScreen() {
                 autoFocus
                 autoCorrect={false}
               />
-              <MicButton value={pickerSearch} onChangeText={setPickerSearch} onClear={() => setPickerSearch('')} />
+              <MicButton value={pickerSearch} onChangeText={setPickerSearch} onClear={() => setPickerSearch('')} domain="wine" serverCorrect />
             </View>
             {(() => {
               const q = foldAccents(pickerSearch.trim());
