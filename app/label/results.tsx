@@ -2061,7 +2061,7 @@ export default function LabelResultsScreen() {
       </TouchableOpacity>
 
       {/* Top-right action: Edit Wine (correct the wine or re-scan). Export moved
-          to a gold button beneath "Find me a Recipe" in the actions section. */}
+          to a gold button in the actions section. */}
       {isIntelOnlyFlow && intelligence ? (
         <View style={styles.topRightActions}>
           <TouchableOpacity
@@ -2388,6 +2388,17 @@ export default function LabelResultsScreen() {
             </View>
           ) : null}
 
+          {/* Chef Inspired Recipe Pairings — opens the recipe-requirements flow
+              (moved up from the action buttons at the foot of the page). */}
+          {isIntelOnlyFlow ? (
+            <View style={styles.vintageSection}>
+              <TouchableOpacity style={styles.vintageHeadingRow} onPress={handleChefPairing} activeOpacity={0.7}>
+                <Text style={styles.mapTitle}>Chef Inspired Recipe Pairings</Text>
+                <Text style={styles.mapChevron}>›</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {/* The Inside Line — the "sommelier best friend" verdict: how this
               vintage actually fared and how this producer stacked up against its
               peers that year. Real in-the-know context, not a dictionary entry. */}
@@ -2471,9 +2482,6 @@ export default function LabelResultsScreen() {
             activeOpacity={0.85}
           >
             <Text style={styles.saveReviewBtnText}>Save to Your Cellar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.saveReviewBtn, { marginTop: spacing.sm }]} onPress={handleChefPairing} activeOpacity={0.85}>
-            <Text style={styles.saveReviewBtnText}>Find me a Recipe</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.saveReviewBtn, { marginTop: spacing.sm }]} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
             <Text style={styles.saveReviewBtnText}>{sharing ? 'Exporting…' : 'Export Wine Intel'}</Text>

@@ -2169,6 +2169,16 @@ export default function CellarWineDetail() {
               )}
             </View>
           ) : null}
+          {/* Chef Inspired Recipe Pairings — opens the recipe-requirements flow
+              (moved up from the button list at the foot of the card). */}
+          <View style={styles.reviewRow}>
+            <View style={styles.vinsterHeaderRow}>
+              <TouchableOpacity onPress={handleFindPairings} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+                <Text style={styles.vinsterReviewTitle}>Chef Inspired Recipe Pairings</Text>
+                <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
+              </TouchableOpacity>
+            </View>
+          </View>
         </>
       ) : null}
 
@@ -2451,11 +2461,10 @@ export default function CellarWineDetail() {
         </TouchableOpacity>
       )}
 
-      {/* Chef pairing CTA — moved down to sit just above Archive/Delete.
-          Wishlist wines hide it (no bottle yet); the reviews-flow variant
-          posts the review to the community instead. */}
-      {!isArchived && (
-        isWishlist ? null : cameFromReviews ? (
+      {/* Reviews-flow only: post the review to the community. (The recipe CTA
+          that used to share this slot is now "Chef Inspired Recipe Pairings"
+          beneath Serving Suggestions.) */}
+      {!isArchived && !isWishlist && cameFromReviews && (
           <TouchableOpacity
             style={[styles.chefBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted) && styles.chefBtnDisabled]}
             onPress={handlePostToCommunity}
@@ -2466,11 +2475,6 @@ export default function CellarWineDetail() {
               {!COMMUNITY_ENABLED ? 'Share Review To Community (coming soon)' : reviewPosted ? '✓ Shared to Community' : postingReview ? 'Sharing…' : 'Share Review To Community'}
             </Text>
           </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
-            <Text style={styles.chefBtnText}>Find me a recipe for this wine</Text>
-          </TouchableOpacity>
-        )
       )}
 
       {/* Regenerate the wine card's intel from scratch — refreshes value, score,
