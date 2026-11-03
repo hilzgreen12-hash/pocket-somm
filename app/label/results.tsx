@@ -1358,7 +1358,7 @@ export default function LabelResultsScreen() {
   }
 
   function buildWinePayload(userId: string) {
-    const parsedPrice = parseFloat(purchasePrice);
+    const parsedPrice = parseFloat(purchasePrice.replace(',', '.'));
     const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
     return {
       user_id: userId,
@@ -1734,7 +1734,7 @@ export default function LabelResultsScreen() {
     try {
       const parsedScore = parseInt(reviewScore, 10);
       const validScore = !Number.isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 100 ? parsedScore : null;
-      const parsedPrice = parseFloat(reviewListPrice);
+      const parsedPrice = parseFloat(reviewListPrice.replace(',', '.'));
       const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
       const parsedVintage = parseInt(wine.vintage, 10);
       const validVintage = !Number.isNaN(parsedVintage) ? parsedVintage : null;

@@ -64,8 +64,10 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
   }, [visible, field, seedField]);
 
   function setVal(id: string, text: string) {
-    // Keep digits + a single decimal point.
-    const cleaned = text.replace(/[^0-9.]/g, '').replace(/(\.\d*)\./g, '$1');
+    // Keep digits + a single decimal point. A comma is a decimal point too:
+    // phones set to a comma-decimal locale show "," on the decimal pad, and
+    // stripping it turned "150,74" into 15074 (a 100× purchase value).
+    const cleaned = text.replace(/,/g, '.').replace(/[^0-9.]/g, '').replace(/(\.\d*)\./g, '$1');
     setValues((v) => ({ ...v, [id]: cleaned }));
   }
 

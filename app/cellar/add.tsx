@@ -43,7 +43,7 @@ export default function AddWineScreen() {
 
   async function performNewEntry() {
     if (!session?.user.id) return;
-    const parsedPrice = parseFloat(purchasePrice);
+    const parsedPrice = parseFloat(purchasePrice.replace(',', '.'));
     const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
     setSaving(true);
     try {

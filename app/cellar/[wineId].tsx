@@ -1186,7 +1186,7 @@ export default function CellarWineDetail() {
 
   async function handleSavePrice() {
     Keyboard.dismiss();
-    const trimmed = purchasePriceDraft.trim();
+    const trimmed = purchasePriceDraft.trim().replace(',', '.');
     const parsed = trimmed ? Number(trimmed) : null;
     if (trimmed && (parsed === null || Number.isNaN(parsed) || parsed < 0)) {
       showAlert({ title: 'Invalid', body: 'Enter a positive number for the purchase price.' });
