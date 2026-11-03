@@ -274,6 +274,11 @@ export async function fetchAutoLabelUri(producer?: string | null, wineName?: str
   } catch { return null; }
 }
 
+// Returned by the on-demand note fetchers when the server's recognition gate
+// says the model doesn't genuinely know this wine — callers show an honest
+// "doesn't know this wine" line and never persist it as content.
+export const WINE_UNKNOWN = { unknown: true } as const;
+
 // On-demand "Vinster's Review" (the sommelier tasting note). The recommend call
 // no longer generates this up front — the results card fetches it here when the
 // diner expands the chevron, keeping the main 3-wine generation light and fast.
@@ -285,7 +290,7 @@ export async function fetchVinsterReview(input: {
   appellation?: string | null;
   grape?: string | null;
   vintage?: number | string | null;
-}): Promise<string | null> {
+}): Promise<string | null | typeof WINE_UNKNOWN> {
   if (!input.producer?.trim() && !input.wineName?.trim()) return null;
   try {
     const data = await invokeResilient('vinster-review', {
@@ -295,7 +300,8 @@ export async function fetchVinsterReview(input: {
       appellation: input.appellation ?? null,
       grape: input.grape ?? null,
       vintage: input.vintage ?? null,
-    }, { timeoutMs: 30000, retries: 1 }) as { review?: string };
+    }, { timeoutMs: 30000, retries: 1 }) as { review?: string | null; identified?: boolean };
+    if (data?.identified === false) return WINE_UNKNOWN;
     return data?.review?.trim() || null;
   } catch { return null; }
 }
@@ -307,10 +313,13 @@ export interface RangeWineNote {
   note: string;
 }
 
+export type RangeWineNoteResult = RangeWineNote | typeof WINE_UNKNOWN;
+
 // On-demand "inside line" for one wine tapped in a producer's range — technical
-// details (grape/region/style) plus a short in-the-know note. Returns null on
-// any failure so the caller can show a graceful retry.
-export async function fetchRangeWineNote(input: { producer?: string | null; wineName?: string | null; region?: string | null; tier?: string | null }): Promise<RangeWineNote | null> {
+// details (grape/region/style) plus a short in-the-know note. Returns
+// WINE_UNKNOWN when the server says the wine isn't recognised (note:null),
+// and null on any failure so the caller can show a graceful retry.
+export async function fetchRangeWineNote(input: { producer?: string | null; wineName?: string | null; region?: string | null; tier?: string | null }): Promise<RangeWineNoteResult | null> {
   if (!input.producer?.trim() && !input.wineName?.trim()) return null;
   try {
     const data = await invokeResilient('range-wine-note', {
@@ -318,8 +327,12 @@ export async function fetchRangeWineNote(input: { producer?: string | null; wine
       wineName: input.wineName ?? null,
       region: input.region ?? null,
       tier: input.tier ?? null,
-    }, { timeoutMs: 30000, retries: 1 }) as Partial<RangeWineNote> & { error?: string };
-    if (data?.error || !data?.note?.trim()) return null;
+    }, { timeoutMs: 30000, retries: 1 }) as Partial<Omit<RangeWineNote, 'note'>> & { note?: string | null; error?: string };
+    if (data?.error) return null;
+    // Server's recognition gate: a successful response with note:null means the
+    // model doesn't genuinely know this wine.
+    if (data && 'note' in data && data.note === null) return WINE_UNKNOWN;
+    if (!data?.note?.trim()) return null;
     return { grape: data.grape ?? null, region: data.region ?? null, style: data.style ?? null, note: data.note.trim() };
   } catch { return null; }
 }
@@ -332,6 +345,25 @@ export async function searchRestaurantImages(input: { restaurant?: string | null
   const data = await invokeFunction('label-image-search', { query: q }) as { images?: LabelImageCandidate[]; error?: string };
   if (data.error) throw new Error(data.error);
   return data.images ?? [];
+}
+
+// Live web lookup for a name Vinster didn't recognise (misheard / misread):
+// returns the real wine it most plausibly is, backed by a cited web page, or
+// null. Server-side it also adds the wine to the catalogue for next time.
+export interface ResolvedWine { producer: string; wineName: string | null; region: string | null; grape: string | null; style: string | null }
+export async function resolveWine(input: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | null }): Promise<ResolvedWine | null> {
+  try {
+    const data = await invokeFunction('resolve-wine', {
+      producer: input.producer ?? '',
+      wineName: input.wineName ?? '',
+      region: input.region ?? '',
+      vintage: input.vintage ?? '',
+    }) as { found?: boolean; producer?: string; wineName?: string | null; region?: string | null; grape?: string | null; style?: string | null };
+    if (!data?.found || !data.producer) return null;
+    return { producer: data.producer, wineName: data.wineName ?? null, region: data.region ?? null, grape: data.grape ?? null, style: data.style ?? null };
+  } catch {
+    return null;
+  }
 }
 
 export async function getWineIntelligence(
@@ -367,17 +399,22 @@ export interface WineKnowledge {
 
 // "Dive Deeper" — four editorial profiles for a wine (producer, region,
 // vintage, grape). Generated once and cached on the cellar row by the caller.
+// Returns null when the server's recognition gate says the model doesn't
+// genuinely know this wine (identified !== true / no profiles) — the caller
+// shows an honest line and must NOT cache that as content.
 export async function getWineKnowledge(input: {
   producer: string; region: string; wineName: string | null; vintage: string | null; grape: string | null;
-}): Promise<WineKnowledge> {
+}): Promise<WineKnowledge | null> {
   const data = await invokeFunction('wine-knowledge', {
     producer: input.producer,
     region: input.region,
     wineName: input.wineName,
     vintage: input.vintage,
     grape: input.grape,
-  }) as WineKnowledge;
-  return data;
+  }) as WineKnowledge & { identified?: boolean };
+  if (data?.identified === false || !data?.producerProfile) return null;
+  const { identified: _identified, ...knowledge } = data;
+  return knowledge;
 }
 
 export async function generatePairings(

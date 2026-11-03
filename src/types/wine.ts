@@ -137,6 +137,17 @@ export interface GrapeVariant {
 }
 
 export interface WineIntelligence {
+  // Identity gate (wine-intelligence): false when Vinster does NOT genuinely
+  // recognise this as a real, specific wine (misheard / misread / fictional).
+  // An unidentified wine carries no estimated facts; generateWineIntel throws
+  // WineNotFoundError unless Wine-Searcher has a real listing for it.
+  identified?: boolean;
+  // Correct spelling of the wine when identified from a garbled name.
+  canonicalProducer?: string | null;
+  canonicalWineName?: string | null;
+  // Set when the name had to be resolved by a live web lookup (resolve-wine):
+  // the real wine Vinster found for a garbled name. Shown on the card instead.
+  resolvedIdentity?: { producer: string; wineName: string | null; region: string | null } | null;
   // Average / consensus critic score (out of 100). Shown as "Avg Critic
   // Score" on the Wine Intel card, with the per-critic breakdown below.
   criticScore: number | null;

@@ -83,6 +83,7 @@ Deno.serve(async (req) => {
 If the producer text is a misspelling/OCR misread, silently correct it to the real producer. Then list the REAL, DISTINCT wines that producer makes that could match the label (up to 8), most likely first. If a region/cuvée was clearly read, list ONLY bottlings matching it.
 
 ACCURACY IS CRITICAL — a wrong list is worse than a short one:
+- If you do not genuinely recognise the producer (even allowing for a misspelling), return an empty array []. Never map a garbled name onto a producer you're only guessing at.
 - NEVER invent a bottling. Only real wines this producer genuinely makes. If unsure, return FEWER.
 - One entry per distinct wine (don't split one wine across near-identical names).
 - For Bordeaux, give the appellation (+ cru only if real) then "Bordeaux", no "France"; for Burgundy give appellation/sub/cru then "Burgundy", no "France".

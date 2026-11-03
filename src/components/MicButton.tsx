@@ -5,7 +5,7 @@ import { showAlert } from './AppAlert';
 import { correctWineTerms } from '../utils/wineDictation';
 import { correctFoodTerms } from '../utils/foodDictation';
 import { correctVoiceTranscript } from '../api/correctVoice';
-import { useDictationCorrect } from '../hooks/useDictationCorrect';
+import { useDictationCorrect, useDictationHints } from '../hooks/useDictationCorrect';
 import { colors } from '../constants/theme';
 
 interface Props {
@@ -47,6 +47,8 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
   // hand-written dictionary). Held in a ref so the event handler always uses the
   // latest index even if the cellar changes mid-mount.
   const refine = useDictationCorrect();
+  // Cellar producer / cuvée names, passed to the recogniser as hints (wine only).
+  const hints = useDictationHints();
   const refineRef = useRef(refine);
   refineRef.current = refine;
 
@@ -117,7 +119,14 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
       listeningRef.current = true;
       setListening(true);
       // interimResults:true so the field updates as the user speaks.
-      ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: false });
+      // British English (Vinster's users say "Château" and "Sadie" the UK way),
+      // biased towards the names in the user's own cellar for wine fields.
+      ExpoSpeechRecognitionModule.start({
+        lang: 'en-GB',
+        interimResults: true,
+        continuous: false,
+        ...(domain !== 'food' && hints.length ? { contextualStrings: hints } : {}),
+      });
     } catch (err) {
       stopState();
       showAlert({ title: 'Could not start dictation', body: err instanceof Error ? err.message : 'Please try again.' });

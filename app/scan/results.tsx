@@ -125,6 +125,9 @@ export default function ResultsScreen() {
   // Indices whose review fetch FAILED (e.g. a 429) — shown as a tappable retry
   // rather than an endless "Generating…" spinner.
   const [reviewFailed, setReviewFailed] = useState<Set<number>>(new Set());
+  // Indices Vinster doesn't genuinely recognise (server recognition gate) —
+  // shown as an honest line, never stored as a review/rationale.
+  const [reviewUnknown, setReviewUnknown] = useState<Set<number>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
   // Tracks the in-flight autoSave promise so concurrent callers
   // (onBlur of the input + the Review CTA tap) join the same save
@@ -731,6 +734,7 @@ export default function ResultsScreen() {
       setReviewByIndex({});
       setReviewLoading(new Set());
       setReviewFailed(new Set());
+      setReviewUnknown(new Set());
       setWsByIndex({});
       setChosenIndexes(new Set());
       sessionPickIdRef.current.clear();
@@ -798,7 +802,7 @@ export default function ResultsScreen() {
     // call happened to include an inline rationale — so the review is the last
     // thing to land and the results present quicker. History reuses the saved one.
     const alreadyHave = (isFromHistory && wine.rationale) || (reviewByIndex[i] && reviewByIndex[i].length > 0);
-    if (alreadyHave || reviewLoading.has(i)) return;
+    if (alreadyHave || reviewUnknown.has(i) || reviewLoading.has(i)) return;
     setReviewLoading((prev) => new Set(prev).add(i));
     setReviewFailed((prev) => { const n = new Set(prev); n.delete(i); return n; });
     try {
@@ -810,7 +814,9 @@ export default function ResultsScreen() {
         grape: wine.grape,
         vintage: wine.vintage,
       });
-      if (review) {
+      if (review && typeof review === 'object') { // WINE_UNKNOWN
+        setReviewUnknown((prev) => new Set(prev).add(i));
+      } else if (review) {
         setReviewByIndex((prev) => ({ ...prev, [i]: review }));
       } else {
         // Failed (e.g. rate-limited) — flag it so the card offers a retry instead
@@ -1020,7 +1026,7 @@ export default function ResultsScreen() {
           const criticScoreText = wsE && wsE.criticScore != null
             ? `${wsE.criticScore} points · Wine-Searcher`
             : (wine.criticScoreNote
-              ?? (wine.criticScore > 0
+              ?? (wine.criticScore != null && wine.criticScore > 0
                 ? (wine.criticScore === maxCriticScore && recommendation.wines.length > 1
                     ? `Highest of the picks at ${wine.criticScore} points`
                     : `${wine.criticScore} points`)
@@ -1215,6 +1221,7 @@ export default function ResultsScreen() {
                   // ready — never pre-baked. History scans reuse the saved rationale.
                   const reviewText = isFromHistory ? (wine.rationale || reviewByIndex[i]) : reviewByIndex[i];
                   if (reviewText) return <Text style={styles.sommNoteText}>{reviewText}</Text>;
+                  if (reviewUnknown.has(i)) return <Text style={styles.sommLoadingText}>Vinster doesn't know this bottle well enough to describe it.</Text>;
                   // Failed (and not currently retrying) → offer a tap-to-retry
                   // rather than an endless spinner (the 429 / rate-limit case).
                   if (reviewFailed.has(i) && !reviewLoading.has(i)) {

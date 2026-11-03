@@ -23,8 +23,11 @@ Provide background knowledge on this wine:
 - Wine Name: ${wineName || producer}
 - Vintage: ${vintageStr}${grapeStr}
 
+RECOGNITION GATE — first decide "identified": true ONLY if you genuinely know this producer AND this specific wine (the names may be misheard, misread or not a real wine). If identified is false, return exactly {"identified": false, "producerProfile": null, "producerStats": null, "regionProfile": null, "regionStats": null, "vintageProfile": null, "vintageStats": null, "grapeProfile": null, "grapeStats": null} — never describe a wine as if you know it when you don't, and never substitute a similar wine you do know.
+
 Return ONLY a valid JSON object with exactly this structure. Alongside each prose profile is a compact "stats" object of specific facts for a stats bar — keep each stat to a few words, and use null for any single fact you are not genuinely confident about (a null is far better than a fabricated figure):
 {
+  "identified": <true|false — see RECOGNITION GATE above>,
   "producerProfile": <2-4 elegant, informative sentences on the producer: their history, philosophy, reputation and signature style. CRITICAL: only state the producer's SCALE or production size when genuinely confident. If unsure of size, describe style and reputation WITHOUT guessing scale. Never invent facts, awards, or figures.>,
   "producerStats": {
     "founded": <the year (or approximate era, e.g. "circa 1980") the producer/estate was founded, as a short string; null if unknown>,
@@ -62,6 +65,18 @@ Write the prose in an elegant, knowledgeable sommelier voice. Be accurate and ho
     const match = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim().match(/\{[\s\S]*\}/);
     if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
     const parsed = JSON.parse(match[0]);
+
+    // Enforce the recognition gate server-side: anything other than an explicit
+    // identified:true gets every profile/stat nulled, so no invented text ships.
+    if (parsed?.identified !== true) {
+      return new Response(JSON.stringify({
+        identified: false,
+        producerProfile: null, producerStats: null,
+        regionProfile: null, regionStats: null,
+        vintageProfile: null, vintageStats: null,
+        grapeProfile: null, grapeStats: null,
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' },

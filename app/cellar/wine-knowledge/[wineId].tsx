@@ -34,6 +34,9 @@ export default function WineKnowledgeScreen() {
   const [knowledge, setKnowledge] = useState<WineKnowledgeData | null>(cellarWine?.wine_knowledge ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The model doesn't genuinely recognise this wine — show an honest line, never
+  // invented profiles. Not cached on the cellar row, so a later open retries.
+  const [unknown, setUnknown] = useState(false);
 
   useEffect(() => {
     if (!hasWine) return;
@@ -53,6 +56,7 @@ export default function WineKnowledgeScreen() {
     (async () => {
       setLoading(true);
       setError(null);
+      setUnknown(false);
       try {
         const data = await getWineKnowledge({
           producer: info.producer,
@@ -62,6 +66,13 @@ export default function WineKnowledgeScreen() {
           grape: info.grape,
         });
         if (cancelled) return;
+        if (!data) {
+          // Unrecognised — keep any previously cached real profiles, otherwise
+          // show the honest line. Never persist the empty result.
+          if (cachedK?.producerProfile) setKnowledge(cachedK);
+          else { setKnowledge(null); setUnknown(true); }
+          return;
+        }
         setKnowledge(data);
         // Cache onto the cellar row when we have one (reviews aren't cached).
         if (cellarWine) {
@@ -139,6 +150,10 @@ export default function WineKnowledgeScreen() {
           ) : error ? (
             <View style={styles.loadingBlock}>
               <Text style={styles.emptyBody}>{error}</Text>
+            </View>
+          ) : unknown ? (
+            <View style={styles.loadingBlock}>
+              <Text style={styles.emptyBody}>Vinster doesn't know this wine well enough for a deeper profile.</Text>
             </View>
           ) : knowledge ? (
             <>

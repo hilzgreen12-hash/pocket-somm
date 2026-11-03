@@ -34,7 +34,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { fetchPricing, generateWineIntel, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
+import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
 import { generateServingSuggestion } from '../../src/api/wineExtras';
 import type { WineServingSuggestion } from '../../src/types/wine';
 import { peekIntelCurrency } from '../../src/utils/localCurrency';
@@ -213,9 +213,11 @@ export default function LabelResultsScreen() {
   // user sees the card shell instantly; we generate on this screen and swirl the
   // score/price/window + Inside Line until it lands. genError surfaces a retry.
   const [genError, setGenError] = useState(false);
+  // Vinster couldn't confirm the wine exists (identity gate) — no card is built.
+  const [notFound, setNotFound] = useState(false);
   const genStartedRef = useRef(false);
   // True while we're building intel for a skeleton arrival — drives the swirls.
-  const intelLoading = isIntelOnlyFlow && gen === '1' && !intelligence && !awaitingConfirm && !genError;
+  const intelLoading = isIntelOnlyFlow && gen === '1' && !intelligence && !awaitingConfirm && !genError && !notFound;
   // Generate the intel on THIS screen (skeleton arrival). Records to Recent Scans
   // unless the caller passed noRecent=1 (Manually Search / voice / lineup / reviews).
   const runGenerate = useCallback(async (detailsOverride?: WineDetailsComplete) => {
@@ -232,15 +234,20 @@ export default function LabelResultsScreen() {
       return;
     }
     setGenError(false);
+    setNotFound(false);
     try {
       const generated = await generateWineIntel(details, userCurrency);
+      // Show the wine's correct spelling when Vinster recognised a garbled name.
+      const named = withCanonicalName(details, generated);
+      if (named !== details) setWineDetailsConfirmed(named);
       setIntelligence(generated);
-      useLastIntelStore.getState().setLast(details, generated, { recordRecent: noRecent !== '1' });
+      useLastIntelStore.getState().setLast(named, generated, { recordRecent: noRecent !== '1' });
       // Opened from Recent Scans with an empty/missing snapshot → heal the stored
       // label so it's instant (and never shows the prompt) next time.
       if (labelId) { try { await updateLabelIntel(labelId, generated); } catch { /* best-effort */ } }
-    } catch {
-      setGenError(true);
+    } catch (e) {
+      if (isWineNotFound(e)) setNotFound(true);
+      else setGenError(true);
     }
   }, [wineDetailsConfirmed, userCurrency, noRecent, setIntelligence, labelId]);
   useEffect(() => {
@@ -353,8 +360,9 @@ export default function LabelResultsScreen() {
       setVintagesExpanded(false);
       // (Label Library retired — scanned labels are no longer saved to a library;
       // the user saves the wine to Your Wine Reviews from the intel card instead.)
-    } catch {
-      showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
+    } catch (e) {
+      if (isWineNotFound(e)) showAlert({ title: "Vinster couldn't find this wine", body: 'The label may have been misread. Please try another photo, or search for the wine.' });
+      else showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
     } finally {
       setReReading(false);
     }
@@ -447,9 +455,10 @@ export default function LabelResultsScreen() {
     setConfirmGenerating(true);
     try {
       const generated = await generateWineIntel(identity, userCurrency);
-      setWineDetailsConfirmed(identity);
+      const named = withCanonicalName(identity, generated);
+      setWineDetailsConfirmed(named);
       setIntelligence(generated);
-      useLastIntelStore.getState().setLast(identity, generated);
+      useLastIntelStore.getState().setLast(named, generated);
       // The user has already confirmed the wine — don't re-prompt the post-card
       // "which wine is this?" disambiguation for the same result.
       candidatesTriedRef.current = true;
@@ -460,8 +469,9 @@ export default function LabelResultsScreen() {
       setVintageRows(null);
       setVintagesExpanded(false);
       setAwaitingConfirm(false);
-    } catch {
-      showAlert({ title: 'Could not get intel', body: 'Please try again.' });
+    } catch (e) {
+      if (isWineNotFound(e)) { setAwaitingConfirm(false); setNotFound(true); }
+      else showAlert({ title: 'Could not get intel', body: 'Please try again.' });
     } finally {
       setConfirmGenerating(false);
     }
@@ -599,8 +609,9 @@ export default function LabelResultsScreen() {
         setConfirmOptions([]);
         setAwaitingConfirm(true);
       }
-    } catch {
-      showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
+    } catch (e) {
+      if (isWineNotFound(e)) showAlert({ title: "Vinster couldn't find this wine", body: 'The label may have been misread. Please try another photo, or search for the wine.' });
+      else showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
     } finally {
       setReReading(false);
     }
@@ -1135,6 +1146,19 @@ export default function LabelResultsScreen() {
   // The Add flow legitimately has no intel; the confirm-first step deliberately
   // has none yet; a skeleton arrival (intelLoading) is generating and falls
   // through to the card shell; every other flow needs intel.
+  if (notFound && !intelligence) {
+    const asked = [wineDetailsConfirmed?.producer, wineDetailsConfirmed?.wineName, wineDetailsConfirmed?.vintage].filter(Boolean).join(' ');
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>{asked ? `Vinster couldn't find ${asked}.` : "Vinster couldn't find this wine."}</Text>
+        <Text style={styles.errorText}>Check the name and try again.</Text>
+        <TouchableOpacity onPress={openSearchAgain}>
+          <Text style={styles.linkText}>Search again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (!wineDetailsConfirmed || (!intelligence && !isAddFlow && !awaitingConfirm && !intelLoading)) {
     return (
       <View style={styles.center}>

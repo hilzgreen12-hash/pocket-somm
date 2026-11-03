@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
 - Vintage: "${vintage ?? ''}"
 ${catalogBlock}
 
-If the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans). Then give that producer's core range so the user can see WHERE this wine sits within it.
+If the producer text is a minor misspelling or OCR misread of a producer you clearly recognise, correct the spelling (e.g. "Pazo Senorans" → Pazo de Señorans). Never map a garbled or unfamiliar name onto a DIFFERENT producer or wine that merely sounds similar. If you do not genuinely recognise the PRODUCER, return {"wines": [], "summary": null} — never invent a range. Otherwise give that producer's core range so the user can see WHERE this wine sits within it.
 
 List the REAL, DISTINCT wines this producer is known to make — be THOROUGH and include their WHOLE core range (up to 12), from entry level to flagship, not just the scanned one. Even when the scanned wine is a specific or prestige bottling, you MUST still list the producer's OTHER core wines — above all their standard / entry bottling. A well-known estate's core lineup is easy to recall (e.g. Pazo de Señoráns makes the standard Albariño AND the aged Selección de Añada, plus the sweet Sol de Señoráns; Krug makes Grande Cuvée, Rosé, Vintage, Clos du Mesnil, Clos d'Ambonnay, Collection). Order them STRICTLY by real-world PRESTIGE / price, entry-level first, the rarest/most-expensive flagship last.
 
@@ -83,7 +83,7 @@ ACCURACY IS CRITICAL — a wrong lineup is worse than a short one:
 - Do NOT list the same wine under several near-identical names (e.g. never "Clos d'Ambonnay", "Clos d'Ambonnay Brut" and "Clos d'Ambonnay Vintage" — that is ONE wine). One entry per distinct wine.
 - Get the ORDER right: a producer's rare single-vineyard / prestige cuvée belongs at the TOP (band 5), never at entry level (e.g. Krug's Clos d'Ambonnay and Clos du Mesnil are their most prestigious, NOT entry).
 - If you are unsure of an OBSCURE bottling, leave it out rather than guessing — but "fewer" means no invented guesses, it does NOT mean dropping the producer's well-known core wines (their standard / entry bottling above all).
-- MINIMUM RANGE: for any producer who makes more than one wine — which is almost all of them — the list MUST contain at least their standard / entry wine AND the scanned wine. A single-item list that contains only the scanned wine is a FAILURE unless the producer genuinely makes just that one wine. (Pazo de Señoráns, for example, must never come back as only "Selección de Añada" — the standard Albariño belongs there too.)
+- MINIMUM RANGE (guidance for well-known producers whose range you genuinely know): the list should contain at least their standard / entry wine as well as the scanned wine — a single-item list for such a producer usually means you've left out their core wines. This is NOT licence to invent: if you don't genuinely know a producer's other wines, list only what you actually know. (Pazo de Señoráns, for example, must never come back as only "Selección de Añada" — the standard Albariño belongs there too.)
 - ENTRY TIER ACROSS APPELLATIONS: always include the producer's entry-level wine even when it sits in a DIFFERENT appellation to their flagship. For a Montalcino estate the Rosso di Montalcino MUST appear alongside the Brunello di Montalcino (and any Brunello Riserva) — a Brunello producer's range that omits their Rosso is wrong. Likewise include the Langhe Nebbiolo for a Barolo/Barbaresco estate, and the Bourgogne / village wine for a Burgundy grand-cru domaine. These entry wines anchor the range and are frequently the exact bottle a user scanned.
 
 ENTRY-LEVEL CONSOLIDATION (important — top-tier wines are what interest the user):
@@ -94,7 +94,7 @@ ENTRY-LEVEL CONSOLIDATION (important — top-tier wines are what interest the us
 - Three or fewer entry-level wines are listed individually as normal (grouped: false).
 - ALWAYS list the producer's TOP-TIER / prestige wines INDIVIDUALLY — never group or drop them. They are the most intriguing to the user and MUST appear. If the range is large, prefer trimming lesser entry wines (via the consolidation above) over omitting any prestige wine.
 
-You MUST include the scanned wine itself in the list (set "isThis": true on exactly one entry — the one matching "${wineName || producer}"). If the scanned cuvée isn't among the producer's well-known wines, still place it at its approximate prestige level and flag it. If the scanned wine is itself an entry-level varietal that you consolidate, keep it INSIDE the grouped entry and set that grouped entry's "isThis": true.
+If you genuinely recognise the scanned wine as one of this producer's wines, include it in the list (set "isThis": true on exactly one entry — the one matching "${wineName || producer}"). If the scanned wine isn't one you recognise in this producer's range (it may be misheard, misread or not a real cuvée), do NOT add it or guess its level: mark NO entry "isThis" and set "summary" to null. If the scanned wine is itself an entry-level varietal that you consolidate, keep it INSIDE the grouped entry and set that grouped entry's "isThis": true.
 
 Each "wineName" must be ONLY the distinguishing cuvée/bottling name — NEVER repeat the producer's name in it (e.g. "Rosal", not "Pazo de Señorans Rosal"). For a flagship sold simply under the producer's own name, use its grape or appellation.
 
@@ -108,7 +108,7 @@ Return ONLY a JSON object (no markdown, no prose) with exactly these keys:
   "summary": "<ONE short sentence — 25 words max — placing the scanned wine in the producer's range, e.g. 'Bin 707 sits near the top of Penfolds' range, one tier below the flagship Grange.'>"
 }
 
-If you cannot confidently identify the producer's range, return {"wines": [], "summary": null}.`;
+If you do not genuinely recognise the producer, or cannot confidently identify their range, return {"wines": [], "summary": null}.`;
 
     const resp = await client.messages.create({
       // Sonnet, not Haiku: producer-range needs real, accurate lineup knowledge —
@@ -163,13 +163,16 @@ If you cannot confidently identify the producer's range, return {"wines": [], "s
       w.isThis = false;
     }
 
-    const summary = typeof parsed?.summary === 'string' && parsed.summary.trim()
+    // The summary places the SCANNED wine in the range — if no entry is flagged
+    // (the model didn't recognise the scanned wine), there's nothing true to say.
+    const summary = seenThis && typeof parsed?.summary === 'string' && parsed.summary.trim()
       ? parsed.summary.trim()
       : null;
 
     const result = { wines, summary };
     // Cache it so this wine's range is stable on every future open. Only cache a
-    // non-empty result — an empty/failed generation should be retried next time.
+    // non-empty result — an empty range (failed generation OR unrecognised
+    // producer) is never cached, so it's retried next time.
     if (wines.length > 0) {
       try { await admin.from('producer_range_cache').upsert({ cache_key: cacheKey, response: result }); }
       catch (e) { console.warn('[producer-range] cache write failed:', e); }

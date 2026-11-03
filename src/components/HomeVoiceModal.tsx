@@ -13,6 +13,8 @@ import { chooseFromCellar, decideBetween, mentionsBudget, type CellarPicksResult
 import { isNetworkError } from '../api/invokeResilient';
 import { useLabelStore } from '../stores/labelStore';
 import { currencySymbol } from '../constants/currency';
+import { fetchPricing } from '../services/pricing';
+import { resolveIntelCurrency } from '../utils/localCurrency';
 import type { CellarWine, WineDetailsComplete } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -35,7 +37,9 @@ type Step =
   | 'error';
 
 const NOTHING_FOOD = 'Nothing, just for drinking';
-const NOT_SURE = 'Not sure';
+const NOTHING_SPECIFIC = 'Nothing Specific';
+// What the reply bubble says when the user picks "Nothing Specific".
+const NO_OCCASION = 'No specific occasion or mood';
 const MARK = require('../../assets/vinster-mark.png');
 
 function wineName(w: CellarWine): string {
@@ -169,10 +173,22 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
       ls.setWineDetailsConfirmed(confirmed);
       ls.setIntelligence(null);
       ls.setImageUri(null);
-      setTimeout(() => {
-        onClose();
-        router.push('/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1' as any);
-      }, 900);
+      // Verify against Wine-Searcher first, exactly like a label scan. A real
+      // listing goes straight to the card; anything unverified (often a misheard
+      // name) goes through "Which wine is this?" and Vinster's identity check —
+      // so a voice command can never build a card for a wine that doesn't exist.
+      let verified = false;
+      try {
+        const cur = await resolveIntelCurrency(preferences?.defaultCurrency);
+        const queryName = [confirmed.producer, confirmed.wineName].filter(Boolean).join(' ').trim();
+        const vintageNum = confirmed.vintage && confirmed.vintage !== 'NV' ? Number(confirmed.vintage) : null;
+        const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, cur);
+        verified = pricing.source === 'wine-searcher' && pricing.matched !== false;
+      } catch { verified = false; }
+      onClose();
+      router.push((verified
+        ? '/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1'
+        : '/label/results?context=intel&fresh=1&confirm=1&noRecent=1') as any);
     } catch (err) { fail(err, 'i_q'); }
   }
 
@@ -266,6 +282,7 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
       case 'c_q':
         return (
           <>
+            <Title>Tell me what I can help you with, we'll take it from there</Title>
             <Said lines={['Choose from my cellar']} />
             <Q small>Give me some context — what you're eating, the mood, the company — and I'll serve up suggestions.</Q>
             <Q>What are you eating with it?</Q>
@@ -273,14 +290,14 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
             <View style={styles.options}><Option first label={NOTHING_FOOD} onPress={() => setEating(NOTHING_FOOD)} /></View>
             <Q>What's the occasion or mood?</Q>
             {answerRow(mood, setMood)}
-            <View style={styles.options}><Option first label={NOT_SURE} onPress={() => setMood(NOT_SURE)} /></View>
+            <View style={styles.options}><Option first label={NOTHING_SPECIFIC} onPress={() => setMood(NO_OCCASION)} /></View>
           </>
         );
       case 'c_decant':
         return (
           <>
             <Title>Selecting wines from your cellar</Title>
-            <Said lines={cellarAnswers} />
+            {cellarAnswers.map((a, i) => <Said key={i} lines={[a]} />)}
             <Q>Opening now, or is there time to decant?</Q>
             <View style={styles.options}>
               <Option first label="Opening now" onPress={() => afterDecant('now')} />
@@ -293,7 +310,7 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
         return (
           <>
             <Title>Selecting wines from your cellar</Title>
-            <Said lines={cellarAnswers} />
+            {cellarAnswers.map((a, i) => <Said key={i} lines={[a]} />)}
             <Said lines={[decantLabel]} />
             <Q>Do you have a cost per bottle in mind?</Q>
             <View style={styles.amountRow}>
@@ -326,7 +343,7 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
         return (
           <>
             <Title>Selecting wines from your cellar</Title>
-            <Said lines={cellarAnswers} />
+            {cellarAnswers.map((a, i) => <Said key={i} lines={[a]} />)}
             <Said lines={[decantLabel]} />
             <Said lines={[budgetLabel]} />
             <Working line="Choosing three bottles from your cellar…" />
@@ -364,7 +381,7 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
         return (
           <>
             <Title>Tell me what I can help you with, we'll take it from there</Title>
-            <Said lines={['Help me decide']} />
+            <Said lines={['Help me decide between wine options']} />
             <Q>How many wines are you weighing up?</Q>
             <View style={styles.options}>
               <Option first label="Two" onPress={() => chooseCount(2)} />
@@ -396,14 +413,15 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
             <View style={styles.options}><Option first label={NOTHING_FOOD} onPress={() => setDEating(NOTHING_FOOD)} /></View>
             <Q>What's the occasion or mood?</Q>
             {answerRow(dMood, setDMood)}
-            <View style={styles.options}><Option first label={NOT_SURE} onPress={() => setDMood(NOT_SURE)} /></View>
+            <View style={styles.options}><Option first label={NOTHING_SPECIFIC} onPress={() => setDMood(NO_OCCASION)} /></View>
           </>
         );
       case 'd_working':
         return (
           <>
             <Title>Helping you choose between {['', '', 'two', 'three', 'four'][count]} wines</Title>
-            <Said lines={[dEating, dMood]} />
+            <Said lines={[dEating]} />
+            <Said lines={[dMood]} />
             <Working line="Weighing up your wines…" />
           </>
         );

@@ -28,7 +28,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
-import { valueWine, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
+import { valueWine, isWineNotFound, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
 import { wineQueryName } from '../../src/utils/wineIdentity';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation } from '../../src/api/placements';
@@ -390,6 +390,8 @@ export default function CellarWineDetail() {
   // Written market & vintage summary — the fallback when Wine-Searcher has no
   // per-vintage listings to table.
   const [marketNote, setMarketNote] = useState<Awaited<ReturnType<typeof generateMarketVintage>> | null>(null);
+  // Vinster's recognition gate said it doesn't know this wine — honest line, no note.
+  const [marketUnknown, setMarketUnknown] = useState(false);
   const [generatingServing, setGeneratingServing] = useState(false);
   const [generatingMarket, setGeneratingMarket] = useState(false);
 
@@ -794,7 +796,11 @@ export default function CellarWineDetail() {
       // market & vintage summary (comparing vintages either side) instead of a
       // dead end.
       if (rows.length === 0) {
-        try { setMarketNote(await generateMarketVintage(wine, currency)); } catch { /* leave null */ }
+        try {
+          const note = await generateMarketVintage(wine, currency);
+          setMarketNote(note);
+          setMarketUnknown(note === null);
+        } catch { /* leave null */ }
       }
     } catch {
       showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
@@ -1373,8 +1379,9 @@ export default function CellarWineDetail() {
       // generate" prompt is warranted (vs a false flash while the cache
       // refetches the freshly-saved values).
       return v.criticScore != null || v.estimatedValue != null;
-    } catch {
-      showAlert({ title: 'Could not refresh', body: 'Vinster couldn\'t generate an estimate right now. Please try again.' });
+    } catch (e) {
+      if (isWineNotFound(e)) showAlert({ title: "Vinster couldn't find this wine", body: "Vinster doesn't recognise this wine and Wine-Searcher has no listing for it, so no estimate is shown. Check the producer, wine name and vintage." });
+      else showAlert({ title: 'Could not refresh', body: 'Vinster couldn\'t generate an estimate right now. Please try again.' });
       return false;
     } finally {
       setRefreshingValue(false);
@@ -2345,7 +2352,7 @@ export default function CellarWineDetail() {
                   {marketNote.market ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Market · </Text>{marketNote.market}</Text> : null}
                 </View>
               ) : vintageRows ? (
-                <Text style={styles.tastingNotes}>Wine-Searcher has no per-vintage market data for this wine.</Text>
+                <Text style={styles.tastingNotes}>Wine-Searcher has no per-vintage market data for this wine.{marketUnknown ? " Vinster doesn't know this wine well enough to comment." : ''}</Text>
               ) : (
                 <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateMarket} activeOpacity={0.7}>
                   <Text style={styles.generateNoteBtnText}>Generate</Text>

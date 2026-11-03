@@ -13,7 +13,7 @@ import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineNameKey } from '../../src/utils/wineIdentity';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { File, Paths } from 'expo-file-system';
-import { generateWineIntel } from '../../src/services/pricing';
+import { generateWineIntel, isWineNotFound } from '../../src/services/pricing';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -391,7 +391,8 @@ export default function LabelConfirmScreen() {
       router.replace(`/label/results${contextQuery}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load wine details');
-      showAlert({ title: 'Error', body: 'Could not load wine details. Please try again.' });
+      if (isWineNotFound(err)) showAlert({ title: "Vinster couldn't find this wine", body: 'Check the producer, wine name and vintage, then try again.' });
+      else showAlert({ title: 'Error', body: 'Could not load wine details. Please try again.' });
     } finally {
       setLoading(false);
     }

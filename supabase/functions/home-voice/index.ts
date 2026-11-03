@@ -57,7 +57,7 @@ WHAT THEY TOLD YOU
 RULES
 - Pick the three best fits, best first. Prefer variety across countries / regions / styles where the cellar allows.
 - Take their words literally; don't invent preferences they didn't give.
-- rank labels: "Top pick", "Also good", "Wildcard" (Wildcard = a less obvious bottle you feel strongly about).
+- rank labels: "Top pick", "Runner up", "Wildcard" (Wildcard = a less obvious bottle you feel strongly about).
 - why: ONE sentence tying the wine to the food and mood.
 ${timeToDecant ? '- decant: the optimal decanting time for THIS bottle, e.g. "Decant for about 1 hour", "Decant for 30–45 minutes", "Decant for 1½–2 hours". Base it on the wine\'s age, structure and style.' : '- decant: null.'}
 - brief: one line in EXACTLY this shape, filled in from what they said: "Three wines chosen from your cellar for <dish, short>, <${timeToDecant ? 'with time to decant' : 'no time to decant'}> and <${typeof b.budget === 'number' ? 'around <budget> a bottle' : 'no budget in mind'}>". If they gave no dish, describe the mood instead.
@@ -82,6 +82,7 @@ ${wines.map((w, i) => `${i + 1}. ${w}`).join('\n')}
 
 RULES
 - Take each wine exactly as they described it (producer, cuvée, vintage); tidy the name's spelling/capitalisation only.
+- NEVER INVENT: names are dictated and may be misheard. Only make producer-specific claims (rarity, reputation, price, critic standing) about a wine you GENUINELY recognise. If you don't recognise one, keep its name exactly as given (no "tidying" into a different wine), say plainly in its text that you don't know it ("I don't know this bottle, so I've judged it on what you told me"), and make no rarity / price / reputation claims about it. Prefer the wine you know when the fit is otherwise close.
 - Choose ONE pick and ONE runner up. Ignore any others.
 - The occasion genuinely matters: weigh rarity, uniqueness, producer reputation and price point against the occasion (a widely available everyday bottle suits a casual night; something rarer suits a special one).
 - headline: EXACTLY this shape — "I recommend the <short name of the pick>, for <dish, short> <occasion phrase>. Here's why…" (if no dish, use the occasion alone).

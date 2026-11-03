@@ -41,8 +41,16 @@ Deno.serve(async (req) => {
     // stable and caches fully).
     const systemPrompt = `You are a wine expert with encyclopaedic knowledge of wines, producers, vintages, and critic scores.
 
+IDENTITY GATE — this overrides every other instruction below. Vinster must NEVER present a wine that does not exist, or invent facts for a wine it does not know; being caught out would discredit the app. Names often reach you garbled — misheard by dictation (e.g. "Ebensady Palladiums") or misread from a label. Before anything else decide whether you GENUINELY recognise this as a real, specific wine:
+- "identified": true ONLY when you know this producer as a real producer AND know this wine/cuvée as one they actually make (a basic estate bottling counts). Obvious spelling, accent, transcription or OCR variants of a real wine still count — return its correct spelling in canonicalProducer / canonicalWineName (e.g. "Ebensady Palladiums" → producer "Sadie Family Wines", wine "Palladius").
+- "identified": false when you do not recognise the producer, or the producer is real but you do not know them to make a wine of this name, or the name could plausibly be several different real wines and you can't tell which. Recognising only the region or grape is NOT enough. Do not guess, do not pick the "closest" wine, do not build a plausible profile.
+- When identified is false: set criticScore, estimatedValue, estimatedValueLow, estimatedValueHigh, valueConfidence, drinkingWindowFrom, drinkingWindowTo, drinkingWindowStatus, tastingNotes, insiderNote, grapeVariety to null and criticScores/grapeOptions to []. Every "ALWAYS estimate" / "never return null" rule below applies ONLY to identified wines.
+
 Return ONLY a valid JSON object with exactly this structure:
 {
+  "identified": <boolean, per the IDENTITY GATE above>,
+  "canonicalProducer": <the producer's correct name when identified, else null>,
+  "canonicalWineName": <the cuvée/wine's correct name when identified (null if the wine is simply the producer's eponymous/estate wine), else null>,
   "criticScore": <integer 0-100 — the AVERAGE / consensus critic score for this exact wine and vintage. ALWAYS provide your best expert estimate of where critics would rate this wine, informed by the producer's reputation, the wine's quality tier, the region and the vintage. This is Vinster's estimated consensus — NOT a claim that a specific review exists (the criticScores array below carries any real published scores). For ANY wine with a recognisable producer or region, estimate a score rather than returning null. Return null ONLY in the rare case you genuinely cannot identify the wine at all. When you list individual scores in criticScores, this should be roughly their average (convert any /20 scores to /100 first)>,
   "criticScoreNote": <single short sentence — 20 words max — used ONLY in the rare case criticScore is null, explaining why the wine could not be identified/scored. e.g. "Couldn't confidently identify this wine, so no reliable score estimate." Do NOT assert the producer's size/scale (e.g. "small producer") unless you are genuinely certain of it. Set to null whenever criticScore is provided>,
   "criticScores": <array of individual PUBLISHED critic scores for this EXACT wine and vintage that you genuinely recall as real. Each item: {"critic": <short abbreviation>, "score": <number on that critic's own scale>, "scale": <"100" for most critics; "20" for Jancis Robinson>}. Use these standard abbreviations only: "JS" (James Suckling), "JR" (Jancis Robinson, /20), "NM" (Neal Martin), "WK" (William Kelly), "AG" (Antonio Galloni), "WA" (Wine Advocate), "WS" (Wine Spectator), "WE" (Wine Enthusiast), "D" (Decanter), "V" (Vinous), "JD" (Jeb Dunnuck), "BH" (Burghound). CRITICAL: include ONLY scores you are genuinely confident were actually published for this precise wine+vintage — never invent, guess, or approximate a plausible-looking number. Return an empty array [] if you do not confidently recall any specific published scores. Maximum 6 entries>,
@@ -63,11 +71,11 @@ Return ONLY a valid JSON object with exactly this structure:
   "isSpirit": <boolean. TRUE when this bottle is a SPIRIT — whisky/whiskey, gin, rum, vodka, brandy/cognac/armagnac, tequila/mezcal, liqueur, etc. — rather than a wine. DEFAULT false for all wines (still, sparkling, and fortified wines such as Port, Sherry and Madeira are NOT spirits). When true, set drinkingWindowFrom, drinkingWindowTo and drinkingWindowStatus all to null — maturity and drinking windows do not apply to spirits.>
 }
 
-Always estimate a drinking window (from/to years) and a status from the vintage, grape and region — never return "unknown" — EXCEPT for spirits (isSpirit true), where drinkingWindowFrom, drinkingWindowTo and drinkingWindowStatus must all be null (maturity does not apply to spirits). Base the status on the current year ${currentYear} relative to the from/to years.
+For an IDENTIFIED wine, always estimate a drinking window (from/to years) and a status from the vintage, grape and region — never return "unknown" — EXCEPT for spirits (isSpirit true), where drinkingWindowFrom, drinkingWindowTo and drinkingWindowStatus must all be null (maturity does not apply to spirits). Base the status on the current year ${currentYear} relative to the from/to years.
 
-Valuation rule: the user must ALWAYS see a price, so always provide a best-effort estimatedValue (with a plausible low/high range). Be honest about firmness via valueConfidence rather than by withholding the number — mark "high" ONLY for wines you genuinely know trade actively at an established price, "medium" for a reasonable sense, and "low" when estimating from sparse knowledge. Reserve a null estimatedValue for the rare wine you truly cannot identify at all.
+Valuation rule (IDENTIFIED wines only): the user must see a price, so provide a best-effort estimatedValue (with a plausible low/high range). Be honest about firmness via valueConfidence rather than by withholding the number — mark "high" ONLY for wines you genuinely know trade actively at an established price, "medium" for a reasonable sense, and "low" when estimating from sparse knowledge. Reserve a null estimatedValue for the rare wine you truly cannot identify at all.
 
-NEVER-DEFAULT-TO-CHEAP RULE: when you do NOT genuinely recognise a producer, do NOT assume it is a cheap, generic or bulk wine — that assumption is a serious error. Unfamiliar, hard-to-find, tiny-production labels (very common on the US West Coast — garagiste, allocation-only and mailing-list wineries) are far MORE likely to be boutique/premium than cheap. If you cannot place a wine, do not invent a specific bargain price or a generic supermarket-style tasting note; instead pitch the estimate at least to a serious boutique level, set valueConfidence:"low", and keep the notes about grape/region/style character WITHOUT fabricating specifics or calling it generic. A small unknown producer described as a cheap generic wine is exactly the kind of hallucination to avoid. Only ever call a wine genuinely inexpensive/everyday when you actually recognise it as such.
+NEVER-DEFAULT-TO-CHEAP RULE (applies to a real wine you have identified but know little market detail for): do NOT assume it is a cheap, generic or bulk wine — that assumption is a serious error. Unfamiliar, hard-to-find, tiny-production labels (very common on the US West Coast — garagiste, allocation-only and mailing-list wineries) are far MORE likely to be boutique/premium than cheap. If you cannot place a wine, do not invent a specific bargain price or a generic supermarket-style tasting note; instead pitch the estimate at least to a serious boutique level, set valueConfidence:"low", and keep the notes about grape/region/style character WITHOUT fabricating specifics or calling it generic. A small unknown producer described as a cheap generic wine is exactly the kind of hallucination to avoid. Only ever call a wine genuinely inexpensive/everyday when you actually recognise it as such.
 
 PRODUCER-SCALE DISCIPLINE: in tastingNotes and criticScoreNote, only describe the producer's size or production scale (e.g. "small artisanal grower", "boutique estate", "large négociant") when you are genuinely certain it is accurate. Many well-known estates are mistaken for small producers — when unsure of scale, describe the wine's character, reputation or style WITHOUT making a size claim. Never guess production scale.
 
@@ -114,6 +122,42 @@ Return only the raw JSON — no markdown, no explanation.`;
       }
     }
     if (!parsed) throw lastErr ?? new Error('wine-intelligence: no result after retries');
+
+    // IDENTITY GATE, enforced in code (never trust the prompt alone): a wine the
+    // model doesn't genuinely recognise gets NO estimated facts at all. The
+    // client then shows "couldn't find this wine" — or, when Wine-Searcher has a
+    // real listing, only that real market data.
+    if (parsed.identified !== true) {
+      console.warn('wine-intelligence: unidentified wine', JSON.stringify({ producer, wineName, vintage }));
+      return new Response(JSON.stringify({
+        identified: false,
+        canonicalProducer: null,
+        canonicalWineName: null,
+        criticScore: null,
+        criticScoreNote: null,
+        criticScores: [],
+        drinkingWindowFrom: null,
+        drinkingWindowTo: null,
+        drinkingWindowStatus: 'unknown',
+        grapeVariety: null,
+        grapeAmbiguous: false,
+        grapeOptions: [],
+        tastingNotes: null,
+        insiderNote: null,
+        estimatedValue: null,
+        estimatedValueLow: null,
+        estimatedValueHigh: null,
+        valueConfidence: null,
+        // No model-supplied "canonical" name for a wine it doesn't know — a
+        // Wine-Searcher retry on a guessed name could match a different wine.
+        wsSearchName: null,
+        isNatural: false,
+        isSpirit: parsed.isSpirit === true,
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    parsed.identified = true;
+    parsed.canonicalProducer = typeof parsed.canonicalProducer === 'string' && parsed.canonicalProducer.trim() ? parsed.canonicalProducer.trim() : null;
+    parsed.canonicalWineName = typeof parsed.canonicalWineName === 'string' && parsed.canonicalWineName.trim() ? parsed.canonicalWineName.trim() : null;
 
     // Normalise the ambiguity signal so the client can gate on it safely.
     parsed.grapeAmbiguous = parsed.grapeAmbiguous === true;

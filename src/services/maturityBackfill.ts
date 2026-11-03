@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getWineIntelligence } from '../api/label';
 import { updateCellarWine } from '../api/cellar';
 import type { CellarWine } from '../types/wine';
@@ -15,6 +16,18 @@ const PACE_MS = 1500;         // pause between calls — gentle, never a burst
 
 let running = false;
 const processed = new Set<string>();
+
+// Wines Vinster doesn't recognise (identity gate) get no invented window — and
+// are remembered across sessions so the backfill doesn't re-ask every visit.
+const UNRECOGNISED_KEY = 'maturity-backfill-unrecognised-v1';
+async function loadUnrecognised(): Promise<Set<string>> {
+  try { return new Set(JSON.parse((await AsyncStorage.getItem(UNRECOGNISED_KEY)) ?? '[]')); }
+  catch { return new Set(); }
+}
+async function saveUnrecognised(ids: Set<string>): Promise<void> {
+  try { await AsyncStorage.setItem(UNRECOGNISED_KEY, JSON.stringify(Array.from(ids).slice(-2000))); }
+  catch { /* best-effort */ }
+}
 
 function needsWindow(w: CellarWine): boolean {
   return (
@@ -40,8 +53,10 @@ export async function backfillMissingMaturities(
 
   running = true;
   let updated = 0;
+  const unrecognised = await loadUnrecognised();
   try {
     for (const w of targets) {
+      if (unrecognised.has(w.id)) { processed.add(w.id); continue; }
       processed.add(w.id);
       try {
         const intel = await getWineIntelligence({
@@ -52,6 +67,12 @@ export async function backfillMissingMaturities(
           style: null,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
+        if (intel.identified === false) {
+          // Not a wine Vinster recognises — never save a guessed window.
+          unrecognised.add(w.id);
+          await saveUnrecognised(unrecognised);
+          continue;
+        }
         await updateCellarWine(w.id, {
           drinking_window_from: intel.drinkingWindowFrom ?? null,
           drinking_window_to: intel.drinkingWindowTo ?? null,

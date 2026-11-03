@@ -39,7 +39,9 @@ export function RangeWineNoteSheet({
   const loading = enabled && isFetching && note == null && !isError;
   const failed = enabled && isError && !isFetching;
 
-  const details = note ? [note.grape, note.region, note.style].filter(Boolean).join(' · ') : '';
+  const unknown = !!note && 'unknown' in note;
+  const known = note && !('unknown' in note) ? note : null;
+  const details = known ? [known.grape, known.region, known.style].filter(Boolean).join(' · ') : '';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -55,7 +57,9 @@ export function RangeWineNoteSheet({
               <ActivityIndicator color={colors.gold} />
               <Text style={styles.loadingText}>Pulling the inside line…</Text>
             </View>
-          ) : note ? (
+          ) : unknown ? (
+            <Text style={styles.failed}>Vinster doesn't know this wine well enough to comment.</Text>
+          ) : known ? (
             <ScrollView
               style={styles.noteScroll}
               contentContainerStyle={styles.noteScrollContent}
@@ -64,7 +68,7 @@ export function RangeWineNoteSheet({
               keyboardShouldPersistTaps="handled"
             >
               {details ? <Text style={styles.details}>{details}</Text> : null}
-              <Text style={styles.note}>{note.note}</Text>
+              <Text style={styles.note}>{known.note}</Text>
             </ScrollView>
           ) : failed ? (
             <Text style={styles.failed}>Vinster couldn't pull the inside line just now. Tap the wine again to retry.</Text>

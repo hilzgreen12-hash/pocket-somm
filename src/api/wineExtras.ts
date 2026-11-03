@@ -21,9 +21,13 @@ export async function generateServingSuggestion(w: CellarWine): Promise<WineServ
   return data;
 }
 
-// Generate Vinster's Market & Vintage Comparison on demand.
-export async function generateMarketVintage(w: CellarWine, currency?: string | null): Promise<WineMarketVintageNote> {
-  const data = await invokeResilient('wine-market-vintage', { ...identity(w), currency: currency ?? 'GBP' }) as WineMarketVintageNote & { error?: string };
+// Generate Vinster's Market & Vintage Comparison on demand. Returns null when
+// the server's recognition gate says the model doesn't genuinely know this wine
+// (identified !== true / no text) — the caller shows an honest line instead.
+export async function generateMarketVintage(w: CellarWine, currency?: string | null): Promise<WineMarketVintageNote | null> {
+  const data = await invokeResilient('wine-market-vintage', { ...identity(w), currency: currency ?? 'GBP' }) as
+    { vintage?: string | null; market?: string | null; identified?: boolean; error?: string };
   if (data?.error) throw new Error(data.error);
-  return data;
+  if (data?.identified === false || (!data?.vintage && !data?.market)) return null;
+  return { vintage: data.vintage ?? undefined, market: data.market ?? undefined };
 }

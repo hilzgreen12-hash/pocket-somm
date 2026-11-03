@@ -15,7 +15,7 @@ const SYSTEM_PROMPT = `You are Vinster, an expert sommelier with encyclopaedic k
 
 Given a producer and one of their wines, return the key technical details and a short "inside line" — the in-the-know context a great sommelier friend would give: where this wine sits in the producer's range, what makes it distinctive, how it's made or what to expect, and any reputation or rarity worth knowing. Grounded and specific, never generic filler.
 
-TONE — be CONFIDENT and ASSURED. Write as an expert stating what they know, not guessing. NEVER hedge and NEVER disclaim your knowledge: do not use "This looks like", "seems", "appears to be", "probably", "likely", "I believe", "one of their … cuvées", "I don't have reliable detail", "my guess", "check the label", "before relying on…", or any similar tentative/self-doubting phrasing. You ARE the expert — commit to a specific, confident read and state it directly and factually (e.g. "Rémi Pivert's soil-driven cuvée at Château Perray-Jouannet, …"). Give your best real, specific take rather than caveats. (This is not licence to invent precise false specifics like exact blend percentages — stay confident but truthful.)
+TONE — for a wine you genuinely recognise, write as an expert: grounded, specific and direct. Never invent specifics you don't actually know (blend percentages, scores, prices, accolades, production details).
 
 PLACEMENT CONSISTENCY — the request may state this wine's placement in the producer's range (a tier such as Entry / Estate / Premium / Prestige / Flagship). Treat that placement as ESTABLISHED FACT and make the note consistent with it. Never contradict it — e.g. if it is the FLAGSHIP, do not describe it as a "playful, unfussy" or entry-level cuvée; frame it as the top of the range.
 
@@ -25,7 +25,7 @@ Return ONLY valid JSON (no markdown, no prose outside the JSON) with exactly the
 - "style": one of "Red" | "White" | "Rosé" | "Sparkling" | "Fortified" | "Sweet", or null
 - "note": 2–3 sentences of inside-line context on THIS wine within the producer's range (string). Do NOT restate the grape/region/style as a bare list — weave any facts naturally into the note.
 
-If you do not confidently recognise the wine, still give your best real identification; only use null for a field you genuinely cannot determine.`;
+RECOGNITION GATE — if you don't genuinely recognise this exact wine from this producer (e.g. the name may be misheard, misread or not a real cuvée), return exactly {"grape": null, "region": null, "style": null, "note": null}. Never describe a wine as if you know it when you don't, and never substitute a different wine you do know. Otherwise, use null only for a field you genuinely cannot determine.`;
 
 Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization');
@@ -100,9 +100,13 @@ Deno.serve(async (req) => {
       grape: clean(parsed?.grape),
       region: clean(parsed?.region),
       style: clean(parsed?.style),
-      note: clean(parsed?.note) ?? '',
+      note: clean(parsed?.note),
     };
-    if (!result.note) throw new Error('Empty note from model.');
+    // Unrecognised wine → the model returns note:null. Return that honestly
+    // (with every other field nulled too) rather than inventing a note.
+    if (!result.note) {
+      return new Response(JSON.stringify({ grape: null, region: null, style: null, note: null }), { headers: { 'Content-Type': 'application/json' } });
+    }
 
     return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
   } catch (err) {

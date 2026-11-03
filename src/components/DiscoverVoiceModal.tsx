@@ -96,7 +96,7 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
         // gen=1: build the intel on the results screen (instant shell). noRecent=1:
         // a voice query isn't a scan — keep it out of Recent Scans.
         handleClose();
-        router.push('/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1' as any);
+        router.push('/label/results?context=intel&fresh=1&confirm=1&noRecent=1' as any); // unverified voice → confirm step + identity gate
         return;
       }
 

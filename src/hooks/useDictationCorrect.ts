@@ -15,3 +15,21 @@ export function useDictationCorrect(): (text: string) => string {
   );
   return useCallback((text: string) => fuzzyCorrectProducers(text, index), [index]);
 }
+
+// Words to bias the phone's speech recogniser towards before it even hears the
+// user — producer and cuvée names from their cellar (iOS contextualStrings /
+// Android EXTRA_BIASING_STRINGS). Capped so the hint list stays light.
+export function useDictationHints(): string[] {
+  const { wines } = useCellar();
+  return useMemo(() => {
+    const seen = new Set<string>();
+    for (const w of wines) {
+      for (const v of [w.producer, w.wine_name]) {
+        const t = (v ?? '').trim();
+        if (t && t.length <= 60) seen.add(t);
+        if (seen.size >= 100) return Array.from(seen);
+      }
+    }
+    return Array.from(seen);
+  }, [wines]);
+}

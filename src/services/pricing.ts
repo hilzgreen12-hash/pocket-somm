@@ -1,5 +1,5 @@
 import { fetchWinePrice } from '../api/wine-searcher';
-import { getWineIntelligence } from '../api/label';
+import { getWineIntelligence, resolveWine } from '../api/label';
 import { fetchWineFacts } from '../api/wineFacts';
 import { wineQueryName } from '../utils/wineIdentity';
 import { withBordeauxInfo } from '../constants/bordeauxClassification';
@@ -10,6 +10,30 @@ import type { GrapeVariant, PricingData, WineDetailsComplete, WineIntelligence }
 // query — and skip a wasted second Wine-Searcher lookup when it doesn't.
 function wsNameKey(s: string): string {
   return (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+// Thrown when Vinster can't confirm a wine exists: the model doesn't recognise
+// it AND Wine-Searcher has no listing. Callers show "couldn't find this wine"
+// rather than a card — Vinster must never build intel for a non-existent wine.
+export class WineNotFoundError extends Error {
+  constructor() { super("Vinster couldn't find this wine."); this.name = 'WineNotFoundError'; }
+}
+export function isWineNotFound(e: unknown): boolean {
+  return e instanceof Error && e.name === 'WineNotFoundError';
+}
+
+// When Vinster recognised a garbled name (dictation / OCR), return the details
+// with the wine's correct spelling; otherwise the same object, untouched.
+export function withCanonicalName(d: WineDetailsComplete, intel: WineIntelligence): WineDetailsComplete {
+  if (intel.resolvedIdentity) {
+    const r = intel.resolvedIdentity;
+    return { ...d, producer: r.producer, wineName: r.wineName, region: r.region ?? d.region };
+  }
+  if (intel.identified !== true || !intel.canonicalProducer) return d;
+  const producer = intel.canonicalProducer;
+  const wineName = intel.canonicalWineName ?? d.wineName ?? null;
+  if (producer === d.producer && wineName === (d.wineName ?? null)) return d;
+  return { ...d, producer, wineName };
 }
 
 // Look a wine up on Wine-Searcher, retrying once with Claude's canonical
@@ -144,6 +168,8 @@ export async function valueWine(
   const pricing = await resolveWsPricing(first, queryName, intel.wsSearchName, vintageArg, currency);
   const wsMatched = pricing.source === 'wine-searcher' && pricing.matched !== false;
   const wsScore = wsMatched ? pricing.criticScore : null;
+  // Unrecognised by Vinster and no Wine-Searcher listing: no estimates at all.
+  if (intel.identified === false && !wsMatched) throw new WineNotFoundError();
 
   // Headline value: real WS market average when matched, else Claude estimate.
   const useWs = wsMatched && pricing.averageMarketPrice != null;
@@ -185,6 +211,8 @@ export async function valueWine(
 export async function generateWineIntel(
   wineIn: WineDetailsComplete,
   currency: string = 'GBP',
+  // Internal: false on the retry after a web lookup, so it can't loop.
+  allowResolve: boolean = true,
 ): Promise<WineIntelligence> {
   // Classified Bordeaux: fill classification (wine name) + appellation (region)
   // when blank, so intel is complete on EVERY path (scan, lineup, search…).
@@ -221,6 +249,30 @@ export async function generateWineIntel(
   // Retry Wine-Searcher with Claude's canonical name on a miss (cult-producer gap).
   const pricing = await resolveWsPricing(first, queryName, intel.wsSearchName, vintageArg, currency);
   const wsMatched = pricing.source === 'wine-searcher' && pricing.matched !== false;
+  // IDENTITY GATE: Vinster doesn't recognise the wine and Wine-Searcher has no
+  // listing → it may not exist (misheard / misread). Never build a card for it.
+  // (A prior permanent WS facts record counts as a real listing.)
+  if (intel.identified === false && !wsMatched && facts?.criticScore == null) {
+    // Last resort before "couldn't find": a live web lookup for the real wine
+    // this garbled name most plausibly is. Only a web-confirmed wine is tried,
+    // and its intel still has to pass the same identity gate.
+    if (allowResolve) {
+      const found = await resolveWine(wine);
+      if (found) {
+        const resolved: WineDetailsComplete = {
+          ...wineIn,
+          producer: found.producer,
+          wineName: found.wineName,
+          region: found.region ?? wineIn.region,
+          grape: wineIn.grape ?? found.grape,
+          style: wineIn.style ?? found.style,
+        };
+        const again = await generateWineIntel(resolved, currency, false);
+        return { ...again, resolvedIdentity: { producer: found.producer, wineName: found.wineName, region: found.region } };
+      }
+    }
+    throw new WineNotFoundError();
+  }
   // Prefer this session's live WS score; else fall back to the permanent facts
   // score so a re-open stays accurate even after the 30-day price cache expired.
   const wsScore = wsMatched ? pricing.criticScore : (facts?.criticScore ?? null);

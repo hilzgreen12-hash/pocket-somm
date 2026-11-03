@@ -200,6 +200,8 @@ Wine Details:
 ${courseBlock}${constraintBlock}${servingsBlock}${softBlock}${asianBlock}${regionalDiversityBlock}${chefPoolBlock}${excludeChefsBlock}${additionalRequestBlock}${difficultyBlock}${diversityBlock}${timeBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 
+Wine recognition (HARD RULE): if you don't genuinely recognise this specific wine from this producer (the name may be misheard, misread or not a real wine), base the pairings ONLY on the style / grape / region / vintage given and make NO producer-specific claims (no house style, cuvée details, scores or reputation). Never describe the wine as if you know it when you don't.
+
 Return ONLY a valid JSON object with this exact structure:
 {
   "pairings": [

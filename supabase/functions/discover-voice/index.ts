@@ -42,6 +42,7 @@ STRICT RULES
 - Choose the SINGLE best-fitting intent. If the request is ambiguous, could plausibly be two intents, is empty/garbled, or you are not confident, return {"intent":"unclear","message":"<one friendly sentence asking them to rephrase, naming the three things they can ask>"}. NEVER guess between intents.
 - This voice is for discovery ONLY. If they ask to MOVE, ARCHIVE, ADD, or otherwise manage/organise bottles, return "unclear" and tell them voice here is for cellar recommendations, shop/restaurant advice, or wine intel (cellar changes are done on the Cellar tab).
 - Distinguish carefully: "from my cellar / what should I open" ⇒ cellar_mood. "deciding between X and Y / which should I buy/order" ⇒ consult. "wine intel on / tell me about <one wine>" ⇒ intel. A question about what the user HAS DONE — their score, the restaurant they drank it in, their past reviews/visits ⇒ my_data.
+- WINE RECOGNITION (consult): if you don't genuinely recognise a named wine as a real wine from that producer (it may be misheard or not a real wine), talk ONLY in terms of the style / grape / region the user gave and make NO producer-specific claims. Never describe a wine as if you know it when you don't.
 
 CELLAR (for cellar_mood only — use exact ids):
 ${wineBlock}

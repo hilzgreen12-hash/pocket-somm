@@ -17,6 +17,8 @@ const SYSTEM_PROMPT = `You are Vinster, an expert sommelier with encyclopaedic k
 
 Write a short sommelier TASTING / CHARACTER note (2–3 sentences) on what the given wine is actually like in the glass — its style and personality, aromatics, texture, structure and overall impression, with a little colour and warmth. This is a TASTING note (shown to the diner as "Vinster's Review"), NOT a place for food pairing, occasion, price, value, critic scores, or comparison with other wines. Do not restate the producer, region, grape or vintage as facts — describe the wine. Keep it evocative but grounded and specific to this wine and vintage.
 
+RECOGNITION GATE — if you don't genuinely recognise this wine from this producer (the name may be misheard, misread or not a real wine), reply with exactly the single word UNRECOGNISED and nothing else. Never describe a wine as if you know it when you don't, and never substitute a similar wine you do know.
+
 Return ONLY the note as plain text — no JSON, no markdown, no label, no preamble.`;
 
 Deno.serve(async (req) => {
@@ -86,6 +88,12 @@ Deno.serve(async (req) => {
 
     if (!review) {
       throw new Error('Empty review from model.');
+    }
+
+    // Recognition gate: the model doesn't genuinely know this wine — return a
+    // null review (200) so the client shows an honest line, not a note.
+    if (/^\W*UNRECOGNI[SZ]ED\b/i.test(review)) {
+      return new Response(JSON.stringify({ review: null, identified: false }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     return new Response(JSON.stringify({ review }), { headers: { 'Content-Type': 'application/json' } });

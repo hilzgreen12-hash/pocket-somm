@@ -401,7 +401,7 @@ export default function ScanLandingScreen() {
       {/* Search bar directly beneath the two scan tiles (above the separator). */}
       <TouchableOpacity style={styles.searchBar} onPress={() => setSearchModalOpen(true)} activeOpacity={0.7}>
         <Feather name="search" size={18} color={colors.textMuted} style={styles.searchBarIcon} />
-        <Text style={styles.searchBarText}>Search a Wine</Text>
+        <Text style={styles.searchBarText} numberOfLines={1}>Search a Wine, powered by Wine Searcher</Text>
       </TouchableOpacity>
 
       {/* Recent Scans — mixed label + list scans, most recent first. */}

@@ -18,8 +18,11 @@ function buildPrompt(w: { producer?: string; wineName?: string; region?: string;
 Wine: ${identity}
 Currency for any value framing: ${w.currency ?? 'GBP'}
 
+RECOGNITION GATE — set "identified" to true ONLY if you genuinely know this producer AND this specific wine (the names may be misheard, misread or not a real wine). If identified is false, return exactly {"identified": false, "vintage": null, "market": null} — never describe a wine's vintages, value, trajectory or peers as if you know it when you don't, and never substitute a similar wine you do know.
+
 Return ONLY valid JSON with this structure:
 {
+  "identified": <true|false — see RECOGNITION GATE above>,
   "vintage": "2-3 sentences on how the ${w.vintage ?? 'stated'} vintage compares to this wine's other vintages — the character and quality of the year for this wine/region, whether it's a stronger or weaker year, and how it's drinking relative to neighbouring vintages.",
   "market": "2-3 sentences on where this wine's market value sits — its price trajectory (rising / stable / softening), how it compares in value to peers, and whether it's one to hold or drink. Frame figures as guidance, not a live quote."
 }
@@ -47,6 +50,11 @@ Deno.serve(async (req) => {
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
     const parsed = JSON.parse(match[0]);
+    // Enforce the recognition gate: anything but an explicit identified:true
+    // ships nulls, never invented vintage/market commentary.
+    if (parsed?.identified !== true) {
+      return new Response(JSON.stringify({ identified: false, vintage: null, market: null }), { headers: { 'Content-Type': 'application/json' } });
+    }
     return new Response(JSON.stringify(parsed), { headers: { 'Content-Type': 'application/json' } });
   } catch (_err) {
     return new Response(JSON.stringify({ error: 'Something went wrong. Please try again.' }), { status: 500, headers: { 'Content-Type': 'application/json' } });

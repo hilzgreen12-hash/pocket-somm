@@ -49,6 +49,9 @@ export function ReviewDetailModal({
   const [noteOpen, setNoteOpen] = useState(false);
   const [fetchedNote, setFetchedNote] = useState<string | null>(null);
   const [noteLoading, setNoteLoading] = useState(false);
+  // Vinster doesn't genuinely recognise this wine (server recognition gate) —
+  // honest line instead of a note, and nothing persisted.
+  const [noteUnknown, setNoteUnknown] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   // "Your Personal Note" popup — which entry is open, the editable draft + saving.
   const [personalNoteEntryId, setPersonalNoteEntryId] = useState<string | null>(null);
@@ -59,7 +62,7 @@ export function ReviewDetailModal({
   const reviewKey = review ? `${review.title}|${review.entries[0]?.id ?? ''}` : null;
   // Also close the (now sibling) photo viewer, so it can't linger over the
   // parent screen when switching between reviews or dismissing the card.
-  useEffect(() => { setNoteOpen(false); setFetchedNote(null); setNoteLoading(false); setViewerOpen(false); setPersonalNoteEntryId(null); }, [reviewKey]);
+  useEffect(() => { setNoteOpen(false); setFetchedNote(null); setNoteUnknown(false); setNoteLoading(false); setViewerOpen(false); setPersonalNoteEntryId(null); }, [reviewKey]);
 
   if (!review) return null;
   const { entries } = review; // newest first
@@ -70,7 +73,7 @@ export function ReviewDetailModal({
   async function toggleNote() {
     const willOpen = !noteOpen;
     setNoteOpen(willOpen);
-    if (!willOpen || savedNote || (fetchedNote && fetchedNote.length > 0) || noteLoading) return;
+    if (!willOpen || savedNote || (fetchedNote && fetchedNote.length > 0) || noteUnknown || noteLoading) return;
     setNoteLoading(true);
     try {
       const note = await fetchVinsterReview({
@@ -80,6 +83,10 @@ export function ReviewDetailModal({
         grape: review!.grape,
         vintage: review!.vintage,
       });
+      if (note && typeof note === 'object') { // WINE_UNKNOWN
+        setNoteUnknown(true);
+        return;
+      }
       setFetchedNote(note ?? '');
       // Persist it so re-opening the card is instant and never regenerates.
       if (note) onNoteGenerated?.(note);
@@ -179,6 +186,8 @@ export function ReviewDetailModal({
                 </View>
               ) : displayNote ? (
                 <Text style={styles.vinsterField}><Text style={styles.vinsterLabel}>Sommelier's Note · </Text>{displayNote}</Text>
+              ) : noteUnknown ? (
+                <Text style={styles.noteRetry}>Vinster doesn't know this bottle well enough to describe it.</Text>
               ) : (
                 <Text style={styles.noteRetry}>Vinster couldn't write this note just now — tap "View Vinster's Note" again to retry.</Text>
               )}
