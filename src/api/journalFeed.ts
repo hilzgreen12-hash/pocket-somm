@@ -7,6 +7,7 @@ export interface JournalPost {
   title: string;
   link: string;
   publishedAt: string | null; // ISO date
+  imageUrl: string | null;    // the post's featured image (or first inline image)
 }
 
 function decodeEntities(s: string): string {
@@ -38,7 +39,14 @@ export async function fetchJournalPosts(): Promise<JournalPost[]> {
     .map((item) => {
       const pub = tag(item, 'pubDate');
       const t = pub ? Date.parse(pub) : NaN;
+      // Squarespace puts the featured image in <media:content url>; fall back to
+      // the first <img> in the post body. Ask the CDN for a tile-sized copy.
+      const media = item.match(/<media:content[^>]*url="([^"]+)"/);
+      const inline = item.match(/<img[^>]*src="([^"]+)"/);
+      const raw = media?.[1] ?? inline?.[1] ?? null;
+      const imageUrl = raw ? decodeEntities(raw).replace(/\?format=\d+w$/, '') + '?format=500w' : null;
       return {
+        imageUrl: imageUrl && imageUrl.startsWith('http') ? imageUrl : null,
         title: tag(item, 'title'),
         link: tag(item, 'link'),
         publishedAt: Number.isNaN(t) ? null : new Date(t).toISOString(),

@@ -5,17 +5,18 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { listLineupArchives, lineupSignedUrl, deleteLineupArchive, type LineupArchive } from '../api/lineups';
 import { showAlert } from './AppAlert';
-import { PlaceholderCardView, type PlaceholderCard, LINEUP_IMG } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, placeholderLabelImages } from './ExamplePlaceholder';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-// Placeholder tiles shown until the user saves their first lineup — a faded
-// generic bottle-lineup photo under a scrim, mirroring the empty "Your Recent
-// Scans" carousel.
+// Placeholder tiles shown until the user saves their first lineup — a faded row
+// of bundled wine labels (a bottle lineup) under a scrim, mirroring the empty
+// "Your Recent Scans" carousel.
+const LINEUP_OVERLAY = 'Your first lineup appears here as you use Vinster';
 const LINEUP_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'image', uri: LINEUP_IMG, title: 'Your Lineup', stamp: '20 Dec 2029 · La Steakhouse', overlay: 'Your first lineup appears here as you use Vinster' },
-  { kind: 'image', uri: LINEUP_IMG, title: 'Your Lineup', stamp: '18 Dec 2029 · At Home', overlay: 'Your first lineup appears here as you use Vinster' },
-  { kind: 'image', uri: LINEUP_IMG, title: 'Your Lineup', stamp: '02 Dec 2029 · The Cellar Door', overlay: 'Your first lineup appears here as you use Vinster' },
+  { kind: 'labelLineup', images: placeholderLabelImages(0, 4), title: 'Your Lineup', stamp: '20 Dec 2029 · La Steakhouse', overlay: LINEUP_OVERLAY },
+  { kind: 'labelLineup', images: placeholderLabelImages(4, 4), title: 'Your Lineup', stamp: '18 Dec 2029 · At Home', overlay: LINEUP_OVERLAY },
+  { kind: 'labelLineup', images: placeholderLabelImages(8, 4), title: 'Your Lineup', stamp: '02 Dec 2029 · The Cellar Door', overlay: LINEUP_OVERLAY },
 ];
 
 // One lineup in the carousel — a large thumbnail with a date · location stamp.

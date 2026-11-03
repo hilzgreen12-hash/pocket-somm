@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput, Image } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../hooks/useRacks';
@@ -10,6 +10,7 @@ import { getBins, getBinBottleCounts, deleteBin, getBinCells } from '../api/bins
 import { fetchStorageLocations, deleteStorageLocation, renameStorageLocation } from '../api/storageLocations';
 import { deleteLocationAndWines, trimOrDeleteWineOnUnitDelete, fetchLatestLocationThumbs } from '../api/placements';
 import { LabelThumb } from './LabelThumb';
+import { placeholderLabelImages } from './ExamplePlaceholder';
 import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -28,6 +29,22 @@ function CardBg({ path }: { path?: string }) {
   return (
     <>
       <LabelThumb path={path} style={styles.cardBg} radius={14} frame={0} />
+      <View style={styles.cardScrim} pointerEvents="none" />
+    </>
+  );
+}
+
+// Setup-template backdrop: a faded 2×2 collage of the bundled placeholder
+// labels under the same scrim as a real tile, so an empty carousel never reads
+// as plain brown boxes. `offset` gives each template a different set.
+function CollageBg({ offset }: { offset: number }) {
+  return (
+    <>
+      <View style={styles.collage} pointerEvents="none">
+        {placeholderLabelImages(offset, 4).map((img, i) => (
+          <Image key={i} source={img} style={styles.collageCell} resizeMode="cover" />
+        ))}
+      </View>
       <View style={styles.cardScrim} pointerEvents="none" />
     </>
   );
@@ -317,13 +334,14 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
             </>
           ) : (
             // No storage yet — four setup templates the user can name.
-            TEMPLATES.map((t) => (
+            TEMPLATES.map((t, i) => (
               <TouchableOpacity
                 key={t.kind}
                 style={styles.storageCard}
                 onPress={() => requireAuth(() => addByKind(t.kind))}
                 activeOpacity={0.85}
               >
+                <CollageBg offset={i * 2} />
                 <Text style={styles.storageCardType} allowFontScaling={false}>{t.type}</Text>
                 <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{t.name}</Text>
                 <Text style={styles.storageCardCount} allowFontScaling={false}>Tap to set up</Text>
@@ -390,6 +408,8 @@ const styles = StyleSheet.create({
   storageCard: { width: 152, height: 108, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between', overflow: 'hidden' },
   // Last-added wine label filling the tile, under a dark scrim for legibility.
   cardBg: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: 152, height: 108 },
+  collage: { position: 'absolute', left: 0, top: 0, width: 152, height: 108, flexDirection: 'row', flexWrap: 'wrap', opacity: 0.55 },
+  collageCell: { width: 76, height: 54 },
   cardScrim: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
   storageCardType: { fontSize: 11, fontFamily: fontsSpectral.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
   storageCardName: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },

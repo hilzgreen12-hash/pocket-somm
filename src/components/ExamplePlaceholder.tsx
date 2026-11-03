@@ -4,11 +4,9 @@ import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // Generic, faded stock imagery for empty-state tiles that aren't about a single
-// wine label — a restaurant interior (dined-out / wine-list cards) and a bottle
-// lineup. We NEVER show a plain brown tile with an icon in a carousel; every
+// wine label — a restaurant interior (dined-out / wine-list cards). We NEVER show a plain brown tile with an icon in a carousel; every
 // placeholder is an image under the "appears here" scrim.
 export const RESTAURANT_IMG = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=440&q=55';
-export const LINEUP_IMG = 'https://images.unsplash.com/photo-1510626176961-4b57d4fbad03?auto=format&fit=crop&w=440&q=55';
 
 // Bundled generic wine-label images — shipped with the app so placeholder tiles
 // ALWAYS show real labels (no flaky per-wine web fetch). Used for the label
@@ -38,7 +36,9 @@ export function placeholderLabelImages(offset: number, n: number): ImageSourcePr
 export type PlaceholderCard =
   | { kind: 'label'; producer: string; wineName: string; title: string; stamp: string; overlay: string }
   | { kind: 'image'; uri: string; title: string; stamp: string; overlay: string }
-  | { kind: 'labelCollage'; images: ImageSourcePropType[]; title: string; stamp: string; overlay: string };
+  | { kind: 'labelCollage'; images: ImageSourcePropType[]; title: string; stamp: string; overlay: string }
+  // Bundled labels side by side in one row — reads as a bottle lineup.
+  | { kind: 'labelLineup'; images: ImageSourcePropType[]; title: string; stamp: string; overlay: string };
 
 // A single example/placeholder card in the real card shape (thumbnail + name +
 // date · location stamp), scrimmed with a "your [scan/review] replaces this
@@ -66,8 +66,14 @@ export function PlaceholderCardView({ card }: { card: PlaceholderCard }) {
               </View>
             )}
           </View>
+        ) : card.kind === 'labelLineup' ? (
+          <View style={[styles.fadedImg, styles.lineupRow]}>
+            {card.images.map((img, i) => (
+              <Image key={i} source={img} style={styles.lineupCell} resizeMode="cover" />
+            ))}
+          </View>
         ) : (
-          // Faded generic photo (restaurant / bottle lineup).
+          // Faded generic photo (restaurant).
           <Image source={{ uri: card.uri }} style={styles.genericImg} resizeMode="cover" />
         )}
         <View style={styles.overlay} pointerEvents="none">
@@ -89,6 +95,8 @@ const styles = StyleSheet.create({
   collageFull: { width: 220, height: 165 },
   collageGrid: { width: 220, height: 165, flexDirection: 'row', flexWrap: 'wrap' },
   collageCell: { width: 110, height: 82.5 },
+  lineupRow: { flexDirection: 'row' },
+  lineupCell: { flex: 1, height: 165 },
   overlay: { ...StyleSheet.absoluteFillObject, borderRadius: 12, backgroundColor: 'rgba(18,11,10,0.42)', alignItems: 'center', justifyContent: 'center', padding: spacing.md },
   overlayText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 18 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },

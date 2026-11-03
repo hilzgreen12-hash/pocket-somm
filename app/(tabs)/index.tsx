@@ -14,7 +14,7 @@ import { HelpTitle } from '../../src/components/HelpTitle';
 import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
 import { DrinkNowCarousel } from '../../src/components/DrinkNowCarousel';
 import { CellarInsightsCarousel } from '../../src/components/CellarInsightsCarousel';
-import { DiscoverVoiceModal } from '../../src/components/DiscoverVoiceModal';
+import { HomeVoiceModal } from '../../src/components/HomeVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -573,7 +573,7 @@ export default function ScanLandingScreen() {
         onContinue={continueWithoutAccount}
       />
 
-      <DiscoverVoiceModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
+      <HomeVoiceModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
 
     </ScrollView>
     </TabSwipeView>
