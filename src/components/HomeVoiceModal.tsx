@@ -482,7 +482,7 @@ export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose
             <Q>What would you like to know?</Q>
             <Q small>Ask about anything you've reviewed: scores, restaurants, dates, what you drank where.</Q>
             {answerRow(question, setQuestion, 'Tap the mic and ask', 'query')}
-            <Text style={styles.note}>For example, 'where did I drink a Cornas recently?' or 'What's my highest rated wine this year?'</Text>
+            <Text style={styles.note}>For example, 'Where did I drink a Cornas recently?' or 'What's my highest rated wine this year?'</Text>
           </>
         );
       case 'r_working':
