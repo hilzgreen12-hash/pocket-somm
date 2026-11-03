@@ -651,7 +651,6 @@ const styles = StyleSheet.create({
   voiceBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm, marginBottom: 18 },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
 
-
   // Search-a-Wine prompt (opened from the Search tile).
   searchModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.xl },
   searchModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg },
