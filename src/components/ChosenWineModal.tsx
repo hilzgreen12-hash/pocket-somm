@@ -357,7 +357,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
             <View style={styles.dictateRow}>
               <Text style={styles.sectionLabel}>Your Review</Text>
-              <MicButton value={tastingNote} onChangeText={setTastingNote} onClear={() => setTastingNote('')} />
+              <MicButton value={tastingNote} onChangeText={setTastingNote} onClear={() => setTastingNote('')} domain="note" serverCorrect />
             </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
@@ -372,7 +372,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
             <View style={styles.dictateRow}>
               <Text style={styles.sectionLabel}>Personal Notes</Text>
-              <MicButton value={otherObservations} onChangeText={setOtherObservations} onClear={() => setOtherObservations('')} />
+              <MicButton value={otherObservations} onChangeText={setOtherObservations} onClear={() => setOtherObservations('')} domain="note" serverCorrect />
             </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
