@@ -846,7 +846,7 @@ export function RestaurantReviewModal({
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={chooseLinkReview} activeOpacity={0.85}><Text style={styles.bottleOptText}>Link to a Wine Review</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('library')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Upload a Wine Label</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('camera')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Scan a Label</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={chooseSearch} activeOpacity={0.85}><Text style={styles.bottleOptText}>Search a Wine</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={chooseSearch} activeOpacity={0.85}><Text style={styles.bottleOptText}>Search/Manual Input</Text></TouchableOpacity>
                 <TouchableOpacity style={styles.bottleCancel} onPress={() => setBottleChooserOpen(false)}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
               </View>
             </View>

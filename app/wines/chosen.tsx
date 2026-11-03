@@ -1533,7 +1533,7 @@ export default function ChosenWinesScreen() {
               <Text style={styles.chooserBtnText}>Upload A Wine Label</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseManual} activeOpacity={0.85}>
-              <Text style={styles.chooserBtnText}>Search a Wine</Text>
+              <Text style={styles.chooserBtnText}>Search/Manual Input</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseCellar} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Select from Cellar</Text>
