@@ -1,3 +1,5 @@
+import NetInfo from '@react-native-community/netinfo';
+import { OfflinePhotoPlaceholder } from '../../../src/components/LineupThumb';
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -59,6 +61,11 @@ export default function LineupDetailScreen() {
   const backToLineup = `&backTo=${encodeURIComponent(`/cellar/lineup/${id}`)}`;
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  // The photo couldn't load (usually no connection) → offline placeholder.
+  const [photoFailed, setPhotoFailed] = useState(false);
+  function loadPhoto(path: string | null | undefined) {
+    lineupSignedUrl(path).catch(() => null).then((u) => { setPhotoUrl(u); setPhotoFailed(!u); });
+  }
   const [zoomOpen, setZoomOpen] = useState(false);
   const [replacingPhoto, setReplacingPhoto] = useState(false);
   // Editable lineup name (tap the title). Falls back to "Your Lineup".
@@ -81,9 +88,17 @@ export default function LineupDetailScreen() {
       hydrated.current = true;
       setNote(lineup.note ?? '');
       setName(lineup.name ?? '');
-      lineupSignedUrl(lineup.image_path).then(setPhotoUrl);
+      loadPhoto(lineup.image_path);
     }
   }, [lineup]);
+  // Back online after a failed load → fetch the photo again.
+  useEffect(() => {
+    if (!photoFailed || !lineup) return;
+    return NetInfo.addEventListener((st) => {
+      if (st.isConnected && st.isInternetReachable !== false) loadPhoto(lineup.image_path);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoFailed, lineup?.image_path]);
 
   function openNameEdit() {
     if (!lineup) return;
@@ -577,7 +592,7 @@ export default function LineupDetailScreen() {
     setReplacingPhoto(true);
     try {
       const path = await replaceLineupImage(session.user.id, lineup.id, res.assets[0].uri);
-      setPhotoUrl(await lineupSignedUrl(path));
+      setPhotoUrl(await lineupSignedUrl(path)); setPhotoFailed(false);
       qc.invalidateQueries({ queryKey: ['lineup', id] });
       qc.invalidateQueries({ queryKey: ['lineup-archives'] });
     } catch (err) {
@@ -678,9 +693,11 @@ export default function LineupDetailScreen() {
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 90 }} keyboardShouldPersistTaps="handled">
           <View style={styles.photoWrap}>
-            {photoUrl ? (
+            {photoFailed ? (
+              <OfflinePhotoPlaceholder width="100%" height={420} borderRadius={14} />
+            ) : photoUrl ? (
               <TouchableOpacity style={styles.photoTouch} activeOpacity={0.9} onPress={() => setZoomOpen(true)}>
-                <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="contain" />
+                <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="contain" onError={() => setPhotoFailed(true)} />
               </TouchableOpacity>
             ) : <ActivityIndicator color={colors.gold} style={{ marginVertical: 40 }} />}
             <View style={styles.photoBadges}>

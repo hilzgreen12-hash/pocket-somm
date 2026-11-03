@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { LineupThumb } from '../../src/components/LineupThumb';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Modal, TextInput, useWindowDimensions } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
@@ -36,20 +37,12 @@ function lineupBottleTotal(l: LineupArchive): number {
 }
 
 function LineupTile({ item, size, onPress, onLongPress }: { item: LineupArchive; size: number; onPress: () => void; onLongPress: () => void }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    lineupSignedUrl(item.image_path).then((u) => { if (active) setUrl(u); });
-    return () => { active = false; };
-  }, [item.image_path]);
-
   const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   // Full-width row (thumbnail left, details right) mirroring the Label Library.
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.7}>
       <View style={{ width: size, height: Math.round(size * 0.78) }}>
-        {url ? <Image source={{ uri: url }} style={{ width: size, height: Math.round(size * 0.78), borderRadius: 5 }} resizeMode="cover" />
-             : <ActivityIndicator color={colors.gold} />}
+        <LineupThumb path={item.image_path} width={size} height={Math.round(size * 0.78)} borderRadius={5} />
       </View>
       <View style={styles.rowBody}>
         {/* Date · location stamp. */}

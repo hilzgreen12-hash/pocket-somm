@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, ActivityIndicator, Modal } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
-import { listLineupArchives, lineupSignedUrl, deleteLineupArchive, type LineupArchive } from '../api/lineups';
+import { listLineupArchives, deleteLineupArchive, type LineupArchive } from '../api/lineups';
 import { showAlert } from './AppAlert';
+import { LineupThumb } from './LineupThumb';
 import { PlaceholderCardView, type PlaceholderCard, placeholderLabelImages } from './ExamplePlaceholder';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -21,13 +22,7 @@ const LINEUP_EXAMPLES: PlaceholderCard[] = [
 
 // One lineup in the carousel — a large thumbnail with a date · location stamp.
 function LineupCard({ item }: { item: LineupArchive }) {
-  const [url, setUrl] = useState<string | null>(null);
   const qc = useQueryClient();
-  useEffect(() => {
-    let active = true;
-    lineupSignedUrl(item.image_path).then((u) => { if (active) setUrl(u); });
-    return () => { active = false; };
-  }, [item.image_path]);
   const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   const place = (item.venue || item.city || '').trim();
   // Long-hold to permanently delete this lineup (photo + notes + wines).
@@ -51,7 +46,7 @@ function LineupCard({ item }: { item: LineupArchive }) {
   return (
     <TouchableOpacity style={styles.card} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} onLongPress={confirmDelete} delayLongPress={450} activeOpacity={0.85}>
       <View style={styles.cardImageWrap}>
-        {url ? <Image source={{ uri: url }} style={styles.cardImage} resizeMode="cover" /> : <ActivityIndicator color={colors.gold} />}
+        <LineupThumb path={item.image_path} width={220} height={165} />
       </View>
       {item.name?.trim() ? <Text style={styles.cardName} numberOfLines={1} allowFontScaling={false}>{item.name.trim()}</Text> : null}
       <Text style={[styles.cardStamp, item.name?.trim() ? styles.cardStampTight : null]} numberOfLines={1} allowFontScaling={false}>{date}{place ? ` · ${place}` : ''}</Text>
