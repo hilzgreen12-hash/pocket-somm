@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
-import { fetchBlogPosts } from '../api/blog';
+import * as WebBrowser from 'expo-web-browser';
+import { fetchJournalPosts } from '../api/journalFeed';
 import { colors, spacing } from '../constants/theme';
 import { fontsSpectral as fonts } from '../constants/fonts';
 
@@ -11,20 +11,21 @@ function fmtDate(iso: string | null | undefined) {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// Carousel of Journal entries (title + date), newest first — each card opens
-// that entry. Mirrors the "Vinster's Review of You" alter-ego carousel: before
+// Carousel of Journal entries (title + date), newest first, read from the
+// Vinster website's blog feed — each card opens that post on the website. Mirrors the "Vinster's Review of You" alter-ego carousel: before
 // the first entry exists a "coming" card shows, and two dashed "future"
 // placeholders always trail so the row reads as an evolving set of three.
 // Reading the Journal is public, so cards navigate directly (no sign-in gate).
 export function JournalCarousel() {
   const { data: posts = [] } = useQuery({
-    queryKey: ['journal-posts'],
+    queryKey: ['journal-feed'],
     // Keep the cache warm for a day so returning to the Share tab renders the
     // cards instantly (same reasoning as the alter-ego carousel).
     gcTime: 1000 * 60 * 60 * 24,
-    queryFn: fetchBlogPosts,
+    queryFn: fetchJournalPosts,
+    staleTime: 1000 * 60 * 10,
   });
-  const published = posts.filter((p) => p.is_published);
+  const published = posts;
   const hasPosts = published.length > 0;
 
   return (
@@ -33,13 +34,13 @@ export function JournalCarousel() {
         {hasPosts ? (
           published.map((p) => (
             <TouchableOpacity
-              key={p.id}
+              key={p.link}
               style={styles.card}
-              onPress={() => router.push(`/community/blog/${p.id}` as any)}
+              onPress={() => { WebBrowser.openBrowserAsync(p.link).catch(() => {}); }}
               activeOpacity={0.85}
             >
               <Text style={styles.cardName} numberOfLines={3}>{p.title}</Text>
-              <Text style={styles.cardDate}>{fmtDate(p.published_at ?? p.created_at)}</Text>
+              <Text style={styles.cardDate}>{fmtDate(p.publishedAt)}</Text>
             </TouchableOpacity>
           ))
         ) : (

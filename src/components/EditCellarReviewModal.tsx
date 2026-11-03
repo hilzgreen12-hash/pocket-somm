@@ -37,6 +37,10 @@ interface Props {
   // When true, edit the latest entry in place (pre-filled) instead of appending
   // a fresh blank review. Used by the review card's "Edit" action.
   editLatest?: boolean;
+  // Tapping the wine title on a FIRST review hands off to the shared Edit Wine
+  // Details screen (fix the name / add a vintage). The parent hides this modal,
+  // opens the screen, and re-opens the modal for the same wine on return.
+  onEditWine?: (wine: CellarWine) => void;
 }
 
 function todayISO() {
@@ -49,7 +53,7 @@ function todayISO() {
 // review_date) rather than chosen_wines, so this modal reads and saves
 // there. It lets Your Wine Reviews open every review the same way — a
 // review form, never the full wine card.
-export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLatest = false }: Props) {
+export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLatest = false, onEditWine }: Props) {
   const { updateWine } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -71,10 +75,17 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
   const [shareLabelUri, setShareLabelUri] = useState<string | null>(null);
 
   const shareCardRef = useRef<View>(null);
+  // Set while the user is away on the Edit Wine Details screen, so re-opening
+  // the same wine keeps the review they'd already started typing.
+  const suspendedForEditRef = useRef<string | null>(null);
 
   // Re-seed the form whenever a new wine is opened.
   useEffect(() => {
     if (!wine) return;
+    if (visible && suspendedForEditRef.current === wine.id) {
+      suspendedForEditRef.current = null;
+      return;
+    }
     // Edit mode: pre-fill from the latest entry and edit it in place. Otherwise
     // this modal writes a NEW review entry each time (append-only), so the
     // review fields open blank; price stays (it's a bottle-level field).
@@ -338,6 +349,9 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
               vintage={wine.vintage}
               region={wine.region}
               grape={wine.grape_variety}
+              onPressTitle={onEditWine && !editLatest && entriesOf(wine).length === 0
+                ? () => { suspendedForEditRef.current = wine.id; onEditWine(wine); }
+                : undefined}
               thumbnail={wine.label_image_path
                 ? <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
                 : null}

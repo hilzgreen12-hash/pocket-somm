@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar, useWishList } from '../../../src/hooks/useCellar';
 import { useAttachLabelPhoto } from '../../../src/hooks/useAttachLabelPhoto';
 import { usePreferences } from '../../../src/hooks/usePreferences';
 import { valueWine } from '../../../src/services/pricing';
 import { fetchWineCandidates } from '../../../src/api/label';
-import { updateCellarWine } from '../../../src/api/cellar';
+import { getCellarWineById, updateCellarWine } from '../../../src/api/cellar';
 import { showAlert } from '../../../src/components/AppAlert';
 import { LabelThumb } from '../../../src/components/LabelThumb';
 import { BottleSizePicker } from '../../../src/components/BottleSizePicker';
@@ -29,7 +29,15 @@ export default function EditWineScreen() {
   const { wines: wishlist } = useWishList();
   const { preferences } = usePreferences();
   const attachPhoto = useAttachLabelPhoto();
-  const wine = wines.find((w) => w.id === wineId) ?? wishlist.find((w) => w.id === wineId) ?? null;
+  const listed = wines.find((w) => w.id === wineId) ?? wishlist.find((w) => w.id === wineId) ?? null;
+  // Archived wines aren't in either list (e.g. editing from a review), so load
+  // the row directly when it isn't found there.
+  const { data: fetched } = useQuery({
+    queryKey: ['cellar-wine', wineId],
+    queryFn: () => getCellarWineById(wineId!),
+    enabled: !!wineId && !listed,
+  });
+  const wine = listed ?? fetched ?? null;
 
   const [producer, setProducer] = useState('');
   const [region, setRegion] = useState('');
@@ -204,12 +212,14 @@ export default function EditWineScreen() {
       qc.invalidateQueries({ queryKey: ['bin-cells'] });
       qc.invalidateQueries({ queryKey: ['bins'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+      qc.invalidateQueries({ queryKey: ['cellar-wine', wine.id] });
 
       // Bottles were ADDED here, so they exist in the Full Cellar List but sit
       // in no rack, fridge, diamond or alt cellar yet. Offer to file them now
       // rather than letting them quietly become "awaiting placement".
       const added = (typeof updates.quantity === 'number' ? updates.quantity : (wine.quantity ?? 0)) - (wine.quantity ?? 0);
-      if (added > 0) {
+      if (added > 0 && !wine.archived_at) {
         // The save itself is finished — drop the spinner before the popup, so
         // dismissing it by tapping outside doesn't leave Save stuck saving.
         setSaving(false);

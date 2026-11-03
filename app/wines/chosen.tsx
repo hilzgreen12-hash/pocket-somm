@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { getCellarWineById } from '../../src/api/cellar';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
@@ -183,6 +184,21 @@ export default function ChosenWinesScreen() {
   // True when the cellar review modal was opened to EDIT the latest entry (from
   // the review card's Edit) rather than to add a fresh one.
   const [editingCellarLatest, setEditingCellarLatest] = useState(false);
+  // A first review hands off to Edit Wine Details when the user taps the wine
+  // title; remember which wine so the review re-opens (draft intact) on return.
+  const reopenReviewForRef = useRef<{ id: string; latest: boolean } | null>(null);
+  useFocusEffect(useCallback(() => {
+    const pending = reopenReviewForRef.current;
+    if (!pending) return;
+    reopenReviewForRef.current = null;
+    getCellarWineById(pending.id)
+      .then((fresh) => {
+        if (!fresh) return;
+        setEditingCellarLatest(pending.latest);
+        setEditingCellarWine(fresh);
+      })
+      .catch(() => {});
+  }, []));
   const [addOpen, setAddOpen] = useState(false);
   // OCR pre-fill for the Add-a-Review modal when the user came via Scan/Upload
   // (null for Manual Input). Keeps all three on the same review input screen.
@@ -1312,6 +1328,11 @@ export default function ChosenWinesScreen() {
         wine={editingCellarWine}
         visible={!!editingCellarWine}
         editLatest={editingCellarLatest}
+        onEditWine={(w) => {
+          reopenReviewForRef.current = { id: w.id, latest: editingCellarLatest };
+          setEditingCellarWine(null);
+          router.push(`/cellar/edit-wine/${w.id}` as any);
+        }}
         onClose={() => { setEditingCellarWine(null); const back = returnToDetailRef.current; returnToDetailRef.current = null; if (back) setDetailItem(back); else if (cameViaLink) returnToLibrary(); }}
         onSaved={() => {
           setEditingCellarWine(null);

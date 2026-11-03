@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { WineIdentityHeader } from './WineIdentityHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -12,9 +12,12 @@ import { fonts } from '../constants/fonts';
 // keeps its own photo-add behaviour; it's wrapped in a cream frame here so it
 // matches the cellar card and never reads as a raw "cut-out" image.
 export function ReviewCardHeader({
-  thumbnail, producer, wineName, vintage, region, grape,
+  thumbnail, producer, wineName, vintage, region, grape, onPressTitle,
 }: {
   thumbnail: ReactNode;
+  // When set, the wine identity is tappable (no visible edit affordance) —
+  // used on a first review so the user can fix the name or add a vintage.
+  onPressTitle?: () => void;
   producer?: string | null;
   wineName?: string | null;
   vintage?: string | number | null;
@@ -24,17 +27,31 @@ export function ReviewCardHeader({
   return (
     <View style={styles.row}>
       {thumbnail ? <View style={styles.thumbFrame}>{thumbnail}</View> : null}
-      <View style={styles.textCol}>
-        <WineIdentityHeader
-          producer={producer}
-          wineName={wineName}
-          vintage={vintage != null ? String(vintage) : null}
-          region={region}
-          grape={grape}
-          align="left"
-          size="lg"
-        />
-      </View>
+      {onPressTitle ? (
+        <TouchableOpacity style={styles.textCol} onPress={onPressTitle} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Edit wine details">
+          <WineIdentityHeader
+            producer={producer}
+            wineName={wineName}
+            vintage={vintage != null ? String(vintage) : null}
+            region={region}
+            grape={grape}
+            align="left"
+            size="lg"
+          />
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.textCol}>
+          <WineIdentityHeader
+            producer={producer}
+            wineName={wineName}
+            vintage={vintage != null ? String(vintage) : null}
+            region={region}
+            grape={grape}
+            align="left"
+            size="lg"
+          />
+        </View>
+      )}
     </View>
   );
 }

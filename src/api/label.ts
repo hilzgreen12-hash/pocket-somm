@@ -250,7 +250,10 @@ export async function searchLabelImages(input: { producer?: string | null; wineN
   const data = await invokeFunction('label-image-search', {
     producer: input.producer ?? '',
     wineName: input.wineName ?? '',
-  }) as { images?: LabelImageCandidate[] };
+  }) as { images?: LabelImageCandidate[]; error?: string };
+  // The function returns 200 with an `error` when the image service itself
+  // fails — surface that as a failure, not as "no photos found".
+  if (data.error) throw new Error(data.error);
   return data.images ?? [];
 }
 
@@ -326,7 +329,8 @@ export async function fetchRangeWineNote(input: { producer?: string | null; wine
 // photos of the restaurant itself rather than bottles.
 export async function searchRestaurantImages(input: { restaurant?: string | null; city?: string | null }): Promise<LabelImageCandidate[]> {
   const q = [input.restaurant, input.city, 'restaurant'].map((s) => (s ?? '').trim()).filter(Boolean).join(' ');
-  const data = await invokeFunction('label-image-search', { query: q }) as { images?: LabelImageCandidate[] };
+  const data = await invokeFunction('label-image-search', { query: q }) as { images?: LabelImageCandidate[]; error?: string };
+  if (data.error) throw new Error(data.error);
   return data.images ?? [];
 }
 
