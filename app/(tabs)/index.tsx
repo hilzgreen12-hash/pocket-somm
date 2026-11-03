@@ -1,3 +1,4 @@
+import { JournalCarousel } from '../../src/components/JournalCarousel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -424,13 +425,11 @@ export default function ScanLandingScreen() {
       <Text style={styles.carouselHeader}>Vinster's Insights</Text>
       <View style={styles.carouselBleed}><CellarInsightsCarousel /></View>
 
-      {/* Community Musings — coming soon (recently shared reviews, journal). */}
+      {/* Community Musings — the Journal entries (same carousel as the Share tab:
+          the website blog feed, each card opening its post). */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Community Musings</Text>
-      <View style={styles.comingSoonCard}>
-        <Text style={styles.comingSoonText}>Coming soon</Text>
-        <Text style={styles.comingSoonSub}>Recently shared wine &amp; restaurant reviews, journal entries and more from the Vinster community.</Text>
-      </View>
+      <View style={styles.carouselBleed}><JournalCarousel /></View>
 
       {/* Dictate-to-search is shelved for now: on-device speech-to-text mangles
           foreign/proper wine names (e.g. "Heidsieck" → "Isaac"), which then risks
@@ -651,10 +650,6 @@ const styles = StyleSheet.create({
   // the rule beneath it.
   voiceBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm, marginBottom: 18 },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  // Community Musings placeholder — faded dashed card until the feature ships.
-  comingSoonCard: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite, borderRadius: 14, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', opacity: 0.85 },
-  comingSoonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.xs },
-  comingSoonSub: { fontFamily: fonts.headingRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
 
 
   // Search-a-Wine prompt (opened from the Search tile).
