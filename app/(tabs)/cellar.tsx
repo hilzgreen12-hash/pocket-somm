@@ -148,7 +148,7 @@ export default function CellarTab() {
         {/* Voice Command — top-right text link (matches the Reviews "Add +").
             Import + Export now live as buttons at the bottom of the tab. */}
         <TouchableOpacity style={styles.voiceLink} onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.voiceLinkText}>Chat with Vinster</Text>
+          <Text style={styles.voiceLinkText}>Ask Vinster</Text>
         </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>

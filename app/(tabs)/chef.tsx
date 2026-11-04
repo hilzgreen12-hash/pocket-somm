@@ -88,7 +88,7 @@ export default function ChefTab() {
         <HelpTitle label="Pair" title="How Pair works" body={CHEF_HELP} textStyle={styles.appName} />
         {/* Voice Command — top-right text link (matches the Reviews "Add +"). */}
         <TouchableOpacity style={styles.voiceLink} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.voiceLinkText}>Chat with Vinster</Text>
+          <Text style={styles.voiceLinkText}>Ask Vinster</Text>
         </TouchableOpacity>
       </View>
 

@@ -144,7 +144,7 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
             </View>
           ) : (
             <ScrollView style={{ maxHeight: winH * 0.82 }} contentContainerStyle={{ paddingBottom: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.voiceHeader}>Chat with Vinster</Text>
+              <Text style={styles.voiceHeader}>Ask Vinster</Text>
               <Text style={styles.introText}>Ask Vinster to recommend a wine from your cellar, help you choose between bottles while you're out, generate Wine Intel on any wine, or answer a question about your own reviews and visits.</Text>
 
               {unclearMsg ? <Text style={styles.unclear}>{unclearMsg}</Text> : null}

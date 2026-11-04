@@ -9,7 +9,7 @@ import { fonts } from '../constants/fonts';
 export function VoiceAnswerView({ query, answer }: { query?: string | null; answer: string }) {
   return (
     <View style={styles.wrap}>
-      <Text style={styles.header}>Chat with Vinster</Text>
+      <Text style={styles.header}>Ask Vinster</Text>
       {query?.trim() ? (
         <View style={[styles.bubble, styles.queryBubble]}>
           <Text style={styles.queryText}>{query.trim()}</Text>

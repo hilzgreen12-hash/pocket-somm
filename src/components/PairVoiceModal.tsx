@@ -12,7 +12,7 @@ import type { ChefLabelSession } from '../api/chef';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-const INTRO = "Chat with Vinster about pairing: Find recipes from Your Cookbook, Find a wine pairing from your cellar for a dish, and suggest ingredients/dishes for a wine. Using Vinster's pairing tools will provide deeper results, but chatting with Vinster does the trick for quick ideas.";
+const INTRO = "Ask Vinster about pairing: Find recipes from Your Cookbook, Find a wine pairing from your cellar for a dish, and suggest ingredients/dishes for a wine. Using Vinster's pairing tools will provide deeper results, but asking Vinster does the trick for quick ideas.";
 const SUGGESTIONS = [
   'Find me two wines to open with Sole Meunière tonight',
   'Suggest a dish to pair with Washington Cabernet Franc',
@@ -120,7 +120,7 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
             </View>
           ) : (
             <ScrollView style={{ maxHeight: winH * 0.82 }} contentContainerStyle={{ paddingBottom: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.voiceHeader}>Chat with Vinster</Text>
+              <Text style={styles.voiceHeader}>Ask Vinster</Text>
               <Text style={styles.introText}>{INTRO}</Text>
               {unclearMsg ? <Text style={styles.unclear}>{unclearMsg}</Text> : null}
 
