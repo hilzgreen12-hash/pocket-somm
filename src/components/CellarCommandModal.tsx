@@ -65,7 +65,7 @@ function mentionsCellarList(text: string): boolean {
 // Default intro copy + examples (the Cellar-tab, full-scope voice command).
 // A caller (e.g. a home-storage location screen) can override these to present
 // a scoped explainer — the underlying move/archive/add engine is unchanged.
-const DEFAULT_INTRO_TEXT = 'Ask Vinster about your cellar: Move wines between storage locations, Archive bottles, Add them to your cellar list to place later, permanently Delete bottles, or ask Vinster to recommend wines to drink based on your mood and occasion.';
+const DEFAULT_INTRO_TEXT = 'Use Quick Command to: Move wines between storage locations, Archive bottles, Add them to your cellar list to place later, permanently Delete bottles, or ask Vinster to recommend wines to drink based on your mood and occasion.';
 const DEFAULT_SUGGESTIONS = [
   'Move my Lafite 1982 from my wine fridge to my small wine rack',
   'Archive 3 bottles of Harlan 1990',
@@ -78,7 +78,7 @@ const DEFAULT_SUGGESTIONS = [
 // examples. Spread into <CellarCommandModal {...HOME_STORAGE_VOICE} /> so all
 // four screen types stay identical.
 export const HOME_STORAGE_VOICE: { introText: string; suggestions: string[]; allowedActions: CellarCommandAction[] } = {
-  introText: 'Through your home storage locations you can ask Vinster to: Move wines from this location to another, Archive bottles, and permanently Delete bottles.',
+  introText: 'Through your home storage locations you can use Quick Command to: Move wines from this location to another, Archive bottles, and permanently Delete bottles.',
   suggestions: [
     'Move two bottles of Rousseau 1999 to My Small Wine Bin',
     'Archive one bottle of Lafite 1961',
@@ -434,7 +434,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         // removal log and archive stats stay consistent.
         const count = Math.min(chosenWine.quantity, Math.max(1, result?.quantity ?? chosenWine.quantity));
         const removedAt = new Date().toISOString();
-        await addCellarWineRemoval({ cellarWineId: chosenWine.id, removedAt, count, note: 'Archived via Ask Vinster' });
+        await addCellarWineRemoval({ cellarWineId: chosenWine.id, removedAt, count, note: 'Archived via Quick Command' });
         if (count >= chosenWine.quantity) {
           await updateCellarWine(chosenWine.id, { quantity: count, archived_at: removedAt });
         } else {
@@ -613,7 +613,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         <View style={styles.sheet}>
           {phase === 'speak' && (
             <ScrollView style={{ maxHeight: winH * 0.82 }} contentContainerStyle={{ paddingBottom: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.voiceHeader}>Ask Vinster</Text>
+              <Text style={styles.voiceHeader}>Quick Command</Text>
               <Text style={styles.introText}>{introText ?? DEFAULT_INTRO_TEXT}</Text>
 
               <View style={styles.modalDivider} />

@@ -1139,7 +1139,7 @@ export default function StorageLocationScreen() {
 
       {/* Voice Command — beneath the title, above the separator (mirrors Cellar tab). */}
       <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
-        <Text style={styles.voiceBubbleText}>Ask Vinster</Text>
+        <Text style={styles.voiceBubbleText}>Quick Command</Text>
       </TouchableOpacity>
       <View style={styles.headerDivider} />
 
