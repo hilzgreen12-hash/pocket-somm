@@ -347,7 +347,7 @@ export default function ScanLandingScreen() {
         {/* Voice Command — top-right text link (matches the Reviews "Add +").
             Discovery only (recommend / consult / wine intel). */}
         <TouchableOpacity style={styles.voiceLink} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.voiceLinkText}>Voice Command</Text>
+          <Text style={styles.voiceLinkText}>Chat with Vinster</Text>
         </TouchableOpacity>
       </View>
       <Text style={styles.blurb}>
