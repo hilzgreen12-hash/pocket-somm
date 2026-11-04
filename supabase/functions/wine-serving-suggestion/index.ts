@@ -9,13 +9,13 @@ const DAILY_LIMIT = 400;
 // Generate "how to serve THIS wine" on demand for a cellar wine card: serving
 // temperature, decanting, glassware, plus a wine style to enjoy before (aperitif)
 // and after (digestif). No dish context — this is about the wine itself.
-function buildPrompt(w: { producer?: string; wineName?: string; region?: string; vintage?: string; grape?: string; style?: string }): string {
+function buildPrompt(w: { producer?: string; wineName?: string; region?: string; vintage?: string; grape?: string; style?: string; decantTime?: string }): string {
   const identity = [w.producer, w.wineName, w.vintage].filter(Boolean).join(' ')
     + [w.region ? `, ${w.region}` : '', w.grape ? ` (${w.grape})` : '', w.style ? ` — ${w.style}` : ''].join('');
   return `You are a world-class sommelier. Give concise, practical serving guidance for this specific wine.
 
 Wine: ${identity}
-
+${w.decantTime ? `\nTime available before serving (the user's words): "${w.decantTime}". Your decanting advice must fit within it; if the wine would ideally need longer, say so and give the best option within their time.\n` : ''}
 Return ONLY valid JSON with this structure:
 {
   "temperature": "ideal serving temperature, e.g. '16-18°C, slightly cool'",
@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
     const limited = await checkRateLimit(req, 'wine-serving-suggestion', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
-    const { producer, wineName, region, vintage, grape, style } = await req.json();
+    const { producer, wineName, region, vintage, grape, style, decantTime } = await req.json();
     if (typeof producer !== 'string' && typeof wineName !== 'string') {
       return new Response(JSON.stringify({ error: 'wine identity required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4000,
-      messages: [{ role: 'user', content: buildPrompt({ producer, wineName, region, vintage, grape, style }) }],
+      messages: [{ role: 'user', content: buildPrompt({ producer, wineName, region, vintage, grape, style, decantTime: typeof decantTime === "string" ? decantTime.slice(0, 200) : undefined }) }],
     });
 
     const text = response.content.find((b) => b.type === 'text')?.text ?? '';

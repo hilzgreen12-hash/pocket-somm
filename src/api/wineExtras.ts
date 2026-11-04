@@ -15,8 +15,10 @@ function identity(w: CellarWine) {
 
 // Generate "how to serve this wine" on demand (temperature / decant / glassware
 // + a wine to enjoy before and after). Caller caches the result on the wine.
-export async function generateServingSuggestion(w: CellarWine): Promise<WineServingSuggestion> {
-  const data = await invokeResilient('wine-serving-suggestion', identity(w)) as WineServingSuggestion & { error?: string };
+// decantTime: the user's own words for how long they have (Ask Vinster), so
+// the decanting advice fits.
+export async function generateServingSuggestion(w: CellarWine, decantTime?: string): Promise<WineServingSuggestion> {
+  const data = await invokeResilient('wine-serving-suggestion', { ...identity(w), ...(decantTime ? { decantTime } : {}) }) as WineServingSuggestion & { error?: string };
   if (data?.error) throw new Error(data.error);
   return data;
 }

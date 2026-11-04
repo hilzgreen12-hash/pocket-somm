@@ -43,7 +43,9 @@ export async function classifyDiscoverVoice(transcript: string, wines: CellarWin
 
 // Answer a question about the user's OWN records (reviews + restaurant visits).
 // Scoped server-side to the signed-in user. Returns a short natural answer.
-export async function askMyData(question: string): Promise<string> {
-  const data = await invokeResilient('ask-my-data', { question }) as { answer?: string | null; error?: string };
+// history: earlier turns of the same chat, so follow-up questions make sense.
+export async function askMyData(question: string, history: { q: string; a: string }[] = []): Promise<string> {
+  const data = await invokeResilient('ask-my-data', { question, history }) as { answer?: string | null; error?: string };
+  if (data?.error && !data?.answer) throw new Error(data.error);
   return (data?.answer ?? '').trim() || "I couldn't find that in your records.";
 }

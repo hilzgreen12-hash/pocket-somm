@@ -17,7 +17,11 @@ function json(payload: unknown, status = 200): Response {
 
 Deno.serve(async (req) => {
   try {
-    const { question } = await req.json().catch(() => ({}));
+    const { question, history } = await req.json().catch(() => ({}));
+    // Earlier turns of the same chat (follow-up questions refer back to them).
+    const turns: { q: string; a: string }[] = Array.isArray(history)
+      ? history.filter((t: any) => typeof t?.q === 'string' && typeof t?.a === 'string').slice(-6)
+      : [];
     if (!question || !String(question).trim()) return json({ answer: null, error: 'question required' }, 400);
 
     // Scope all reads to the signed-in user via their bearer token (RLS).
@@ -105,16 +109,33 @@ ${cellarLines.join('\n') || '(none)'}
 THEIR RESTAURANT VISITS:
 ${visitLines.join('\n') || '(none)'}
 
+${turns.length ? `EARLIER IN THIS CHAT (the new question may refer back to these):\n${turns.map((t) => `Q: ${t.q}\nA: ${t.a}`).join('\n')}\n\n` : ''}ONLINE: you may use web search ONLY when the question needs something that isn't in their records (e.g. a restaurant's website, opening hours or address, or general facts about a wine). Their own scores, dates and where they drank it always come from the records above. When you give a link, it MUST be a URL the search actually returned — prefer the restaurant's or producer's official site; if the search shows a restaurant has closed, say so. Never invent a URL, address, phone number or fact. Write any link as the bare URL.
+
 QUESTION: ${question}
 
 Answer:`;
 
-    const resp = await client.messages.create({
+    const resp: any = await client.messages.create({
       model: 'claude-sonnet-5-5',
-      max_tokens: 700,
+      max_tokens: 2000,
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }] as any,
       messages: [{ role: 'user', content: prompt }],
     });
-    const answer = (resp.content.find((b) => b.type === 'text') as { text?: string } | undefined)?.text?.trim() || null;
+    // Only links the web search actually returned may reach the user.
+    const seen = new Set<string>();
+    const key = (u: string) => u.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[?#].*$/, '').replace(/\/+$/, '');
+    for (const b of resp.content ?? []) {
+      if (b?.type === 'web_search_tool_result' && Array.isArray(b.content)) for (const r of b.content) if (typeof r?.url === 'string') seen.add(key(r.url));
+    }
+    // Text written before/between searches is narration ("Let me look that up"):
+    // keep only what follows the last search result.
+    const blocks: any[] = resp.content ?? [];
+    let lastTool = -1;
+    blocks.forEach((b, i) => { if (b?.type === 'web_search_tool_result' || b?.type === 'server_tool_use') lastTool = i; });
+    let answer: string | null = blocks.slice(lastTool + 1).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('').trim() || null;
+    if (answer) {
+      answer = answer.replace(/https?:\/\/[^\s)\]]+/g, (u: string) => (seen.has(key(u.replace(/[.,;:]+$/, ''))) ? u : '')).replace(/\(\s*\)/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+    }
     return json({ answer: answer ?? "I couldn't work that out from your records." });
   } catch (err) {
     console.error('ask-my-data error:', err instanceof Error ? err.message : String(err));
