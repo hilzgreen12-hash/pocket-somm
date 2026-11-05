@@ -1,7 +1,7 @@
 import { useMemo, useCallback, useSyncExternalStore } from 'react';
 import { useCellar } from './useCellar';
 import { buildProducerIndex, fuzzyCorrectProducers } from '../utils/fuzzyWineCorrect';
-import { correctWineNamesBySound, buildSoundNameIndex } from '../utils/soundAlike';
+import { correctWineNamesBySound, buildSoundNameIndex, europeanSoundIndex } from '../utils/soundAlike';
 
 // Returns a function that snaps misheard producer names in a dictated (FINAL)
 // transcript to the closest real producer in the user's cellar. Built from the
@@ -35,7 +35,9 @@ const subscribeHints = (fn: () => void) => { hintListeners.add(fn); return () =>
 export function useSoundCorrect(): (text: string) => string {
   const { wines } = useCellar();
   const index = useMemo(() => buildSoundNameIndex(wines.flatMap((w) => [w.producer, w.wine_name]).filter(Boolean) as string[]), [wines]);
-  return useCallback((text: string) => correctWineNamesBySound(text, index), [index]);
+  // The user's own wines first, then the general European list (Burgundy,
+  // Germany, Spain, Italy) for names they don't own yet.
+  return useCallback((text: string) => correctWineNamesBySound(correctWineNamesBySound(text, index), europeanSoundIndex()), [index]);
 }
 
 export function useDictationHints(): string[] {

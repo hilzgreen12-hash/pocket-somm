@@ -6,47 +6,92 @@
 // are compared key to key. Runs on the phone against the cellar it already has.
 
 import type { CellarWine } from '../types/wine';
+import { BURGUNDY_NAMES } from '../constants/burgundyNames';
+import { EUROPEAN_WINE_NAMES } from '../constants/europeanWineNames';
 
 // Words that carry no identity (and generic estate words) — dropped before keys
-// are built, so "Château X" and "Domaine X" key on X.
+// are built, so "Château X" and "Domaine X" key on X. ("Clos" stays: in
+// Burgundy it IS the name — Clos de Tart, Clos Saint-Jacques.)
 const FILLER = new Set([
-  'chateau', 'domaine', 'dom', 'clos', 'maison', 'cave', 'caves', 'tenuta', 'bodega', 'bodegas', 'weingut',
+  'chateau', 'domaine', 'dom', 'maison', 'cave', 'caves', 'tenuta', 'bodega', 'bodegas', 'weingut',
   'estate', 'estates', 'winery', 'vineyard', 'vineyards', 'cellars', 'family', 'the', 'de', 'du', 'des',
-  'la', 'le', 'les', 'di', 'del', 'della', 'von', 'van', 'and', 'et', 'of', 'a', 'an',
+  'la', 'le', 'les', 'aux', 'au', 'en', 'di', 'del', 'della', 'von', 'van', 'and', 'et', 'of', 'a', 'an',
   'bottle', 'bottles', 'wine', 'wines', 'red', 'white', 'one', 'two', 'three', 'four', 'five', 'six',
   'seven', 'eight', 'nine', 'ten', 'twelve', 'move', 'archive', 'delete', 'add', 'find', 'from', 'to', 'in',
   'my', 'this', 'that', 'rack', 'fridge', 'bin', 'case', 'please', 'where', 'did', 'i', 'drink', 'have',
 ]);
 
+// Short words speech-to-text makes out of a syllable of a French name.
+const SYLLABLE = new Set(['a', 'an', 'en', 'au', 'in', 'la', 'le', 'de', 'du', 'des', 'les', 'aux']);
+// …and the ones that can END a misheard name ("roo jee AN" = Rugiens).
+const END_SYLLABLE = new Set(['an', 'en', 'in']);
+
+// Everyday English words a general wine-name list (e.g. Burgundy climats) must
+// never replace on their own ("mountain" ≠ Montagny, "friends" ≠ Les Frionnes).
+const COMMON = new Set([
+  'mountain', 'mountains', 'friend', 'friends', 'cotton', 'button', 'mutton', 'morning', 'evening', 'night', 'dinner',
+  'lunch', 'breakfast', 'money', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+  'mother', 'father', 'brother', 'sister', 'husband', 'wife', 'garden', 'kitchen', 'chicken', 'birthday', 'party',
+  'lovely', 'really', 'very', 'pretty', 'great', 'nice', 'good', 'better', 'best', 'bought', 'brought', 'drank',
+  'drunk', 'opened', 'open', 'glass', 'glasses', 'table', 'restaurant', 'bar', 'dinner', 'holiday', 'trip',
+  'tonight', 'today', 'yesterday', 'tomorrow', 'week', 'month', 'year', 'recently', 'last', 'first', 'next',
+  'cellar', 'storage', 'location', 'shelf', 'bottom', 'top', 'left', 'right', 'small', 'large', 'big', 'little',
+  'score', 'review', 'rating', 'price', 'value', 'cost', 'cheap', 'expensive', 'meal', 'food', 'steak', 'beef',
+  'lamb', 'pork', 'fish', 'cheese', 'pasta', 'pizza', 'salad', 'dessert', 'chocolate', 'cake', 'sauce',
+  'many', 'much', 'more', 'most', 'some', 'any', 'all', 'none', 'which', 'what', 'when', 'who', 'how', 'why',
+  'think', 'thought', 'liked', 'loved', 'enjoyed', 'tasted', 'tasting', 'notes', 'note', 'merry',
+  'money', 'honey', 'sunny', 'sorry', 'carry', 'marry', 'berry', 'cherry', 'jolly', 'hurry', 'worry',
+  'cool', 'warm', 'cold', 'hot',
+  'month', 'months', 'family', 'people', 'guests', 'colleague', 'boss', 'client', 'anniversary', 'christmas',
+  'roast', 'roasted', 'toast', 'grilled', 'baked', 'fried', 'braised', 'stew', 'soup', 'bread', 'butter', 'cream',
+  'rice', 'risotto', 'duck', 'turkey', 'goose', 'veal', 'venison', 'game', 'oysters', 'lobster', 'crab', 'salmon',
+  'come', 'came', 'went', 'said', 'told', 'asked', 'gave', 'given', 'kept', 'left', 'put', 'set',
+  'other', 'another', 'again', 'still', 'just', 'only', 'also', 'even', 'ever', 'never', 'always', 'often',
+]);
+
 function fold(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+// Spell ONE word the way it's said (French/Italian/German folded to English
+// sounds). `dropFinal` also drops French silent endings (Clos, Nuits, Pommard,
+// Bonnes, Échezeaux) — keys are compared both ways, since some names say them
+// (Rayas) and most don't.
+function prep(word: string, dropFinal: boolean): string {
+  let w = fold(word).replace(/[^a-z]/g, '');
+  if (!w) return '';
+  w = w
+    .replace(/eaux?$/, 'o').replace(/eau/g, 'o').replace(/aux?$/, 'o').replace(/ault?$/, 'o')
+    .replace(/ph/g, 'f').replace(/gh/g, '').replace(/th/g, 't')
+    .replace(/sch/g, 'sh').replace(/ch/g, 'sh').replace(/sh/g, 'S')
+    .replace(/qu/g, 'k').replace(/ck/g, 'k').replace(/cc(?=[ei])/g, 'ks')
+    .replace(/c(?=[eiy])/g, 's').replace(/c/g, 'k').replace(/q/g, 'k').replace(/x(?=.)/g, 'ks')
+    .replace(/g(?=[eiy])/g, 'j')
+    .replace(/gn/g, 'ny').replace(/gli/g, 'ly').replace(/([aeiou])ill/g, '$1i').replace(/ll/g, 'l')
+    .replace(/^S(?=[pt])/, 's')
+    .replace(/tz|ts/g, 's').replace(/z/g, 's')
+    // W: a glide after a consonant (pwee, nwee, fwee), a V at the start (German Würzgarten).
+    .replace(/^w/, 'v').replace(/w/g, '').replace(/y/g, 'i')
+    .replace(/([aeiou])h/g, '$1').replace(/^h/, '');
+  if (dropFinal) w = w.replace(/([aeiourn])(ent|es|ts|t|d|x|s)$/, '$1');
+  return w.replace(/x$/, '');
+}
+
+// Consonant skeleton of the joined spelling (vowels rarely survive speech-to-
+// text intact); one leading-vowel marker; doubled sounds collapsed.
+function skeleton(w: string): string {
+  if (!w) return '';
+  const lead = /[aeiou]/.test(w[0]) ? 'A' : '';
+  return (lead + w.replace(/[aeiou]/g, '')).replace(/(.)\1+/g, '$1');
+}
+
+function keyOfWords(ws: string[], dropFinal = false): string {
+  return skeleton(ws.map((x) => prep(x, dropFinal)).join(''));
 }
 
 // Rough phonetic key for ONE word.
 export function soundKey(word: string): string {
-  let w = fold(word).replace(/[^a-z]/g, '');
-  if (!w) return '';
-  w = w
-    .replace(/eaux?$/, 'o').replace(/eau/g, 'o').replace(/aux?$/, 'o')
-    .replace(/ph/g, 'f').replace(/gh/g, 'g').replace(/th/g, 't')
-    .replace(/sch/g, 'sh').replace(/ch/g, 'sh').replace(/sh/g, 'S')
-    .replace(/qu/g, 'k').replace(/ck/g, 'k').replace(/cc(?=[ei])/g, 'ks')
-    .replace(/c(?=[eiy])/g, 's').replace(/c/g, 'k').replace(/q/g, 'k').replace(/x/g, 'ks')
-    .replace(/gn/g, 'ny').replace(/gli/g, 'ly').replace(/ll/g, 'l')
-    .replace(/z/g, 's').replace(/w/g, 'v').replace(/y/g, 'i')
-    .replace(/([aeiou])h/g, '$1').replace(/^h/, '')
-    // Silent French endings (Margaux, Bordeaux handled above; -et, -ot, -ts, -t, -d).
-    // A final -s is kept: Rayas, Rieussec-style names say it.
-    .replace(/([aeiou])(ts|t|d|x)$/, '$1');
-  // Consonant skeleton (vowels mostly don't survive speech-to-text), duplicates collapsed.
-  const first = w[0];
-  const body = w.replace(/[aeiou]/g, '');
-  const skel = (/[aeiou]/.test(first) ? 'A' : '') + body;
-  return skel.replace(/(.)\1+/g, '$1');
-}
-
-function keyOfWords(words: string[]): string {
-  return words.map(soundKey).join('');
+  return keyOfWords([word]);
 }
 
 function words(s: string | null | undefined): string[] {
@@ -72,16 +117,22 @@ function sim(a: string, b: string): number {
 // Best match of a name (as word list) anywhere in the spoken words: compare the
 // name's key with every 1–4 word window of what was said.
 function bestWindowScore(nameWords: string[], spoken: string[]): number {
-  const target = keyOfWords(nameWords);
-  if (target.length < 2) return 0;
+  // Names compared with and without French silent endings (Tollot-Beaut says
+  // "-bo"; Rayas says its s), against what was said, also both ways.
+  const targets = [keyOfWords(nameWords), keyOfWords(nameWords, true)].filter((t) => t.length >= 2);
+  if (!targets.length) return 0;
   let best = 0;
   for (let i = 0; i < spoken.length; i++) {
     for (let len = 1; len <= 4 && i + len <= spoken.length; len++) {
-      const k = keyOfWords(spoken.slice(i, i + len));
-      if (!k) continue;
-      if (Math.abs(k.length - target.length) > 3) continue;
-      const s = sim(k, target);
-      if (s > best) best = s;
+      const win = spoken.slice(i, i + len);
+      for (const k of [keyOfWords(win), keyOfWords(win, true)]) {
+        if (!k) continue;
+        for (const target of targets) {
+          if (Math.abs(k.length - target.length) > 3) continue;
+          const s = sim(k, target);
+          if (s > best) best = s;
+        }
+      }
     }
   }
   return best;
@@ -117,7 +168,7 @@ export function likelyProducerWines(spokenText: string, wines: CellarWine[]): { 
       // Any single distinctive producer word heard clearly ("engel").
       if (score < 0.75 && pw.some((t) => soundKey(t).length >= 3 && spoken.some((sp) => soundKey(sp) === soundKey(t)))) score = 0.75;
       // Longer producer names are more specific ("René Engel" over "Engel Family").
-      if (score >= 0.75) score += Math.min(0.08, keyOfWords(pw).length * 0.01);
+      if (score >= 0.75) score += Math.min(0.08, pw.join('').length * 0.005);
       entry = { producer: name, wines: [], score };
       byProducer.set(key, entry);
     }
@@ -149,7 +200,7 @@ export function rankWinesBySound(spokenText: string, wines: CellarWine[], max = 
       // Speech-to-text often runs words together ("Engel Les Brûlées" →
       // "engelabrule"): hearing a distinctive word inside a longer one counts.
       if (sc < 0.8 && runTogether(ws, spoken)) sc = 0.8;
-      return sc ? sc + Math.min(0.08, keyOfWords(ws).length * 0.01) : 0;
+      return sc ? sc + Math.min(0.08, ws.join('').length * 0.005) : 0;
     };
     const ps = part(p);
     // Cuvée: the whole name, or any one distinctive word of it ("Brûlées" in
@@ -165,16 +216,33 @@ export function rankWinesBySound(spokenText: string, wines: CellarWine[], max = 
   return out.sort((a, b) => b.score - a.score).slice(0, max);
 }
 
-// Rewrite misheard wine names in a sentence to the real name from the user's
-// cellar, when the match is strong ("where did I drink chateau rear sack" →
-// "where did I drink Château Rieussec"). Conservative: multi-consonant keys only.
-export type SoundNameIndex = { name: string; key: string; folded: string }[];
+// Rewrite misheard wine names in a sentence to the real name (the user's own
+// wines, or a general list such as Burgundy appellations) when the match is
+// strong ("where did I drink chateau rear sack" → "…Château Rieussec").
+export type SoundNameEntry = {
+  name: string; folded: string; words: number; isStatic: boolean;
+  key: string; keyDrop: string; keyAll: string; keyAllDrop: string;
+};
+export type SoundNameIndex = SoundNameEntry[];
+
+function allWords(s: string): string[] {
+  return fold(s).split(/[^a-z0-9]+/).filter((t) => t && !/^\d+$/.test(t));
+}
 
 // Pre-build the sound keys for a list of names once (a big cellar has thousands).
-export function buildSoundNameIndex(names: string[]): SoundNameIndex {
+// `isStatic` = a general list (not the user's wines) — matched more cautiously.
+export function buildSoundNameIndex(names: string[], isStatic = false): SoundNameIndex {
   return Array.from(new Set(names.map((n) => (n ?? '').trim()).filter(Boolean)))
-    .map((name) => ({ name, key: keyOfWords(words(name)), folded: fold(name) }))
-    .filter((e) => e.key.length >= 3);
+    .map((name) => {
+      const ws = words(name);
+      const all = allWords(name);
+      return {
+        name, folded: fold(name), words: ws.length, isStatic,
+        key: keyOfWords(ws), keyDrop: keyOfWords(ws, true),
+        keyAll: keyOfWords(all), keyAllDrop: keyOfWords(all, true),
+      };
+    })
+    .filter((e) => Math.max(e.key.length, e.keyDrop.length, e.keyAll.length) >= 3);
 }
 
 export function correctWineNamesBySound(text: string, names: string[] | SoundNameIndex): string {
@@ -185,32 +253,89 @@ export function correctWineNamesBySound(text: string, names: string[] | SoundNam
   const reps: { start: number; end: number; text: string }[] = [];
   for (let i = 0; i < tokens.length; i++) {
     let best: { len: number; name: string; s: number } | null = null;
-    for (let len = 4; len >= 1; len--) {
+    for (let len = 5; len >= 1; len--) {
       if (i + len > tokens.length || used.slice(i, i + len).some(Boolean)) continue;
       const span = tokens.slice(i, i + len).map((t) => t.raw);
-      const plain = span.map((t) => fold(t).replace(/[^a-z]/g, ''));
-      const kept = plain.filter((t) => t && !FILLER.has(t));
-      if (!kept.length || !kept.some((t) => t.length >= 3)) continue;
+      // Hyphenated names count as their words ("Saint-Aubin" = two words).
+      const plain = span.flatMap((t) => fold(t).split(/[^a-z]+/)).filter(Boolean)
+        // "Les" is usually heard as "lay" / "lays".
+        .map((t) => (t === 'lay' || t === 'lays' ? 'les' : t));
+      const kept = plain.filter((t) => !FILLER.has(t));
+      if (!kept.length) continue;
       const k = keyOfWords(kept);
-      if (k.length < 3) continue;
+      const kA = keyOfWords(plain);
+      if (Math.max(k.length, kA.length) < 3) continue;
+      const singleCommon = kept.length === 1 && COMMON.has(kept[0]);
       for (const e of entries) {
-        // Never swallow ordinary words around the name: every word in the span
-        // must be a sound word or a word of the name itself ("chateau").
-        if (plain.some((t) => t && FILLER.has(t) && !e.folded.split(/[^a-z]+/).includes(t))) continue;
-        if (Math.abs(k.length - e.key.length) > 1) continue;
-        const s = sim(k, e.key);
-        if (s >= 0.8 && (!best || s > best.s)) best = { len, name: e.name, s };
+        const nameWords = e.folded.split(/[^a-z]+/);
+        // Never swallow ordinary words around the name: a filler word must belong
+        // to the name itself ("les", "clos de") — except a tiny syllable word
+        // INSIDE or at the END of a misheard name ("pull IN yee", "moulin A vaughn",
+        // "roo jee AN"), never at the start ("a Corton" keeps its "a").
+        if (plain.some((t, ti) => FILLER.has(t) && !nameWords.includes(t)
+          && (ti === 0 || !SYLLABLE.has(t) || (ti === plain.length - 1 && !END_SYLLABLE.has(t))))) continue;
+        if (e.isStatic) {
+          // General lists: an everyday English word never becomes a wine name,
+          // and a multi-word name needs at least two spoken words.
+          if (singleCommon || kept.some((t) => COMMON.has(t))) continue;
+          if (e.words >= 2 && kept.length < 2) continue;
+        }
+        // Compare spoken vs name keys with and without silent endings, both ways
+        // ("bat" keeps its t; "Bâtard" drops its d).
+        const scoreOf = (ws: string[], all: string[]) => {
+          let best0 = 0;
+          const cmp = (x: string, y: string) => {
+            if (x.length >= 3 && Math.abs(x.length - y.length) <= 1) best0 = Math.max(best0, sim(x, y));
+          };
+          for (const x of [keyOfWords(ws), keyOfWords(ws, true)]) for (const y of [e.key, e.keyDrop]) cmp(x, y);
+          for (const x of [keyOfWords(all), keyOfWords(all, true)]) for (const y of [e.keyAll, e.keyAllDrop]) cmp(x, y);
+          return best0;
+        };
+        // Cheap length pre-check before any real comparison.
+        const lens = [k.length, kA.length];
+        const near = [e.key, e.keyDrop, e.keyAll, e.keyAllDrop].some((y) => lens.some((l) => Math.abs(l - y.length) <= 2));
+        if (!near) continue;
+        const sc = scoreOf(kept, plain);
+        // Don't swallow a neighbouring word: if the name matches just as well
+        // without the first or last spoken word, that word isn't part of it
+        // ("rioha reserva" → only "reserva" is Reserva).
+        if (plain.length > 1 && sc > 0) {
+          const keptOf = (xs: string[]) => xs.filter((t) => !FILLER.has(t));
+          // (An edge word that's part of the name — "Château", "Les" — is fine.)
+          const edgeOk = (t: string) => FILLER.has(t) && nameWords.includes(t);
+          const trimA = plain.slice(1), trimB = plain.slice(0, -1);
+          if (!edgeOk(plain[0]) && scoreOf(keptOf(trimA), trimA) >= sc) continue;
+          if (!edgeOk(plain[plain.length - 1]) && scoreOf(keptOf(trimB), trimB) >= sc) continue;
+        }
+        // Short keys must match exactly; longer ones may differ by one sound.
+        const need = Math.min(k.length || 99, kA.length || 99) <= 3 ? 1 : 0.8;
+        // A match that explains more of what was said wins ("lay com bet" → Les
+        // Combettes, not La Comme + "bet"); then closer vowels break ties
+        // ("tora si" → Taurasi, not Torres).
+        const vowelsClose = sim(kept.join(''), e.folded.replace(/[^a-z]/g, ''));
+        const eff = sc + 0.08 * (plain.length - 1) + 0.05 * vowelsClose;
+        if (sc >= need && (!best || eff > best.s)) best = { len, name: e.name, s: eff };
       }
     }
     if (best) {
-      const spanText = fold(tokens.slice(i, i + best.len).map((t) => t.raw).join(' '));
-      if (!fold(best.name).includes(spanText)) {
+      const norm = (x: string) => fold(x).replace(/[^a-z]+/g, ' ').trim();
+      const spanText = norm(tokens.slice(i, i + best.len).map((t) => t.raw).join(' '));
+      if (!norm(best.name).includes(spanText)) {
         for (let k = i; k < i + best.len; k++) used[k] = true;
         reps.push({ start: tokens[i].start, end: tokens[i + best.len - 1].end, text: best.name });
+      } else {
+        for (let k = i; k < i + best.len; k++) used[k] = true; // already right — leave it
       }
     }
   }
   let out = text;
   for (const r of reps.sort((a, b) => b.start - a.start)) out = out.slice(0, r.start) + r.text + out.slice(r.end);
   return out;
+}
+
+// Burgundy + German, Spanish and Italian names, keyed once on first use.
+let euroIndex: SoundNameIndex | null = null;
+export function europeanSoundIndex(): SoundNameIndex {
+  if (!euroIndex) euroIndex = buildSoundNameIndex([...BURGUNDY_NAMES, ...EUROPEAN_WINE_NAMES], true);
+  return euroIndex;
 }

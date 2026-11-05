@@ -3,7 +3,7 @@ import { View, Text } from 'react-native';
 import { router } from 'expo-router';
 import { useCellar } from '../hooks/useCellar';
 import { useChosenWines } from '../hooks/useChosenWines';
-import { buildSoundNameIndex, correctWineNamesBySound } from '../utils/soundAlike';
+import { buildSoundNameIndex, correctWineNamesBySound, europeanSoundIndex } from '../utils/soundAlike';
 import { usePreferences } from '../hooks/usePreferences';
 import { classifyDiscoverVoice, askMyData } from '../api/discoverVoice';
 import {
@@ -63,7 +63,7 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
     ...wines.flatMap((w) => [w.producer, w.wine_name]),
     ...chosenWines.flatMap((c: any) => [c.producer, c.wine_name]),
   ].filter(Boolean) as string[]), [wines, chosenWines]);
-  const soundFix = (q: string) => correctWineNamesBySound(q, soundIndex);
+  const soundFix = (q: string) => correctWineNamesBySound(correctWineNamesBySound(q, soundIndex), europeanSoundIndex());
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const chat = useChat();
