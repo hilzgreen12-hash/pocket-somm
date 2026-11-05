@@ -57,7 +57,10 @@ function cookbookMatches(sessions: ChefLabelSession[], said: string): ChefLabelS
     .map((x) => x.s);
 }
 
-export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+// startWith opens straight into one conversation — 'dishForWine' (Recipe
+// Requirements' Ask Vinster) or 'wineForDish' (Find a Wine Pairing's); presetWine skips "Which wine?" when the bottle is
+// already known (e.g. opened from a wine card).
+export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { visible: boolean; onClose: () => void; startWith?: 'dishForWine' | 'wineForDish'; presetWine?: WineDetailsComplete | null }) {
   const { wines } = useCellar();
   const { sessions } = useChefLabelHistory();
   const { preferences } = usePreferences();
@@ -67,7 +70,11 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Closing cancels whatever the chat was doing; opening starts fresh.
-  useEffect(() => { chat.reset(); }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    chat.reset();
+    if (visible && startWith === 'dishForWine') setTimeout(() => runDishForWine(), 0);
+    if (visible && startWith === 'wineForDish') setTimeout(() => runWineForDish(), 0);
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function start(flow: () => Promise<void>) {
     flow().catch((err) => {
@@ -152,7 +159,10 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
   // ---- A dish for my wine ----------------------------------------------
   const runDishForWine = () => start(async () => {
     chat.hear('A dish for my wine');
-    const wineSaid = await chat.ask('Which wine are we pairing?', 'ie. Domaine Jamet Côte-Rôtie 2015', 'wine', [
+    const preset = presetWine?.producer ? presetWine : null;
+    const presetLabel = preset ? [preset.producer, preset.wineName, preset.vintage && preset.vintage !== 'NV' ? preset.vintage : null].filter(Boolean).join(' ') : '';
+    if (preset) chat.say(`We're pairing ${presetLabel}.`);
+    const wineSaid = preset ? presetLabel : await chat.ask('Which wine are we pairing?', 'ie. Domaine Jamet Côte-Rôtie 2015', 'wine', [
       ...(wines.length ? [{ label: 'Or choose from my cellar', onPress: () => setCellarPickerOpen(true) }] : []),
       { label: 'Or search for the wine', onPress: () => setSearchOpen(true) },
     ]);
@@ -183,7 +193,7 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
     const allergies = await chat.ask('Are there any allergies or strong preferences to be aware of?', 'ie. No shellfish');
     const t = chat.token();
     const { identity, pairings } = await chat.working('Thinking about what to cook…', async () => {
-      const id = await toIdentity(wineSaid);
+      const id = preset ?? await toIdentity(wineSaid);
       const none = /^\s*(no|none|nope|nothing|no allergies)\b/i.test(allergies);
       const filters: Record<string, unknown> = {
         dietary: null, allergens: [], customAllergen: none ? '' : allergies,

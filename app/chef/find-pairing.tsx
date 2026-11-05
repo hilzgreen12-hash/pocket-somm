@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView 
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { MicButton } from '../../src/components/MicButton';
+import { PairVoiceModal } from '../../src/components/PairVoiceModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
@@ -38,6 +39,8 @@ export default function FindPairingScreen() {
   const [budget, setBudget] = useState<number | null>(savedPreferences?.defaultBudget ?? null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [loading, setLoading] = useState(false);
+  // Ask Vinster — the "A wine for my dish" conversation instead of the form.
+  const [askOpen, setAskOpen] = useState(false);
 
   // "View Last Result" — reopen the current in-memory pairing if there is one,
   // otherwise the most recent saved pairing. Mirrors the Pair tab's long-press.
@@ -191,6 +194,11 @@ export default function FindPairingScreen() {
         <View style={{ width: 44 }} />
       </View>
 
+      <TouchableOpacity style={styles.askBtn} onPress={() => setAskOpen(true)} activeOpacity={0.8} accessibilityRole="button">
+        <Text style={styles.askBtnText}>Ask Vinster</Text>
+      </TouchableOpacity>
+      <PairVoiceModal visible={askOpen} onClose={() => setAskOpen(false)} startWith="wineForDish" />
+
       <View style={styles.divider} />
 
       {/* What are you cooking — label with the mic + bin to its right,
@@ -298,6 +306,8 @@ export default function FindPairingScreen() {
 }
 
 const styles = StyleSheet.create({
+  askBtn: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
+  askBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: spacing.xl },
   // Brand wordmark shown on the loading splash — keep editorial Cormorant.
   loadingBrand: { fontSize: 36, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1.5, marginBottom: spacing.xxl },

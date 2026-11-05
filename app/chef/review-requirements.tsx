@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { WineSearchModal } from '../../src/components/WineSearchModal';
+import { PairVoiceModal } from '../../src/components/PairVoiceModal';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -98,6 +99,8 @@ export default function ReviewRequirementsScreen() {
   const [wineChooserOpen, setWineChooserOpen] = useState(false);
   // Catalog Search (replaces free-text Manual Input).
   const [wineSearchOpen, setWineSearchOpen] = useState(false);
+  // Ask Vinster — the "A dish for my wine" conversation instead of the form.
+  const [askOpen, setAskOpen] = useState(false);
 
   // Narrow the cellar list by producer / wine / region / vintage as the user types.
   const cellarResults = (() => {
@@ -333,6 +336,11 @@ export default function ReviewRequirementsScreen() {
         <View style={{ width: 44 }} />
       </View>
 
+      <TouchableOpacity style={styles.askBtn} onPress={() => setAskOpen(true)} activeOpacity={0.8} accessibilityRole="button">
+        <Text style={styles.askBtnText}>Ask Vinster</Text>
+      </TouchableOpacity>
+      <PairVoiceModal visible={askOpen} onClose={() => setAskOpen(false)} startWith="dishForWine" presetWine={isFromCellar ? wineDetailsConfirmed : null} />
+
       <View style={styles.divider} />
 
       <Text style={styles.label}>Dietary Concerns <Text style={styles.labelHint}>(additional to your settings)</Text></Text>
@@ -542,6 +550,8 @@ export default function ReviewRequirementsScreen() {
 }
 
 const styles = StyleSheet.create({
+  askBtn: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
+  askBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: 76, paddingHorizontal: spacing.xl, paddingBottom: 48 },
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
