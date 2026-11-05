@@ -2895,7 +2895,7 @@ export default function RackGridScreen() {
       />
 
       {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={rack?.name ?? null} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={rack?.name ?? null} hereWineIds={Array.from(new Set(slots.map((s) => s.cellar_wine_id).filter(Boolean) as string[]))} />
 
       {/* Archive — the shared modal: how many (if you own more than one) + note. */}
       <ArchiveNoteModal

@@ -1686,7 +1686,7 @@ export default function StorageLocationScreen() {
       </Modal>
 
       {/* Voice Command — same engine as the Cellar tab, scoped copy for home storage. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={location?.name ?? null} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={location?.name ?? null} hereWineIds={Array.from(new Set(wines.map((w) => w.id)))} />
 
       {/* "How is this wine packaged?" — on move-in and on Update Packaging. */}
       <PackagingPrompt

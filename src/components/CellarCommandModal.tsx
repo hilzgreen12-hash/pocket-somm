@@ -16,6 +16,7 @@ import { recommendFromCellar } from '../api/cellarRecommend';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
 import { supabase } from '../api/supabase';
+import { showFoundBanner } from './FoundBanner';
 import { HomeVoiceModal } from './HomeVoiceModal';
 
 const MARK = require('../../assets/vinster-mark.png');
@@ -91,7 +92,10 @@ export const HOME_STORAGE_VOICE: { introText: string; suggestions: string[]; all
   allowedActions: ['move', 'archive', 'delete'],
 };
 
-export function CellarCommandModal({ visible, onClose, introText, suggestions, allowedActions, locationName }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[]; allowedActions?: CellarCommandAction[]; locationName?: string | null }) {
+// `hereWineIds` = wines in the storage screen this was opened from. Spoken names
+// are matched against THESE first (a short list makes misheard names like
+// "rear sack" → Rieussec easy), then the whole cellar.
+export function CellarCommandModal({ visible, onClose, introText, suggestions, allowedActions, locationName, hereWineIds }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[]; allowedActions?: CellarCommandAction[]; locationName?: string | null; hereWineIds?: string[] }) {
   void introText; void suggestions; // superseded by the Quick Command layout (kept for callers)
   // Hide while another screen (e.g. the rack placement screen) is in front; come
   // back to the same state (e.g. the done line) when the user returns.
@@ -241,6 +245,17 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     }
   }
 
+  // Resolve a spoken wine against the bottles in THIS location first, then the
+  // whole cellar if nothing here matches.
+  async function parseHereFirst(act: CellarCommandAction, text: string): Promise<CellarCommandResult> {
+    const here = hereWineIds?.length ? wines.filter((w) => hereWineIds.includes(w.id)) : [];
+    if (here.length && act !== 'add') {
+      const r = await parseCellarCommand(act, text, here, locations, units);
+      if (r.wineId || (r.candidates?.length ?? 0) > 0) return r;
+    }
+    return parseCellarCommand(act, text, wines, locations, units);
+  }
+
   async function runParse() {
     if (!transcript.trim()) return;
     // Mood / recommendation — a free description, handled by its own flow. But a
@@ -289,7 +304,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     try {
       // 'delete' resolves identically to 'archive' (a wine + a count, no
       // destination) — only the end action differs — so parse it as archive.
-      let res = await parseCellarCommand(act === 'delete' ? 'archive' : act, transcript, wines, locations, units);
+      let res = await parseHereFirst(act === 'delete' ? 'archive' : act, transcript);
 
       // A MOVE here targets HOME storage, so a wine that lives ONLY in an
       // external/offsite cellar can't be the one meant — drop it from the
@@ -739,15 +754,17 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     if (!asked) return;
     setPhase('parsing');
     try {
-      const res = await parseCellarCommand('archive', asked, wines, locations, units);
+      const res = await parseHereFirst('archive', asked);
       const match = res.wineId ? wines.find((w) => w.id === res.wineId) : null;
       if (match) {
         const places = await placesFor(match);
         if (places.length === 1) {
-          // One place: open it straight away (no reply).
-          setFindResult(null);
-          setPhase('find');
+          // One place: close the chat, open that location with the bottles
+          // highlighted, and say what was found in a small banner (Done clears it).
+          const n = places[0].count;
           const [path, query] = places[0].route.split('?');
+          handleClose();
+          showFoundBanner(`Found ${n} ${n === 1 ? 'bottle' : 'bottles'} of ${wineLabel(match)}`, path);
           if (path === pathname) {
             // Already on that screen: highlight in place rather than stacking a copy.
             const params = Object.fromEntries((query ?? '').split('&').filter(Boolean).map((kv) => { const [k, v = ''] = kv.split('='); return [k, decodeURIComponent(v)]; }));

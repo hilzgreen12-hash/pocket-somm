@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AppBottomBar } from '../src/components/AppBottomBar';
+import { FoundBannerHost } from '../src/components/FoundBanner';
 import { WsIdBackfillRunner } from '../src/components/WsIdBackfillRunner';
 import { ScanCloudBackfillRunner } from '../src/components/ScanCloudBackfillRunner';
 import * as SplashScreen from 'expo-splash-screen';
@@ -222,6 +223,8 @@ export default function RootLayout() {
             <Stack.Screen name="age-gate" />
             <Stack.Screen name="legal/privacy" />
           </Stack>
+          {/* Quick Command "Found X bottles" banner over storage screens. */}
+          <FoundBannerHost />
           </View>
           <AppBottomBar />
           <WsIdBackfillRunner />
