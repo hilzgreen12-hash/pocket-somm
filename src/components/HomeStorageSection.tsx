@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ReorderableRow, type ReorderableTile } from './ReorderableRow';
+import { useStorageOrder, storageKey } from '../hooks/useStorageOrder';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput, Image } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
@@ -16,6 +18,8 @@ import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import { fontsSpectral } from '../constants/fonts';
 import type { WineRack } from '../types/wine';
+
+const TILE_W = 152; // storageCard width
 
 function bottleLabel(n: number) {
   return n === 0 ? 'Empty' : `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
@@ -261,6 +265,54 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     });
   }
 
+  // Every home-storage tile in the user's saved order (racks, bins, then Alt
+  // Cellars by default).
+  const { sort: sortStorage, save: saveOrder } = useStorageOrder();
+  const orderedTiles: ReorderableTile[] = sortStorage([
+    ...racks.map((rack) => ({ key: storageKey('rack', rack.id), label: rack.name, node: (
+                <TouchableOpacity
+                  style={styles.storageCard}
+                  onPress={() => router.push(`/cellar/rack/${rack.id}` as any)}
+                  onLongPress={() => handleLongPressRack(rack)}
+                  delayLongPress={400}
+                  activeOpacity={0.85}
+                >
+                  <CardBg path={tileThumbs?.rack[rack.id]} />
+                  <Text style={styles.storageCardType} allowFontScaling={false}>{rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
+                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{rack.name}</Text>
+                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(rackCounts[rack.id] ?? 0)}</Text>
+                </TouchableOpacity>
+    ) })),
+    ...bins.map((bin) => ({ key: storageKey('bin', bin.id), label: bin.name, node: (
+                <TouchableOpacity
+                  style={styles.storageCard}
+                  onPress={() => router.push(`/cellar/bin/${bin.id}` as any)}
+                  onLongPress={() => handleLongPressBin(bin)}
+                  delayLongPress={400}
+                  activeOpacity={0.85}
+                >
+                  <CardBg path={tileThumbs?.bin[bin.id]} />
+                  <Text style={styles.storageCardType} allowFontScaling={false}>Bin</Text>
+                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{bin.name}</Text>
+                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(binCounts[bin.id] ?? 0)}</Text>
+                </TouchableOpacity>
+    ) })),
+    ...homeLocations.map((loc) => ({ key: storageKey('location', loc.id), label: loc.name, node: (
+                <TouchableOpacity
+                  style={styles.storageCard}
+                  onPress={() => router.push(`/cellar/storage-location/${loc.id}` as any)}
+                  onLongPress={() => handleLongPressLocation(loc)}
+                  delayLongPress={400}
+                  activeOpacity={0.85}
+                >
+                  <CardBg path={tileThumbs?.location[loc.id]} />
+                  <Text style={styles.storageCardType} allowFontScaling={false}>Alt Cellar</Text>
+                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{loc.name}</Text>
+                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(loc.wineCount ?? 0)}</Text>
+                </TouchableOpacity>
+    ) })),
+  ], (t) => t.key);
+
   return (
     <View>
       <Text style={styles.sectionHeader}>Your Wines At Home</Text>
@@ -283,56 +335,24 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
       ) : session && isError ? (
         <Text style={styles.error}>Couldn't load your storage — pull to refresh. Your wines are safe.</Text>
       ) : (
+        hasStorage ? (
+          // Hold a tile's grip (top-right) and drag to reorder; saved per device.
+          <ReorderableRow
+            style={styles.carouselScroll}
+            contentContainerStyle={styles.carousel}
+            itemWidth={TILE_W}
+            gap={spacing.sm}
+            onReorder={saveOrder}
+            items={orderedTiles}
+            trailing={
+          <TouchableOpacity style={styles.addTile} onPress={() => requireAuth(handleAddAnyStorage)} activeOpacity={0.85}>
+            <Text style={styles.addTilePlus} allowFontScaling={false}>+ Add</Text>
+          </TouchableOpacity>
+            }
+          />
+        ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carouselScroll} contentContainerStyle={styles.carousel}>
-          {hasStorage ? (
-            <>
-              {racks.map((rack) => (
-                <TouchableOpacity
-                  key={rack.id}
-                  style={styles.storageCard}
-                  onPress={() => router.push(`/cellar/rack/${rack.id}` as any)}
-                  onLongPress={() => handleLongPressRack(rack)}
-                  delayLongPress={400}
-                  activeOpacity={0.85}
-                >
-                  <CardBg path={tileThumbs?.rack[rack.id]} />
-                  <Text style={styles.storageCardType} allowFontScaling={false}>{rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
-                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{rack.name}</Text>
-                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(rackCounts[rack.id] ?? 0)}</Text>
-                </TouchableOpacity>
-              ))}
-              {bins.map((bin) => (
-                <TouchableOpacity
-                  key={bin.id}
-                  style={styles.storageCard}
-                  onPress={() => router.push(`/cellar/bin/${bin.id}` as any)}
-                  onLongPress={() => handleLongPressBin(bin)}
-                  delayLongPress={400}
-                  activeOpacity={0.85}
-                >
-                  <CardBg path={tileThumbs?.bin[bin.id]} />
-                  <Text style={styles.storageCardType} allowFontScaling={false}>Bin</Text>
-                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{bin.name}</Text>
-                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(binCounts[bin.id] ?? 0)}</Text>
-                </TouchableOpacity>
-              ))}
-              {homeLocations.map((loc) => (
-                <TouchableOpacity
-                  key={loc.id}
-                  style={styles.storageCard}
-                  onPress={() => router.push(`/cellar/storage-location/${loc.id}` as any)}
-                  onLongPress={() => handleLongPressLocation(loc)}
-                  delayLongPress={400}
-                  activeOpacity={0.85}
-                >
-                  <CardBg path={tileThumbs?.location[loc.id]} />
-                  <Text style={styles.storageCardType} allowFontScaling={false}>Alt Cellar</Text>
-                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{loc.name}</Text>
-                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(loc.wineCount ?? 0)}</Text>
-                </TouchableOpacity>
-              ))}
-            </>
-          ) : (
+          {
             // No storage yet — four setup templates the user can name.
             TEMPLATES.map((t, i) => (
               <TouchableOpacity
@@ -347,11 +367,12 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                 <Text style={styles.storageCardCount} allowFontScaling={false}>Tap to set up</Text>
               </TouchableOpacity>
             ))
-          )}
+          }
           <TouchableOpacity style={styles.addTile} onPress={() => requireAuth(handleAddAnyStorage)} activeOpacity={0.85}>
             <Text style={styles.addTilePlus} allowFontScaling={false}>+ Add</Text>
           </TouchableOpacity>
         </ScrollView>
+        )
       )}
       {/* Sits beneath the carousel: adding is via the "+ Add" card at its end. */}
       {hasStorage && (

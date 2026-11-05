@@ -4,6 +4,7 @@ import { useAuth } from './useAuth';
 import { useRacks } from './useRacks';
 import { getBins } from '../api/bins';
 import { fetchStorageLocations } from '../api/storageLocations';
+import { useStorageOrder, storageKey } from './useStorageOrder';
 
 // One continuous navigation sequence across every home-storage location, in the
 // SAME order the "Your Wines at Home" carousel (HomeStorageSection) renders:
@@ -37,6 +38,7 @@ export function useStorageLocationNav(): StorageLocationNav {
   const { session } = useAuth();
   const userId = session?.user.id;
   const { racks } = useRacks();
+  const { sort: sortStorage } = useStorageOrder();
 
   // Reuse the SAME query keys as HomeStorageSection so the cache is shared and
   // these reads are free once the carousel has loaded them.
@@ -70,8 +72,9 @@ export function useStorageLocationNav(): StorageLocationNav {
       name: l.name,
       route: routeFor('location', l.id),
     }));
-    return [...rackEntries, ...binEntries, ...locationEntries];
-  }, [racks, bins, storageLocations]);
+    // Follow the user's own tile order from the Cellar tab carousel.
+    return sortStorage([...rackEntries, ...binEntries, ...locationEntries], (e) => storageKey(e.kind, e.id));
+  }, [racks, bins, storageLocations, sortStorage]);
 
   return useMemo<StorageLocationNav>(() => {
     const indexOf = (id: string) => locations.findIndex((l) => l.id === id);
