@@ -65,7 +65,7 @@ function bottleLabel(n: number) {
 }
 
 export default function StorageLocationScreen() {
-  const { id, highlight } = useLocalSearchParams<{ id: string; highlight?: string }>();
+  const { id, highlight, placeWine } = useLocalSearchParams<{ id: string; highlight?: string; placeWine?: string }>();
   // Quick Command "Find a bottle": show just this wine, as an applied filter would.
   const [highlightOnly, setHighlightOnly] = useState<string | null>(highlight ?? null);
   useEffect(() => { setHighlightOnly(highlight ?? null); }, [id, highlight]);
@@ -318,7 +318,7 @@ export default function StorageLocationScreen() {
     const label = wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'This wine');
     showAlert({
       title: 'Where should this go?',
-      body: `${label} was moved here and is awaiting placement. File it into a case, or leave it loose in ${location?.name ?? 'this cellar'}.`,
+      body: `${label} is here awaiting placement. File it into a case, or leave it loose in ${location?.name ?? 'this cellar'}.`,
       buttons: [
         ...cases.map((c) => ({ text: `Into ${c.name}`, onPress: () => void placeAwaiting(w, c.id) })),
         { text: 'Leave loose', onPress: () => void placeAwaiting(w, null) },
@@ -326,6 +326,19 @@ export default function StorageLocationScreen() {
       ],
     });
   }
+
+  // Arriving from Quick Command "Confirm & Place Wine" (?placeWine=<id>): open the
+  // same case / loose prompt a manual add uses, once the wine's row is here.
+  const placeWineHandled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!placeWine || placeWineHandled.current === placeWine) return;
+    const w = awaitingWines.find((x) => x.id === placeWine);
+    if (!w) return;
+    placeWineHandled.current = placeWine;
+    if (cases.length === 0) { void placeAwaiting(w, null); return; } // nowhere to file it → loose
+    openPlaceAwaiting(w);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placeWine, awaitingWines.map((w) => w.id).join(','), cases.length]);
 
   // All add paths file the saved wine into THIS location (context=add-location,
   // pendingStorageLocationId set). A "case" is just a wine with a higher quantity.

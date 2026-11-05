@@ -25,7 +25,7 @@ const MARK = require('../../assets/vinster-mark.png');
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'archiveNote' | 'error' | 'find' | 'found';
+type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'archiveNote' | 'error' | 'find' | 'found' | 'addWhere';
 
 
 function wineLabel(w: CellarWine | undefined): string {
@@ -158,6 +158,9 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   // afterwards, e.g. a late dictation correction) — replies always refer to this.
   const [sentText, setSentText] = useState('');
   const [pickIntro, setPickIntro] = useState<string | null>(null);
+  // An Add from the Cellar tab with no location named: added to the cellar list,
+  // waiting for "where shall I place them?".
+  const [addedPending, setAddedPending] = useState<{ id: string; count: number; label: string; wine: string; meta: string } | null>(null);
   const [phase, setPhase] = useState<Phase>('speak');
   const [action, setAction] = useState<CellarCommandAction>('move');
   const [transcript, setTranscript] = useState('');
@@ -195,6 +198,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     setAddCaseId(null);
     setSentText('');
     setPickIntro(null);
+    setAddedPending(null);
   }
 
   function handleClose() {
@@ -272,6 +276,49 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
       useMoodPicksStore.getState().set(transcript.trim(), views);
       router.push('/cellar/mood-picks' as any);
       handleClose();
+    } catch {
+      setPhase('error');
+    }
+  }
+
+  // Open a screen; if it's the one we're on, just update its params.
+  function openRoute(route: string) {
+    const [path, query] = route.split('?');
+    if (path === pathname) {
+      const params = Object.fromEntries((query ?? '').split('&').filter(Boolean).map((kv) => { const [k, v = ''] = kv.split('='); return [k, decodeURIComponent(v)]; }));
+      router.setParams(params as any);
+    } else {
+      router.push(route as any);
+    }
+  }
+
+  // "Where shall I place them?" — file the just-added bottles in a rack / fridge /
+  // bin / alt cellar using that screen's own placement flow, or leave them loose.
+  async function placeAddedInto(dest: { kind: 'unit' | 'location'; id: string; name: string; isBin?: boolean } | null) {
+    const p = addedPending;
+    if (!p) return;
+    try {
+      const spelled = `${countWord(p.count)} ${p.count === 1 ? 'bottle' : 'bottles'} of ${p.label} ${p.count === 1 ? 'is' : 'are'}`;
+      if (!dest) {
+        await updateCellarWine(p.id, { awaiting_placement: true, awaiting_placement_unit_id: null });
+        setSuccess({ action: 'add', wine: p.wine, meta: p.meta, detail: `${p.count} ${p.count === 1 ? 'bottle' : 'bottles'} added to Your Cellar List — awaiting placement`, viewLabel: 'View in Your Cellar List', viewRoute: '/cellar/list' });
+        setPhase('success');
+        return;
+      }
+      if (dest.kind === 'unit') {
+        await updateCellarWine(p.id, { awaiting_placement: true, awaiting_placement_unit_id: dest.id });
+      } else {
+        await addLocationPlacement(p.id, dest.id, null, p.count);
+        await updateCellarWine(p.id, { awaiting_placement: true, awaiting_placement_unit_id: dest.id });
+      }
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      setSuccess({ action: 'add', wine: p.wine, meta: p.meta, detail: `Added. ${spelled} in your ${dest.name}.`, viewLabel: 'View the wine card', viewRoute: `/cellar/${p.id}` });
+      setPhase('success');
+      openRoute(dest.kind === 'location'
+        ? `/cellar/storage-location/${dest.id}?placeWine=${p.id}`
+        : dest.isBin ? `/cellar/bin/${dest.id}` : `/cellar/rack/${dest.id}?placeWine=${p.id}&placeLimit=${p.count}`);
     } catch {
       setPhase('error');
     }
@@ -697,7 +744,12 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           const row = await addCellarWine(payload);
           addedId = row.id;
         }
-        if (result?.locationId) await addLocationPlacement(addedId, result.locationId, addCaseId, count);
+        if (result?.locationId) {
+          await addLocationPlacement(addedId, result.locationId, addCaseId, count);
+          // No case named → the cellar opens with its "Where should this go?"
+          // prompt (a case, or loose), the same as a manual add.
+          if (!addCaseId) await updateCellarWine(addedId, { awaiting_placement: true, awaiting_placement_unit_id: result.locationId });
+        }
         qc.invalidateQueries({ queryKey: ['placements', addedId] });
         qc.invalidateQueries({ queryKey: ['placements-list'] });
         qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
@@ -717,14 +769,13 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
             viewRoute: `/cellar/${addedId}`,
           });
         } else {
-          setSuccess({
-            action: 'add',
-            wine: [a.producer, a.wineName].filter(Boolean).join(' ') || name,
-            meta: [a.region, a.vintage].filter(Boolean).join(' · '),
-            detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} added to Your Cellar List — awaiting placement`,
-            viewLabel: 'View in Your Cellar List',
-            viewRoute: '/cellar/list',
-          });
+          // Added to the cellar list; now ask where to place them (or leave them).
+          setAddedPending({ id: addedId, count, label, wine: [a.producer, a.wineName].filter(Boolean).join(' ') || name, meta: [a.region, a.vintage].filter(Boolean).join(' · ') });
+          qc.invalidateQueries({ queryKey: ['cellar', userId] });
+          setTranscript('');
+          setPhase('addWhere');
+          setExecuting(false);
+          return;
         }
         // Rack / fridge / bin: open that unit to place the new bottles; this sheet
         // shows the done line when the user comes back.
@@ -735,6 +786,13 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           router.push((targetUnit?.storage_type === 'bin'
             ? `/cellar/bin/${result.unitId}`
             : `/cellar/rack/${result.unitId}?placeWine=${addedId}&placeLimit=${count}`) as any);
+          return;
+        }
+        if (result?.locationId && !addCaseId) {
+          setTranscript('');
+          setPhase('success');
+          setExecuting(false);
+          openRoute(`/cellar/storage-location/${result.locationId}?placeWine=${addedId}`);
           return;
         }
       }
@@ -946,7 +1004,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   const confirmLabel = action === 'move'
     ? (result?.unitId ? 'Confirm & Select Placement' : 'Confirm move')
     : action === 'archive' ? 'Confirm archive'
-    : action === 'add' ? (result?.unitId ? 'Confirm & Select Placement' : 'Confirm and add')
+    : action === 'add' ? 'Confirm & Place Wine'
     : `Delete ${bottles}`;
 
   return (
@@ -1024,6 +1082,21 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
                 <UserLine text={sentText || transcript} />
                 <VinsterLine text={result?.message?.trim() || (action === 'move' ? "I couldn't match the wine or where it's going. Tell me again: the wine, how many, and where to." : "I couldn't match that to a wine in your cellar. Tell me again with the producer and vintage.")} />
                 <OutlineBtn label="Restate Command" onPress={restate} />
+              </>
+            )}
+
+            {phase === 'addWhere' && addedPending && (
+              <>
+                <VinsterLine text={`Added ${addedPending.count} ${addedPending.count === 1 ? 'bottle' : 'bottles'} of ${addedPending.label}. Where shall I place ${addedPending.count === 1 ? 'it' : 'them'}?`} />
+                <View>
+                  {units.map((u, i) => (
+                    <RowLink key={u.id} first={i === 0} label={u.name} sub={u.storage_type === 'bin' ? 'Bin' : u.storage_type === 'fridge' ? 'Fridge' : 'Rack'} onPress={() => void placeAddedInto({ kind: 'unit', id: u.id, name: u.name, isBin: u.storage_type === 'bin' })} />
+                  ))}
+                  {locations.filter((l) => !l.is_external).map((l, i) => (
+                    <RowLink key={l.id} first={units.length === 0 && i === 0} label={l.name} sub="Alt Cellar" onPress={() => void placeAddedInto({ kind: 'location', id: l.id, name: l.name })} />
+                  ))}
+                  <RowLink label="Leave in my Cellar List" sub="Place them later" onPress={() => void placeAddedInto(null)} />
+                </View>
               </>
             )}
 
