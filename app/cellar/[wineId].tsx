@@ -34,7 +34,7 @@ import { wineQueryName } from '../../src/utils/wineIdentity';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation, addLocationPlacement } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
-import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
+import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals, stampPurchasePriceDate } from '../../src/api/cellar';
 import { generateServingSuggestion, generateMarketVintage, generateRarity } from '../../src/api/wineExtras';
 import { wineNameKey, looseWineMatch } from '../../src/utils/wineIdentity';
 import { publishCommunityReview } from '../../src/api/community';
@@ -1258,6 +1258,7 @@ export default function CellarWineDetail() {
           ...(wine!.purchase_price_currency ? {} : { purchase_price_currency: preferences?.defaultCurrency ?? 'GBP' }),
         },
       });
+      void stampPurchasePriceDate(wine!.id);
       setEditingPrice(false);
     } catch {
       showAlert({ title: 'Error', body: 'Could not save purchase price.' });
@@ -2139,8 +2140,8 @@ export default function CellarWineDetail() {
                   ) : pp != null ? (
                     <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}>
                       <Text style={styles.wcValue}>{formatCurrency(pp, wine.purchase_price_currency, { decimals: 0 })}</Text>
-                      <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Market estimate when cellared' : 'Entered by you'}</Text>
-                      {wine.purchase_price_estimated && cellaredOn ? <Text style={styles.wcSmall}>{fmtDay(cellaredOn)}</Text> : null}
+                      <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Market estimate' : 'Entered by you'}</Text>
+                      {(wine.purchase_price_at ?? cellaredOn) ? <Text style={styles.wcSmall}>{fmtDay(wine.purchase_price_at ?? cellaredOn)}</Text> : null}
                       <Text style={styles.wcLinkSmall}>Edit</Text>
                     </TouchableOpacity>
                   ) : (

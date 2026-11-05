@@ -2,7 +2,7 @@ import { parsePriceText } from '../utils/priceInput';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { updateCellarWine } from '../api/cellar';
+import { updateCellarWine, stampPurchasePriceDate } from '../api/cellar';
 import { bottleSizeCl } from './BottleSizePicker';
 import { CURRENCIES } from '../constants/currency';
 import { showAlert } from './AppAlert';
@@ -102,6 +102,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
             // The user has now confirmed/entered it — no longer an estimate.
             purchase_price_estimated: false,
           });
+          void stampPurchasePriceDate(e.id);
         }
         anySaved = true;
       }

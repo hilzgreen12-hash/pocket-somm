@@ -336,3 +336,11 @@ export async function removeCellarShare(ownerId: string, email: string): Promise
     .eq('shared_with_email', email);
   if (error) throw error;
 }
+
+// Record when a purchase price was set (migration 124). Separate, best-effort
+// write so a price save never fails if the column isn't there yet.
+export async function stampPurchasePriceDate(id: string): Promise<void> {
+  try {
+    await supabase.from('cellar_wines').update({ purchase_price_at: new Date().toISOString() }).eq('id', id);
+  } catch { /* column not migrated yet — the card falls back to the cellared date */ }
+}

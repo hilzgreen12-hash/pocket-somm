@@ -8,7 +8,7 @@ import { useAttachLabelPhoto } from '../../../src/hooks/useAttachLabelPhoto';
 import { usePreferences } from '../../../src/hooks/usePreferences';
 import { valueWine } from '../../../src/services/pricing';
 import { fetchWineCandidates } from '../../../src/api/label';
-import { getCellarWineById, updateCellarWine } from '../../../src/api/cellar';
+import { getCellarWineById, updateCellarWine, stampPurchasePriceDate } from '../../../src/api/cellar';
 import { showAlert } from '../../../src/components/AppAlert';
 import { LabelThumb } from '../../../src/components/LabelThumb';
 import { BottleSizePicker } from '../../../src/components/BottleSizePicker';
@@ -191,6 +191,7 @@ export default function EditWineScreen() {
             // the user typed), refresh it to the new wine's value too.
             ...(wine.purchase_price_estimated ? { purchase_price: v.estimatedValue, purchase_price_currency: v.currency } : {}),
           });
+          if (wine.purchase_price_estimated) void stampPurchasePriceDate(wine.id);
         } catch { /* keep the identity edit even if the revalue lookup fails */ }
       }
 
