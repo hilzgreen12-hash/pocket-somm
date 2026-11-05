@@ -2089,7 +2089,7 @@ export default function CellarWineDetail() {
 
             {!isWishlist && (producerRangeLoading || rangeWines.length > 0) ? (
               <View style={styles.wcCard}>
-                <Text style={styles.wcH2}>The {wine.producer} range</Text>
+                <Text style={styles.insiderTitle}>The {wine.producer} Range</Text>
                 {rangeWines.some((rw) => !rw.isThis) ? <Text style={styles.rangeHint}>Tap a wine for its inside line</Text> : null}
                 {producerRange ? (
                   <>
