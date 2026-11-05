@@ -22,6 +22,7 @@ import { useLabels } from '../../src/hooks/useLabels';
 import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
 import { captureCity } from '../../src/utils/captureCity';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
+import { findSameCellarWine } from '../../src/utils/wineMatch';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { patchChosenWine } from '../../src/api/chosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
@@ -1067,7 +1068,10 @@ export default function LabelResultsScreen() {
       );
       if (swapped) return swapped;
     }
-    return null;
+    // Shared identity rule (articles, word order, producer-only names read as
+    // the appellation) — "Il Marroneto" + region Brunello matches "Marroneto
+    // Brunello di Montalcino".
+    return findSameCellarWine(wines, { producer: wineDetailsConfirmed.producer, wineName: wineDetailsConfirmed.wineName || wineDetailsConfirmed.producer, region: wineDetailsConfirmed.region, vintage: wantedVintage, grape_variety: wineDetailsConfirmed.grape ?? null }, wineDetailsConfirmed.bottleSizeMl ?? null) ?? null;
   }, [wineDetailsConfirmed, wines]);
 
   // The matching wine's real bottle distribution, so the "already in your cellar"

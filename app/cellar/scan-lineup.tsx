@@ -19,6 +19,7 @@ import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { findCellarWineByIdentity } from '../../src/api/cellar';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { wineNameKey, looseWineMatch } from '../../src/utils/wineIdentity';
+import { findSameCellarWine } from '../../src/utils/wineMatch';
 import { BottleSizePicker, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import type { CellarWine } from '../../src/types/wine';
 import { showAlert } from '../../src/components/AppAlert';
@@ -375,13 +376,8 @@ export default function ScanLineupScreen() {
     // "Mullineux Iron" collapsing onto an existing "Mullineux Schist", inheriting
     // its label + intel and bumping its count. Compare producer+name as an
     // order-independent set so an OCR producer/name swap still matches.
-    const target = wineNameKey(b.producer, b.wineName);
-    if (!target) return null;
-    const bv = (b.vintage ?? '').trim().toLowerCase();
-    return cellarWines.find((w) => {
-      if (wineNameKey(w.producer, w.wine_name) !== target) return false;
-      return (w.vintage ?? '').toString().trim().toLowerCase() === bv;
-    }) ?? null;
+    if (!wineNameKey(b.producer, b.wineName)) return null;
+    return findSameCellarWine(cellarWines, { producer: b.producer, wineName: b.wineName, region: (b as any).region ?? null, vintage: b.vintage }) ?? null;
   }
 
   // Fallback for OCR / word-order / grape-placement variance that the exact

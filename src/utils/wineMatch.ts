@@ -7,7 +7,7 @@
 //
 // Dependency-light on purpose: imports only from wineIdentity.ts.
 
-import { wineNameKey, looseWineMatch } from './wineIdentity';
+import { wineNameKey, looseWineMatch, lookupWineName } from './wineIdentity';
 
 function norm(s: string | null | undefined): string {
   return (s ?? '').trim().toLowerCase();
@@ -21,10 +21,16 @@ export interface WineLike {
   wineName?: string | null;
   vintage?: string | number | null;
   ws_wine_id?: string | null;
+  region?: string | null;
+  grape_variety?: string | null;
 }
 
+// The cuvée name, with a name that merely repeats the producer ("Il Marroneto"
+// / "Il Marroneto") read as the appellation from the region ("Brunello di
+// Montalcino"), so a producer-only scan matches the full wine.
 function nameOf(w: WineLike): string | null | undefined {
-  return w.wine_name ?? w.wineName;
+  const n = w.wine_name ?? w.wineName;
+  return lookupWineName(w.producer, n, w.region) || n;
 }
 
 // True when a and b are the same wine, using the SAME criterion as
@@ -45,9 +51,24 @@ export function sameWineIdentity(a: WineLike, b: WineLike): boolean {
   if (keyA && keyB && keyA === keyB) return true;
 
   return looseWineMatch(
-    { producer: a.producer, wineName: nameOf(a), vintage: a.vintage },
-    { producer: b.producer, wineName: nameOf(b), vintage: b.vintage },
+    { producer: a.producer, wineName: nameOf(a), grape: a.grape_variety, vintage: a.vintage },
+    { producer: b.producer, wineName: nameOf(b), grape: b.grape_variety, vintage: b.vintage },
   );
+}
+
+// THE "do you already own this?" lookup every add path uses (scan → rack / bin
+// / location, Lineup, voice, manual): the active (not archived, not wishlist)
+// cellar row that is the same wine — and, when sizeMl is given, the same bottle
+// format (a magnum is its own line). One rule everywhere, so "Il Marroneto
+// Brunello 2016" added to a bin finds "Marroneto Brunello 2016" in a rack.
+export function findSameCellarWine<T extends WineLike & { archived_at?: string | null; is_wishlist?: boolean | null; bottle_size_ml?: number | null }>(
+  wines: readonly T[] | null | undefined,
+  candidate: WineLike,
+  sizeMl?: number | null,
+): T | undefined {
+  return (wines ?? []).find((w) => !w.archived_at && !w.is_wishlist
+    && (sizeMl == null || (w.bottle_size_ml ?? 750) === sizeMl)
+    && sameWineIdentity(candidate, w));
 }
 
 export interface WineGroup<T> {

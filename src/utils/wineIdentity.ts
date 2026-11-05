@@ -100,8 +100,19 @@ export function looseWineMatch(
   if (at.size < 2 || bt.size < 2) return false;
   const [small, big] = at.size <= bt.size ? [at, bt] : [bt, at];
   for (const t of small) if (!big.has(t)) return false;
+  // Short cuvée codes count too: "Roses de Jeanne HL/R21" vs "BO/R21" share
+  // every 3+ letter word but are different wines — the smaller side's short
+  // tokens must also appear on the bigger side.
+  const shortOf = (w: typeof a) => new Set(norm([w.producer, w.wineName, w.grape].filter(Boolean).join(' ')).split(' ').filter((t) => t && t.length < 3 && !/^\d+$/.test(t) && !KEY_STOPWORDS.has(t) && !SHORT_CONNECTORS.has(t)));
+  const [sa, sb] = [shortOf(a), shortOf(b)];
+  const [ss, sbg] = small === at ? [sa, sb] : [sb, sa];
+  for (const t of ss) if (!sbg.has(t)) return false;
   return true;
 }
+
+// Two-letter connectors that may appear in one rendering of a name and not the
+// other ("Brunello di Montalcino" vs "Brunello Montalcino") — never identity.
+const SHORT_CONNECTORS = new Set(['di', 'de', 'du', 'da', 'do', 'la', 'le', 'el', 'en', 'et', 'y', 'e', 'a', 'of', 'am', 'im', 'an', 'zu', 'st', 'ch']);
 
 // The wine name to LOOK UP with. When the stored name is blank or just repeats
 // the producer ("Il Marroneto" / "Il Marroneto"), the wine is the producer's

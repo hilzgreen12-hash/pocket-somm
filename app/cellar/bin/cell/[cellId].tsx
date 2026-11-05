@@ -26,6 +26,7 @@ import { WineSearchModal } from '../../../../src/components/WineSearchModal';
 import { colors, spacing } from '../../../../src/constants/theme';
 import { fonts } from '../../../../src/constants/fonts';
 import type { CellarWine } from '../../../../src/types/wine';
+import { findSameCellarWine } from '../../../../src/utils/wineMatch';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
@@ -304,12 +305,7 @@ export default function BinCellScreen() {
         // Merge into an existing row of the same wine + format already in this
         // cell, so "12 x Diamond Creek" stays one line (mirrors lineup batching).
         // Both the row total and this cell's bin placement grow by qty.
-        const existing = wines.find((w) =>
-          norm(w.producer) === norm(draft.producer) &&
-          norm(w.wine_name) === norm(name) &&
-          (w.vintage ?? '').trim() === draft.vintage.trim() &&
-          (w.bottle_size_ml ?? 750) === draft.bottleSizeMl
-        );
+        const existing = findSameCellarWine(wines, { producer: draft.producer, wineName: name, region: draft.region, vintage: draft.vintage.trim() }, draft.bottleSizeMl);
         if (existing) {
           await updateCellarWine(existing.id, { quantity: (existing.quantity ?? 0) + qty });
           await addBinPlacement(existing.id, cellId, qty);

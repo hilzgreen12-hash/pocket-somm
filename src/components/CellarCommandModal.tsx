@@ -24,6 +24,7 @@ import { HomeVoiceModal } from './HomeVoiceModal';
 const MARK = require('../../assets/vinster-mark.png');
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+import { findSameCellarWine } from '../utils/wineMatch';
 
 type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'archiveNote' | 'error' | 'find' | 'found' | 'addWhere';
 
@@ -730,9 +731,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         } as any;
         // One wine = one line: an identical wine already in the cellar just gets
         // the extra bottles.
-        const norm = (x?: string | null) => (x ?? '').trim().toLowerCase();
-        const twin = wines.find((w) => !w.archived_at && !w.is_wishlist
-          && norm(w.producer) === norm(payload.producer) && norm(w.wine_name) === norm(payload.wine_name) && norm(w.vintage) === norm(payload.vintage));
+        const twin = findSameCellarWine(wines, { producer: payload.producer, wineName: payload.wine_name, region: payload.region, vintage: payload.vintage, grape_variety: payload.grape_variety }, payload.bottle_size_ml ?? 750);
         let addedId: string;
         if (twin) {
           await updateCellarWine(twin.id, {

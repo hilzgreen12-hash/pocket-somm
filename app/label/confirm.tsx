@@ -10,7 +10,8 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { generatePairings, searchLabelImages, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
-import { wineNameKey } from '../../src/utils/wineIdentity';
+import { lookupWineName } from '../../src/utils/wineIdentity';
+import { findSameCellarWine } from '../../src/utils/wineMatch';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { File, Paths } from 'expo-file-system';
 import { generateWineIntel, isWineNotFound } from '../../src/services/pricing';
@@ -466,13 +467,8 @@ export default function LabelConfirmScreen() {
       // same wine + vintage. If the user already owns it, offer to add these
       // bottles to that entry so the total stays correct, instead of spawning a
       // second listing (the "split across two locations" bug).
-      const key = wineNameKey(producer, wineName.trim() || producer.trim());
-      const wantVintage = vintage.trim();
-      const dupe = key
-        ? cellarWines.find((w) =>
-            !w.is_wishlist && !w.archived_at &&
-            wineNameKey(w.producer, w.wine_name) === key &&
-            (w.vintage ?? '').trim() === wantVintage)
+      const dupe = producer.trim()
+        ? findSameCellarWine(cellarWines, { producer, wineName: wineName.trim() || producer.trim(), region, vintage: vintage.trim(), grape_variety: grape.trim() || null })
         : undefined;
 
       let merge = false;
@@ -511,7 +507,7 @@ export default function LabelConfirmScreen() {
       } else {
         const saved = await addWine.mutateAsync({
           user_id: userId,
-          wine_name: wineName.trim() || producer.trim(),
+          wine_name: lookupWineName(producer, wineName, region) || producer.trim(),
           producer: producer.trim(),
           region: region.trim(),
           vintage: vintage.trim(),
@@ -581,18 +577,11 @@ export default function LabelConfirmScreen() {
     const qty = Math.max(1, parseInt(binQty) || 1);
     const priceNum = binPrice.trim() ? parseFloat(binPrice.replace(/[^0-9.]/g, '')) : NaN;
     const purchasePrice = Number.isFinite(priceNum) ? priceNum : null;
-    const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
     // A bin is just another home storage location now (mig 116): one wine = one
     // cellar line, distributable across placements. So merge into an EXISTING
     // same-identity + format row ANYWHERE in the cellar (not just this cell) and
     // record the bin membership as a placement — never spawn a second listing.
-    const existing = cellarWines.find((w) =>
-      !w.is_wishlist && !w.archived_at &&
-      norm(w.producer) === norm(confirmed.producer) &&
-      norm(w.wine_name) === norm(confirmed.wineName ?? confirmed.producer) &&
-      (w.vintage ?? '').trim() === confirmed.vintage.trim() &&
-      (w.bottle_size_ml ?? 750) === binFormat,
-    );
+    const existing = findSameCellarWine(cellarWines, { producer: confirmed.producer, wineName: confirmed.wineName ?? confirmed.producer, region: confirmed.region, vintage: confirmed.vintage, grape_variety: grape.trim() || null }, binFormat);
 
     const commit = async (mergeInto: typeof existing | null) => {
       setPlacing(true);
@@ -604,7 +593,7 @@ export default function LabelConfirmScreen() {
         } else {
           const saved = await addWine.mutateAsync({
             user_id: userId,
-            wine_name: confirmed.wineName?.trim() || confirmed.producer,
+            wine_name: lookupWineName(confirmed.producer, confirmed.wineName, confirmed.region) || confirmed.producer,
             producer: confirmed.producer,
             region: confirmed.region,
             vintage: confirmed.vintage,
