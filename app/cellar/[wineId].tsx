@@ -1936,6 +1936,8 @@ export default function CellarWineDetail() {
   const reviewOpenHref = hasAnyReview
     ? `/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}`
     : `/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}`;
+  // "View full review" → the latest review's full review / edit screen.
+  const reviewEditHref = `/wines/chosen?openCellarReviewEdit=${wine.id}${archiveReviewReturn}`;
   const pp = wine.purchase_price != null ? Number(wine.purchase_price) : null;
   const ev = wine.estimated_value != null ? Number(wine.estimated_value) : null;
   const sameCurrency = (wine.purchase_price_currency ?? cardCurrency) === (wine.estimated_value_currency ?? cardCurrency);
@@ -2036,7 +2038,10 @@ export default function CellarWineDetail() {
                     <Text style={styles.wcSmall}>{[fmtDay(latestReview.date ?? latestReview.savedAt), latestReview.location].filter(Boolean).join(' · ')}</Text>
                   </View>
                   {latestReview.note ? <Text style={styles.wcBodyText} numberOfLines={8}>{latestReview.note}</Text> : null}
-                  <TouchableOpacity onPress={() => router.push(reviewOpenHref as any)} activeOpacity={0.7}><Text style={styles.wcLink}>View full review ›</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push(reviewEditHref as any)} activeOpacity={0.7}><Text style={styles.wcLink}>View full review ›</Text></TouchableOpacity>
+                  {reviews.length > 1 ? (
+                    <TouchableOpacity onPress={() => router.push(reviewOpenHref as any)} activeOpacity={0.7}><Text style={[styles.wcLink, { marginTop: 6 }]}>View review history ›</Text></TouchableOpacity>
+                  ) : null}
                   {reviews.length > 1 ? (
                     <View style={styles.wcList}>
                       <Text style={[styles.wcLabel, { paddingTop: spacing.sm }]}>Earlier reviews</Text>

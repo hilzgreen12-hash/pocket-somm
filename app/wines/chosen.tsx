@@ -508,12 +508,12 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; sg?: string; slp?: string; slu?: string; sd?: string; backTo?: string; savedToast?: string; fromIntel?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; openCellarReviewEdit?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; sg?: string; slp?: string; slu?: string; sd?: string; backTo?: string; savedToast?: string; fromIntel?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   // Broader "arrived via a deep link to a specific wine's review" flag — also
   // covers the cellar-review links (used by the Lineup wine list). Any of these
   // should return to `backTo` (or the Label Library) when the review closes.
-  const cameViaLink = cameViaLabelLink || !!params.openCellarReview || !!params.openCellarReviewInput;
+  const cameViaLink = cameViaLabelLink || !!params.openCellarReview || !!params.openCellarReviewInput || !!params.openCellarReviewEdit;
   // Return to wherever the user arrived from — an explicit backTo (e.g. a
   // restaurant card via ?openSession) when provided, else the Label Library.
   // dismissTo pops back to the EXISTING screen in the stack (don't router.replace
@@ -618,6 +618,20 @@ export default function ChosenWinesScreen() {
       }
       return;
     }
+    if (params.openCellarReviewEdit) {
+      // From a wine card's "View full review" — open the LATEST review in its
+      // full review / edit screen (same as Edit on the review card).
+      const key = `openCellarEdit:${params.openCellarReviewEdit}`;
+      if (handledParamRef.current === key) return;
+      const w = cellarWines.find((x) => x.id === params.openCellarReviewEdit)
+        ?? archivedWines.find((x) => x.id === params.openCellarReviewEdit);
+      if (w) {
+        handledParamRef.current = key;
+        setEditingCellarLatest(true);
+        setEditingCellarWine(w);
+      }
+      return;
+    }
     if (params.addManual === '1') {
       // From the Review tab's "Add a wine review" — open the mode-of-input
       // chooser (Scan / Upload / Manual Input / Select from Cellar).
@@ -644,7 +658,7 @@ export default function ChosenWinesScreen() {
       setAddOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.openReview, params.openCellarReview, params.openCellarReviewInput, params.seedAdd, params.addManual, params.sp, params.sw, params.sv, params.sr, params.slu, chosenWines, cellarWines, archivedWines]);
+  }, [params.openReview, params.openCellarReview, params.openCellarReviewInput, params.openCellarReviewEdit, params.seedAdd, params.addManual, params.sp, params.sw, params.sv, params.sr, params.slu, chosenWines, cellarWines, archivedWines]);
 
   // "Don't show me this again" — a direct action (no tick box): opt out
   // permanently and dismiss.
