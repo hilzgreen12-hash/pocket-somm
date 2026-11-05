@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -51,7 +51,7 @@ function fillColor(cell: BinCell): string {
 }
 
 export default function BinDetailScreen() {
-  const { binId } = useLocalSearchParams<{ binId: string }>();
+  const { binId, highlight } = useLocalSearchParams<{ binId: string; highlight?: string }>();
   const { session } = useAuth();
   const qc = useQueryClient();
   const userId = session?.user.id;
@@ -60,6 +60,8 @@ export default function BinDetailScreen() {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
+  // Arriving to find a bottle (Quick Command "Find a bottle") → highlight it.
+  useEffect(() => { setHighlightedWineId(highlight ?? null); }, [binId, highlight]);
   const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
   // Permanent delete of a multi-bottle wine → ask how many first.
   const [deleteWine, setDeleteWine] = useState<{ id: string; name: string; qty: number; cellId: string } | null>(null);
@@ -701,7 +703,7 @@ export default function BinDetailScreen() {
       />
 
       {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={bin?.name ?? null} />
 
       {/* Permanent delete — how many bottles? Shown for multi-bottle wines. */}
       <Modal visible={deleteWine !== null} transparent animationType="fade" onRequestClose={() => setDeleteWine(null)}>

@@ -2750,7 +2750,7 @@ export default function RackGridScreen() {
       />
 
       {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={rack?.name ?? null} />
 
       {/* Archive — the shared modal: how many (if you own more than one) + note. */}
       <ArchiveNoteModal

@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, ActivityIndicator, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, ActivityIndicator, useWindowDimensions, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MicButton } from './MicButton';
 import { showAlert } from './AppAlert';
@@ -15,10 +15,14 @@ import { moveBottlesToLocation, clearLocationPlacements, releaseBottlesFromPlace
 import { recommendFromCellar } from '../api/cellarRecommend';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
+import { supabase } from '../api/supabase';
+import { HomeVoiceModal } from './HomeVoiceModal';
+
+const MARK = require('../../assets/vinster-mark.png');
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'archiveNote' | 'error';
+type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'archiveNote' | 'error' | 'find' | 'found';
 
 
 function wineLabel(w: CellarWine | undefined): string {
@@ -87,7 +91,13 @@ export const HOME_STORAGE_VOICE: { introText: string; suggestions: string[]; all
   allowedActions: ['move', 'archive', 'delete'],
 };
 
-export function CellarCommandModal({ visible, onClose, introText, suggestions, allowedActions }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[]; allowedActions?: CellarCommandAction[] }) {
+export function CellarCommandModal({ visible, onClose, introText, suggestions, allowedActions, locationName }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[]; allowedActions?: CellarCommandAction[]; locationName?: string | null }) {
+  void introText; void suggestions; // superseded by the Quick Command layout (kept for callers)
+  // Hide while another screen (e.g. the rack placement screen) is in front; come
+  // back to the same state (e.g. the done line) when the user returns.
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
+  const [chooseOpen, setChooseOpen] = useState(false);
   const { session } = useAuth();
   const { height: winH } = useWindowDimensions();
   const userId = session?.user.id;
@@ -384,6 +394,9 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
         if (!result?.locationId && !result?.unitId) return;
         const toName = destName ?? 'its new location';
+        // The bottles that moved (the whole row, or the split-off row) — the
+        // destination's placement screen opens on them.
+        let movedWineId: string | null = whole ? chosenWine.id : null;
 
         if (result?.locationId) {
           // Destination is an alt cellar — go placement-native + merge-aware so
@@ -407,7 +420,8 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
             await removeSlotsForWine(chosenWine.id, count);
             await updateCellarWine(chosenWine.id, { quantity: chosenWine.quantity - count });
             const { id, created_at, updated_at, ...rest } = chosenWine;
-            await addCellarWine({ ...rest, quantity: count, is_wishlist: false, ...destFields });
+            const added = await addCellarWine({ ...rest, quantity: count, is_wishlist: false, ...destFields });
+            movedWineId = added?.id ?? null;
           }
         }
         qc.invalidateQueries({ queryKey: ['cellar', userId] });
@@ -424,10 +438,24 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           action: 'move',
           wine: [chosenWine.producer, chosenWine.wine_name].filter(Boolean).join(' '),
           meta: [chosenWine.region, chosenWine.vintage].filter(Boolean).join(' · '),
-          detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} · from ${fromName} to ${toName}${result?.unitId ? ' — awaiting placement' : ''}`,
-          viewLabel: `View in ${toName}`,
+          detail: result?.locationId
+            ? `${count} ${count === 1 ? 'bottle' : 'bottles'} of ${wineLabel(chosenWine)} moved to your alt cellar ${toName}. Navigate to that cellar to place the wine more precisely.`
+            : `Moved. ${count} ${count === 1 ? 'bottle' : 'bottles'} of ${wineLabel(chosenWine)} ${count === 1 ? 'is' : 'are'} now in the ${toName}.`,
+          viewLabel: result?.locationId ? `Go to ${toName}` : `View the ${toName}`,
           viewRoute,
         });
+        // Racks/fridges: open the REAL rack screen in placement mode on the moved
+        // bottles (the user always picks the slots). Bins: open the bin, which
+        // surfaces awaiting-placement bottles. This sheet hides while that screen
+        // is in front and shows the done line when they come back.
+        if (result?.unitId) {
+          setPhase('success');
+          setExecuting(false);
+          router.push((targetUnit?.storage_type === 'bin'
+            ? `/cellar/bin/${result.unitId}`
+            : `/cellar/rack/${result.unitId}${movedWineId ? `?placeWine=${movedWineId}&placeLimit=${count}` : ''}`) as any);
+          return;
+        }
       } else if (action === 'archive') {
         if (!chosenWine) return;
         // archive — mirror the Chef pairing "Select & Archive" flow so the
@@ -607,159 +635,354 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
   const candidateWines = (result?.candidates ?? []).map((id) => wines.find((w) => w.id === id)).filter(Boolean) as CellarWine[];
 
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <View style={styles.overlay}>
-        <View style={styles.sheet}>
-          {phase === 'speak' && (
-            <ScrollView style={{ maxHeight: winH * 0.82 }} contentContainerStyle={{ paddingBottom: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.voiceHeader}>Quick Command</Text>
-              <Text style={styles.introText}>{introText ?? DEFAULT_INTRO_TEXT}</Text>
+  // Storage screens (rack / fridge / bin / alt cellar) are scoped: no Add, and
+  // "Find a bottle in this location" instead of "Choose from my cellar".
+  const scoped = !!allowedActions;
+  const prompts = scoped
+    ? ['Archive X bottles of...', 'Move X bottles of... to another location', 'Delete X bottles of...']
+    : ['Archive X bottles of...', 'Move X bottles of...', 'Add X bottles of...', 'Delete X bottles of...'];
 
-              <View style={styles.modalDivider} />
+  function restate() { setTranscript(''); setResult(null); setChosenWineId(null); setPhase('speak'); }
 
-              <Text style={styles.title}>Tap the mic and speak</Text>
-              <View style={styles.micRow}>
-                {/* MicButton corrects misheard wine terms on the dictated text itself;
-                    manual edits in the field below are left as typed. */}
-                <MicButton value={transcript} onChangeText={setTranscript} onClear={() => setTranscript('')} domain="query" serverCorrect />
-              </View>
-              {/* Editable so the user can fix any mis-hearing before confirming. */}
-              <TextInput
-                style={[styles.inputField, styles.inputText]}
-                value={transcript}
-                onChangeText={setTranscript}
-                placeholder="Tap the mic and speak, or type your command…"
-                placeholderTextColor={colors.textSubtle}
-                multiline
-              />
-              <Text style={styles.editHint}>Tip: you can edit the text above before confirming.</Text>
+  // ---- Find a bottle ----------------------------------------------------
+  // One location → that location's real screen opens straight away with the
+  // wine highlighted (no reply). Two or more → Vinster lists them with links;
+  // coming back from one returns here to open the other.
+  const [findText, setFindText] = useState('');
+  const [findResult, setFindResult] = useState<
+    | { kind: 'many'; label: string; total: number; places: { name: string; route: string; count: number }[] }
+    | { kind: 'others'; asked: string; others: { label: string; places: { name: string; route: string; count: number }[] }[] }
+    | { kind: 'none'; asked: string }
+    | null
+  >(null);
 
-              <View style={styles.suggestions}>
-                {(suggestions ?? DEFAULT_SUGGESTIONS).map((s, i) => (
-                  <Text key={i} style={styles.suggestion}>{`“${s}”`}</Text>
-                ))}
-              </View>
+  async function placesFor(w: CellarWine): Promise<{ name: string; route: string; count: number }[]> {
+    const pls = await fetchPlacementsForWine(w.id);
+    const out = new Map<string, { name: string; route: string; count: number }>();
+    const add = (key: string, name: string, route: string, n: number) => {
+      const cur = out.get(key);
+      if (cur) cur.count += n; else out.set(key, { name, route, count: n });
+    };
+    const binCellIds = pls.filter((p) => p.kind === 'bin' && p.bin_cell_id).map((p) => p.bin_cell_id as string);
+    const cellToBin = new Map<string, string>();
+    if (binCellIds.length) {
+      const { data } = await supabase.from('bin_cells').select('id, bin_id').in('id', binCellIds);
+      (data ?? []).forEach((r: any) => cellToBin.set(r.id, r.bin_id));
+    }
+    for (const p of pls) {
+      const n = p.quantity ?? 1;
+      if (p.kind === 'rack' && p.rack_id) {
+        const u = units.find((x) => x.id === p.rack_id);
+        add(`r:${p.rack_id}`, u?.name ?? 'Rack', `/cellar/rack/${p.rack_id}?highlight=${w.id}`, n);
+      } else if (p.kind === 'bin' && p.bin_cell_id) {
+        const binId = cellToBin.get(p.bin_cell_id);
+        if (binId) add(`b:${binId}`, units.find((x) => x.id === binId)?.name ?? 'Bin', `/cellar/bin/${binId}?highlight=${w.id}`, n);
+      } else if (p.kind === 'location' && p.storage_location_id) {
+        add(`l:${p.storage_location_id}`, locations.find((l) => l.id === p.storage_location_id)?.name ?? 'Cellar', `/cellar/storage-location/${p.storage_location_id}?highlight=${w.id}`, n);
+      }
+    }
+    return Array.from(out.values());
+  }
 
-              <TouchableOpacity
-                style={[styles.primaryBtn, !transcript.trim() && styles.btnDisabled]}
-                onPress={runParse}
-                disabled={!transcript.trim()}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.primaryBtnText}>Continue</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
-            </ScrollView>
-          )}
+  async function runFind() {
+    const asked = findText.trim();
+    if (!asked) return;
+    setPhase('parsing');
+    try {
+      const res = await parseCellarCommand('archive', asked, wines, locations, units);
+      const match = res.wineId ? wines.find((w) => w.id === res.wineId) : null;
+      if (match) {
+        const places = await placesFor(match);
+        if (places.length === 1) {
+          // One place: open it straight away (no reply).
+          setFindResult(null);
+          setPhase('find');
+          router.push(places[0].route as any);
+          return;
+        }
+        if (places.length > 1) {
+          setFindResult({ kind: 'many', label: wineLabel(match), total: places.reduce((n, p) => n + p.count, 0), places });
+          setPhase('found');
+          return;
+        }
+      }
+      // The asked-for vintage isn't stored: offer other vintages of the wine.
+      const others = distinctCandidateIds(res.candidates, wines).map((id) => wines.find((w) => w.id === id)).filter(Boolean) as CellarWine[];
+      if (others.length) {
+        const withPlaces = await Promise.all(others.slice(0, 4).map(async (w) => ({ label: wineLabel(w), places: await placesFor(w) })));
+        setFindResult({ kind: 'others', asked, others: withPlaces });
+      } else {
+        setFindResult({ kind: 'none', asked });
+      }
+      setPhase('found');
+    } catch {
+      setPhase('error');
+    }
+  }
 
-          {phase === 'parsing' && (
-            <View style={styles.centerBlock}>
-              <ActivityIndicator color={colors.gold} />
-              <Text style={styles.parsingText}>Understanding…</Text>
-            </View>
-          )}
+  const title = scoped && locationName ? `What would you like to do in your ${locationName}?` : 'What would you like to do?';
+  const count = Math.min(chosenWine?.quantity ?? 1, Math.max(1, result?.quantity ?? (chosenWine?.quantity ?? 1)));
+  const bottles = `${count} ${count === 1 ? 'bottle' : 'bottles'}`;
 
-          {phase === 'pick' && (
-            <>
-              <Text style={styles.title}>Which wine did you mean?</Text>
-              <ScrollView style={{ maxHeight: 320 }}>
-                {candidateWines.map((w) => (
-                  <TouchableOpacity key={w.id} style={styles.pickRow} onPress={() => { setChosenWineId(w.id); setPhase('confirm'); }} activeOpacity={0.7}>
-                    <Text style={styles.pickWine} numberOfLines={2}>{wineLabel(w)}</Text>
-                    {w.region ? <Text style={styles.pickRegion} numberOfLines={1}>{w.region}</Text> : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <TouchableOpacity onPress={() => setPhase('speak')} style={styles.cancelRow}><Text style={styles.cancelText}>Try again</Text></TouchableOpacity>
-            </>
-          )}
-
-          {phase === 'confirm' && (
-            <>
-              <Text style={styles.title}>Confirm</Text>
-              <Text style={styles.confirmBody}>{confirmText()}</Text>
-              <TouchableOpacity style={[styles.primaryBtn, executing && styles.btnDisabled]} onPress={execute} disabled={executing} activeOpacity={0.8}>
-                {executing ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.primaryBtnText}>{action === 'archive' ? 'Archive' : action === 'add' ? 'Add' : action === 'delete' ? 'Delete' : 'Move'}</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setPhase('speak')} style={styles.cancelRow}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
-            </>
-          )}
-
-          {phase === 'need' && (
-            <>
-              <Text style={styles.title}>Didn't quite catch that</Text>
-              <Text style={styles.confirmBody}>{result?.message?.trim() || (action === 'move' ? "I couldn't match the wine or the location. Try again — name the wine and where to move it." : "I couldn't match that to a wine in your cellar. Try again with the producer or wine name.")}</Text>
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => setPhase('speak')} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Try again</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Close</Text></TouchableOpacity>
-            </>
-          )}
-
-          {phase === 'error' && (
-            <>
-              <Text style={styles.title}>Something went wrong</Text>
-              <Text style={styles.confirmBody}>Please try again.</Text>
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => setPhase('speak')} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Try again</Text></TouchableOpacity>
-              <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Close</Text></TouchableOpacity>
-            </>
-          )}
-
-          {phase === 'success' && success && (
-            <>
-              <Text style={styles.successAction}>{success.action === 'archive' ? 'Archived' : success.action === 'add' ? 'Added' : success.action === 'delete' ? 'Deleted' : 'Moved'}</Text>
-              <Text style={styles.successWine}>{success.wine}</Text>
-              {success.meta ? <Text style={styles.successMeta}>{success.meta}</Text> : null}
-              <Text style={styles.successDetail}>{success.detail}</Text>
-              {success.action === 'move' ? (
-                // Move: the destination is a primary BUTTON, and no "Another
-                // Command" — just View in <destination> + Done.
-                <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={() => { handleClose(); router.push(success.viewRoute as any); }} activeOpacity={0.8}>
-                  <Text style={styles.primaryBtnText}>{success.viewLabel}</Text>
-                </TouchableOpacity>
-              ) : (
-                <>
-                  <TouchableOpacity onPress={() => { handleClose(); router.push(success.viewRoute as any); }} activeOpacity={0.7} style={styles.viewLinkRow}>
-                    <Text style={styles.viewLink}>{success.viewLabel} →</Text>
-                  </TouchableOpacity>
-                  {success.action === 'archive' ? (
-                    // Archive: offer a quick note on the bottle just archived instead
-                    // of "Another Command".
-                    <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={() => setPhase('archiveNote')} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Add Archive Note</Text></TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={reset} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Another Command</Text></TouchableOpacity>
-                  )}
-                </>
-              )}
-              <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Done</Text></TouchableOpacity>
-            </>
-          )}
-
-          {phase === 'archiveNote' && success && (
-            <>
-              <Text style={styles.title}>Add Archive Note</Text>
-              <Text style={styles.successWine}>{success.wine}</Text>
-              {success.meta ? <Text style={styles.successMeta}>{success.meta}</Text> : null}
-              <TextInput
-                style={[styles.inputField, styles.inputText]}
-                value={archiveNote}
-                onChangeText={setArchiveNote}
-                placeholder="e.g. Drunk at Anna's 40th — still singing…"
-                placeholderTextColor={colors.textSubtle}
-                maxLength={100}
-                multiline
-              />
-              <Text style={styles.editHint}>{`${archiveNote.length}/100`}</Text>
-              <TouchableOpacity style={[styles.primaryBtn, savingNote && styles.btnDisabled]} onPress={saveArchiveNote} disabled={savingNote} activeOpacity={0.8}>
-                {savingNote ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.primaryBtnText}>Save Note</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setPhase('success')} style={styles.cancelRow}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
-            </>
-          )}
+  // The confirm card for each action.
+  function ConfirmCard() {
+    if (action === 'add') {
+      const a = result?.add;
+      const n = Math.max(1, result?.quantity ?? 1);
+      return (
+        <View style={qs.card}>
+          <Text style={qs.cardAction}>Add</Text>
+          <Text style={qs.cardWine}>{[a?.producer, a?.wineName, a?.vintage].filter(Boolean).join(' · ') || 'This wine'}</Text>
+          <Text style={qs.cardLine}>{`${n} ${n === 1 ? 'bottle' : 'bottles'} · ${targetLocation?.name ?? 'Your Cellar List'}`}</Text>
+          <Text style={qs.cardLine}>Wine Intel builds in the background</Text>
         </View>
+      );
+    }
+    return (
+      <View style={qs.card}>
+        <Text style={qs.cardAction}>{action === 'move' ? 'Move' : action === 'delete' ? 'Delete' : 'Archive'}</Text>
+        <Text style={qs.cardWine}>{wineLabel(chosenWine)}</Text>
+        <Text style={qs.cardLine}>{action === 'move' ? `${bottles} · → ${destName ?? 'the chosen location'}` : action === 'archive' ? `${bottles} · dated today` : bottles}</Text>
+        {action === 'delete' ? <Text style={qs.warn}>This permanently removes them from your records. If you drank them, archive them instead.</Text> : null}
       </View>
+    );
+  }
+
+  const confirmLabel = action === 'move'
+    ? (result?.unitId ? 'Confirm & Select Placement' : 'Confirm move')
+    : action === 'archive' ? 'Confirm archive'
+    : action === 'add' ? 'Confirm and add'
+    : `Delete ${bottles}`;
+
+  return (
+    <Modal visible={visible && focused} transparent animationType="slide" onRequestClose={handleClose}>
+      <View style={qs.overlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[qs.sheet, { maxHeight: winH * 0.9 }]}>
+          <View style={qs.handle} />
+          <View style={qs.header}>
+            <View style={qs.headerLeft}>
+              <Image source={MARK} style={qs.mark} resizeMode="contain" />
+              <Text style={qs.headerName}>Vinster</Text>
+            </View>
+            <TouchableOpacity onPress={handleClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
+              <Text style={qs.close}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={qs.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+            {phase === 'speak' && (
+              <>
+                <Text style={qs.title}>{title}</Text>
+                <CommandField value={transcript} onChange={setTranscript} onSend={runParse}
+                  placeholder={scoped ? 'ie. Move two bottles of Rousseau 1999 to the wine fridge' : 'ie. Move two bottles of Lafite 1982 from the wine fridge to the small rack'} />
+                <View style={{ gap: 6 }}>
+                  <Text style={qs.goldLabel}>Start your instruction with</Text>
+                  {prompts.map((p) => <Text key={p} style={qs.prompt}>{p}</Text>)}
+                </View>
+                <View style={qs.sep} />
+                <Text style={qs.title}>Or, if you like...</Text>
+                {scoped ? (
+                  <RowLink label="Find a bottle in this location" sub="If it's not here, I'll find where it is" onPress={() => { setFindText(''); setFindResult(null); setPhase('find'); }} />
+                ) : (
+                  <RowLink label="Choose from my cellar" sub="Not sure what to open? Let's talk about it" onPress={() => setChooseOpen(true)} />
+                )}
+              </>
+            )}
+
+            {phase === 'parsing' && (
+              <View style={qs.centre}>
+                <ActivityIndicator color={colors.gold} />
+              </View>
+            )}
+
+            {phase === 'pick' && (
+              <>
+                <UserLine text={transcript} />
+                <VinsterLine text="Which wine did you mean?" />
+                <View>
+                  {candidateWines.map((w, i) => (
+                    <RowLink key={w.id} first={i === 0} label={wineLabel(w)} sub={w.region ?? ''} onPress={() => { setChosenWineId(w.id); setPhase('confirm'); }} />
+                  ))}
+                </View>
+                <OutlineBtn label="Restate Command" onPress={restate} />
+              </>
+            )}
+
+            {phase === 'confirm' && (
+              <>
+                <UserLine text={transcript} />
+                <ConfirmCard />
+                {executing ? <ActivityIndicator color={colors.gold} /> : (
+                  <>
+                    <OutlineBtn label={confirmLabel} onPress={execute} />
+                    {action === 'delete' ? <OutlineBtn label="Archive instead" onPress={() => { setAction('archive'); }} /> : null}
+                    <OutlineBtn label="Restate Command" onPress={restate} />
+                  </>
+                )}
+              </>
+            )}
+
+            {phase === 'need' && (
+              <>
+                <UserLine text={transcript} />
+                <VinsterLine text={result?.message?.trim() || (action === 'move' ? "I couldn't match the wine or where it's going. Tell me again: the wine, how many, and where to." : "I couldn't match that to a wine in your cellar. Tell me again with the producer and vintage.")} />
+                <OutlineBtn label="Restate Command" onPress={restate} />
+              </>
+            )}
+
+            {phase === 'error' && (
+              <>
+                <VinsterLine text="Something went wrong. Please try again." />
+                <OutlineBtn label="Restate Command" onPress={restate} />
+              </>
+            )}
+
+            {phase === 'success' && success && (
+              <>
+                <View style={qs.tick}><Text style={qs.tickText}>✓</Text></View>
+                <Text style={qs.doneLine}>{success.action === 'move' ? success.detail : `${success.action === 'archive' ? 'Wine Archived.' : success.action === 'add' ? 'Added.' : 'Deleted.'} ${success.detail.replace(/^\d+ bottles? · /, '')} · ${success.wine}`}</Text>
+                <RowLink label={success.viewLabel} onPress={() => { handleClose(); router.push(success.viewRoute as any); }} />
+                {success.action === 'archive' ? <RowLink label="Add Archive Note" onPress={() => setPhase('archiveNote')} /> : null}
+                <Text style={[qs.goldLabel, { marginTop: 8 }]}>Another command?</Text>
+                <CommandField value={transcript} onChange={setTranscript} onSend={() => { setSuccess(null); runParse(); }} placeholder="ie. Archive a bottle of Harlan 1990" />
+                <DoneLink onPress={handleClose} />
+              </>
+            )}
+
+            {phase === 'archiveNote' && success && (
+              <>
+                <VinsterLine text={`Add an archive note for ${success.wine}`} />
+                <TextInput style={qs.noteInput} value={archiveNote} onChangeText={setArchiveNote} placeholder="ie. Dad's 70th birthday" placeholderTextColor="rgba(255,255,255,0.4)" maxLength={100} multiline />
+                <Text style={qs.caption}>{`${archiveNote.length}/100`}</Text>
+                {savingNote ? <ActivityIndicator color={colors.gold} /> : <OutlineBtn label="Save Note" onPress={saveArchiveNote} />}
+              </>
+            )}
+
+            {phase === 'find' && (
+              <>
+                <UserLine text="Find a bottle in this location" />
+                <VinsterLine text="Which bottle are you looking for?" />
+                <CommandField value={findText} onChange={setFindText} onSend={runFind} placeholder="ie. Lafite 2005" />
+              </>
+            )}
+
+            {phase === 'found' && findResult && (
+              <>
+                <UserLine text={findText} />
+                {findResult.kind === 'many' ? (
+                  <>
+                    <VinsterLine text={`There are ${findResult.total} bottles of ${findResult.label} stored across ${findResult.places.length === 2 ? 'two' : findResult.places.length} locations: ${findResult.places.map((p) => p.name).join(', and ')}.`} />
+                    <View>{findResult.places.map((p, i) => <RowLink key={p.route} first={i === 0} label={`View In ${p.name}`} sub={`${p.count} ${p.count === 1 ? 'bottle' : 'bottles'}`} onPress={() => router.push(p.route as any)} />)}</View>
+                  </>
+                ) : findResult.kind === 'others' ? (
+                  <>
+                    <VinsterLine text={`I can't find ${findResult.asked} anywhere in your cellar, but you do have ${findResult.others.length === 1 ? 'another vintage' : 'other vintages'}.`} />
+                    {findResult.others.map((o) => (
+                      <View key={o.label} style={{ gap: 4 }}>
+                        <View style={qs.card}>
+                          <Text style={qs.cardWine}>{o.label}</Text>
+                          {o.places.length ? o.places.map((p) => <Text key={p.route} style={qs.cardLine}>{`${p.count} ${p.count === 1 ? 'bottle' : 'bottles'} · ${p.name}`}</Text>) : <Text style={qs.cardLine}>Not yet placed</Text>}
+                        </View>
+                        {o.places.map((p) => <RowLink key={`v-${p.route}`} label={`View ${p.name}`} onPress={() => router.push(p.route as any)} />)}
+                      </View>
+                    ))}
+                  </>
+                ) : (
+                  <VinsterLine text={`I can't find ${findResult.asked} anywhere in your cellar.`} />
+                )}
+                <DoneLink onPress={handleClose} />
+              </>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+      {/* "Choose from my cellar" runs the same chat as Home. */}
+      <HomeVoiceModal visible={chooseOpen} startWith="cellar" onClose={() => { setChooseOpen(false); handleClose(); }} />
     </Modal>
   );
 }
+
+// ---- small building blocks (Quick Command look) ---------------------------
+function CommandField({ value, onChange, onSend, placeholder }: { value: string; onChange: (t: string) => void; onSend: () => void; placeholder: string }) {
+  const can = !!value.trim();
+  return (
+    <View style={qs.field}>
+      <TextInput style={qs.fieldInput} value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="rgba(255,255,255,0.4)" multiline returnKeyType="send" blurOnSubmit onSubmitEditing={() => { if (can) onSend(); }} />
+      <MicButton value={value} onChangeText={onChange} domain="query" serverCorrect />
+      <TouchableOpacity onPress={() => { if (can) onSend(); }} disabled={!can} accessibilityLabel="Send" style={qs.send} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
+        <Text style={[qs.sendText, !can && { opacity: 0.4 }]}>›</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+function RowLink({ label, sub, onPress, first }: { label: string; sub?: string; onPress: () => void; first?: boolean }) {
+  return (
+    <TouchableOpacity style={[qs.row, first && qs.rowFirst]} onPress={onPress} activeOpacity={0.7}>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={qs.rowLabel}>{label}</Text>
+        {sub ? <Text style={qs.rowSub}>{sub}</Text> : null}
+      </View>
+      <Text style={qs.arrow}>›</Text>
+    </TouchableOpacity>
+  );
+}
+function OutlineBtn({ label, onPress }: { label: string; onPress: () => void }) {
+  return <TouchableOpacity style={qs.outline} onPress={onPress} activeOpacity={0.8}><Text style={qs.outlineText}>{label}</Text></TouchableOpacity>;
+}
+function VinsterLine({ text }: { text: string }) {
+  return <View style={qs.vWrap}><View style={qs.vBubble}><Text style={qs.vText}>{text}</Text></View></View>;
+}
+function UserLine({ text }: { text: string }) {
+  return text ? <View style={qs.uWrap}><View style={qs.uBubble}><Text style={qs.uText}>{text}</Text></View></View> : null;
+}
+function DoneLink({ onPress }: { onPress: () => void }) {
+  return <TouchableOpacity onPress={onPress} style={{ alignSelf: 'center', paddingVertical: 8 }}><Text style={qs.done}>Done</Text></TouchableOpacity>;
+}
+
+const qs = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: colors.background, borderTopLeftRadius: 22, borderTopRightRadius: 22, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', alignSelf: 'center', marginTop: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(224,184,74,0.3)' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  mark: { width: 30, height: 30 },
+  headerName: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, letterSpacing: 0.3 },
+  close: { fontSize: 20, color: 'rgba(255,255,255,0.75)' },
+  body: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 40, gap: 14 },
+  title: { fontFamily: fonts.headingItalic, fontSize: 27, lineHeight: 32, color: colors.text },
+  goldLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: colors.gold },
+  prompt: { fontFamily: fonts.bodyItalic, fontSize: 14, color: 'rgba(255,255,255,0.75)' },
+  sep: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginTop: 6 },
+  field: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingLeft: 16, paddingRight: 6, backgroundColor: 'rgba(255,255,255,0.12)', borderTopLeftRadius: 16, borderTopRightRadius: 4, borderBottomLeftRadius: 16, borderBottomRightRadius: 16 },
+  fieldInput: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, paddingVertical: 6, minHeight: 30, maxHeight: 140 },
+  send: { width: 30, height: 44, alignItems: 'center', justifyContent: 'center' },
+  sendText: { fontSize: 28, lineHeight: 30, color: colors.gold },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)' },
+  rowFirst: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
+  rowLabel: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.gold },
+  rowSub: { fontFamily: fonts.bodyItalic, fontSize: 13, color: 'rgba(255,255,255,0.8)' },
+  arrow: { fontSize: 22, color: colors.gold },
+  card: { gap: 6, padding: 14, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
+  cardAction: { fontFamily: fonts.bodySemibold, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)' },
+  cardWine: { fontFamily: fonts.headingBold, fontSize: 19, lineHeight: 23, color: colors.gold },
+  cardLine: { fontFamily: fonts.bodyRegular, fontSize: 14.5, lineHeight: 21, color: 'rgba(255,255,255,0.92)' },
+  warn: { fontFamily: fonts.bodyRegular, fontSize: 13.5, lineHeight: 19, color: '#F2B8A0' },
+  outline: { height: 50, borderRadius: 12, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  outlineText: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold },
+  vWrap: { alignItems: 'flex-start' },
+  vBubble: { maxWidth: '90%', backgroundColor: colors.surface, borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', borderTopLeftRadius: 4, borderTopRightRadius: 16, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, paddingVertical: 10, paddingHorizontal: 16 },
+  vText: { fontFamily: fonts.headingItalic, fontSize: 20, lineHeight: 25, color: colors.text },
+  uWrap: { alignItems: 'flex-end' },
+  uBubble: { maxWidth: '90%', backgroundColor: 'rgba(255,255,255,0.12)', borderTopLeftRadius: 16, borderTopRightRadius: 4, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, paddingVertical: 10, paddingHorizontal: 16 },
+  uText: { fontFamily: fonts.bodyRegular, fontSize: 15, lineHeight: 23, color: colors.text },
+  tick: { width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  tickText: { color: colors.gold, fontSize: 22 },
+  doneLine: { fontFamily: fonts.headingItalic, fontSize: 23, lineHeight: 29, color: colors.text },
+  noteInput: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, padding: 12, minHeight: 60 },
+  caption: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: 'rgba(255,255,255,0.7)' },
+  centre: { paddingVertical: 40, alignItems: 'center' },
+  done: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, textDecorationLine: 'underline' },
+});
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },

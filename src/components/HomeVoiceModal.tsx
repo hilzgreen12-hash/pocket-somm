@@ -50,13 +50,19 @@ function marketPrice(m: MarketPoint | null): string | null {
   return `${sym}${Math.round(m.avg)}${range} · Wine-Searcher`;
 }
 
-export function HomeVoiceModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+// startWith: open straight into one conversation (Quick Command's "Choose from
+// my cellar" runs the same chat as Home).
+export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boolean; onClose: () => void; startWith?: 'cellar' }) {
   const { wines } = useCellar();
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const chat = useChat();
 
-  useEffect(() => { if (visible) chat.reset(); }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!visible) return;
+    chat.reset();
+    if (startWith === 'cellar') setTimeout(() => runCellar(), 0);
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Run one conversation; a closed/abandoned chat just stops quietly.
   function start(flow: () => Promise<void>) {

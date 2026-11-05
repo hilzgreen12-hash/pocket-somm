@@ -65,7 +65,10 @@ function bottleLabel(n: number) {
 }
 
 export default function StorageLocationScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, highlight } = useLocalSearchParams<{ id: string; highlight?: string }>();
+  // Quick Command "Find a bottle": show just this wine, as an applied filter would.
+  const [highlightOnly, setHighlightOnly] = useState<string | null>(highlight ?? null);
+  useEffect(() => { setHighlightOnly(highlight ?? null); }, [id, highlight]);
   const qc = useQueryClient();
   const { session } = useAuth();
   const userId = session?.user.id;
@@ -252,6 +255,7 @@ export default function StorageLocationScreen() {
       // now filtered via the case chips on the carousel, not a packaging kind.)
       if (packaging === 'loose' && w.case_id) return false;
       if (activeFilterWineIds && !activeFilterWineIds.has(w.id)) return false;
+      if (highlightOnly && w.id !== highlightOnly) return false;
       if (caseFilter && w.case_id !== caseFilter) return false;
       if (q) {
         const hay = foldAccents([w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' '));
@@ -260,7 +264,7 @@ export default function StorageLocationScreen() {
       }
       return true;
     });
-  }, [wines, search, maturity, packaging, activeFilterWineIds, caseFilter]);
+  }, [wines, search, maturity, packaging, activeFilterWineIds, caseFilter, highlightOnly]);
 
   // Stats bar figures — cases, loose (un-cased) bottles, and the grand total.
   const caseCount = cases.length;
@@ -1187,6 +1191,14 @@ export default function StorageLocationScreen() {
         {/* Filter row — List (default full list), Packaging, Maturity, saved
             filters, then + Add, mirroring the rack/fridge affordance. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
+          {highlightOnly ? (
+            // Arrived from Quick Command "Find a bottle": showing just that wine.
+            <TouchableOpacity style={[styles.filterChip, styles.filterChipActive]} onPress={() => setHighlightOnly(null)} activeOpacity={0.7}>
+              <Text style={[styles.filterChipText, styles.filterChipTextActive]} numberOfLines={1}>
+                {[wines.find((w) => w.id === highlightOnly)?.producer, wines.find((w) => w.id === highlightOnly)?.vintage].filter(Boolean).join(' ') || 'This wine'} ✕
+              </Text>
+            </TouchableOpacity>
+          ) : null}
           {/* The List chip is the view-mode picker only — it never reflects a
               selected case (that shows via the case chip's own highlight), so it
               can't be hijacked into showing a case name. */}
@@ -1573,7 +1585,7 @@ export default function StorageLocationScreen() {
       </Modal>
 
       {/* Voice Command — same engine as the Cellar tab, scoped copy for home storage. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={location?.name ?? null} />
 
       {/* "How is this wine packaged?" — on move-in and on Update Packaging. */}
       <PackagingPrompt
