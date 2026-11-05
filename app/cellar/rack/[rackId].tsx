@@ -79,6 +79,9 @@ function Counter({ label, value, onChange }: { label: string; value: number; onC
   );
 }
 
+// A tapped rack slot (row/col), so an action targets that exact bottle.
+type SlotPos = { row: number; col: number };
+
 export default function RackGridScreen() {
   const { rackId, highlight, lineup, placed, placeWine, placeLimit, addMoreWine: addMoreWineParam } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string; placed?: string; placeWine?: string; placeLimit?: string; addMoreWine?: string }>();
   const navigation = useNavigation();
@@ -123,7 +126,7 @@ export default function RackGridScreen() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   // "Archive Wine" → the shared ArchiveNoteModal: how many (if the user owns
   // more than one, across the whole cellar) + an optional note. qty is the total.
-  const [singleArchive, setSingleArchive] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
+  const [singleArchive, setSingleArchive] = useState<{ wineId: string; wineName: string; qty: number; slot?: SlotPos } | null>(null);
   const [archiving, setArchiving] = useState(false);
   // Moving an already-placed wine INTO this rack via "Select from Cellar List".
   const { data: allLocations = [] } = useQuery({
@@ -157,7 +160,7 @@ export default function RackGridScreen() {
   // `qty` = how many are deletable FROM THIS RACK (the modal caps to it);
   // `totalQty` = the wine's global quantity, used to decide whether the last
   // bottle anywhere is gone (→ delete the row) or just decrement.
-  const [deleteModal, setDeleteModal] = useState<{ wineId: string; wineName: string; qty: number; totalQty: number } | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ wineId: string; wineName: string; qty: number; totalQty: number; slot?: SlotPos } | null>(null);
   const [deleteCount, setDeleteCount] = useState('1');
   const [deleting, setDeleting] = useState(false);
   // Placement modal — shown when the user taps an empty slot with a
@@ -1391,11 +1394,39 @@ export default function RackGridScreen() {
   // never moved. Frees this rack's slots; if the row would still be over-placed
   // (the count exceeded this rack's bottles and there weren't enough loose ones),
   // frees the overflow from its other placements.
-  async function releaseHereThenSetQuantity(wineId: string, count: number, newQty: number) {
-    await removeSlotsForWine(wineId, count, rackId);
+  async function releaseHereThenSetQuantity(wineId: string, count: number, newQty: number, slot?: SlotPos) {
+    await freeSlotsHere(wineId, count, slot);
     const overflow = placedCount(await fetchPlacementsForWine(wineId)) - newQty;
     if (overflow > 0) await releaseBottlesFromPlacements(wineId, overflow);
     await updateWine.mutateAsync({ id: wineId, updates: { quantity: newQty } });
+  }
+
+  // Free `count` of a wine's slots in THIS rack, starting with the slot the user
+  // tapped (if it still holds this wine) — so archiving/deleting from a slot
+  // removes THAT bottle, not another of the same wine elsewhere in the rack.
+  async function freeSlotsHere(wineId: string, count: number, slot?: SlotPos): Promise<number> {
+    if (count <= 0) return 0;
+    let freed = 0;
+    if (slot && slotMap[`${slot.row},${slot.col}`]?.cellar_wine_id === wineId) {
+      await clearSlot(rackId, slot.row, slot.col);
+      freed = 1;
+    }
+    if (count > freed) freed += await removeSlotsForWine(wineId, count - freed, rackId);
+    return freed;
+  }
+
+  // Same order for the instant grid update: tapped slot first, then the rest.
+  function optimisticDropSlots(wineId: string, count: number, slot?: SlotPos) {
+    qc.setQueryData<RackSlot[]>(['rack-slots', rackId], (old = []) => {
+      let left = count;
+      const tapped = slot ? old.find((s) => s.cellar_wine_id === wineId && s.row_index === slot.row && s.col_index === slot.col) : undefined;
+      if (tapped) left--;
+      return old.filter((s) => {
+        if (s === tapped) return false;
+        if (left > 0 && s.cellar_wine_id === wineId) { left--; return false; }
+        return true;
+      });
+    });
   }
 
   async function archiveWholeNow(wine: CellarWine) {
@@ -1618,7 +1649,7 @@ export default function RackGridScreen() {
         { text: 'Add More Bottles', onPress: () => setDestPicker({ mode: 'addMore', wineId, wineName: title, row, col }) },
         { text: 'Move to Another Location', onPress: () => setDestPicker({ mode: 'move', wineId, wineName: title, row, col }) },
         { separator: true, text: '' },
-        { text: 'Archive or Delete Bottles', onPress: () => promptArchiveOrDelete(wine) },
+        { text: 'Archive or Delete Bottles', onPress: () => promptArchiveOrDelete(wine, { row, col }) },
         { separator: true, text: '' },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -1627,15 +1658,16 @@ export default function RackGridScreen() {
 
   // Second step of "Archive or Delete Bottles": confirm WHICH, warn that Delete is
   // permanent, then act immediately (no further confirmation popup).
-  function promptArchiveOrDelete(wine: CellarWine) {
+  // `slot` = the slot the user tapped; that exact bottle is the one removed.
+  function promptArchiveOrDelete(wine: CellarWine, slot?: SlotPos) {
     showAlert({
       title: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name,
       body: 'Archive keeps this wine in your records (Cellar Archive). Delete removes it permanently and cannot be undone.',
       buttons: [
         // Both ask HOW MANY bottles (a wine can have several) rather than acting on
         // the whole listing — matching the wine-list menu and the delete flow.
-        { text: 'Archive', onPress: () => setSingleArchive({ wineId: wine.id, wineName: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name, qty: wine.quantity ?? 1 }) },
-        { text: 'Delete (permanent)', style: 'destructive', onPress: () => openDeleteFlow(wine) },
+        { text: 'Archive', onPress: () => setSingleArchive({ wineId: wine.id, wineName: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name, qty: wine.quantity ?? 1, slot }) },
+        { text: 'Delete (permanent)', style: 'destructive', onPress: () => openDeleteFlow(wine, slot) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -1648,16 +1680,13 @@ export default function RackGridScreen() {
   async function handleSingleArchive(count: number, note: string, date: string) {
     const target = singleArchive;
     if (!target || archiving) return;
-    const { wineId, qty } = target;
+    const { wineId, qty, slot } = target;
     const today = date;
     const wine = wines.find((w) => w.id === wineId);
     setArchiving(true);
-    // Optimistically drop `count` of this wine's slots from the grid so the
-    // thumbnail disappears immediately, not after the DB round-trips + refetch.
-    qc.setQueryData<RackSlot[]>(['rack-slots', rackId], (old = []) => {
-      let left = count;
-      return old.filter((s) => { if (left > 0 && s.cellar_wine_id === wineId) { left--; return false; } return true; });
-    });
+    // Optimistically drop `count` of this wine's slots from the grid (the tapped
+    // one first) so the thumbnail disappears immediately.
+    optimisticDropSlots(wineId, count, slot);
     try {
       await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count, note: note || null });
       qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
@@ -1676,7 +1705,7 @@ export default function RackGridScreen() {
         // Partial — free that many of its slots in THIS rack first (a wine can
         // span units), THEN decrement the live row, then clone an archive row
         // for the removed bottles.
-        await releaseHereThenSetQuantity(wineId, count, qty - count);
+        await releaseHereThenSetQuantity(wineId, count, qty - count, slot);
         if (wine) {
           const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
           await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false, archive_note: note.trim().slice(0, 35) || null });
@@ -1703,23 +1732,23 @@ export default function RackGridScreen() {
   // Route a delete correctly for where it's issued from. When the wine also
   // lives in another storage unit, deletion is scoped to THIS rack's bottles;
   // only when this is the wine's only home does it delete the whole row.
-  function openDeleteFlow(wine: CellarWine) {
+  function openDeleteFlow(wine: CellarWine, slot?: SlotPos) {
     const total = wine.quantity ?? 1;
     const rc = rackCountOf(wine.id);
     const spans = rc > 0 && rc < total; // some bottles are in another unit
     const deletable = spans ? rc : total; // cap to this rack when it spans units
     if (deletable > 1) {
       setDeleteCount('1');
-      setDeleteModal({ wineId: wine.id, wineName: wine.wine_name, qty: deletable, totalQty: total });
+      setDeleteModal({ wineId: wine.id, wineName: wine.wine_name, qty: deletable, totalQty: total, slot });
     } else if (spans) {
-      confirmDeleteOneFromRack(wine.id, wine.wine_name, total);
+      confirmDeleteOneFromRack(wine.id, wine.wine_name, total, slot);
     } else {
       confirmDeleteWine(wine.id, wine.wine_name, total);
     }
   }
 
   // Single-bottle delete scoped to this rack, when the wine also lives elsewhere.
-  function confirmDeleteOneFromRack(wineId: string, wineName: string, total: number) {
+  function confirmDeleteOneFromRack(wineId: string, wineName: string, total: number, slot?: SlotPos) {
     showAlert({
       title: 'Delete this bottle?',
       body: `Remove one bottle of ${wineName} from here. Your other bottle${total - 1 === 1 ? '' : 's'} in another storage unit stay put. This can't be undone.`,
@@ -1729,7 +1758,7 @@ export default function RackGridScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await removeSlotsForWine(wineId, 1, rackId);
+              await freeSlotsHere(wineId, 1, slot);
               await updateWine.mutateAsync({ id: wineId, updates: { quantity: Math.max(0, total - 1) } });
               qc.invalidateQueries({ queryKey: ['cellar'] });
               qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
@@ -1811,19 +1840,16 @@ export default function RackGridScreen() {
   // this is a permanent delete, not an archive.
   async function handleRackDelete(deleteAll: boolean) {
     if (!deleteModal || deleting) return;
-    const { wineId, qty, totalQty } = deleteModal;
+    const { wineId, qty, totalQty, slot } = deleteModal;
     const count = deleteAll ? qty : (parseInt(deleteCount, 10) || 0);
     if (count < 1 || count > qty) {
       showAlert({ title: 'Invalid', body: `Enter between 1 and ${qty} bottles.` });
       return;
     }
     setDeleting(true);
-    // Optimistically drop `count` of this wine's slots so the thumbnail vanishes
-    // at once (not after the delete + refetch).
-    qc.setQueryData<RackSlot[]>(['rack-slots', rackId], (old = []) => {
-      let left = count;
-      return old.filter((s) => { if (left > 0 && s.cellar_wine_id === wineId) { left--; return false; } return true; });
-    });
+    // Optimistically drop `count` of this wine's slots (the tapped one first) so
+    // the thumbnail vanishes at once.
+    optimisticDropSlots(wineId, count, slot);
     try {
       const newTotal = totalQty - count;
       if (newTotal <= 0) {
@@ -1840,7 +1866,7 @@ export default function RackGridScreen() {
         // Decrement the live row and free `count` slots FROM THIS RACK only — a
         // bottle of the same wine in another rack/fridge is never touched.
         // Free first, then lower quantity (see releaseHereThenSetQuantity).
-        await releaseHereThenSetQuantity(wineId, count, newTotal);
+        await releaseHereThenSetQuantity(wineId, count, newTotal, slot);
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
