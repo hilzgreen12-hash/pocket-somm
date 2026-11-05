@@ -79,6 +79,9 @@ export interface WineSearchResult {
   // Optional: only catalog results carry it; other constructors can omit it.
   colour?: string | null;
   grape: string | null;
+  // True when this came from the sound-alike fallback (the typed words didn't
+  // match exactly) — the dropdown labels these "Did you mean…".
+  suggested?: boolean;
   // A 4-digit vintage typed into the search ("Forts de Latour 2009") — stripped
   // before matching the (vintage-less) catalog, then carried onto every result so
   // picking one fills the vintage too. Null when the query had no vintage.
@@ -131,10 +134,34 @@ export async function searchWines(query: string): Promise<WineSearchResult[]> {
       deduped.push(r);
       if (deduped.length >= 8) break;
     }
-    return deduped;
+    if (deduped.length > 0) return deduped;
+    // Nothing matched every typed word — a typo ("Even Sadie", "Palladous") or a
+    // winemaker's name ("Eben Sadie") instead of the estate's. Fall back to the
+    // catalogue's sound-alike + alias lookup. Still catalogue-only: every
+    // suggestion is a REAL wine, never a generated guess.
+    return await soundsLikeCatalog(q, vintage);
   } catch {
     return [];
   }
+}
+
+async function soundsLikeCatalog(q: string, vintage: string | null): Promise<WineSearchResult[]> {
+  const { data, error } = await supabase.rpc('catalog_sounds_like', { q, lim: 12 });
+  if (error || !Array.isArray(data) || data.length === 0) return [];
+  const rows = data as { producer: string; wine_name: string | null; region: string | null; score: number }[];
+  // Keep only the clearly-better matches (within 70% of the best score).
+  const top = rows[0].score ?? 0;
+  const seen = new Set<string>();
+  const out: WineSearchResult[] = [];
+  for (const r of rows) {
+    if ((r.score ?? 0) < top * 0.7) break;
+    const key = wineNameKey(r.producer, r.wine_name ?? null);
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    out.push({ producer: r.producer, wineName: r.wine_name ?? null, region: r.region ?? null, style: null, colour: null, grape: null, vintage, suggested: true });
+    if (out.length >= 6) break;
+  }
+  return out;
 }
 
 export interface WineCandidate {

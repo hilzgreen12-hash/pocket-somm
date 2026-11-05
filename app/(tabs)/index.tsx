@@ -559,6 +559,9 @@ export default function ScanLandingScreen() {
                   <Text style={styles.searchDropdownEmpty}>Searching…</Text>
                 ) : (
                   <>
+                    {searchResults.length > 0 && searchResults[0].suggested ? (
+                      <Text style={styles.searchDidYouMean}>Did you mean…</Text>
+                    ) : null}
                     {searchResults.map((r, i) => (
                       <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.searchOption} onPress={() => selectWine(r)} activeOpacity={0.7}>
                         {/* Show the typed vintage on the result so the list offers
@@ -698,6 +701,7 @@ const styles = StyleSheet.create({
   searchModalHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   searchModalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, letterSpacing: 0.5, flexShrink: 1 },
   searchModalCancel: { alignItems: 'center', paddingTop: spacing.md },
+  searchDidYouMean: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 2 },
   searchModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   // "Search a Wine Name for Intel" — magnifying-glass icon left of the field.
   searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
