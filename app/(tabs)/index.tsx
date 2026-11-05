@@ -29,6 +29,7 @@ import { tidyWineRegion } from '../../src/utils/regionFormat';
 import { generateWineIntel, fetchPricing, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
 import { vintageVerdict } from '../../src/utils/wineCardInsights';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { wineNameKey } from '../../src/utils/wineIdentity';
 import { wineQueryName } from '../../src/utils/wineIdentity';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
@@ -97,6 +98,8 @@ export default function ScanLandingScreen() {
   const { preferences } = usePreferences();
   // The user's cellar — search results say when they already own the wine.
   const { wines: cellarWines } = useCellar();
+  // The user's reviews — search results say when they've reviewed the wine.
+  const { chosenWines } = useChosenWines();
 
   const [wineSearch, setWineSearch] = useState('');
   // Predictive "Search a Wine" dropdown, powered by the wines_catalog.
@@ -265,6 +268,22 @@ export default function ScanLandingScreen() {
     const n = matches.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
     const top = [...matches].sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))[0];
     return { n, id: top.id };
+  }
+
+  // "You reviewed this wine on dd/mm/yy" — their most recent written review of
+  // the same wine (and vintage, when one was typed).
+  function reviewHolding(r: WineSearchResult): { id: string; date: string } | null {
+    const key = wineNameKey(r.producer, r.wineName);
+    if (!key) return null;
+    const v = (r.vintage ?? '').trim();
+    const mine = chosenWines.filter((c) => !c.wishlist && !c.review_dismissed
+      && (!!(c.tasting_note && c.tasting_note.trim()) || c.user_score != null)
+      && wineNameKey(c.producer, c.wine_name) === key && (!v || String(c.vintage ?? '').trim() === v));
+    if (!mine.length) return null;
+    const when = (c: typeof mine[number]) => new Date(c.reviewed_at ?? c.chosen_at).getTime();
+    const latest = [...mine].sort((a, b) => when(b) - when(a))[0];
+    const d = new Date(latest.reviewed_at ?? latest.chosen_at);
+    return { id: latest.id, date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }) };
   }
 
   async function openCompareVintages() {
@@ -692,6 +711,16 @@ export default function ScanLandingScreen() {
                             <Text style={styles.searchHolding}>
                               You have {h.n} {h.n === 1 ? 'bottle' : 'bottles'} of this wine in your cellar ·{' '}
                               <Text style={styles.searchHoldingLink} onPress={() => { setSearchModalOpen(false); setSearchOpen(false); router.push(`/cellar/${h.id}` as any); }}>View in Cellar</Text>
+                            </Text>
+                          );
+                        })()}
+                        {(() => {
+                          const rv = reviewHolding(r);
+                          if (!rv) return null;
+                          return (
+                            <Text style={styles.searchHolding}>
+                              You reviewed this wine on {rv.date} ·{' '}
+                              <Text style={styles.searchHoldingLink} onPress={() => { setSearchModalOpen(false); setSearchOpen(false); router.push(`/wines/chosen?openReview=${rv.id}&backTo=${encodeURIComponent('/(tabs)')}` as any); }}>View review</Text>
                             </Text>
                           );
                         })()}
