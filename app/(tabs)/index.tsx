@@ -42,11 +42,10 @@ let welcomeShownThisSession = false;
 
 // "How Scan works" — the help body behind the underlined Scan title, matching
 // the other tabs' tappable titles.
-// Search & Discover tile images (bundled). Restaurant interior: add a photo
-// at assets/images/tiles/restaurant-interior.jpg and point SD_RESTAURANT_IMAGE
-// at it — until then the tile shows a quiet fallback.
+// Search & Discover tile images (bundled). The restaurant photo is from Unsplash
+// (free licence) — see assets/images/tiles/CREDITS.md.
 const SD_LABEL_IMAGE = require('../../assets/images/placeholder-labels/label-1.jpg');
-const SD_RESTAURANT_IMAGE: number | null = null;
+const SD_RESTAURANT_IMAGE: number | null = require('../../assets/images/tiles/restaurant-interior.jpg');
 const SD_COLLAGE_IMAGES = [
   require('../../assets/images/placeholder-labels/label-2.jpg'),
   require('../../assets/images/placeholder-labels/label-5.jpg'),
