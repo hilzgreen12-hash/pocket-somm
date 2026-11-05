@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Text, TouchableOpacity, Modal, ScrollView, StyleSheet, type StyleProp, type TextStyle } from 'react-native';
+import { Text, TouchableOpacity, Modal, ScrollView, StyleSheet, useWindowDimensions, type StyleProp, type TextStyle } from 'react-native';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -15,6 +15,9 @@ interface Props {
 
 export function HelpTitle({ label, title, body, textStyle }: Props) {
   const [open, setOpen] = useState(false);
+  // Size the text area to the screen so longer help copy is never cut off
+  // (it scrolls only if it truly can't fit).
+  const { height: winH } = useWindowDimensions();
 
   return (
     <>
@@ -32,7 +35,7 @@ export function HelpTitle({ label, title, body, textStyle }: Props) {
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>{title}</Text>
-            <ScrollView style={styles.bodyScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ maxHeight: Math.round(winH * 0.62) }} showsVerticalScrollIndicator>
               <Text style={styles.body}>{body}</Text>
             </ScrollView>
             <TouchableOpacity onPress={() => setOpen(false)} style={styles.button}>
@@ -50,7 +53,6 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
   modalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
-  bodyScroll: { maxHeight: 400 },
   body: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.lg },
   buttonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.5 },

@@ -42,7 +42,9 @@ let welcomeShownThisSession = false;
 
 // "How Scan works" — the help body behind the underlined Scan title, matching
 // the other tabs' tappable titles.
-const SCAN_HELP = `Home is your starting point. Scan a label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — or scan a wine list for tailored picks from the menu. No label to hand? Search a Wine from Vinster's catalogue. Below, revisit your Recent Scans, see which cellar bottles are drinking now, and catch up on Community Musings.`;
+const SCAN_HELP = `Expert training + Wine Searcher Market API result in the most comprehensive and customized experience in wine exploration.
+
+Home is your starting point. Scan a label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — or scan a wine list for tailored picks from the menu. No label to hand? Search a Wine from Vinster's catalogue. Below, revisit your Recent Scans, see which cellar bottles are drinking now, and catch up on Community Musings.`;
 
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
 // an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
@@ -350,9 +352,6 @@ export default function ScanLandingScreen() {
           <Text style={styles.voiceLinkText}>Ask Vinster</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.blurb}>
-        Vinster Training + Wine Searcher Market API result in the most comprehensive and customized experience in wine exploration.
-      </Text>
 
       <View style={styles.blurbSeparator} />
 
@@ -608,7 +607,6 @@ const styles = StyleSheet.create({
   // the Reviews "Add +"). Absolute so it never shifts the centred title.
   voiceLink: { position: 'absolute', right: 0, top: -22 },
   voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
-  blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: 0 },
   // Rule between the intro blurb and the 2×2 grid (Voice Command now lives in the
   // header, so the grid moves up into the reclaimed space).
   blurbSeparator: { height: 1, backgroundColor: colors.divider, marginTop: 18, marginBottom: 18 },
