@@ -134,12 +134,17 @@ export async function searchWines(query: string): Promise<WineSearchResult[]> {
       deduped.push(r);
       if (deduped.length >= 8) break;
     }
-    if (deduped.length > 0) return deduped;
-    // Nothing matched every typed word — a typo ("Even Sadie", "Palladous") or a
-    // winemaker's name ("Eben Sadie") instead of the estate's. Fall back to the
-    // catalogue's sound-alike + alias lookup. Still catalogue-only: every
-    // suggestion is a REAL wine, never a generated guess.
-    return await soundsLikeCatalog(q, vintage);
+    if (deduped.length >= 4) return deduped;
+    // Few or no exact matches — likely a typo ("Even Sadie", "Palladous") or a
+    // partial match that isn't what they meant ("Even" → Evening Land). Add the
+    // catalogue's sound-alike + alias suggestions after the exact ones. Still
+    // catalogue-only: every suggestion is a REAL wine, never a generated guess.
+    const seenKeys = new Set(deduped.map((r) => wineNameKey(r.producer, r.wineName)).filter(Boolean) as string[]);
+    const extra = (await soundsLikeCatalog(q, vintage)).filter((r) => {
+      const k = wineNameKey(r.producer, r.wineName);
+      return !k || !seenKeys.has(k);
+    });
+    return [...deduped, ...extra].slice(0, 8);
   } catch {
     return [];
   }

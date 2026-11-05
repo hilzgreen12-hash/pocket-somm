@@ -81,7 +81,9 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
           ) : (
             <>
               {results.map((r, i) => (
-                <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.option} onPress={() => choose(r)} activeOpacity={0.7}>
+                <View key={`${r.producer}-${r.wineName ?? ''}-${i}`}>
+                {r.suggested && !results[i - 1]?.suggested ? <Text style={styles.didYouMean}>Did you mean…</Text> : null}
+                <TouchableOpacity style={styles.option} onPress={() => choose(r)} activeOpacity={0.7}>
                   {/* White producer+name, gold region + grape beneath (shared header). */}
                   <WineIdentityHeader
                     producer={r.producer}
@@ -93,6 +95,7 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
                     align="left"
                   />
                 </TouchableOpacity>
+                </View>
               ))}
               {/* Always-present escape hatch: rare bottles Vinster doesn't know
                   (or mis-guesses) are never a dead end — enter them as typed and
@@ -133,6 +136,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 10, borderBottomRightRadius: 10, backgroundColor: colors.surfaceElevated, overflow: 'hidden',
   },
   searchingText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, padding: spacing.md },
+  didYouMean: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 2 },
   option: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   optionName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
   optionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },

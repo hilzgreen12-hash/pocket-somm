@@ -559,11 +559,11 @@ export default function ScanLandingScreen() {
                   <Text style={styles.searchDropdownEmpty}>Searching…</Text>
                 ) : (
                   <>
-                    {searchResults.length > 0 && searchResults[0].suggested ? (
-                      <Text style={styles.searchDidYouMean}>Did you mean…</Text>
-                    ) : null}
                     {searchResults.map((r, i) => (
-                      <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.searchOption} onPress={() => selectWine(r)} activeOpacity={0.7}>
+                      <View key={`${r.producer}-${r.wineName ?? ''}-${i}`}>
+                      {/* "Did you mean…" heads the sound-alike suggestions (typos, winemaker names). */}
+                      {r.suggested && !searchResults[i - 1]?.suggested ? <Text style={styles.searchDidYouMean}>Did you mean…</Text> : null}
+                      <TouchableOpacity style={styles.searchOption} onPress={() => selectWine(r)} activeOpacity={0.7}>
                         {/* Show the typed vintage on the result so the list offers
                             the full wine + vintage the user searched. */}
                         <View style={styles.searchOptionNameRow}>
@@ -573,6 +573,7 @@ export default function ScanLandingScreen() {
                         {/* Region + grape in gold beneath the white name (shared style). */}
                         {tidyWineRegion(r.region) || r.grape ? <Text style={[styles.searchOptionMeta, { color: colors.gold }]} numberOfLines={1}>{[tidyWineRegion(r.region), r.grape].filter(Boolean).join(' · ')}</Text> : null}
                       </TouchableOpacity>
+                      </View>
                     ))}
                     {!searchLoading && wineSearch.trim().length >= 3 ? (
                       <TouchableOpacity style={styles.searchOption} onPress={useTypedWine} activeOpacity={0.7}>
