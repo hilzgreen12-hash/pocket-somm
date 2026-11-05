@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { selectAllPages } from './paging';
 import type { CellarWine } from '../types/wine';
 import { wineNameKey } from '../utils/wineIdentity';
 import { clearWineFromRacks } from './racks';
@@ -270,14 +271,17 @@ export async function findCellarWineByIdentity(
   userId: string,
   identity: { producer: string | null; wineName: string | null; vintage?: string | number | null },
 ): Promise<CellarWine | null> {
-  const { data, error } = await supabase
-    .from('cellar_wines')
-    .select('*')
-    .eq('user_id', userId)
-    .is('archived_at', null)
-    .eq('is_wishlist', false);
-  if (error) throw error;
-  const list = (data ?? []) as CellarWine[];
+  // Paged — PostgREST caps a select at 1000 rows, so a big (imported) cellar
+  // would otherwise miss the match and create a duplicate line.
+  const list = await selectAllPages<CellarWine>((from, to) =>
+    supabase
+      .from('cellar_wines')
+      .select('*')
+      .eq('user_id', userId)
+      .is('archived_at', null)
+      .eq('is_wishlist', false)
+      .order('id', { ascending: true })
+      .range(from, to) as any);
   // Same wine = same producer+cuvée identity (order-independent word set, so an
   // OCR producer/name split still matches) AND same vintage. Matching on producer
   // alone merged distinct cuvées from one producer into a single row.

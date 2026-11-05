@@ -1,3 +1,4 @@
+import { normalisePriceText, parsePriceText } from '../../src/utils/priceInput';
 import { useMemo, useState, useEffect, useRef, useCallback, type ComponentProps } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, Share, BackHandler } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -1358,7 +1359,7 @@ export default function LabelResultsScreen() {
   }
 
   function buildWinePayload(userId: string) {
-    const parsedPrice = parseFloat(purchasePrice.replace(',', '.'));
+    const parsedPrice = parsePriceText(purchasePrice);
     const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
     return {
       user_id: userId,
@@ -1734,7 +1735,7 @@ export default function LabelResultsScreen() {
     try {
       const parsedScore = parseInt(reviewScore, 10);
       const validScore = !Number.isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 100 ? parsedScore : null;
-      const parsedPrice = parseFloat(reviewListPrice.replace(',', '.'));
+      const parsedPrice = parsePriceText(reviewListPrice);
       const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
       const parsedVintage = parseInt(wine.vintage, 10);
       const validVintage = !Number.isNaN(parsedVintage) ? parsedVintage : null;

@@ -17,8 +17,8 @@ import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
 import { addCellarWineRemoval, addCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { fetchStorageLocations, assignWineToStorageLocation } from '../../../src/api/storageLocations';
-import { addLocationPlacement, fetchPlacementsForWine, fetchPlacementsForWines, decrementPlacement, clearLocationPlacements } from '../../../src/api/placements';
-import { getBins } from '../../../src/api/bins';
+import { addLocationPlacement, fetchPlacementsForWine, fetchPlacementsForWines, decrementPlacement, addBinPlacement, releaseBottlesFromPlacements, placedCount } from '../../../src/api/placements';
+import { getBins, getBinCells } from '../../../src/api/bins';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
@@ -197,6 +197,16 @@ export default function RackGridScreen() {
   // bottle. Kept valid as wines complete (see the effect below the awaiting list).
   const [selectedAwaitingId, setSelectedAwaitingId] = useState<string | null>(null);
   const placeExistingStartedRef = useRef(false);
+  // The ?placeWine= value already handled (placed or cancelled) — so a cellar
+  // refetch after Confirm/Cancel doesn't drop the user back into placement mode
+  // (the route param outlives the flow).
+  const placeWineHandledRef = useRef<string | null>(null);
+  // The wine handed over via ?placeWine= (e.g. Quick Command, which also flags it
+  // awaiting_placement on this unit). While its placement bar is up — and after it
+  // completes, until the cleared flag refetches — it must NOT also show in the
+  // separate awaiting checklist. Cleared on Cancel so a still-awaiting wine can be
+  // placed the regular way.
+  const [suppressAwaitingId, setSuppressAwaitingId] = useState<string | null>(placeWine ?? null);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [slotUploading, setSlotUploading] = useState(false);
   // Edit-rack modal — Wipe Contents / Rename / Resize / Delete.
@@ -660,9 +670,9 @@ export default function RackGridScreen() {
   // the order they were scanned (left to right) — each tap fills the next one.
   const awaitingWines = useMemo(
     () => wines
-      .filter((w) => w.awaiting_placement_unit_id === rackId)
+      .filter((w) => w.awaiting_placement_unit_id === rackId && w.id !== suppressAwaitingId && w.id !== placeExisting?.wine.id)
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    [wines, rackId],
+    [wines, rackId, suppressAwaitingId, placeExisting],
   );
   // How many of each awaiting wine's bottles are already placed ELSEWHERE (other
   // racks / alt cellars). A merged wine (e.g. 4 of 5 bottles already in another
@@ -689,9 +699,12 @@ export default function RackGridScreen() {
   // wine + a limit (the unplaced count). Once only, after the cellar has loaded.
   useEffect(() => {
     if (placeExistingStartedRef.current || !placeWine || wines.length === 0) return;
+    if (placeWineHandledRef.current === placeWine) return;
     const w = wines.find((x) => x.id === placeWine);
     if (!w) return;
     placeExistingStartedRef.current = true;
+    placeWineHandledRef.current = placeWine;
+    setSuppressAwaitingId(w.id);
     setPlaceExisting({ wine: w, limit: Math.max(1, parseInt(placeLimit ?? '1', 10) || 1) });
   }, [placeWine, placeLimit, wines]);
 
@@ -925,6 +938,9 @@ export default function RackGridScreen() {
     setMultiSlots(new Set());
     setPlaceExisting(null);
     placeExistingStartedRef.current = false;
+    // Cancelled: if the wine is still flagged awaiting this unit, let the regular
+    // awaiting checklist take over.
+    setSuppressAwaitingId(null);
   }
 
   // Place the selected slots — assigns the EXISTING (unplaced) bottles to them,
@@ -936,6 +952,15 @@ export default function RackGridScreen() {
     const wineId = placeExisting.wine.id;
     try {
       await assignSlots(rackId, slots, wineId);
+      // The hand-off (e.g. Quick Command) may have flagged the wine awaiting a slot
+      // in THIS unit. The bottles are now placed — clear the flag, or the wine sits
+      // "awaiting" forever and the awaiting checklist pops up for it as well. A flag
+      // pointing at a DIFFERENT unit (e.g. a bin) is left alone.
+      const live = wines.find((w) => w.id === wineId) ?? placeExisting.wine;
+      const unit = live.awaiting_placement_unit_id ?? null;
+      if (unit === rackId || (live.awaiting_placement && !unit)) {
+        await updateWine.mutateAsync({ id: wineId, updates: { awaiting_placement: false, awaiting_placement_unit_id: null } });
+      }
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['placements'] });
@@ -1123,8 +1148,9 @@ export default function RackGridScreen() {
   }
 
   // Move `count` bottles of a located/binned wine into free slots of THIS rack,
-  // running from the tapped slot. A partial move splits the remainder off into a
-  // new row that stays in the source location.
+  // running from the tapped slot. ONE wine = ONE Full Cellar List line: a partial
+  // move keeps the SAME row (quantity unchanged) — the moved bottles are freed from
+  // their source placements and slotted here; the remainder stays where it was.
   async function moveIntoRack(wine: CellarWine, count: number, rid: string, row: number, col: number) {
     const N = wine.quantity ?? 1;
     const run = computePlacementSlots(row, col, count, 'Vertical');
@@ -1149,18 +1175,18 @@ export default function RackGridScreen() {
         if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; }
       }
     }
+    let placedHere = M;
     try {
+      // Release FIRST (the quantity never changes — it's a move), then slot the
+      // freed bottles here on the same row. Cap to what is actually unplaced after
+      // the release so the rack can never push placed above quantity.
+      await releaseSourcePlacements(wine.id, M);
+      const after = await fetchPlacementsForWine(wine.id);
+      placedHere = Math.min(M, Math.max(0, N - placedCount(after)));
+      if (placedHere > 0) await assignSlots(rid, free.slice(0, placedHere), wine.id);
       if (M >= N) {
+        // Whole wine left its alt cellar / bin — drop the stale legacy pointers.
         await updateWine.mutateAsync({ id: wine.id, updates: { storage_location_id: null, bin_cell_id: null, case_id: null } });
-        await releaseSourcePlacements(wine.id, M);
-        await assignSlots(rid, free.slice(0, M), wine.id);
-      } else {
-        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: N - M } });
-        // Reduce the source's own placements by the moved M (the remainder stays).
-        await releaseSourcePlacements(wine.id, M);
-        const { id: _id, created_at: _c, updated_at: _u, ...rest } = wine;
-        const created = await addCellarWine({ ...rest, quantity: M, storage_location_id: null, bin_cell_id: null, case_id: null, is_wishlist: false } as any);
-        await assignSlots(rid, free.slice(0, M), created.id);
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', rid] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
@@ -1169,7 +1195,8 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
       qc.invalidateQueries({ queryKey: ['bins'] });
       qc.invalidateQueries({ queryKey: ['bin-cells'] });
-      setSavedMsg(M > 1 ? `${M} bottles moved to this rack` : 'Bottle moved to this rack');
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      setSavedMsg(placedHere > 1 ? `${placedHere} bottles moved to this rack` : 'Bottle moved to this rack');
     } catch (err) {
       showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -1214,19 +1241,44 @@ export default function RackGridScreen() {
     }
   }
 
-  // Move a placed wine into a bin: clear its slots, flag it as awaiting a cell in
-  // that bin, then open the bin so the user taps a diamond to drop it.
-  async function moveWineToBin(wineId: string, binId: string) {
+  // Move `count` of THIS rack's bottles of a wine into a bin — same row, quantity
+  // unchanged. Frees exactly that many slots from THIS rack only (a wine can also
+  // sit in other racks/fridges, which must not be touched), then files them as a
+  // bin placement: merged into the wine's existing cell in that bin, else the
+  // first cell with room. Opens the bin with the wine highlighted (it can be
+  // re-filed diamond-to-diamond there). Free first, then place, so placed never
+  // exceeds quantity.
+  async function moveWineToBin(wineId: string, binId: string, count?: number) {
+    const movedCount = Math.min(count ?? slotsForWine(wineId), slotsForWine(wineId));
+    if (movedCount <= 0) { setLocBinPicker(null); setDestPicker(null); return; }
     try {
-      await clearWineFromRacks(wineId);
-      await updateWine.mutateAsync({ id: wineId, updates: { storage_location_id: null, bin_cell_id: null, case_id: null, awaiting_placement: true, awaiting_placement_unit_id: binId } });
+      const cells = await getBinCells(binId);
+      const freed = await removeSlotsForWine(wineId, movedCount, rackId);
+      if (freed > 0) {
+        if (cells.length > 0) {
+          const room = (c: (typeof cells)[number]) => (c.capacity ?? 0) - (c.bottleCount ?? 0);
+          const cell = cells.find((c) => (c.wines ?? []).some((w) => w.id === wineId))
+            ?? cells.find((c) => c.kind === 'diamond' && room(c) >= freed)
+            ?? cells.find((c) => room(c) >= freed)
+            ?? cells.find((c) => room(c) > 0)
+            ?? cells[0];
+          await addBinPlacement(wineId, cell.id, freed);
+        } else {
+          // A bin with no cells can't hold a placement — leave the freed bottles
+          // flagged awaiting this bin so its screen asks where they go.
+          await updateWine.mutateAsync({ id: wineId, updates: { awaiting_placement: true, awaiting_placement_unit_id: binId } });
+        }
+      }
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['bins'] });
+      qc.invalidateQueries({ queryKey: ['bin-cells'] });
       setLocBinPicker(null);
       setDestPicker(null);
-      router.push(`/cellar/bin/${binId}` as any);
+      router.push(`/cellar/bin/${binId}?highlight=${wineId}` as any);
     } catch (err) {
       showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
     }
@@ -1306,6 +1358,46 @@ export default function RackGridScreen() {
   // this archived the WHOLE wine and cleared every rack, so archiving from one unit
   // wrongly took a bottle from another). Only when this rack holds ALL the wine's
   // bottles does it become a full archive.
+  // FULL archive: free every app-side spot the row holds — all rack slots, all bin
+  // placements, and every alt-cellar placement EXCEPT external (offsite) cellars —
+  // so the archived row carries no stale bottles that would reappear on restore.
+  async function freeAllPlacementsForArchive(wineId: string) {
+    await clearWineFromRacks(wineId);
+    const pls = await fetchPlacementsForWine(wineId);
+    const binIds = pls.filter((p) => p.kind === 'bin').map((p) => p.id);
+    const locPls = pls.filter((p) => p.kind === 'location');
+    let locIds: string[] = [];
+    if (locPls.length > 0) {
+      const locationIds = Array.from(new Set(locPls.map((p) => p.storage_location_id).filter((x): x is string => !!x)));
+      const external = new Set<string>();
+      if (locationIds.length > 0) {
+        const { data, error } = await supabase.from('storage_locations').select('id, is_external').in('id', locationIds);
+        if (error) throw error;
+        for (const l of (data ?? []) as { id: string; is_external: boolean | null }[]) if (l.is_external) external.add(l.id);
+      }
+      locIds = locPls.filter((p) => !p.storage_location_id || !external.has(p.storage_location_id)).map((p) => p.id);
+    }
+    const ids = [...binIds, ...locIds];
+    if (ids.length > 0) {
+      const { error } = await supabase.from('cellar_placements').delete().in('id', ids);
+      if (error) throw error;
+    }
+  }
+
+  // PARTIAL removal of `count` bottles issued from THIS rack, leaving `newQty` on
+  // the live row. ORDER MATTERS: free the spots FIRST, then lower quantity — the DB
+  // trim trigger cuts alt-cellar placements whenever quantity drops below the
+  // placed total, so lowering first would strip bottles from an alt cellar that
+  // never moved. Frees this rack's slots; if the row would still be over-placed
+  // (the count exceeded this rack's bottles and there weren't enough loose ones),
+  // frees the overflow from its other placements.
+  async function releaseHereThenSetQuantity(wineId: string, count: number, newQty: number) {
+    await removeSlotsForWine(wineId, count, rackId);
+    const overflow = placedCount(await fetchPlacementsForWine(wineId)) - newQty;
+    if (overflow > 0) await releaseBottlesFromPlacements(wineId, overflow);
+    await updateWine.mutateAsync({ id: wineId, updates: { quantity: newQty } });
+  }
+
   async function archiveWholeNow(wine: CellarWine) {
     if (archiving) return;
     const today = new Date().toISOString().split('T')[0];
@@ -1316,20 +1408,18 @@ export default function RackGridScreen() {
     try {
       await addCellarWineRemoval({ cellarWineId: wine.id, removedAt: today, count, note: null });
       if (count >= total) {
-        // This rack holds every bottle → full archive (mark row, clear all spots).
+        // This rack holds every bottle → full archive (clear all spots, mark row).
+        await freeAllPlacementsForArchive(wine.id);
         await updateWine.mutateAsync({ id: wine.id, updates: { quantity: total, archived_at: `${today}T12:00:00.000Z` } });
-        await clearWineFromRacks(wine.id);
-        await clearLocationPlacements(wine.id);
         if (session?.user.id) {
           qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wine.id));
         }
       } else {
-        // Only the bottles in THIS rack leave: clone an archive row for them,
-        // decrement the live row, and free that many slots from THIS rack only.
-        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: total - count } });
+        // Only the bottles in THIS rack leave: free that many slots from THIS rack
+        // only, THEN decrement the live row, then clone an archive row for them.
+        await releaseHereThenSetQuantity(wine.id, count, total - count);
         const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
         await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
-        await removeSlotsForWine(wine.id, count, rackId);
       }
       if (session?.user.id) {
         qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
@@ -1573,23 +1663,24 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
 
       if (count >= qty) {
-        // Full archive — mark the row archived and clear all its slots.
+        // Full archive — clear all its spots (racks, bins, home alt cellars), then
+        // mark the row archived.
+        await freeAllPlacementsForArchive(wineId);
         await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z`, archive_note: note.trim().slice(0, 35) || null } });
-        await clearWineFromRacks(wineId);
         if (session?.user.id) {
           qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wineId));
           qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
           qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
         }
       } else {
-        // Partial — decrement the live row, clone an archive row for the removed
-        // bottles, and free that many of its slots.
-        await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty - count } });
+        // Partial — free that many of its slots in THIS rack first (a wine can
+        // span units), THEN decrement the live row, then clone an archive row
+        // for the removed bottles.
+        await releaseHereThenSetQuantity(wineId, count, qty - count);
         if (wine) {
           const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
           await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false, archive_note: note.trim().slice(0, 35) || null });
         }
-        await removeSlotsForWine(wineId, count, rackId); // scope to THIS rack (a wine can span units)
         if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
@@ -1748,8 +1839,8 @@ export default function RackGridScreen() {
       } else {
         // Decrement the live row and free `count` slots FROM THIS RACK only — a
         // bottle of the same wine in another rack/fridge is never touched.
-        await updateWine.mutateAsync({ id: wineId, updates: { quantity: newTotal } });
-        await removeSlotsForWine(wineId, count, rackId);
+        // Free first, then lower quantity (see releaseHereThenSetQuantity).
+        await releaseHereThenSetQuantity(wineId, count, newTotal);
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
@@ -2547,7 +2638,7 @@ export default function RackGridScreen() {
               {allBins.map((b) => (
                 <TouchableOpacity key={b.id} style={styles.destRow} activeOpacity={0.7} onPress={() => {
                   if (!destPicker) return;
-                  if (destPicker.mode === 'move') void moveWineToBin(destPicker.wineId, b.id);
+                  if (destPicker.mode === 'move') { const wid = destPicker.wineId, wn = destPicker.wineName; startMove(wid, wn, (n) => void moveWineToBin(wid, b.id, n)); }
                   else { setAddMoreDest({ wineId: destPicker.wineId, wineName: destPicker.wineName, kind: 'bin', id: b.id, name: b.name }); setAddMoreCountStr('1'); setDestPicker(null); }
                 }}>
                   <Text style={styles.destName} numberOfLines={1}>{b.name}</Text>

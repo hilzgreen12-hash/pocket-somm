@@ -8,7 +8,7 @@ import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav'
 import { RenameModal } from '../../../src/components/RenameModal';
 import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
 import { updateCellarWine, archiveCellarWine, deleteCellarWine, addCellarWineRemoval } from '../../../src/api/cellar';
-import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, placedCount } from '../../../src/api/placements';
+import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, fetchPlacementsForWines, placedCount } from '../../../src/api/placements';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { showAlert } from '../../../src/components/AppAlert';
@@ -70,7 +70,17 @@ export default function BinDetailScreen() {
   // Bottles moved into THIS bin (e.g. by Voice Command) that have no cell yet.
   const { wines: allWines } = useCellar();
   const awaitingWines = useMemo(() => allWines.filter((w) => w.awaiting_placement_unit_id === binId), [allWines, binId]);
-  const awaitingBottles = awaitingWines.reduce((s, w) => s + (w.quantity ?? 0), 0);
+  // Only the bottles still waiting to be filed (total − already placed), not
+  // the wine's whole quantity.
+  const { data: awaitingPlacements = [] } = useQuery({
+    queryKey: ['placements-list', 'bin-awaiting', binId, awaitingWines.map((w) => w.id).join(',')],
+    queryFn: () => fetchPlacementsForWines(awaitingWines.map((w) => w.id)),
+    enabled: awaitingWines.length > 0,
+  });
+  const awaitingBottles = awaitingWines.reduce((s, w) => {
+    const placed = awaitingPlacements.filter((p) => p.cellar_wine_id === w.id).reduce((n, p) => n + (p.quantity ?? 0), 0);
+    return s + Math.max(0, (w.quantity ?? 0) - placed);
+  }, 0);
 
   // Bespoke filters live in the same custom_filters table as racks, scoped to
   // this bin's id (a bin is a wine_racks row), so the +Add flow just works.
@@ -148,8 +158,8 @@ export default function BinDetailScreen() {
       return new Set(entries.filter((e) => ids.has(e.wine.id)).map((e) => e.cellId));
     }
     if (highlightedWineId) {
-      const e = entries.find((en) => en.wine.id === highlightedWineId);
-      return e ? new Set([e.cellId]) : new Set<string>();
+      // Every cell the wine sits in, not just the first.
+      return new Set(entries.filter((en) => en.wine.id === highlightedWineId).map((en) => en.cellId));
     }
     return new Set<string>();
   }, [q, filteredEntries, activeCustomFilterId, customFilters, highlightedWineId, entries]);
@@ -262,7 +272,16 @@ export default function BinDetailScreen() {
         // already placed (rack / other cells / alt cellars).
         const pls = await fetchPlacementsForWine(movingWine.id);
         const row = allWines.find((w) => w.id === movingWine.id);
-        const loose = Math.max(1, (row?.quantity ?? 1) - placedCount(pls));
+        const loose = (row?.quantity ?? 0) - placedCount(pls);
+        if (loose < 1) {
+          // Nothing is actually unplaced — never file an extra bottle.
+          await updateCellarWine(movingWine.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
+          invalidate();
+          qc.invalidateQueries({ queryKey: ['cellar'] });
+          setMovingWine(null);
+          showAlert({ title: 'Already placed', body: 'All bottles of this wine are already filed in your storage.' });
+          return;
+        }
         await addBinPlacement(movingWine.id, cell.id, loose);
       }
       // Clear any awaiting-placement flag — the bottles are now filed.

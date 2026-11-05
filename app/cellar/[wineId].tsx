@@ -1,3 +1,4 @@
+import { normalisePriceText, parsePriceText } from '../../src/utils/priceInput';
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share, ScrollView } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -31,7 +32,7 @@ import { generatePairings, fetchProducerRange, type ProducerRange, type Producer
 import { valueWine, isWineNotFound, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
 import { wineQueryName } from '../../src/utils/wineIdentity';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
-import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation } from '../../src/api/placements';
+import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation, addLocationPlacement } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { generateServingSuggestion, generateMarketVintage } from '../../src/api/wineExtras';
@@ -641,14 +642,21 @@ export default function CellarWineDetail() {
   // cellar_wines.storage_location_id assignment the location screen uses.
   async function fileInStorageLocation(locationId: string) {
     try {
-      // Filing into a location clears any rack slots and bin cell first, so the
-      // wine can't be double-counted (its old rack/bin membership would still
-      // show it there) — mirrors the S3 guard in the label results flow.
-      await clearWineFromRacks(wine!.id);
-      if (wine!.bin_cell_id) await updateWine.mutateAsync({ id: wine!.id, updates: { bin_cell_id: null } });
-      await assignWineToStorageLocation(wine!.id, locationId);
+      // File only the UNPLACED bottles here, as a location placement. Bottles
+      // already in racks, bins or other cellars stay exactly where they are
+      // (clearing racks here used to empty them and file nothing).
+      const pls = await fetchPlacementsForWine(wine!.id);
+      const unplaced = Math.max(0, (wine!.quantity ?? 0) - placedCount(pls));
+      if (unplaced <= 0) {
+        showAlert({ title: 'Already placed', body: 'Every bottle of this wine is already filed in your storage.' });
+        return;
+      }
+      await addLocationPlacement(wine!.id, locationId, null, unplaced);
+      if (wine!.awaiting_placement) await updateWine.mutateAsync({ id: wine!.id, updates: { awaiting_placement: false, awaiting_placement_unit_id: null } });
       qc.invalidateQueries({ queryKey: ['storage-locations'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines', locationId] });
+      qc.invalidateQueries({ queryKey: ['placements', wine!.id] });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
       qc.invalidateQueries({ queryKey: ['bins'] });
       qc.invalidateQueries({ queryKey: ['bin-cells'] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
@@ -1186,7 +1194,7 @@ export default function CellarWineDetail() {
 
   async function handleSavePrice() {
     Keyboard.dismiss();
-    const trimmed = purchasePriceDraft.trim().replace(',', '.');
+    const trimmed = normalisePriceText(purchasePriceDraft);
     const parsed = trimmed ? Number(trimmed) : null;
     if (trimmed && (parsed === null || Number.isNaN(parsed) || parsed < 0)) {
       showAlert({ title: 'Invalid', body: 'Enter a positive number for the purchase price.' });

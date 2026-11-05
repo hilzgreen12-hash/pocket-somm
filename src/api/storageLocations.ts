@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { evictCachedLabel } from './labelImageCache';
+import { selectAllPages, selectAllInChunks, chunkIds } from './paging';
 import type { StorageLocation, StorageCase, CellarWine } from '../types/wine';
 
 // Home storage locations (migration 064) — non-grid spaces the user photographs
@@ -19,14 +20,18 @@ export async function fetchStorageLocations(userId: string): Promise<StorageLoca
   const locs = (data ?? []) as any[];
   // Bottle counts come from location PLACEMENTS now (a wine can be split across a
   // rack and an alt cellar), excluding archived/wishlist wines.
-  const { data: placements, error: pErr } = await supabase
-    .from('cellar_placements')
-    .select('quantity, storage_location_id, cellar_wines(archived_at, is_wishlist)')
-    .eq('kind', 'location')
-    .not('storage_location_id', 'is', null);
-  if (pErr) throw pErr;
+  // Paged: an imported external cellar alone can hold thousands of placements,
+  // well past PostgREST's 1000-row cap (which silently undercounted).
+  const placements = await selectAllPages<any>((from, to) =>
+    supabase
+      .from('cellar_placements')
+      .select('id, quantity, storage_location_id, cellar_wines(archived_at, is_wishlist)')
+      .eq('kind', 'location')
+      .not('storage_location_id', 'is', null)
+      .order('id', { ascending: true })
+      .range(from, to) as any);
   const countByLoc = new Map<string, number>();
-  for (const p of (placements ?? []) as any[]) {
+  for (const p of placements) {
     const w = p.cellar_wines;
     if (w && (w.archived_at || w.is_wishlist)) continue;
     if (!p.storage_location_id) continue;
@@ -183,9 +188,9 @@ export async function deleteStorageCase(id: string): Promise<void> {
 export async function fetchStorageCasesByIds(ids: string[]): Promise<StorageCase[]> {
   const clean = Array.from(new Set(ids.filter(Boolean)));
   if (clean.length === 0) return [];
-  const { data, error } = await supabase.from('storage_cases').select(CASE_COLS).in('id', clean);
-  if (error) throw error;
-  return (data ?? []) as StorageCase[];
+  return selectAllInChunks<StorageCase>(clean, (chunk, from, to) =>
+    supabase.from('storage_cases').select(CASE_COLS).in('id', chunk)
+      .order('id', { ascending: true }).range(from, to) as any);
 }
 
 // File (or unfile, with null) a wine into a case.
@@ -208,14 +213,15 @@ export async function deleteEmptyCasesForLocation(locationId: string): Promise<v
   if (error) throw error;
   const caseIds = (cases ?? []).map((c: any) => c.id as string);
   if (caseIds.length === 0) return;
-  const { data: used, error: pErr } = await supabase
-    .from('cellar_placements')
-    .select('case_id')
-    .in('case_id', caseIds);
-  if (pErr) throw pErr;
-  const usedIds = new Set((used ?? []).map((p: any) => p.case_id).filter(Boolean));
+  // Paged + chunked: a case-heavy imported cellar can exceed 1000 placements, and
+  // a truncated read would make a USED case look empty and delete it.
+  const used = await selectAllInChunks<{ case_id: string | null }>(caseIds, (chunk, from, to) =>
+    supabase.from('cellar_placements').select('id, case_id').in('case_id', chunk)
+      .order('id', { ascending: true }).range(from, to) as any);
+  const usedIds = new Set(used.map((p) => p.case_id).filter(Boolean));
   const emptyIds = caseIds.filter((id) => !usedIds.has(id));
-  if (emptyIds.length === 0) return;
-  const { error: delErr } = await supabase.from('storage_cases').delete().in('id', emptyIds);
-  if (delErr) throw delErr;
+  for (const chunk of chunkIds(emptyIds)) {
+    const { error: delErr } = await supabase.from('storage_cases').delete().in('id', chunk);
+    if (delErr) throw delErr;
+  }
 }

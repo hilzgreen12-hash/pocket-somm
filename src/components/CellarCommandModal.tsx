@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, ActivityIndicator, useWindowDimensions, KeyboardAvoidingView, Platform, Image } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, usePathname } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MicButton } from './MicButton';
 import { showAlert } from './AppAlert';
@@ -11,7 +11,7 @@ import { addCellarWine, addCellarWineRemoval, updateCellarWine, deleteCellarWine
 import { getRacks, clearWineFromRacks, removeSlotsForWine } from '../api/racks';
 import { getBins } from '../api/bins';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
-import { moveBottlesToLocation, clearLocationPlacements, releaseBottlesFromPlacements, fetchPlacementsForWine, fetchPlacementsForWines, placedCount } from '../api/placements';
+import { moveBottlesToLocation, releaseBottlesFromPlacements, fetchPlacementsForWine, fetchPlacementsForWines, placedCount, decrementPlacement, addLocationPlacement } from '../api/placements';
 import { recommendFromCellar } from '../api/cellarRecommend';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
@@ -97,6 +97,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   // back to the same state (e.g. the done line) when the user returns.
   const [focused, setFocused] = useState(true);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
+  const pathname = usePathname();
   const [chooseOpen, setChooseOpen] = useState(false);
   const [chooseShown, setChooseShown] = useState(false);
   // Hand over to the chat after the sheet's own dismissal has finished.
@@ -372,15 +373,10 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         // wherever they sit (alt cellar / rack) and leave them loose in the cellar.
         // Quantity is unchanged — the bottles don't leave the cellar, just their spot.
         if (moveToCellarList) {
-          if (whole) {
-            await clearWineFromRacks(chosenWine.id);
-            await clearLocationPlacements(chosenWine.id);
-            await updateCellarWine(chosenWine.id, { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: false, awaiting_placement_unit_id: null });
-          } else {
-            // Free `count` bottles from their placements (rack-first, then alt cellar);
-            // quantity stays the same so those bottles become loose/unplaced.
-            await releaseBottlesFromPlacements(chosenWine.id, count);
-          }
+          // Free `count` HOME bottles (racks, then bins and home cellars — never
+          // offsite stock); quantity is unchanged, so they become loose.
+          await releaseHomeBottles(chosenWine.id, count);
+          if (whole) await updateCellarWine(chosenWine.id, { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: false, awaiting_placement_unit_id: null });
           qc.invalidateQueries({ queryKey: ['cellar', userId] });
           qc.invalidateQueries({ queryKey: ['placements', chosenWine.id] });
           qc.invalidateQueries({ queryKey: ['placements-list'] });
@@ -401,9 +397,9 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
         if (!result?.locationId && !result?.unitId) return;
         const toName = destName ?? 'its new location';
-        // The bottles that moved (the whole row, or the split-off row) — the
-        // destination's placement screen opens on them.
-        let movedWineId: string | null = whole ? chosenWine.id : null;
+        // One wine = one Cellar List line: moved bottles stay on THIS row.
+        const movedWineId: string = chosenWine.id;
+        void whole;
 
         if (result?.locationId) {
           // Destination is an alt cellar — go placement-native + merge-aware so
@@ -411,25 +407,12 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           // line, e.g. bumping a 3-bottle count to 4) instead of vanishing.
           await moveBottlesToLocation(chosenWine, result.locationId, count);
         } else {
-          // Destination is a rack/fridge/bin unit — flag the bottles "awaiting
-          // placement" there (no slot chosen yet). The destination screen surfaces
-          // awaiting-placement bottles so they're never invisible.
-          const destFields = { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: true, awaiting_placement_unit_id: result!.unitId };
-          if (whole) {
-            // Free the wine from every current spot — rack slots AND any alt-cellar
-            // placements — or it lingers as a ghost line where it used to live.
-            await clearWineFromRacks(chosenWine.id);
-            await clearLocationPlacements(chosenWine.id);
-            await updateCellarWine(chosenWine.id, destFields);
-          } else {
-            // Partial move: free that many source slots, decrement the source, and
-            // clone a destination row carrying the moved bottles (awaiting placement).
-            await removeSlotsForWine(chosenWine.id, count);
-            await updateCellarWine(chosenWine.id, { quantity: chosenWine.quantity - count });
-            const { id, created_at, updated_at, ...rest } = chosenWine;
-            const added = await addCellarWine({ ...rest, quantity: count, is_wishlist: false, ...destFields });
-            movedWineId = added?.id ?? null;
-          }
+          // Destination is a rack/fridge/bin. Free `count` HOME bottles from where
+          // they sit (racks, bins, home cellars — never offsite), keeping them on
+          // the SAME row (no second Cellar List line), and mark them awaiting
+          // placement in that unit until the user picks slots/cells there.
+          await releaseHomeBottles(chosenWine.id, count);
+          await updateCellarWine(chosenWine.id, { awaiting_placement: true, awaiting_placement_unit_id: result!.unitId });
         }
         qc.invalidateQueries({ queryKey: ['cellar', userId] });
         qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
@@ -515,6 +498,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         // archive) so a rack/bin/alt-cellar count never lingers above quantity.
         const count = Math.min(chosenWine.quantity, Math.max(1, result?.quantity ?? chosenWine.quantity));
         if (count >= (chosenWine.quantity ?? 0)) {
+          await clearWineFromRacks(chosenWine.id);
           await deleteCellarWine(chosenWine.id);
         } else {
           const winePlacements = await fetchPlacementsForWine(chosenWine.id);
@@ -584,10 +568,29 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           is_favourite: false,
           label_favourite: false,
           bottle_size_ml: 750,
-          storage_location_id: result?.locationId ?? null,
-          awaiting_placement: true,
+          storage_location_id: null,
+          // Into an alt cellar: filed there below as a placement. Otherwise loose,
+          // awaiting placement in the Cellar List.
+          awaiting_placement: !result?.locationId,
         };
-        await addCellarWine(payload);
+        // One wine = one line: an identical wine already in the cellar just gets
+        // the extra bottles.
+        const norm = (x?: string | null) => (x ?? '').trim().toLowerCase();
+        const twin = wines.find((w) => !w.archived_at && !w.is_wishlist
+          && norm(w.producer) === norm(payload.producer) && norm(w.wine_name) === norm(payload.wine_name) && norm(w.vintage) === norm(payload.vintage));
+        let addedId: string;
+        if (twin) {
+          await updateCellarWine(twin.id, { quantity: (twin.quantity ?? 0) + count });
+          addedId = twin.id;
+        } else {
+          const row = await addCellarWine(payload);
+          addedId = row.id;
+        }
+        if (result?.locationId) await addLocationPlacement(addedId, result.locationId, null, count);
+        qc.invalidateQueries({ queryKey: ['placements', addedId] });
+        qc.invalidateQueries({ queryKey: ['placements-list'] });
+        qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+        qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
         qc.invalidateQueries({ queryKey: ['cellar', userId] });
         setSuccess({
           action: 'add',
@@ -650,6 +653,24 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   const prompts = scoped
     ? ['Archive X bottles of...', 'Move X bottles of... to another location', 'Delete X bottles of...']
     : ['Archive X bottles of...', 'Move X bottles of...', 'Add X bottles of...', 'Delete X bottles of...'];
+
+  // Free `n` bottles from HOME storage only: rack/fridge slots first, then bin
+  // cells and home alt cellars. Offsite/external cellars are never touched by a
+  // move or unplace (that stock isn't to hand).
+  async function releaseHomeBottles(wineId: string, n: number): Promise<number> {
+    if (n <= 0) return 0;
+    let freed = await removeSlotsForWine(wineId, n);
+    if (freed >= n) return freed;
+    const externalIds = new Set(locations.filter((l) => l.is_external).map((l) => l.id));
+    const rest = (await fetchPlacementsForWine(wineId)).filter((p) =>
+      p.kind === 'bin' || (p.kind === 'location' && !(p.storage_location_id && externalIds.has(p.storage_location_id))));
+    for (const p of rest) {
+      if (freed >= n) break;
+      const take = Math.min(n - freed, p.quantity ?? 0);
+      if (take > 0) { await decrementPlacement(p.id, take); freed += take; }
+    }
+    return freed;
+  }
 
   function restate() { setTranscript(''); setResult(null); setChosenWineId(null); setPhase('speak'); }
 
@@ -717,7 +738,14 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           // One place: open it straight away (no reply).
           setFindResult(null);
           setPhase('find');
-          router.push(places[0].route as any);
+          const [path, query] = places[0].route.split('?');
+          if (path === pathname) {
+            // Already on that screen: highlight in place rather than stacking a copy.
+            const params = Object.fromEntries((query ?? '').split('&').filter(Boolean).map((kv) => { const [k, v = ''] = kv.split('='); return [k, decodeURIComponent(v)]; }));
+            router.setParams(params as any);
+          } else {
+            router.push(places[0].route as any);
+          }
           return;
         }
         if (places.length > 1) {

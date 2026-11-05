@@ -1,3 +1,4 @@
+import { normalisePriceText, parsePriceText } from '../../src/utils/priceInput';
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -43,7 +44,7 @@ export default function AddWineScreen() {
 
   async function performNewEntry() {
     if (!session?.user.id) return;
-    const parsedPrice = parseFloat(purchasePrice.replace(',', '.'));
+    const parsedPrice = parsePriceText(purchasePrice);
     const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
     setSaving(true);
     try {

@@ -17,7 +17,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements } from '../../src/api/placements';
+import { fetchPlacementsForWine, placedCount, clearAppPlacementsForWine, releaseBottlesFromPlacements } from '../../src/api/placements';
 import { findFoodWinePairing } from '../../src/api/label';
 import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
@@ -334,7 +334,7 @@ export default function PairingResultsScreen() {
         // (this path set archived_at via updateCellarWine, bypassing the central
         // clear in archiveCellarWine).
         await clearWineFromRacks(wine.id);
-        await clearLocationPlacements(wine.id);
+        await clearAppPlacementsForWine(wine.id);
       } else {
         // Decrement the live row and clone an archived row carrying the
         // selected bottles so the user can edit/note them later.

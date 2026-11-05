@@ -2,28 +2,75 @@ import { useEffect, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { showAlert } from './AppAlert';
 import { MicButton } from './MicButton';
+import { fetchStorageLocationCases, createStorageCase } from '../api/storageLocations';
 import {
-  fetchStorageLocationCases, createStorageCase, assignWineToCase,
-} from '../api/storageLocations';
+  fetchPlacementsForWine, placedCount, decrementPlacement, addLocationPlacement,
+} from '../api/placements';
+import { getCellarWineById } from '../api/cellar';
 import type { StorageCase } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // "How is this wine packaged?" — shown whenever a wine lands in an Other Home
 // Storage location. Offers Loose Bottle(s), filing into an existing case, or
-// creating a brand-new case (name + note). Files the wine via case_id; Loose
-// leaves it uncased. The caller invalidates via onDone.
+// creating a brand-new case (name + note). Case membership lives on the wine's
+// 'location' PLACEMENT in this alt cellar (placement.case_id) — never the legacy
+// cellar_wines.case_id. Loose leaves the bottles uncased. The caller invalidates
+// via onDone.
+
+// File `count` of a wine's bottles in an alt cellar into a case (or loose with
+// caseId null) by moving them between that wine's placements there. The source is
+// `placementId` when given, else the wine's LOOSE placement in the location. A
+// partial file splits the placement (decrement the source, add to the case's
+// placement — addLocationPlacement merges into an existing one, so no duplicate
+// lines). If the wine has no placement here yet (legacy-only row) one is created,
+// but only for bottles that aren't already placed elsewhere, so the placed total
+// never exceeds the wine's quantity.
+export async function fileLocationBottlesIntoCase(opts: {
+  wineId: string;
+  locationId: string;
+  caseId: string | null;
+  count?: number | null;
+  placementId?: string | null;
+}): Promise<void> {
+  const { wineId, locationId, caseId, count, placementId } = opts;
+  const placements = await fetchPlacementsForWine(wineId);
+  const here = placements.filter((p) => p.kind === 'location' && p.storage_location_id === locationId);
+  const src = placementId
+    ? here.find((p) => p.id === placementId)
+    : here.find((p) => !p.case_id);
+  if (!src) {
+    if (!caseId) return; // nothing loose here to file, and loose is the default anyway
+    const wine = await getCellarWineById(wineId);
+    const unplaced = Math.max(0, (wine?.quantity ?? 0) - placedCount(placements));
+    const take = Math.min(count ?? unplaced, unplaced);
+    if (take <= 0) throw new Error("Couldn't find this wine's bottles in this location — pull to refresh and try again.");
+    await addLocationPlacement(wineId, locationId, caseId, take);
+    return;
+  }
+  if ((src.case_id ?? null) === caseId) return; // already filed there
+  const take = Math.max(1, Math.min(count ?? src.quantity, src.quantity));
+  // Shed from the source first, then land in the case's placement.
+  await decrementPlacement(src.id, take);
+  await addLocationPlacement(wineId, locationId, caseId, take);
+}
 
 interface Props {
   visible: boolean;
   wineId: string | null;
   locationId: string | null;
+  // How many bottles just landed here (they sit on the wine's loose placement).
+  // Only that many are filed into a case; omitted = the whole loose placement.
+  count?: number | null;
   userId: string;
   onClose: () => void;
   onDone: () => void; // fired after the wine is filed, so the caller can refresh
 }
 
-export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, onDone }: Props) {
+export function PackagingPrompt({ visible, wineId, locationId, count, userId, onClose, onDone }: Props) {
+  // File the landed bottles into a case (or leave them loose with null).
+  const fileInto = (caseId: string | null) =>
+    fileLocationBottlesIntoCase({ wineId: wineId!, locationId: locationId!, caseId, count });
   const [step, setStep] = useState<'choose' | 'newCase' | 'existing'>('choose');
   const [caseName, setCaseName] = useState('');
   const [caseNote, setCaseNote] = useState('');
@@ -37,7 +84,7 @@ export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, 
   }, [visible, locationId]);
 
   async function finish(action: () => Promise<void>) {
-    if (!wineId || saving) return;
+    if (!wineId || !locationId || saving) return;
     setSaving(true);
     try {
       await action();
@@ -60,7 +107,7 @@ export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, 
     if (!caseName.trim()) { showAlert({ title: 'Name the case', body: 'Give this case a name so you can find it.' }); return; }
     void finish(async () => {
       const created = await createStorageCase(userId, { storageLocationId: locationId!, name: caseName, note: caseNote });
-      await assignWineToCase(wineId!, created.id);
+      await fileInto(created.id);
     });
   }
 
@@ -71,7 +118,7 @@ export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, 
           {step === 'choose' ? (
             <>
               <Text style={styles.title}>How is this wine packaged?</Text>
-              <TouchableOpacity style={styles.optBtn} onPress={() => finish(() => assignWineToCase(wineId!, null))} disabled={saving} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.optBtn} onPress={() => finish(() => fileInto(null))} disabled={saving} activeOpacity={0.85}>
                 <Text style={styles.optText}>Loose Bottle(s)</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.optBtn, !cases.length && styles.optBtnDisabled]} onPress={() => cases.length && setStep('existing')} disabled={!cases.length} activeOpacity={0.85}>
@@ -102,7 +149,7 @@ export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, 
               <Text style={styles.title}>Add to Existing Case</Text>
               <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
                 {cases.map((c) => (
-                  <TouchableOpacity key={c.id} style={styles.caseRow} onPress={() => finish(() => assignWineToCase(wineId!, c.id))} disabled={saving} activeOpacity={0.7}>
+                  <TouchableOpacity key={c.id} style={styles.caseRow} onPress={() => finish(() => fileInto(c.id))} disabled={saving} activeOpacity={0.7}>
                     <Text style={styles.caseName} numberOfLines={1}>{c.name}</Text>
                   </TouchableOpacity>
                 ))}
