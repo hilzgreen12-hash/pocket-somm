@@ -397,7 +397,7 @@ export default function CellarWineDetail() {
   const [marketUnknown, setMarketUnknown] = useState(false);
   const [generatingServing, setGeneratingServing] = useState(false);
   const [generatingMarket, setGeneratingMarket] = useState(false);
-  // Wine card tabs. Only Overview is built on open; Market and Pair generate the
+  // Wine card tabs. Only Overview is built on open; Market and Serve generate the
   // first time they're opened, are saved on the wine, and reopen instantly after
   // (Refresh / Regenerate to update).
   const [cardTab, setCardTab] = useState<'overview' | 'market' | 'somm' | 'cellar'>('overview');
@@ -1920,7 +1920,7 @@ export default function CellarWineDetail() {
     { id: 'overview', label: 'Overview' },
     { id: 'market', label: 'Market' },
     ...(!isWishlist ? [{ id: 'cellar' as const, label: 'Cellar' }] : []),
-    ...(!isArchived && !isWishlist ? [{ id: 'somm' as const, label: 'Pair' }] : []),
+    ...(!isArchived && !isWishlist ? [{ id: 'somm' as const, label: 'Serve' }] : []),
   ];
   const activeTab = tabList.some((t) => t.id === cardTab) ? cardTab : 'overview';
   const cardCurrency = preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP';
