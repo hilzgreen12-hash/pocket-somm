@@ -129,6 +129,7 @@ export default function CellarStatsScreen() {
   const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | 'purchase-estimated' | 'purchase-current' | 'estimate-purchase' | null>(null);
   // Which Condition bucket is expanded to show its wines.
   const [expandedCondition, setExpandedCondition] = useState<string | null>(null);
+  const [awaitingWindowOpen, setAwaitingWindowOpen] = useState(false);
   const editorCurrency = preferences?.defaultCurrency ?? 'GBP';
   function onEditorSaved() {
     if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
@@ -519,9 +520,26 @@ export default function CellarStatsScreen() {
               );
             })}
             {winesAwaitingWindow > 0 ? (
-              <Text style={[styles.missingValueText, { marginTop: spacing.sm }]}>
-                {winesAwaitingWindow} {winesAwaitingWindow === 1 ? 'wine' : 'wines'} awaiting a drinking window — open a wine to generate its intel.
-              </Text>
+              <>
+                <TouchableOpacity style={[styles.missingValueRow, { marginTop: spacing.sm }]} onPress={() => setAwaitingWindowOpen((v) => !v)} activeOpacity={0.7}>
+                  <Text style={styles.missingValueText}>
+                    {winesAwaitingWindow} {winesAwaitingWindow === 1 ? 'wine' : 'wines'} awaiting a drinking window · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
+                  </Text>
+                </TouchableOpacity>
+                {/* The wines with no window yet — open one to generate its intel. */}
+                {awaitingWindowOpen ? (
+                  <View style={styles.conditionWines}>
+                    {wines.filter((w) => !['peak', 'approaching', 'too_young', 'declining'].includes(effectiveMaturity(w) as string)).map((w) => (
+                      <TouchableOpacity key={w.id} style={styles.conditionWineRow} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.7}>
+                        <Text style={styles.conditionWineName} numberOfLines={1}>{[w.producer, w.wine_name, w.vintage].filter(Boolean).join(' ')}</Text>
+                        <Text style={styles.conditionWineMeta} numberOfLines={1}>
+                          {[w.region, `${w.quantity ?? 1} × ${bottleSizeLabel(w.bottle_size_ml ?? 750)}`].filter(Boolean).join(' · ')}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+              </>
             ) : null}
           </View>
 
