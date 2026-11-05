@@ -16,6 +16,7 @@ import { HelpTitle } from '../../src/components/HelpTitle';
 import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
 import { DrinkNowCarousel } from '../../src/components/DrinkNowCarousel';
 import { CellarInsightsCarousel } from '../../src/components/CellarInsightsCarousel';
+import { ReorderableSections, mergeSectionOrder } from '../../src/components/ReorderableSections';
 import { HomeVoiceModal } from '../../src/components/HomeVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -48,6 +49,9 @@ let welcomeShownThisSession = false;
 const SD_LABEL_IMAGE = NAMED_LABELS.denisMortet;
 const SD_RESTAURANT_IMAGE: number | null = require('../../assets/images/tiles/restaurant-interior.jpg');
 const SD_COLLAGE_IMAGES = [NAMED_LABELS.lynchBages, NAMED_LABELS.piperRare, NAMED_LABELS.donnhoff, NAMED_LABELS.benditoDestino];
+
+const HOME_ORDER_KEY = 'home_section_order_v1';
+const HOME_SECTION_DEFAULT = ['search', 'scans', 'cellar', 'insights', 'musings'];
 
 const SCAN_HELP = `Expert training + Wine Searcher Market API result in the most comprehensive and customized experience in wine exploration.
 
@@ -343,9 +347,22 @@ export default function ScanLandingScreen() {
     }
   }
 
+  // User-arranged order of the Home carousels (saved per device).
+  const [homeOrder, setHomeOrder] = useState<string[]>(HOME_SECTION_DEFAULT);
+  const [scrollLocked, setScrollLocked] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(HOME_ORDER_KEY)
+      .then((raw) => { if (raw) setHomeOrder(mergeSectionOrder(JSON.parse(raw), HOME_SECTION_DEFAULT)); })
+      .catch(() => {});
+  }, []);
+  function saveHomeOrder(next: string[]) {
+    setHomeOrder(next);
+    AsyncStorage.setItem(HOME_ORDER_KEY, JSON.stringify(next)).catch(() => {});
+  }
+
   return (
     <TabSwipeView style={styles.container}>
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingTop }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <ScrollView style={{ flex: 1 }} scrollEnabled={!scrollLocked} contentContainerStyle={[styles.scroll, { paddingTop }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
       {/* This scroll has paddingHorizontal (other tabs pad per-section), which
           would push the mark inward — pull it back to the screen edge so the V
@@ -362,96 +379,93 @@ export default function ScanLandingScreen() {
 
       <View style={styles.blurbSeparator} />
 
-      {/* Search & Discover — the three ways in, as a carousel matching the ones
-          below. Scan tiles keep their brown "upload instead" bar. */}
-      <Text style={styles.carouselHeader}>Search &amp; Discover</Text>
-      <View style={styles.carouselBleed}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sdCarousel}>
-          {/* Search a Wine → the typeahead prompt */}
-          <View style={styles.sdCard}>
-            <TouchableOpacity style={styles.sdThumb} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
-              <View style={styles.sdCollage}>
-                {SD_COLLAGE_IMAGES.map((img, i) => (
-                  <Image key={i} source={img} style={styles.sdCollageCell} resizeMode="cover" />
-                ))}
-              </View>
-              <View style={styles.sdShade} pointerEvents="none" />
-              <View style={styles.sdTitleWrap} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search a Wine</Text></View>
-            </TouchableOpacity>
-            <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Market Intel Powered by Wine Searcher</Text>
-          </View>
+      {/* Home carousels — each title has a grip at its left indent; hold and drag
+          to reorder. The order is saved on this device. */}
+      <ReorderableSections
+        order={homeOrder}
+        onReorder={saveHomeOrder}
+        onDragActive={(on) => setScrollLocked(on)}
+        headerStyle={styles.carouselHeader}
+        separatorStyle={styles.sectionSeparator}
+        sections={[
+          {
+            key: 'search',
+            title: 'Search & Discover',
+            // The three ways in. Scan tiles keep their brown "upload instead" bar.
+            content: (
+                <View style={styles.carouselBleed}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sdCarousel}>
+                    {/* Search a Wine → the typeahead prompt */}
+                    <View style={styles.sdCard}>
+                      <TouchableOpacity style={styles.sdThumb} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
+                        <View style={styles.sdCollage}>
+                          {SD_COLLAGE_IMAGES.map((img, i) => (
+                            <Image key={i} source={img} style={styles.sdCollageCell} resizeMode="cover" />
+                          ))}
+                        </View>
+                        <View style={styles.sdShade} pointerEvents="none" />
+                        <View style={styles.sdTitleWrap} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search a Wine</Text></View>
+                      </TouchableOpacity>
+                      <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Market Intel Powered by Wine Searcher</Text>
+                    </View>
 
-          {/* Scan a Label → intel */}
-          <View style={styles.sdCard}>
-            <TouchableOpacity
-              style={styles.sdThumb}
-              onPress={() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))}
-              onLongPress={() => requireAccount(handleViewLastIntel)}
-              activeOpacity={0.85}
-            >
-              <Image source={SD_LABEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
-              <View style={styles.sdShade} pointerEvents="none" />
-              <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Label</Text></View>
-              <TouchableOpacity style={styles.sdBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
-                <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
-                <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-            <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Generate Wine Intel, Review &amp; Cellar</Text>
-          </View>
+                    {/* Scan a Label → intel */}
+                    <View style={styles.sdCard}>
+                      <TouchableOpacity
+                        style={styles.sdThumb}
+                        onPress={() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))}
+                        onLongPress={() => requireAccount(handleViewLastIntel)}
+                        activeOpacity={0.85}
+                      >
+                        <Image source={SD_LABEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
+                        <View style={styles.sdShade} pointerEvents="none" />
+                        <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Label</Text></View>
+                        <TouchableOpacity style={styles.sdBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
+                          <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
+                          <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                      <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Generate Wine Intel, Review &amp; Cellar</Text>
+                    </View>
 
-          {/* Scan a Wine List → recommendations */}
-          <View style={styles.sdCard}>
-            <TouchableOpacity
-              style={styles.sdThumb}
-              onPress={() => router.push('/scan/wine-list')}
-              onLongPress={() => requireAccount(handleViewLastListResult)}
-              activeOpacity={0.85}
-            >
-              {SD_RESTAURANT_IMAGE ? (
-                <Image source={SD_RESTAURANT_IMAGE} style={styles.sdImage} resizeMode="cover" />
-              ) : (
-                <View style={[styles.sdImage, styles.sdFallback]}>
-                  <Ionicons name="restaurant-outline" size={40} color="rgba(255,255,255,0.55)" allowFontScaling={false} />
+                    {/* Scan a Wine List → recommendations */}
+                    <View style={styles.sdCard}>
+                      <TouchableOpacity
+                        style={styles.sdThumb}
+                        onPress={() => router.push('/scan/wine-list')}
+                        onLongPress={() => requireAccount(handleViewLastListResult)}
+                        activeOpacity={0.85}
+                      >
+                        {SD_RESTAURANT_IMAGE ? (
+                          <Image source={SD_RESTAURANT_IMAGE} style={styles.sdImage} resizeMode="cover" />
+                        ) : (
+                          <View style={[styles.sdImage, styles.sdFallback]}>
+                            <Ionicons name="restaurant-outline" size={40} color="rgba(255,255,255,0.55)" allowFontScaling={false} />
+                          </View>
+                        )}
+                        <View style={styles.sdShade} pointerEvents="none" />
+                        <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Wine List</Text></View>
+                        <TouchableOpacity style={styles.sdBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
+                          <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
+                          <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                      <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Tailored Bottle Picks from a Wine List</Text>
+                    </View>
+                  </ScrollView>
                 </View>
-              )}
-              <View style={styles.sdShade} pointerEvents="none" />
-              <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Wine List</Text></View>
-              <TouchableOpacity style={styles.sdBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
-                <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
-                <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-            <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Tailored Bottle Picks from a Wine List</Text>
-          </View>
-        </ScrollView>
-      </View>
-
-      {/* Recent Scans — mixed label + list scans, most recent first. */}
-      <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Your Recent Label Scans</Text>
-      <View style={styles.carouselBleed}><RecentScansCarousel /></View>
-
-      {/* Drink Now — cellar bottles at last call (drinkable now, window closes
-          within 5 years), most urgent first. Replaces the redundant Recent
-          Reviews carousel (reviews live in the Review tab) and consolidates the
-          old "Drink Soon" carousel. */}
-      <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Home Cellar Insights</Text>
-      <View style={styles.carouselBleed}><DrinkNowCarousel /></View>
-
-      {/* Cellar Insights — actionable "running low" bottles to replenish, then a
-          few facts buried in the data (top-rated grape, oldest vintage, most-
-          collected producer). Chef/ingredient tiles deferred — not tracked yet. */}
-      <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Vinster's Insights</Text>
-      <View style={styles.carouselBleed}><CellarInsightsCarousel /></View>
-
-      {/* Community Musings — the Journal entries (same carousel as the Share tab:
-          the website blog feed, each card opening its post). */}
-      <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Community Musings</Text>
-      <View style={styles.carouselBleed}><JournalCarousel /></View>
+            ),
+          },
+          // Recent Scans — mixed label + list scans, most recent first.
+          { key: 'scans', title: 'Your Recent Label Scans', content: <View style={styles.carouselBleed}><RecentScansCarousel /></View> },
+          // Drink Now — cellar bottles at last call, most urgent first.
+          { key: 'cellar', title: 'Home Cellar Insights', content: <View style={styles.carouselBleed}><DrinkNowCarousel /></View> },
+          // Running-low bottles to replenish, then facts buried in the data.
+          { key: 'insights', title: "Vinster's Insights", content: <View style={styles.carouselBleed}><CellarInsightsCarousel /></View> },
+          // The Journal entries (the website blog feed, each card opening its post).
+          { key: 'musings', title: 'Community Musings', content: <View style={styles.carouselBleed}><JournalCarousel /></View> },
+        ]}
+      />
 
       {/* Dictate-to-search is shelved for now: on-device speech-to-text mangles
           foreign/proper wine names (e.g. "Heidsieck" → "Isaac"), which then risks
