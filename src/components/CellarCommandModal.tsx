@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, ActivityIndicator, useWindowDimensions, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -98,6 +98,13 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   const [focused, setFocused] = useState(true);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const [chooseOpen, setChooseOpen] = useState(false);
+  const [chooseShown, setChooseShown] = useState(false);
+  // Hand over to the chat after the sheet's own dismissal has finished.
+  useEffect(() => {
+    if (!chooseOpen) return;
+    const t = setTimeout(() => setChooseShown(true), 450);
+    return () => clearTimeout(t);
+  }, [chooseOpen]);
   const { session } = useAuth();
   const { height: winH } = useWindowDimensions();
   const userId = session?.user.id;
@@ -449,6 +456,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         // surfaces awaiting-placement bottles. This sheet hides while that screen
         // is in front and shows the done line when they come back.
         if (result?.unitId) {
+          setTranscript('');
           setPhase('success');
           setExecuting(false);
           router.push((targetUnit?.storage_type === 'bin'
@@ -590,6 +598,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           viewRoute: '/cellar/list',
         });
       }
+      setTranscript('');
       setPhase('success');
     } catch {
       setPhase('error');
@@ -681,6 +690,17 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         add(`l:${p.storage_location_id}`, locations.find((l) => l.id === p.storage_location_id)?.name ?? 'Cellar', `/cellar/storage-location/${p.storage_location_id}?highlight=${w.id}`, n);
       }
     }
+    // Bottles with no placement row: waiting to be placed in a rack/bin, filed
+    // the older way on the wine itself, or simply loose in the Cellar List.
+    const placed = Array.from(out.values()).reduce((n, p) => n + p.count, 0);
+    const rest = Math.max(0, (w.quantity ?? 0) - placed);
+    if (rest > 0) {
+      const unit = w.awaiting_placement_unit_id ? units.find((u) => u.id === w.awaiting_placement_unit_id) : null;
+      const loc = !unit && w.storage_location_id ? locations.find((l) => l.id === w.storage_location_id) : null;
+      if (unit) add(`u:${unit.id}`, `${unit.name} (waiting to be placed)`, unit.storage_type === 'bin' ? `/cellar/bin/${unit.id}?highlight=${w.id}` : `/cellar/rack/${unit.id}?placeWine=${w.id}&placeLimit=${rest}`, rest);
+      else if (loc) add(`l:${loc.id}`, loc.name, `/cellar/storage-location/${loc.id}?highlight=${w.id}`, rest);
+      else add('loose', 'Your Cellar List (not yet placed)', `/cellar/${w.id}`, rest);
+    }
     return Array.from(out.values());
   }
 
@@ -755,7 +775,8 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     : `Delete ${bottles}`;
 
   return (
-    <Modal visible={visible && focused} transparent animationType="slide" onRequestClose={handleClose}>
+    <>
+    <Modal visible={visible && focused && !chooseOpen} transparent animationType="slide" onRequestClose={handleClose}>
       <View style={qs.overlay}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[qs.sheet, { maxHeight: winH * 0.9 }]}>
           <View style={qs.handle} />
@@ -844,7 +865,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
                 <RowLink label={success.viewLabel} onPress={() => { handleClose(); router.push(success.viewRoute as any); }} />
                 {success.action === 'archive' ? <RowLink label="Add Archive Note" onPress={() => setPhase('archiveNote')} /> : null}
                 <Text style={[qs.goldLabel, { marginTop: 8 }]}>Another command?</Text>
-                <CommandField value={transcript} onChange={setTranscript} onSend={() => { setSuccess(null); runParse(); }} placeholder="ie. Archive a bottle of Harlan 1990" />
+                <CommandField value={transcript} onChange={setTranscript} onSend={() => { setSuccess(null); setPhase('speak'); runParse(); }} placeholder="ie. Archive a bottle of Harlan 1990" />
                 <DoneLink onPress={handleClose} />
               </>
             )}
@@ -896,9 +917,11 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
-      {/* "Choose from my cellar" runs the same chat as Home. */}
-      <HomeVoiceModal visible={chooseOpen} startWith="cellar" onClose={() => { setChooseOpen(false); handleClose(); }} />
     </Modal>
+    {/* "Choose from my cellar" runs the same chat as Home — opened only once the
+        Quick Command sheet has gone, so the two never stack. */}
+    <HomeVoiceModal visible={chooseShown} startWith="cellar" onClose={() => { setChooseShown(false); setChooseOpen(false); handleClose(); }} />
+    </>
   );
 }
 

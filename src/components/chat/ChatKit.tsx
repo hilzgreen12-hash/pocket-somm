@@ -32,7 +32,7 @@ export function useChat() {
   const [items, setItems] = useState<Item[]>([]);
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState<{ line: string; sub?: string; note?: string } | null>(null);
-  const resolver = useRef<((s: string) => void) | null>(null);
+  const resolver = useRef<{ resolve: (s: string) => void; reject: (e: Error) => void } | null>(null);
   const run = useRef(0);
   const seq = useRef(0);
 
@@ -49,7 +49,10 @@ export function useChat() {
     (Array.isArray(question) ? question : question ? [question] : []).forEach((q) => say(q));
     setPending({ placeholder, domain, links });
     return new Promise<string>((resolve, reject) => {
-      resolver.current = (text: string) => (run.current === mine ? resolve(text) : reject(new ChatCancelled()));
+      resolver.current = {
+        resolve: (text: string) => (run.current === mine ? resolve(text) : reject(new ChatCancelled())),
+        reject,
+      };
     });
   }, [say]);
 
@@ -61,7 +64,7 @@ export function useChat() {
     resolver.current = null;
     setPending(null);
     hear(t);
-    r(t);
+    r.resolve(t);
   }, [hear]);
 
   // Run work with Vinster's "working" bubble + spinner showing.
@@ -83,6 +86,8 @@ export function useChat() {
 
   const reset = useCallback(() => {
     run.current += 1;
+    // End any flow still waiting on an answer (it stops quietly).
+    resolver.current?.reject(new ChatCancelled());
     resolver.current = null;
     setItems([]); setPending(null); setBusy(null);
   }, []);
@@ -98,12 +103,15 @@ export type Chat = ReturnType<typeof useChat>;
 // ---------------------------------------------------------------------------
 // Sheet + thread
 
-export function ChatSheet({ visible, onClose, chat, opening }: {
+export function ChatSheet({ visible, onClose, chat, opening, children }: {
   visible: boolean;
   onClose: () => void;
   chat: Chat;
   // Shown while the thread is empty: the greeting + conversation starters.
   opening: ReactNode;
+  // Extra pop-ups (pickers) — rendered INSIDE this Modal: on iOS a sibling
+  // Modal can't be presented while this sheet is up.
+  children?: ReactNode;
 }) {
   const { height: winH } = useWindowDimensions();
   const scroll = useRef<ScrollView>(null);
@@ -152,6 +160,7 @@ export function ChatSheet({ visible, onClose, chat, opening }: {
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
+      {children}
     </Modal>
   );
 }

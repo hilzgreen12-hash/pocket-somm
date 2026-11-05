@@ -115,7 +115,9 @@ export function isYes(t: string): boolean {
   return /\b(yes|yeah|yep|please|sure|both|definitely|absolutely|go on|ok|okay)\b/i.test(t) && !/\b(no|nope|not|don't|dont)\b/i.test(t);
 }
 export function isDone(t: string): boolean {
-  return /\b(that'?s (all|it|everything)|that is (all|it)|no more|nothing else|no others?|none|done|just (those|them|these)|only (those|them|these))\b/i.test(t) || /^\s*no\b/i.test(t);
+  // A bare "no"/"nope" means done; "No, there's one more…" does not.
+  if (/\b(one more|another|also|and the|there'?s)\b/i.test(t)) return false;
+  return /\b(that'?s (all|it|everything)|that is (all|it)|no more|nothing else|no others?|none|done|just (those|them|these)|only (those|them|these))\b/i.test(t) || /^\s*(no|nope|nah)[.!]?\s*$/i.test(t);
 }
 // "compare 3 wines" → 3; "compare a few" → 0 (unknown count); one wine → null.
 export function compareCount(t: string): number | null {

@@ -231,8 +231,8 @@ export function CellarInsightsCarousel() {
 
   // Only tiles with a real image (collage) ever render — no brown/icon tiles.
   const shown = tiles.filter((t) => t.collage.length > 0).slice(0, MAX_TILES);
-  const shownKeys = new Set(shown.map((t) => t.key));
-  const fill = INSIGHT_EXAMPLES.filter((e) => !shownKeys.has(e.key)).map((e) => e.card);
+  // Examples only before there's anything real to show — never beside real tiles.
+  const fill = shown.length === 0 ? INSIGHT_EXAMPLES.map((e) => e.card) : [];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>

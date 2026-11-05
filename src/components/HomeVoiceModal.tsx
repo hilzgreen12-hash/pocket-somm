@@ -59,8 +59,9 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
   const chat = useChat();
 
   useEffect(() => {
-    if (!visible) return;
+    // Closing cancels whatever the chat was doing; opening starts fresh.
     chat.reset();
+    if (!visible) return;
     if (startWith === 'cellar') setTimeout(() => runCellar(), 0);
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -185,7 +186,8 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
   // Open the Wine Intel page. Verified against Wine-Searcher first, exactly like
   // a label scan; anything unverified goes through "Which wine is this?" and the
   // identity gate, so a card is never built for a wine that doesn't exist.
-  async function openIntel(identity: WineDetailsComplete) {
+  async function openIntel(identity: WineDetailsComplete, t: number) {
+    if (!chat.alive(t)) return; // the chat was closed meanwhile — do nothing
     const ls = useLabelStore.getState();
     ls.reset(); ls.setWineDetailsConfirmed(identity); ls.setIntelligence(null); ls.setImageUri(null);
     let verified = false;
@@ -196,6 +198,7 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
       const pricing = await fetchPricing(q, Number.isFinite(v) ? v : null, cur);
       verified = pricing.source === 'wine-searcher' && pricing.matched !== false;
     } catch { verified = false; }
+    if (!chat.alive(t)) return;
     onClose();
     router.push((verified
       ? '/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1'
@@ -211,9 +214,10 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
       let said = await chat.ask('Which wine would you like the intel on? Tell me the producer, the wine and the vintage', 'ie. Château Latour 2005', 'wine');
       for (;;) {
         const identity = await resolveWine(said);
+        const t = chat.token();
         if (identity) {
           const label = [identity.producer, identity.wineName, identity.region, identity.vintage].filter(Boolean).join(' · ');
-          await chat.working(`Building Wine Intel on ${label}…`, () => openIntel(identity),
+          await chat.working(`Building Wine Intel on ${label}…`, () => openIntel(identity, t),
             'Producer and vintage information, market data, and critic scores', 'This could take a moment, please keep this page open');
           return;
         }
@@ -251,8 +255,9 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
             <CardBody>{r.note}</CardBody>
             <GoldLink label="View full wine intel" onPress={() => start(async () => {
               const text = list[(r.index || i + 1) - 1] ?? r.name;
+              const t = chat.token();
               const identity = await chat.working(`Opening Wine Intel on ${r.name}…`, () => resolveWine(text));
-              if (identity) await openIntel(identity);
+              if (identity) await openIntel(identity, t);
               else chat.say(`Sorry, I couldn't pin down ${r.name} well enough to build its Wine Intel.`);
             })} />
           </View>

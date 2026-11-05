@@ -66,7 +66,8 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
-  useEffect(() => { if (visible) chat.reset(); }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Closing cancels whatever the chat was doing; opening starts fresh.
+  useEffect(() => { chat.reset(); }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function start(flow: () => Promise<void>) {
     flow().catch((err) => {
@@ -117,16 +118,20 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
         const r = await buyCandidates({ dish, budgetText: budget, currency, exclude: alt ? shown : [] });
         // Only bottles Wine-Searcher can find are shown — nothing unverifiable.
         const cur = await resolveIntelCurrency(preferences?.defaultCurrency).catch(() => currency);
-        const checked = await Promise.all(r.candidates.slice(0, 6).map(async (c) => {
+        // Check candidates one at a time and stop at three verified bottles —
+        // Wine-Searcher lookups are capped per day, so never spend more than needed.
+        const picks: { c: typeof r.candidates[0]; price: string }[] = [];
+        for (const c of r.candidates.slice(0, 5)) {
+          if (picks.length >= 3) break;
           try {
             const p = await fetchPricing([c.producer, c.wine].filter(Boolean).join(' '), null, cur);
-            if (p.source !== 'wine-searcher' || p.matched === false || p.averageMarketPrice == null) return null;
+            if (p.source !== 'wine-searcher' || p.matched === false || p.averageMarketPrice == null) continue;
             const sym = currencySymbol(p.currency ?? cur);
             const range = p.minPrice != null && p.maxPrice != null ? ` · Range ${sym}${Math.round(p.minPrice)}–${sym}${Math.round(p.maxPrice)}` : '';
-            return { c, price: `${sym}${Math.round(p.averageMarketPrice)}${range} · Wine-Searcher` };
-          } catch { return null; }
-        }));
-        return { brief: r.brief, picks: checked.filter(Boolean).slice(0, 3) as { c: typeof r.candidates[0]; price: string }[] };
+            picks.push({ c, price: `${sym}${Math.round(p.averageMarketPrice)}${range} · Wine-Searcher` });
+          } catch { /* skip */ }
+        }
+        return { brief: r.brief, picks };
       });
       if (!res.picks.length) { chat.say("I couldn't find wines I could verify on the market for that just now. Try describing the dish a little differently."); chat.push(<DoneButton onPress={onClose} />); return; }
       res.picks.forEach(({ c }) => shown.push([c.producer, c.wine].filter(Boolean).join(' ')));
@@ -176,6 +181,7 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
     const course = await chat.ask('What course are we cooking? Or is it for snacks/canapes?', 'ie. A main course', 'food');
     const food = await chat.ask('What sort of food do you want to cook? Could be Thai, could just be something cozy?', 'ie. A slow Sunday roast for friends', 'food');
     const allergies = await chat.ask('Are there any allergies or strong preferences to be aware of?', 'ie. No shellfish');
+    const t = chat.token();
     const { identity, pairings } = await chat.working('Thinking about what to cook…', async () => {
       const id = await toIdentity(wineSaid);
       const none = /^\s*(no|none|nope|nothing|no allergies)\b/i.test(allergies);
@@ -185,8 +191,10 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
         course: courseFilter(course),
       };
       const p = await generatePairings(id, filters as any, { additionalRequest: `Course: ${course}. Style of food they want: ${food}.${none ? '' : ` Allergies / strong preferences: ${allergies}.`}` });
-      const ls = useLabelStore.getState();
-      ls.setWineDetailsConfirmed(id); ls.setFilters(filters); ls.setPairings(p);
+      if (chat.alive(t)) {
+        const ls = useLabelStore.getState();
+        ls.setWineDetailsConfirmed(id); ls.setFilters(filters); ls.setPairings(p);
+      }
       return { identity: id, pairings: p };
     }, "Matching the wine's weight, spice and savoury edge");
     if (!pairings.length) { chat.say("I couldn't come up with dishes for that just now — please try again."); chat.push(<DoneButton onPress={onClose} />); return; }
@@ -257,13 +265,12 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
   );
 
   return (
-    <>
-      <ChatSheet visible={visible} onClose={onClose} chat={chat} opening={opening} />
+    <ChatSheet visible={visible} onClose={onClose} chat={chat} opening={opening}>
       <CellarPicker visible={cellarPickerOpen} wines={wines} onClose={() => setCellarPickerOpen(false)}
         onPick={(w) => { setCellarPickerOpen(false); chat.answer(cellarName(w).replace(/ · /g, ' ')); }} />
       <WineSearchModal visible={searchOpen} onClose={() => setSearchOpen(false)}
         onSelect={(r) => { setSearchOpen(false); chat.answer([r.producer, r.wineName, r.vintage].filter(Boolean).join(' ')); }} />
-    </>
+    </ChatSheet>
   );
 }
 
