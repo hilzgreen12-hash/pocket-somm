@@ -238,7 +238,8 @@ function AnswerField({ placeholder, domain, onSend, links }: { placeholder: stri
           blurOnSubmit
           onSubmitEditing={() => { if (can) onSend(value); }}
         />
-        <MicButton value={value} onChangeText={setValue} domain={domain} serverCorrect />
+        {/* Bin: clear the request and start fresh. */}
+        <MicButton value={value} onChangeText={setValue} onClear={() => setValue('')} domain={domain} serverCorrect />
         <TouchableOpacity onPress={() => { if (can) onSend(value); }} disabled={!can} accessibilityLabel="Send" hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} style={styles.send}>
           <Text style={[styles.sendText, !can && { opacity: 0.4 }]}>›</Text>
         </TouchableOpacity>

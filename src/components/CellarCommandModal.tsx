@@ -1186,7 +1186,8 @@ function CommandField({ value, onChange, onSend, placeholder }: { value: string;
           the user OWNS, which the on-phone cellar sound-match handles — the
           catalogue pass could turn their wine into one they don't have, and it
           lands late, changing the text after it was sent. */}
-      <MicButton value={value} onChangeText={onChange} domain="query" />
+      {/* Bin: clear the instruction and start fresh. */}
+      <MicButton value={value} onChangeText={onChange} onClear={() => onChange('')} domain="query" />
       <TouchableOpacity onPress={() => { if (can) onSend(); }} disabled={!can} accessibilityLabel="Send" style={qs.send} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
         <Text style={[qs.sendText, !can && { opacity: 0.4 }]}>›</Text>
       </TouchableOpacity>
