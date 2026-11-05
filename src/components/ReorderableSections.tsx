@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { View, Text, Animated, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { View, Text, Animated, StyleSheet, useWindowDimensions, type ScrollView, type NativeSyntheticEvent, type NativeScrollEvent, type LayoutChangeEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -11,6 +11,34 @@ import { colors, spacing } from '../constants/theme';
 
 export type ReorderableSection = { key: string; title: string; content: ReactNode };
 
+// The page ScrollView, so a drag near the screen's top/bottom edge can scroll it.
+// Spread `scrollProps` onto that ScrollView and pass `host` to ReorderableSections.
+export type AutoScrollHost = {
+  ref: React.RefObject<ScrollView | null>;
+  y: React.MutableRefObject<number>;
+  maxY: () => number;
+};
+export function useAutoScrollHost() {
+  const ref = useRef<ScrollView | null>(null);
+  const y = useRef(0);
+  const viewH = useRef(0);
+  const contentH = useRef(0);
+  const host = useMemo<AutoScrollHost>(() => ({ ref, y, maxY: () => Math.max(0, contentH.current - viewH.current) }), []);
+  const scrollProps = {
+    ref,
+    scrollEventThrottle: 16,
+    onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => { y.current = e.nativeEvent.contentOffset.y; },
+    onLayout: (e: LayoutChangeEvent) => { viewH.current = e.nativeEvent.layout.height; },
+    onContentSizeChange: (_w: number, h: number) => { contentH.current = h; },
+  };
+  return { host, scrollProps };
+}
+
+// How close (px) to the top/bottom of the screen a drag starts scrolling, and
+// the fastest it scrolls per frame (right at the edge).
+const EDGE = 110;
+const MAX_STEP = 16;
+
 type Props = {
   sections: ReorderableSection[];
   order: string[];
@@ -21,9 +49,14 @@ type Props = {
   separatorStyle: StyleProp<ViewStyle>;
   // Background painted behind the lifted section so it covers its neighbours.
   liftedBackground?: string;
+  // Optional: scroll the page when a drag nears the top/bottom of the screen.
+  autoScroll?: AutoScrollHost;
 };
 
-export function ReorderableSections({ sections, order, onReorder, onDragActive, headerStyle, separatorStyle, liftedBackground = colors.background }: Props) {
+export function ReorderableSections({ sections, order, onReorder, onDragActive, headerStyle, separatorStyle, liftedBackground = colors.background, autoScroll }: Props) {
+  const { height: winH } = useWindowDimensions();
+  const live = useRef({ autoScroll, winH });
+  live.current = { autoScroll, winH };
   const byKey = useMemo(() => new Map(sections.map((s) => [s.key, s])), [sections]);
   const keys = order.filter((k) => byKey.has(k));
 
@@ -35,7 +68,10 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
   // Live copies for the gesture callbacks (created once per key).
   const keysRef = useRef(keys);
   keysRef.current = keys;
-  const drag = useRef<{ key: string; start: string[]; next: string[] } | null>(null);
+  // translation = finger movement; scrolled = how far auto-scroll has moved the
+  // page since the drag began (the lifted section must follow both).
+  const drag = useRef<{ key: string; start: string[]; next: string[]; translation: number; absY: number; scrolled: number; startY: number } | null>(null);
+  const raf = useRef<number | null>(null);
 
   const topsFor = (list: string[]) => {
     const tops: Record<string, number> = {};
@@ -44,9 +80,40 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
     return tops;
   };
 
-  function onUpdate(key: string, dy: number) {
+  function onUpdate(key: string, translation: number, absY: number) {
     const d = drag.current;
     if (!d || d.key !== key) return;
+    d.translation = translation;
+    d.absY = absY;
+    applyDrag(key);
+    if (raf.current == null) raf.current = requestAnimationFrame(autoScrollTick);
+  }
+
+  // Each frame while the finger sits in an edge zone, scroll the page and move
+  // the lifted section by the same amount so it stays under the finger.
+  function autoScrollTick() {
+    raf.current = null;
+    const d = drag.current;
+    const host = live.current.autoScroll;
+    if (!d || !host?.ref.current) return;
+    const h = live.current.winH;
+    let step = 0;
+    if (d.absY < EDGE) step = -MAX_STEP * Math.min(1, (EDGE - d.absY) / EDGE);
+    else if (d.absY > h - EDGE) step = MAX_STEP * Math.min(1, (d.absY - (h - EDGE)) / EDGE);
+    if (step === 0) return;
+    const nextY = Math.max(0, Math.min(host.maxY(), host.y.current + step));
+    if (nextY === host.y.current) return;
+    host.ref.current.scrollTo({ y: nextY, animated: false });
+    host.y.current = nextY;
+    d.scrolled = nextY - d.startY;
+    applyDrag(d.key);
+    raf.current = requestAnimationFrame(autoScrollTick);
+  }
+
+  function applyDrag(key: string) {
+    const d = drag.current;
+    if (!d || d.key !== key) return;
+    const dy = d.translation + d.scrolled;
     offsetOf(key).setValue(dy);
     const oldTops = topsFor(d.start);
     const center = oldTops[key] + (heights.current[key] ?? 0) / 2 + dy;
@@ -67,6 +134,7 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
     const d = drag.current;
     if (!d || d.key !== key) return;
     drag.current = null;
+    if (raf.current != null) { cancelAnimationFrame(raf.current); raf.current = null; }
     const oldTops = topsFor(d.start);
     const newTops = topsFor(d.next);
     Animated.timing(offsetOf(key), { toValue: newTops[key] - oldTops[key], duration: 120, useNativeDriver: true }).start(() => {
@@ -87,12 +155,12 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
         .runOnJS(true)
         .activateAfterLongPress(150)
         .onStart(() => {
-          drag.current = { key, start: [...keysRef.current], next: [...keysRef.current] };
+          drag.current = { key, start: [...keysRef.current], next: [...keysRef.current], translation: 0, absY: 0, scrolled: 0, startY: live.current.autoScroll?.y.current ?? 0 };
           setActiveKey(key);
           onDragActive?.(true);
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         })
-        .onUpdate((e) => onUpdate(key, e.translationY))
+        .onUpdate((e) => onUpdate(key, e.translationY, e.absoluteY))
         .onFinalize(() => finish(key));
     }
     return m;
@@ -109,7 +177,7 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
     onReorder(next);
   }
 
-  useEffect(() => () => { onDragActive?.(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (raf.current != null) cancelAnimationFrame(raf.current); onDragActive?.(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <View>

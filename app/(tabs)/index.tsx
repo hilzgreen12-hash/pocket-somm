@@ -16,7 +16,7 @@ import { HelpTitle } from '../../src/components/HelpTitle';
 import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
 import { DrinkNowCarousel } from '../../src/components/DrinkNowCarousel';
 import { CellarInsightsCarousel } from '../../src/components/CellarInsightsCarousel';
-import { ReorderableSections, mergeSectionOrder } from '../../src/components/ReorderableSections';
+import { ReorderableSections, mergeSectionOrder, useAutoScrollHost } from '../../src/components/ReorderableSections';
 import { HomeVoiceModal } from '../../src/components/HomeVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -350,6 +350,8 @@ export default function ScanLandingScreen() {
   // User-arranged order of the Home carousels (saved per device).
   const [homeOrder, setHomeOrder] = useState<string[]>(HOME_SECTION_DEFAULT);
   const [scrollLocked, setScrollLocked] = useState(false);
+  // Lets a carousel drag auto-scroll the page near the screen edges.
+  const homeScroll = useAutoScrollHost();
   useEffect(() => {
     AsyncStorage.getItem(HOME_ORDER_KEY)
       .then((raw) => { if (raw) setHomeOrder(mergeSectionOrder(JSON.parse(raw), HOME_SECTION_DEFAULT)); })
@@ -362,7 +364,7 @@ export default function ScanLandingScreen() {
 
   return (
     <TabSwipeView style={styles.container}>
-    <ScrollView style={{ flex: 1 }} scrollEnabled={!scrollLocked} contentContainerStyle={[styles.scroll, { paddingTop }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <ScrollView {...homeScroll.scrollProps} style={{ flex: 1 }} scrollEnabled={!scrollLocked} contentContainerStyle={[styles.scroll, { paddingTop }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
       {/* This scroll has paddingHorizontal (other tabs pad per-section), which
           would push the mark inward — pull it back to the screen edge so the V
@@ -385,6 +387,7 @@ export default function ScanLandingScreen() {
         order={homeOrder}
         onReorder={saveHomeOrder}
         onDragActive={(on) => setScrollLocked(on)}
+        autoScroll={homeScroll.host}
         headerStyle={styles.carouselHeader}
         separatorStyle={styles.sectionSeparator}
         sections={[
