@@ -2645,7 +2645,7 @@ export default function RackGridScreen() {
                   <Text style={styles.destType}>Bin</Text>
                 </TouchableOpacity>
               ))}
-              {allLocations.map((l) => (
+              {allLocations.filter((l) => destPicker?.mode !== 'move' || !l.is_external).map((l) => (
                 <TouchableOpacity key={l.id} style={styles.destRow} activeOpacity={0.7} onPress={() => {
                   if (!destPicker) return;
                   if (destPicker.mode === 'move') { const wid = destPicker.wineId, wn = destPicker.wineName; startMove(wid, wn, (n) => void moveWineToLocation(wid, l.id, n)); }

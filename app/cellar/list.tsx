@@ -382,7 +382,7 @@ export default function FullCellarListScreen() {
         // was a step with nothing to choose.
         { text: 'Edit Label or Wine Info', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
         // Only for wines held in an external cellar — bring them home.
-        ...(externalPls.length > 0 ? [{ text: 'Deliver to Home Storage', onPress: () => deliverToHome(w, externalPls) }] : []),
+        ...(externalPls.length > 0 ? [{ text: 'Move to Home Storage', onPress: () => deliverToHome(w, externalPls) }] : []),
         { text: 'View Location', onPress: () => viewWineLocation(w) },
         { text: 'Archive Wine', onPress: () => confirmArchiveOne(w) },
         { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteOne(w) },
@@ -391,36 +391,51 @@ export default function FullCellarListScreen() {
     });
   }
 
-  // Move a wine's external-cellar bottles into home storage — to the Full Cellar
-  // List (loose), an existing home location, or a new one.
+  // Move a wine's external-cellar bottles into home storage. Only ever offered for
+  // wines with bottles in an external cellar; home bottles can never be moved OUT
+  // to external storage. The user picks how many, then where: the Full Cellar List
+  // (loose), a rack/fridge (opens it to place them), a bin, or a home alt cellar.
+  const [deliverWine, setDeliverWine] = useState<{ wine: CellarWine; pls: CellarPlacement[]; max: number } | null>(null);
+  const [deliverCount, setDeliverCount] = useState(1);
   function deliverToHome(w: CellarWine, externalPls: CellarPlacement[]) {
-    const n = externalPls.reduce((s, p) => s + (p.quantity ?? 0), 0);
-    if (n === 0) return;
-    const homeLocs = storageLocations.filter((l) => !l.is_external);
-    const move = async (destLocId: string | null) => {
-      try {
-        for (const p of externalPls) await decrementPlacement(p.id, p.quantity ?? 0);
-        if (destLocId) await addLocationPlacement(w.id, destLocId, null, n);
-        qc.invalidateQueries({ queryKey: ['placements-list'] });
-        qc.invalidateQueries({ queryKey: ['placements', w.id] });
-        qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-        qc.invalidateQueries({ queryKey: ['cellar', session?.user.id] });
-        const dest = destLocId ? (homeLocs.find((l) => l.id === destLocId)?.name ?? 'home storage') : 'your Full Cellar List';
-        showAlert({ title: 'Delivered home', body: `${n} bottle${n === 1 ? '' : 's'} of ${w.wine_name} moved out of external storage to ${dest}.` });
-      } catch (err) {
-        showAlert({ title: 'Could not deliver', body: err instanceof Error ? err.message : 'Please try again.' });
+    const max = externalPls.reduce((s, p) => s + (p.quantity ?? 0), 0);
+    if (max === 0) return;
+    setDeliverCount(max);
+    setDeliverWine({ wine: w, pls: externalPls, max });
+  }
+  async function runDeliver(dest: { kind: 'loose' } | { kind: 'location' | 'rack' | 'bin'; id: string; name: string }) {
+    if (!deliverWine) return;
+    const { wine: w, pls } = deliverWine;
+    const n = Math.max(1, Math.min(deliverCount, deliverWine.max));
+    setDeliverWine(null);
+    try {
+      // Free n bottles from the external cellar(s) first — they become loose on
+      // the same line (quantity unchanged), then land at the destination.
+      let freed = 0;
+      for (const p of pls) {
+        if (freed >= n) break;
+        const take = Math.min(n - freed, p.quantity ?? 0);
+        if (take > 0) { await decrementPlacement(p.id, take); freed += take; }
       }
-    };
-    showAlert({
-      title: 'Deliver to Home Storage',
-      body: `Bring ${n} bottle${n === 1 ? '' : 's'} home from external storage — where to?`,
-      buttons: [
-        { text: 'Full Cellar List (loose)', onPress: () => void move(null) },
-        ...homeLocs.map((l) => ({ text: l.name, onPress: () => void move(l.id) })),
-        { text: 'Add a New Location', onPress: () => router.push('/cellar/storage-location/new' as any) },
-        { text: 'Cancel', style: 'cancel' as const },
-      ],
-    });
+      if (dest.kind === 'location') await addLocationPlacement(w.id, dest.id, null, freed);
+      if (dest.kind === 'bin') await updateWine.mutateAsync({ id: w.id, updates: { awaiting_placement: true, awaiting_placement_unit_id: dest.id } as any });
+      qc.invalidateQueries({ queryKey: ['placements-list'] });
+      qc.invalidateQueries({ queryKey: ['placements', w.id] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      qc.invalidateQueries({ queryKey: ['storage-locations'] });
+      qc.invalidateQueries({ queryKey: ['cellar', session?.user.id] });
+      const label = `${freed} bottle${freed === 1 ? '' : 's'} of ${w.wine_name}`;
+      if (dest.kind === 'rack') {
+        router.push(`/cellar/rack/${dest.id}?placeWine=${w.id}&placeLimit=${freed}` as any);
+      } else if (dest.kind === 'bin') {
+        router.push(`/cellar/bin/${dest.id}` as any);
+      } else {
+        const where = dest.kind === 'location' ? dest.name : 'your Full Cellar List';
+        showAlert({ title: 'Moved home', body: `${label} moved out of external storage to ${where}.` });
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
   // "View Location" — jump to where the wine physically lives. One placement goes
   // straight there; several offer a picker; none tells the user it's loose.
@@ -1529,6 +1544,48 @@ export default function FullCellarListScreen() {
         </View>
       )}
 
+      {/* Move to Home Storage — external bottles only (see deliverToHome). */}
+      <Modal visible={!!deliverWine} transparent animationType="fade" onRequestClose={() => setDeliverWine(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDeliverWine(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Move to Home Storage</Text>
+            <Text style={styles.addBody} numberOfLines={2}>{deliverWine ? (wineHeaderLine(deliverWine.wine.producer, deliverWine.wine.wine_name, deliverWine.wine.vintage) || deliverWine.wine.wine_name) : ''}</Text>
+            {(deliverWine?.max ?? 0) > 1 && (
+              <View style={styles.deliverStepper}>
+                <TouchableOpacity onPress={() => setDeliverCount((c) => Math.max(1, c - 1))} style={styles.deliverStepBtn} accessibilityLabel="Fewer bottles">
+                  <Text style={styles.deliverStepText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.deliverCount}>{deliverCount} of {deliverWine?.max} bottles</Text>
+                <TouchableOpacity onPress={() => setDeliverCount((c) => Math.min(deliverWine?.max ?? 1, c + 1))} style={styles.deliverStepBtn} accessibilityLabel="More bottles">
+                  <Text style={styles.deliverStepText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            <ScrollView style={{ maxHeight: 340 }}>
+              <TouchableOpacity style={styles.deliverRow} onPress={() => void runDeliver({ kind: 'loose' })}>
+                <Text style={styles.deliverName}>Full Cellar List</Text>
+                <Text style={styles.deliverType}>Unplaced</Text>
+              </TouchableOpacity>
+              {racks.map((r) => (
+                <TouchableOpacity key={r.id} style={styles.deliverRow} onPress={() => void runDeliver({ kind: r.storage_type === 'bin' ? 'bin' : 'rack', id: r.id, name: r.name })}>
+                  <Text style={styles.deliverName} numberOfLines={1}>{r.name}</Text>
+                  <Text style={styles.deliverType}>{r.storage_type === 'bin' ? 'Bin' : r.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
+                </TouchableOpacity>
+              ))}
+              {storageLocations.filter((l) => !l.is_external).map((l) => (
+                <TouchableOpacity key={l.id} style={styles.deliverRow} onPress={() => void runDeliver({ kind: 'location', id: l.id, name: l.name })}>
+                  <Text style={styles.deliverName} numberOfLines={1}>{l.name}</Text>
+                  <Text style={styles.deliverType}>Alt Cellar</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity onPress={() => setDeliverWine(null)} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <ArchiveNoteModal
         visible={!!archiveWine}
         title="Archive this wine?"
@@ -1543,6 +1600,14 @@ export default function FullCellarListScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Move to Home Storage popup — count stepper + destination rows.
+  deliverStepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg, marginVertical: spacing.md },
+  deliverStepBtn: { width: 40, height: 40, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  deliverStepText: { fontFamily: fonts.bodySemibold, fontSize: 20, color: colors.gold },
+  deliverCount: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text },
+  deliverRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  deliverName: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, flexShrink: 1 },
+  deliverType: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6 },
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   // Terracotta header band (lighter than the buttons) with cream fonts.

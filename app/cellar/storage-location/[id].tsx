@@ -421,7 +421,8 @@ export default function StorageLocationScreen() {
       buttons: [
         { text: 'Scan a Label', onPress: () => handleScan() },
         { text: 'Upload a Label', onPress: () => handleUpload() },
-        { text: 'Select from Cellar List', onPress: () => setCellarPickerOpen(true) },
+        // Pulling existing cellar bottles in would move them out of home storage.
+        ...(location?.is_external ? [] : [{ text: 'Select from Cellar List', onPress: () => setCellarPickerOpen(true) }]),
         { text: 'Search a Wine', onPress: () => handleSearch() },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -881,7 +882,10 @@ export default function StorageLocationScreen() {
     // only Alt Cellars were offered, so a user whose only other storage was a
     // rack saw a wrong "No other locations".
     const placementId = (w as any).placement_id as string | undefined;
-    const otherLocations = allLocations.filter((l) => l.id !== id);
+    // Home bottles never move OUT to external storage: from a home cellar only
+    // other home cellars are offered (an external cellar can still send bottles
+    // anywhere, including home).
+    const otherLocations = allLocations.filter((l) => l.id !== id && (location?.is_external || !l.is_external));
     if (racks.length === 0 && otherLocations.length === 0) {
       showAlert({ title: 'No other locations', body: 'You have no other racks, fridges or home storage locations to move this into yet.' });
       return;
@@ -909,7 +913,7 @@ export default function StorageLocationScreen() {
           },
         })),
         ...otherLocations.map((l) => ({
-          text: `${l.name} (home storage)`,
+          text: l.is_external ? `${l.name} (external)` : `${l.name} (home storage)`,
           onPress: () => runSingle('Moved', w.id, async (wid) => {
             if (placementId) await decrementPlacement(placementId, count);
             await addLocationPlacement(wid, l.id, null, count);

@@ -321,6 +321,15 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         }
       }
 
+      // Home bottles can't be moved OUT to external storage (bringing them home
+      // is done from the Full Cellar List's long-press "Move to Home Storage").
+      if (act === 'move' && res.locationId && locations.find((l) => l.id === res.locationId)?.is_external) {
+        const extName = locations.find((l) => l.id === res.locationId)?.name ?? 'that cellar';
+        setResult({ ...res, message: `${extName} is external storage, so bottles can't be moved into it from home. Choose a home location instead.` });
+        setPhase('need');
+        return;
+      }
+
       setResult(res);
 
       // Add is a NEW bottle — it doesn't resolve against the existing cellar, it
