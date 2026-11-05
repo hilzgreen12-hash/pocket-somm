@@ -1428,6 +1428,8 @@ export default function CellarWineDetail() {
           // hasn't entered one — never clobber a real price they've recorded.
           purchase_price: wine.purchase_price ?? v.estimatedValue ?? null,
           purchase_price_currency: wine.purchase_price != null ? wine.purchase_price_currency : (v.currency ?? null),
+          // A seeded price is Vinster's estimate (dated today), not the user's.
+          ...(wine.purchase_price == null && v.estimatedValue != null ? { purchase_price_estimated: true, purchase_price_at: new Date().toISOString() } : {}),
         },
       });
       // Whether intel actually came back — used to decide if the "couldn't
@@ -2145,8 +2147,8 @@ export default function CellarWineDetail() {
                   ) : pp != null ? (
                     <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}>
                       <Text style={styles.wcValue}>{formatCurrency(pp, wine.purchase_price_currency, { decimals: 0 })}</Text>
-                      <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Market estimate' : 'Entered by you'}</Text>
-                      {(wine.purchase_price_at ?? cellaredOn) ? <Text style={styles.wcSmall}>{fmtDay(wine.purchase_price_at ?? cellaredOn)}</Text> : null}
+                      <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Estimated' : 'Entered by you'}</Text>
+                      {(wine.purchase_price_at ?? cellaredOn) ? <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Market value on ' : ''}{fmtDay(wine.purchase_price_at ?? cellaredOn)}</Text> : null}
                       <Text style={styles.wcLinkSmall}>Edit</Text>
                     </TouchableOpacity>
                   ) : (

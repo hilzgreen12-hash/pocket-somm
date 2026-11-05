@@ -154,6 +154,9 @@ export default function LabelConfirmScreen() {
   // bottles + format + purchase price.
   const [binPrice, setBinPrice] = useState('');
   const [binPriceEstimating, setBinPriceEstimating] = useState(false);
+  // True while the price field holds Vinster's estimate (not something typed),
+  // so the saved price is flagged as an estimate, not "Entered by you".
+  const [binPriceIsEstimate, setBinPriceIsEstimate] = useState(false);
   const [binPopupOpen, setBinPopupOpen] = useState(false);
   const [binConfirmed, setBinConfirmed] = useState<WineDetailsComplete | null>(null);
 
@@ -313,7 +316,7 @@ export default function LabelConfirmScreen() {
         void (async () => {
           try {
             const intel = await generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP');
-            if (intel.estimatedValue != null) setBinPrice((prev) => prev.trim() || String(Math.round(intel.estimatedValue!)));
+            if (intel.estimatedValue != null) setBinPrice((prev) => { if (prev.trim()) return prev; setBinPriceIsEstimate(true); return String(Math.round(intel.estimatedValue!)); });
           } catch { /* leave the field blank on failure */ }
           finally { setBinPriceEstimating(false); }
         })();
@@ -617,6 +620,7 @@ export default function LabelConfirmScreen() {
             estimated_value_source: null,
             purchase_price: purchasePrice,
             purchase_price_currency: purchasePrice != null ? (preferences?.defaultCurrency ?? 'GBP') : null,
+            purchase_price_estimated: purchasePrice != null && binPriceIsEstimate,
             storage_location_id: null,
             case_id: null,
             bottle_size_ml: binFormat,
@@ -944,7 +948,7 @@ export default function LabelConfirmScreen() {
               <TextInput
                 style={[styles.binQtyInput, styles.binPriceInput]}
                 value={binPrice}
-                onChangeText={(t) => setBinPrice(t.replace(/[^0-9.]/g, '').slice(0, 10))}
+                onChangeText={(t) => { setBinPriceIsEstimate(false); setBinPrice(t.replace(/[^0-9.]/g, '').slice(0, 10)); }}
                 keyboardType="decimal-pad"
                 placeholder={binPriceEstimating ? 'Estimating…' : 'e.g. 45'}
                 placeholderTextColor={colors.textMuted}
