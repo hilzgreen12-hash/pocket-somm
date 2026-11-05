@@ -275,6 +275,12 @@ export interface WineServingSuggestion {
 export interface WineMarketVintageNote {
   vintage?: string;
   market?: string;
+  // Saved Market tab (wine card): the per-vintage Wine-Searcher table, whether
+  // Vinster knew the wine, the currency and when it was fetched.
+  rows?: { vintage: number; score: number | null; price: number | null }[];
+  unknown?: boolean;
+  currency?: string;
+  at?: string;
 }
 
 // Cellar types

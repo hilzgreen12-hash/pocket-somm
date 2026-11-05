@@ -52,6 +52,8 @@ import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModa
 import { PackagingPrompt } from '../../src/components/PackagingPrompt';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
+import { WineCardHero } from '../../src/components/winecard/WineCardHero';
+import { vintageVerdict, pickFromCellar } from '../../src/utils/wineCardInsights';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
@@ -395,6 +397,10 @@ export default function CellarWineDetail() {
   const [marketUnknown, setMarketUnknown] = useState(false);
   const [generatingServing, setGeneratingServing] = useState(false);
   const [generatingMarket, setGeneratingMarket] = useState(false);
+  // Wine card tabs. Only Overview is built on open; Market and Somm generate the
+  // first time they're opened, are saved on the wine, and reopen instantly after
+  // (Refresh / Regenerate to update).
+  const [cardTab, setCardTab] = useState<'overview' | 'market' | 'somm' | 'cellar'>('overview');
 
   // Off-screen share card for "Share outside the app" — captured to
   // PNG and handed to the native share sheet. Same pattern Wine
@@ -545,6 +551,29 @@ export default function CellarWineDetail() {
     if (!wine) return;
     router.push(`/cellar/edit-wine/${wine.id}` as any);
   }
+
+  // Tabs generate on first open, then reopen from what's saved on the wine.
+  const tabLoadedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wine) return;
+    const key = `${wine.id}:${cardTab}`;
+    if (tabLoadedRef.current === key) return;
+    if (cardTab === 'market' && !isArchived && !isWishlist) {
+      tabLoadedRef.current = key;
+      const saved = wine.market_vintage_note;
+      if (vintageRows == null && saved?.rows) {
+        setVintageRows(saved.rows);
+        setMarketNote(saved.vintage || saved.market ? { vintage: saved.vintage, market: saved.market } as any : null);
+        setMarketUnknown(!!saved.unknown);
+      } else if (vintageRows == null && !generatingMarket) {
+        void handleGenerateMarket();
+      }
+    } else if (cardTab === 'somm' && !isArchived && !isWishlist) {
+      tabLoadedRef.current = key;
+      if (!wine.serving_suggestion && !generatingServing) void handleGenerateServing();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardTab, wine?.id]);
 
   // Brief "Wine removed from your records" toast — shown for ~1.4s after
   // a permanent delete, then the auto-dismiss timer navigates back. The
@@ -803,13 +832,20 @@ export default function CellarWineDetail() {
       // Wine-Searcher had no per-vintage data → fall back to Vinster's written
       // market & vintage summary (comparing vintages either side) instead of a
       // dead end.
+      let note: Awaited<ReturnType<typeof generateMarketVintage>> | null = null;
+      let unknown = false;
       if (rows.length === 0) {
         try {
-          const note = await generateMarketVintage(wine, currency);
+          note = await generateMarketVintage(wine, currency);
+          unknown = note === null;
           setMarketNote(note);
-          setMarketUnknown(note === null);
+          setMarketUnknown(unknown);
         } catch { /* leave null */ }
       }
+      // Saved on the wine so the Market tab reopens instantly next time.
+      try {
+        await updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...(note ?? {}), rows, unknown, currency, at: new Date().toISOString() } } as any });
+      } catch { /* the live table still shows */ }
     } catch {
       showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
     } finally {
@@ -941,7 +977,8 @@ export default function CellarWineDetail() {
       });
     }
     for (const p of winePlacements.filter((x) => x.kind === 'bin')) {
-      entries.push({ key: p.id, label: 'Wine bin', quantity: p.quantity ?? null, caseFormat: null, isExternal: false, href: null });
+      const bin = p.rack_id ? racks.find((r) => r.id === p.rack_id) : undefined;
+      entries.push({ key: p.id, label: bin?.name ?? 'Wine bin', quantity: p.quantity ?? null, caseFormat: null, isExternal: false, href: bin ? `/cellar/bin/${bin.id}?highlight=${wine!.id}` : null });
     }
     return entries;
   }
@@ -1868,6 +1905,53 @@ export default function CellarWineDetail() {
     );
   }
 
+  // ---- Wine card (layout E): label hero, tabs, four panels -----------------
+  const tabList: { id: 'overview' | 'market' | 'somm' | 'cellar'; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'market', label: 'Market' },
+    ...(!isArchived && !isWishlist ? [{ id: 'somm' as const, label: 'Somm' }] : []),
+    ...(!isWishlist ? [{ id: 'cellar' as const, label: 'Cellar' }] : []),
+  ];
+  const activeTab = tabList.some((t) => t.id === cardTab) ? cardTab : 'overview';
+  const cardCurrency = preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP';
+  const fmtMoney = (n: number) => formatCurrency(n, cardCurrency, { decimals: 0 });
+  const fmtDay = (d: string | null | undefined) => {
+    if (!d) return '';
+    const dt = new Date(d.length === 10 ? `${d}T00:00:00` : d);
+    return Number.isNaN(dt.getTime()) ? '' : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const reviews = byRecency(entriesOf(wine));
+  const latestReview = reviews[0] ?? null;
+  const hasAnyReview = !!latestReview || wine.review_score != null || !!wine.review_note;
+  const reviewOpenHref = hasAnyReview
+    ? `/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}`
+    : `/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}`;
+  const pp = wine.purchase_price != null ? Number(wine.purchase_price) : null;
+  const ev = wine.estimated_value != null ? Number(wine.estimated_value) : null;
+  const sameCurrency = (wine.purchase_price_currency ?? cardCurrency) === (wine.estimated_value_currency ?? cardCurrency);
+  const vsMarket = pp && ev != null && sameCurrency ? { pct: Math.round(((ev - pp) / pp) * 100), diff: ev - pp } : null;
+  const verdict = vintageRows ? vintageVerdict(vintageRows, wine.vintage, fmtMoney) : null;
+  const cellarEntries = buildCellarEntries();
+  const unplacedHere = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
+  const serving = wine.serving_suggestion ?? null;
+  const beforePick = pickFromCellar(serving?.aperitif?.style, wines, wine.id);
+  const afterPick = pickFromCellar(serving?.digestif?.style, wines, wine.id);
+  const cellaredOn = wine.date_received ?? wine.created_at;
+
+  function pickRow(pick: CellarWine | null) {
+    if (!pick) return <Text style={styles.wcPickNone}>Nothing in this style in your cellar yet.</Text>;
+    return (
+      <TouchableOpacity style={styles.wcPick} onPress={() => router.push(`/cellar/${pick.id}` as any)} activeOpacity={0.7}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.wcLabel}>Top pick from your cellar</Text>
+          <Text style={styles.wcPickName} numberOfLines={2}>{[pick.producer, pick.wine_name, pick.vintage].filter(Boolean).join(' ')}</Text>
+          <Text style={styles.wcSmall}>{[pick.region, `${pick.quantity ?? 1} ${(pick.quantity ?? 1) === 1 ? 'bottle' : 'bottles'}`].filter(Boolean).join(' · ')}</Text>
+        </View>
+        <Text style={styles.wcChevron}>›</Text>
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <KeyboardAwareScrollView
       style={styles.container}
@@ -1877,64 +1961,443 @@ export default function CellarWineDetail() {
       keyboardDismissMode="interactive"
       bottomOffset={24}
     >
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
-        </TouchableOpacity>
-        {/* Card-type label — sits centred between Back and the star
-            so it reads as a chip / breadcrumb identifying which kind
-            of card the user is looking at. */}
-        <Text style={styles.cardTypeLabel}>
-          {isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : 'Wine Card'}
-        </Text>
-        {/* Export moved to a button above Archive/Delete; keep a spacer so the
-            card-type label stays centred between Back and this edge. */}
-        <View style={styles.topBarSpacer} />
+      <WineCardHero
+        path={wine.label_image_path}
+        title={[wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ')}
+        subtitle={[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}
+        chip={isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : 'Wine Card'}
+        onBack={() => router.back()}
+        onPhotoPress={() => (wine.label_image_path ? setPhotoViewerOpen(true) : handleAddPhoto())}
+        onPhotoLongPress={() => (wine.label_image_path ? handlePhotoMenu() : handleAddPhoto())}
+        onTitlePress={openWineEdit}
+        badge={wine.is_spirit ? <SpiritBadge /> : null}
+      />
+      {uploadingPhoto ? <Text style={styles.photoSaving}>Saving photo…</Text> : null}
+
+      {/* Tabs */}
+      <View style={styles.wcTabBar} accessibilityRole="tablist">
+        {tabList.map((t) => {
+          const on = activeTab === t.id;
+          return (
+            <TouchableOpacity key={t.id} style={[styles.wcTab, on && styles.wcTabOn]} onPress={() => setCardTab(t.id)} accessibilityRole="tab" accessibilityState={{ selected: on }} activeOpacity={0.7}>
+              <Text style={[styles.wcTabText, on && styles.wcTabTextOn]}>{t.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* Date cellared — sits just below the 'Wine Card' chip, with a gap before
-          the wine name. Same muted style as before. */}
-      {(() => {
-        const added = wine.date_received ?? wine.created_at;
-        if (!added) return null;
-        const cellaredLabel = `Cellared ${new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
-        return <Text style={styles.addedDateTop}>{cellaredLabel}</Text>;
-      })()}
-
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          {/* Thumbnail to the left of the name. Tap to view; long-press an
-              existing photo to change or delete it (no separate button). */}
-          <TouchableOpacity
-            onPress={() => (wine.label_image_path ? setPhotoViewerOpen(true) : handleAddPhoto())}
-            onLongPress={() => (wine.label_image_path ? handlePhotoMenu() : handleAddPhoto())}
-            delayLongPress={350}
-            activeOpacity={0.85}
-          >
-            <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.detailThumb} />
-          </TouchableOpacity>
-          {/* Tap the identity (name · region · vintage / grape) to edit the wine
-              — the standalone "Edit" link was removed in favour of this. */}
-          <TouchableOpacity
-            style={styles.headerTextCol}
-            onPress={openWineEdit}
-            activeOpacity={0.7}
-          >
-            <WineIdentityHeader
-              producer={wine.producer}
-              wineName={wine.wine_name}
-              vintage={wine.vintage}
-              region={wine.region}
-              grape={wine.grape_variety}
-              align="left"
-              size="lg"
-            />
-            {/* Bottle format is NOT shown here — it lives in the "Bottles in My
-                Cellar" count below (e.g. "1x75cl"). */}
-            {wine.is_spirit ? <SpiritBadge /> : null}
-          </TouchableOpacity>
+      {/* Facts bar — Overview only */}
+      {activeTab === 'overview' ? (
+        <View style={styles.wcFacts}>
+          {!isWishlist ? (
+            <View style={styles.wcFact}><Text style={styles.wcFactLabel}>Bottles</Text><Text style={styles.wcFactValue}>{bottlesInCellar}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text></View>
+          ) : null}
+          <View style={styles.wcFact}><Text style={styles.wcFactLabel}>Critic</Text>
+            {wine.critic_score != null ? <Text style={styles.wcFactValue}>{wine.critic_score}</Text>
+              : refreshingValue ? <Text style={[styles.wcFactValue, styles.statValueMuted]}>…</Text>
+              : <TouchableOpacity onPress={() => handleRefreshEstimate()}><Text style={styles.wcFactAction}>+ Generate</Text></TouchableOpacity>}
+          </View>
+          <View style={styles.wcFact}><Text style={styles.wcFactLabel}>Value</Text>
+            {ev != null ? <Text style={[styles.wcFactValue, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}</Text>
+              : refreshingValue ? <Text style={[styles.wcFactValue, styles.statValueMuted]}>…</Text>
+              : <TouchableOpacity onPress={() => handleRefreshEstimate()}><Text style={styles.wcFactAction}>+ Generate</Text></TouchableOpacity>}
+          </View>
+          <View style={[styles.wcFact, styles.wcFactLast]}><Text style={styles.wcFactLabel}>Window</Text>
+            <Text style={[styles.wcFactValue, { color: windowColor }]} numberOfLines={1}>{windowLabel}</Text>
+            {!wine.is_spirit && wine.drinking_window_from && wine.drinking_window_to ? <Text style={styles.wcFactSub}>{wine.drinking_window_from}–{wine.drinking_window_to}</Text> : null}
+          </View>
         </View>
-        {uploadingPhoto ? <Text style={styles.photoSaving}>Saving photo…</Text> : null}
+      ) : null}
+
+      <View style={styles.wcBody}>
+        {/* ================= OVERVIEW ================= */}
+        {activeTab === 'overview' ? (
+          <>
+            <View style={styles.wcCard}>
+              <View style={styles.wcCardHead}>
+                <Text style={styles.wcH2}>Your Reviews</Text>
+                {reviews.length > 0 ? <Text style={styles.wcSmall}>{reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}</Text> : null}
+              </View>
+              {latestReview ? (
+                <>
+                  <Text style={styles.wcLabel}>Latest</Text>
+                  <View style={styles.wcScoreRow}>
+                    {latestReview.score != null ? <Text style={styles.wcBigScore}>{latestReview.score}<Text style={styles.wcBigScoreOf}>/100</Text></Text> : null}
+                    <Text style={styles.wcSmall}>{[fmtDay(latestReview.date ?? latestReview.savedAt), latestReview.location].filter(Boolean).join(' · ')}</Text>
+                  </View>
+                  {latestReview.note ? <Text style={styles.wcBodyText} numberOfLines={8}>{latestReview.note}</Text> : null}
+                  <TouchableOpacity onPress={() => router.push(reviewOpenHref as any)} activeOpacity={0.7}><Text style={styles.wcLink}>View full review ›</Text></TouchableOpacity>
+                  {reviews.length > 1 ? (
+                    <View style={styles.wcList}>
+                      <Text style={[styles.wcLabel, { paddingTop: spacing.sm }]}>Earlier reviews</Text>
+                      {reviews.slice(1).map((r, i, arr) => (
+                        <TouchableOpacity key={r.id} style={[styles.wcRow, i === arr.length - 1 && styles.wcRowLast]} onPress={() => router.push(reviewOpenHref as any)} activeOpacity={0.7}>
+                          <Text style={styles.wcRowText} numberOfLines={1}>{[fmtDay(r.date ?? r.savedAt), r.location].filter(Boolean).join(' · ')}</Text>
+                          <View style={styles.wcRowRight}>{r.score != null ? <Text style={styles.wcRowScore}>{r.score}</Text> : null}<Text style={styles.wcChevron}>›</Text></View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+                </>
+              ) : (
+                <TouchableOpacity onPress={() => router.push(reviewOpenHref as any)} activeOpacity={0.7}>
+                  <Text style={styles.wcLink}>{hasAnyReview ? 'View your review ›' : 'Add your review ›'}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {wine.critic_score == null && wine.critic_score_note ? (
+              <View style={styles.wcNote}><Text style={styles.wcLabel}>Why no critic score?</Text><Text style={styles.wcNoteText}>{wine.critic_score_note}</Text></View>
+            ) : null}
+
+            {!isWishlist ? (
+              <View style={styles.wcCard}>
+                <Text style={styles.wcH2}>Vinster's Review</Text>
+                {wine.tasting_notes ? (
+                  <Text style={styles.wcBodyText}>{wine.tasting_notes}</Text>
+                ) : refreshingValue ? (
+                  <Text style={styles.wcSmall}>Generating Vinster's review…</Text>
+                ) : (
+                  <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
+                    <Text style={styles.generateNoteBtnText}>Generate</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : null}
+
+            {!isWishlist && (hasRealInsiderNote(wine.insider_note) || !isArchived) ? (
+              <View style={[styles.wcCard, styles.wcInside]}>
+                <Text style={styles.insiderTitle}>The Inside Line</Text>
+                <Text style={styles.insiderBody}>{hasRealInsiderNote(wine.insider_note) ? wine.insider_note?.trim() : 'Generating…'}</Text>
+                {!isArchived ? (
+                  <TouchableOpacity onPress={() => router.push(`/cellar/wine-knowledge/${wine.id}`)} activeOpacity={0.7}>
+                    <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : null}
+
+            {!isWishlist && (producerRangeLoading || rangeWines.length > 0) ? (
+              <View style={styles.wcCard}>
+                <Text style={styles.wcH2}>The {wine.producer} range</Text>
+                {rangeWines.some((rw) => !rw.isThis) ? <Text style={styles.rangeHint}>Tap a wine for its inside line</Text> : null}
+                {producerRange ? (
+                  <>
+                    {rangeWines.map((rw, i) => (
+                      <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => { setRangeNoteWine(rw.wineName); setRangeNoteTier(rw.tier ?? null); }} activeOpacity={(rw.isThis || rw.grouped) ? 1 : 0.7} disabled={rw.isThis || rw.grouped}>
+                        <View style={styles.rangeRowMain}>
+                          <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
+                          <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={rw.grouped ? 4 : 2}>{rw.wineName}</Text>
+                        </View>
+                        <View style={styles.rangeRight}>
+                          <Text style={[styles.rangeBand, rw.isThis && styles.rangeBandThis]}>{currencySymbol(cardCurrency).repeat(rw.band)}</Text>
+                          {rw.tier ? <Text style={styles.rangeTier}>{rw.tier}</Text> : null}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                    {producerRange.summary ? <Text style={styles.rangeSummary}>{producerRange.summary}</Text> : null}
+                  </>
+                ) : (
+                  <View style={styles.rangeLoading}>
+                    <ActivityIndicator color={colors.gold} />
+                    <Text style={styles.rangeLoadingText}>Mapping the range…</Text>
+                  </View>
+                )}
+              </View>
+            ) : null}
+          </>
+        ) : null}
+
+        {/* ================= MARKET ================= */}
+        {activeTab === 'market' ? (
+          <>
+            <View style={styles.wcTwoUp}>
+              {!isWishlist ? (
+                <View style={[styles.wcCard, styles.wcHalf]}>
+                  <Text style={styles.wcLabel}>Purchase Price</Text>
+                  {editingPrice ? (
+                    <>
+                      <TextInput style={styles.statInput} value={purchasePriceDraft} onChangeText={setPurchasePriceDraft} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textMuted} autoFocus />
+                      <View style={styles.statActions}>
+                        <TouchableOpacity onPress={() => { setEditingPrice(false); setPurchasePriceDraft(wine.purchase_price != null ? String(wine.purchase_price) : ''); }}>
+                          <Text style={styles.statCancel}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={handleSavePrice} disabled={savingPrice}>
+                          <Text style={[styles.statAction, savingPrice && { opacity: 0.5 }]}>{savingPrice ? '…' : 'Save'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : pp != null ? (
+                    <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}>
+                      <Text style={styles.wcValue}>{formatCurrency(pp, wine.purchase_price_currency, { decimals: 0 })}</Text>
+                      <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Market estimate when cellared' : 'Entered by you'}</Text>
+                      {wine.purchase_price_estimated && cellaredOn ? <Text style={styles.wcSmall}>{fmtDay(cellaredOn)}</Text> : null}
+                      <Text style={styles.wcLinkSmall}>Edit</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}><Text style={styles.statAction}>+ Add Price</Text></TouchableOpacity>
+                  )}
+                </View>
+              ) : null}
+              <TouchableOpacity style={[styles.wcCard, styles.wcHalf]} onPress={() => handleRefreshEstimate()} disabled={refreshingValue} activeOpacity={refreshingValue ? 1 : 0.7}>
+                <Text style={styles.wcLabel}>Estimated Value</Text>
+                {refreshingValue ? (
+                  <Text style={[styles.wcValue, styles.statValueMuted]}>Estimating…</Text>
+                ) : ev != null ? (
+                  <>
+                    <Text style={[styles.wcValue, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={styles.estimateUpdateLink}> (update)</Text></Text>
+                    {wine.estimated_value_low != null && wine.estimated_value_high != null ? (
+                      <Text style={styles.wcSmall}>Range {formatCurrency(Number(wine.estimated_value_low), wine.estimated_value_currency, { decimals: 0 })}–{formatCurrency(Number(wine.estimated_value_high), wine.estimated_value_currency, { decimals: 0 })}</Text>
+                    ) : null}
+                    {wine.estimated_value_at ? (
+                      <Text style={styles.wcSmall}>
+                        {wine.estimated_value_source === 'wine-searcher' ? (wine.estimated_value_scope === 'all-vintage' ? 'WS · all vintages · ' : 'Wine-Searcher · ') : wine.estimated_value_source === 'vinster' ? 'Vinster estimate · ' : ''}
+                        {fmtDay(wine.estimated_value_at)}
+                      </Text>
+                    ) : null}
+                  </>
+                ) : (
+                  <Text style={styles.statAction}>+ Generate</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {vsMarket ? (
+              <View style={styles.wcVsBar}>
+                <Text style={styles.wcLabel}>Purchase vs Market</Text>
+                <Text style={styles.wcVsValue}>{vsMarket.pct > 0 ? '+' : ''}{vsMarket.pct}% <Text style={styles.wcVsDiff}>({vsMarket.diff >= 0 ? '+' : '−'}{formatCurrency(Math.abs(vsMarket.diff), wine.estimated_value_currency, { decimals: 0 })})</Text></Text>
+              </View>
+            ) : null}
+
+            {!isWishlist && !isArchived ? (
+              <View style={styles.wcCard}>
+                <Text style={styles.wcH2}>Vinster's Market & Vintage Comparison</Text>
+                {generatingMarket ? (
+                  <View style={styles.vintageLoading}>
+                    <ActivityIndicator color={colors.gold} />
+                    <Text style={styles.wcSmall}>Checking Wine-Searcher across vintages…</Text>
+                  </View>
+                ) : vintageRows && vintageRows.length > 0 && verdict ? (
+                  <>
+                    <View style={[styles.wcTRow, styles.wcTHead]}>
+                      <Text style={[styles.wcTCell, styles.wcTYear, styles.wcLabel]}>Vintage</Text>
+                      <Text style={[styles.wcTCell, styles.wcLabel]}>Score</Text>
+                      <Text style={[styles.wcTCell, styles.wcLabel]}>Price</Text>
+                      <Text style={[styles.wcTCell, styles.wcLabel]}>{currencySymbol(cardCurrency)} / pt</Text>
+                    </View>
+                    {verdict.rows.map((r) => {
+                      const mine = String(r.vintage) === String(wine.vintage ?? '').trim();
+                      const best = r.vintage === verdict.bestValueVintage;
+                      return (
+                        <View key={r.vintage} style={styles.wcTRow}>
+                          <Text style={[styles.wcTCell, styles.wcTYear, mine && styles.wcTMine]}>{r.vintage}{mine ? ' · yours' : ''}</Text>
+                          <Text style={[styles.wcTCell, mine && styles.wcTMine]}>{r.score ?? '—'}</Text>
+                          <Text style={[styles.wcTCell, mine && styles.wcTMine]}>{r.price != null ? fmtMoney(r.price) : '—'}</Text>
+                          <Text style={[styles.wcTCell, mine && styles.wcTMine]}>{r.ppt != null ? `${currencySymbol(cardCurrency)}${r.ppt.toFixed(2)}` : '—'}{best ? <Text style={styles.wcBestStar}> ★</Text> : null}</Text>
+                        </View>
+                      );
+                    })}
+                    <Text style={styles.vintageFootnote}>Wine-Searcher market value and aggregate critic score, by vintage.</Text>
+                    {verdict.text ? (
+                      <View style={styles.wcVerdict}>
+                        <Text style={styles.insiderTitle}>Vinster's verdict</Text>
+                        <View style={styles.wcChips}>
+                          {verdict.qualityRank != null ? <Text style={[styles.wcChip, styles.wcChipGold]}>Yours: #{verdict.qualityRank} of {verdict.total} for quality</Text> : null}
+                          {verdict.valueRank != null ? <Text style={styles.wcChip}>#{verdict.valueRank} of {verdict.total} for value</Text> : null}
+                          {verdict.bestValueVintage != null ? <Text style={[styles.wcChip, styles.wcChipGreen]}>Best value: {verdict.bestValueVintage}</Text> : null}
+                        </View>
+                        <Text style={styles.wcBodyText}>{verdict.text}</Text>
+                      </View>
+                    ) : null}
+                    <TouchableOpacity onPress={handleGenerateMarket} activeOpacity={0.7}><Text style={styles.diveDeeperLink}>Refresh →</Text></TouchableOpacity>
+                  </>
+                ) : vintageRows && marketNote ? (
+                  <View style={styles.servingBubble}>
+                    <Text style={styles.marketMissingNote}>Wine-Searcher has no per-vintage market data for this wine, so here's Vinster's assessment:</Text>
+                    {marketNote.vintage ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Vintage · </Text>{marketNote.vintage}</Text> : null}
+                    {marketNote.market ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Market · </Text>{marketNote.market}</Text> : null}
+                    <TouchableOpacity onPress={handleGenerateMarket} activeOpacity={0.7}><Text style={styles.diveDeeperLink}>Refresh →</Text></TouchableOpacity>
+                  </View>
+                ) : vintageRows ? (
+                  <>
+                    <Text style={styles.wcSmall}>Wine-Searcher has no per-vintage market data for this wine.{marketUnknown ? " Vinster doesn't know this wine well enough to comment." : ''}</Text>
+                    <TouchableOpacity onPress={handleGenerateMarket} activeOpacity={0.7}><Text style={styles.diveDeeperLink}>Refresh →</Text></TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateMarket} activeOpacity={0.7}>
+                    <Text style={styles.generateNoteBtnText}>Generate</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : null}
+          </>
+        ) : null}
+
+        {/* ================= SOMM ================= */}
+        {activeTab === 'somm' ? (
+          <>
+            <TouchableOpacity style={styles.wcPairings} onPress={handleFindPairings} activeOpacity={0.7}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={styles.wcH2}>Chef Inspired Recipe Pairings</Text>
+                <Text style={styles.wcPairingsSub}>Let Vinster generate 3 chef-inspired recipes to cook at home, save recipes to your cookbook and share them</Text>
+              </View>
+              <Text style={styles.wcChevron}>›</Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.wcH2, { marginTop: spacing.xs }]}>Serving Suggestions</Text>
+            {serving ? (
+              <>
+                <View style={styles.wcTwoUp}>
+                  {serving.temperature ? <View style={[styles.wcCard, styles.wcHalf]}><Text style={styles.wcLabel}>Temperature</Text><Text style={styles.wcGoldValue}>{serving.temperature}</Text></View> : null}
+                  {serving.decant ? <View style={[styles.wcCard, styles.wcHalf]}><Text style={styles.wcLabel}>Decanting</Text><Text style={styles.wcGoldValue}>{serving.decant}</Text></View> : null}
+                </View>
+                {serving.glassware ? <View style={styles.wcCard}><Text style={styles.wcLabel}>Glassware</Text><Text style={styles.wcGoldValue}>{serving.glassware}</Text></View> : null}
+                {serving.aperitif?.style ? (
+                  <View style={styles.wcCard}>
+                    <Text style={styles.wcLabel}>Drink Before</Text>
+                    <Text style={styles.wcGoldTitle}>{serving.aperitif.style}</Text>
+                    {serving.aperitif.reason ? <Text style={styles.wcBodyText}>{serving.aperitif.reason}</Text> : null}
+                    {pickRow(beforePick)}
+                  </View>
+                ) : null}
+                {serving.digestif?.style ? (
+                  <View style={styles.wcCard}>
+                    <Text style={styles.wcLabel}>Drink After</Text>
+                    <Text style={styles.wcGoldTitle}>{serving.digestif.style}</Text>
+                    {serving.digestif.reason ? <Text style={styles.wcBodyText}>{serving.digestif.reason}</Text> : null}
+                    {pickRow(afterPick)}
+                  </View>
+                ) : null}
+                <TouchableOpacity onPress={handleGenerateServing} disabled={generatingServing} activeOpacity={0.7}>
+                  <Text style={styles.wcRegen}>{generatingServing ? 'Regenerating…' : 'Regenerate serving suggestions'}</Text>
+                </TouchableOpacity>
+              </>
+            ) : generatingServing ? (
+              <View style={styles.vintageLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.wcSmall}>Generating serving suggestions…</Text></View>
+            ) : (
+              <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateServing} activeOpacity={0.7}>
+                <Text style={styles.generateNoteBtnText}>Generate</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : null}
+
+        {/* ================= CELLAR ================= */}
+        {activeTab === 'cellar' ? (
+          <>
+            {cellaredOn ? <Text style={styles.wcSmall}>Cellared {new Date(cellaredOn).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Text> : null}
+
+            <View style={styles.wcCard}>
+              <Text style={styles.wcLabel}>Bottles in My Cellar</Text>
+              <Text style={styles.wcValue}>{bottlesInCellar}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
+              {cellarEntries.length > 0 || unplacedHere > 0 ? (
+                <View style={styles.wcList}>
+                  {cellarEntries.map((e, i) => {
+                    const last = i === cellarEntries.length - 1 && unplacedHere === 0;
+                    const body = (
+                      <>
+                        <View style={{ flex: 1, gap: 1 }}>
+                          <Text style={styles.wcRowText} numberOfLines={1}>{e.label}{e.isExternal ? ' (external)' : ''}</Text>
+                          {e.caseFormat ? <Text style={styles.wcSmall}>in {e.caseFormat}</Text> : null}
+                        </View>
+                        <View style={styles.wcRowRight}>
+                          {e.quantity != null ? <Text style={styles.wcRowScore}>{e.quantity}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text> : null}
+                          {e.href ? <Text style={styles.wcChevron}>›</Text> : null}
+                        </View>
+                      </>
+                    );
+                    return e.href ? (
+                      <TouchableOpacity key={e.key} style={[styles.wcRow, last && styles.wcRowLast]} onPress={() => router.push(e.href as any)} activeOpacity={0.7}>{body}</TouchableOpacity>
+                    ) : (
+                      <View key={e.key} style={[styles.wcRow, last && styles.wcRowLast]}>{body}</View>
+                    );
+                  })}
+                  {unplacedHere > 0 ? (
+                    <View style={[styles.wcRow, styles.wcRowLast]}>
+                      <Text style={styles.wcRowText}>Your Cellar List (not yet placed)</Text>
+                      <Text style={styles.wcRowScore}>{unplacedHere}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+              {cellarEntries.length === 0 && !isArchived ? (
+                <TouchableOpacity onPress={handleAddToLocation}><Text style={styles.statAction}>Add to Location</Text></TouchableOpacity>
+              ) : null}
+              {bottlesInCellar > 0 && !isArchived ? (
+                <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}><Text style={styles.statAction}>Add to Archive →</Text></TouchableOpacity>
+              ) : null}
+            </View>
+            {!isArchived && rackRemovalMsg ? <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text> : null}
+
+            <View style={styles.wcCard}>
+              <Text style={styles.wcLabel}>Bottles in My Archive</Text>
+              {bottlesInArchive === 0
+                ? <Text style={[styles.wcValue, styles.statValueMuted]}>{bottleLabel(0)}</Text>
+                : <Text style={styles.wcValue}>{bottlesInArchive}×{bottleSizeCl(archiveBottleMl)}cl</Text>}
+              {removals.length > 0 ? (
+                <View style={styles.wcList}>
+                  {removals.map((ev2, i) => (
+                    <TouchableOpacity key={ev2.id} style={[styles.wcRow, i === removals.length - 1 && styles.wcRowLast]} onPress={() => setArchiveHistoryOpen(true)} activeOpacity={0.7}>
+                      <View style={{ flex: 1, gap: 1 }}>
+                        <Text style={styles.wcRowText}>{fmtDay(ev2.removed_at)} · {bottleLabel(ev2.count)}</Text>
+                        {ev2.note?.trim() ? <Text style={styles.wcSmallItalic} numberOfLines={2}>{ev2.note.trim()}</Text> : null}
+                      </View>
+                      <Text style={styles.wcChevron}>›</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+
+            <View style={[styles.wcCard, { paddingVertical: spacing.xs }]}>
+              <View style={styles.reviewRow}>
+                {renderCellarNoteCol()}
+                {isArchived ? renderArchiveNoteCol() : null}
+              </View>
+            </View>
+          </>
+        ) : null}
+
+        {/* ================= ACTIONS ================= */}
+        {isWishlist ? (
+          <>
+            <TouchableOpacity style={[styles.chefBtn, { borderColor: colors.gold }]} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/cellar/list'); }} activeOpacity={0.7}>
+              <Text style={[styles.chefBtnText, { color: colors.gold }]}>Add to Cellar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.chefBtn, { borderColor: colors.gold }]} onPress={handleDeleteFromWishlist} disabled={removing} activeOpacity={0.7}>
+              <Text style={[styles.chefBtnText, { color: colors.gold }]}>Delete from Wish List</Text>
+            </TouchableOpacity>
+          </>
+        ) : null}
+
+        {!isArchived && !isWishlist && cameFromReviews ? (
+          <TouchableOpacity style={[styles.chefBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted) && styles.chefBtnDisabled]} onPress={handlePostToCommunity} disabled={!COMMUNITY_ENABLED || postingReview || reviewPosted} activeOpacity={0.7}>
+            <Text style={styles.chefBtnText}>{!COMMUNITY_ENABLED ? 'Share Review To Community (coming soon)' : reviewPosted ? '✓ Shared to Community' : postingReview ? 'Sharing…' : 'Share Review To Community'}</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {!isArchived ? (
+          <TouchableOpacity style={styles.exportBtn} onPress={handleShareIntel} disabled={sharingIntel} activeOpacity={0.85}>
+            <Text style={styles.exportBtnText}>{sharingIntel ? 'Preparing…' : 'Export Wine Intel'}</Text>
+          </TouchableOpacity>
+        ) : null}
+        {!isArchived && !isWishlist ? (
+          <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
+            <Text style={styles.archiveAccessBtnText}>Archive or Delete Wine</Text>
+          </TouchableOpacity>
+        ) : null}
+        {!isArchived ? (
+          <TouchableOpacity onPress={() => handleRefreshEstimate()} disabled={refreshingValue} activeOpacity={0.7} style={styles.wcRegenWrap}>
+            {refreshingValue
+              ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><ActivityIndicator size="small" color="#FFFFFF" /><Text style={styles.wcRegen}>Regenerating…</Text></View>
+              : <Text style={styles.wcRegen}>Regenerate Wine Card Intel</Text>}
+          </TouchableOpacity>
+        ) : null}
+        {isArchived ? (
+          <TouchableOpacity style={[styles.exportBtn, styles.archivedDeleteBtn, removing && styles.buttonDisabled]} onPress={() => setRemoveStep('confirm')} disabled={removing}>
+            <Text style={styles.exportBtnText}>Delete Wine From Your Records</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <LabelPhotoViewer
@@ -1944,14 +2407,6 @@ export default function CellarWineDetail() {
         onClose={() => setPhotoViewerOpen(false)}
       />
 
-      {/* "Confirm this wine" — shown when the same producer + name is sold as
-          more than one wine (e.g. a Syrah AND a Chenin). Picking the variant
-          pins the grape so the intel card is accurate. Mirrors the scan flow's
-          confirm popup. */}
-      {/* Archive / removal history — opened from the "View Archive History" link.
-          One row per archiving event, in three columns: when, how many bottles,
-          and the note recorded with it. A long note wraps within its column
-          rather than being hidden behind a tap. */}
       <Modal visible={archiveHistoryOpen} transparent animationType="fade" onRequestClose={() => setArchiveHistoryOpen(false)}>
         <View style={styles.titleEditOverlay}>
           <View style={styles.titleEditSheet}>
@@ -2015,9 +2470,6 @@ export default function CellarWineDetail() {
         </View>
       </Modal>
 
-      {/* Couldn't-generate-intel prompt. Shows after a failed auto-generate
-          (no critic score and no value) — usually a misspelt or wrongly-split
-          name. Offers a jump straight into the Edit sheet. */}
       <NoIntelPrompt
         visible={
           !!wine && !isWishlist && !isArchived && !autoGenerating && !refreshingValue &&
@@ -2029,531 +2481,14 @@ export default function CellarWineDetail() {
         editLabel="Edit Wine"
       />
 
-      {/* Bottles grid moved ABOVE the chef button so the user can see
-          at a glance whether they own (or have owned) the wine before
-          deciding whether to pair a meal to it. Hidden for wishlist
-          wines — bottle counts don't apply to a wine not yet bought. */}
-      {!isWishlist && (
-      <View style={[styles.statsGrid, { paddingTop: 0 }]}>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Bottles in My Cellar</Text>
-          <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
-          {/* A single yellow "View in Cellar →" (matching "Add to Archive →")
-              replaces the inline where-they-are breakdown. A single home location
-              navigates straight there; external cellars or a multi-location wine
-              open a popup listing each cellar, its quantity and case format. */}
-          {(() => {
-            const entries = buildCellarEntries();
-            const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
-            if (entries.length === 0) {
-              // Nothing placed yet — keep the "Add to Location" affordance.
-              return (!isArchived && !isWishlist) ? (
-                <TouchableOpacity onPress={handleAddToLocation}>
-                  <Text style={styles.statAction}>Add to Location</Text>
-                </TouchableOpacity>
-              ) : null;
-            }
-            // One home location and no stray unplaced bottles → go straight there.
-            const singleHome = entries.length === 1 && !entries[0].isExternal && !!entries[0].href && unplaced === 0;
-            return (
-              <TouchableOpacity onPress={() => singleHome ? router.push(entries[0].href as any) : setCellarViewOpen(true)}>
-                <Text style={styles.statAction}>View in Cellar →</Text>
-              </TouchableOpacity>
-            );
-          })()}
-          {/* Archive bottles FROM the cellar lives here, beneath View in Cellar —
-              asks how many (and which location if split), then confirms. */}
-          {bottlesInCellar > 0 && !isArchived ? (
-            <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}>
-              <Text style={styles.statAction}>Add to Archive →</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Bottles in My Archive</Text>
-          {/* Count in white on its own line; the date moved out of it into a
-              gold "Last Added" line so this cell reads like Bottles in My
-              Cellar (white value, gold actions beneath). */}
-          {bottlesInArchive === 0 ? (
-            <Text style={[styles.statValue, styles.statValueMuted]}>{bottleLabel(0)}</Text>
-          ) : (
-            <Text style={styles.statValue}>{bottlesInArchive}x{bottleSizeCl(archiveBottleMl)}cl</Text>
-          )}
-          {lastArchivedAt ? (
-            <Text style={styles.statAction}>
-              Last Added: {new Date(lastArchivedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-            </Text>
-          ) : null}
-          {/* Quick access to this wine's archive/removal history — only when there
-              is one. */}
-          {removals.length > 0 ? (
-            <TouchableOpacity onPress={() => setArchiveHistoryOpen(true)} activeOpacity={0.7}>
-              <Text style={styles.statAction}>View Archive History</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-      )}
-
-      {!isArchived && rackRemovalMsg && (
-        <Text style={[styles.rackRemovalMsg, { marginHorizontal: spacing.xl }]}>{rackRemovalMsg}</Text>
-      )}
-
-      {/* ARCHIVED: Cellar Note (left) beside Archive Note (right).
-          CELLAR LIST: back to its original pairing — Your Review beside Cellar
-          Note. Archive Note never appears on a cellar-list card, even when
-          sibling bottles of the same wine are archived. */}
-      <View style={styles.reviewRow}>
-        {isArchived ? (
-          <>
-            {renderCellarNoteCol()}
-            {renderArchiveNoteCol()}
-          </>
-        ) : (
-          <>
-            {renderYourReviewCol()}
-            {renderCellarNoteCol()}
-          </>
-        )}
-      </View>
-
-      <View style={styles.cardDivider} />
-
-      {/* Compact stats grid — score / window / bottle counts only. The
-          Purchase and Estimated values are pulled out into full-width rows
-          below so each has room to breathe and a clearer call to action. */}
-      <View style={[styles.statsGrid, { paddingBottom: 0 }]}>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Avg Critic Score</Text>
-          {wine.critic_score != null ? (
-            <Text style={styles.statValue}>{wine.critic_score}</Text>
-          ) : refreshingValue ? (
-            <Text style={[styles.statValue, styles.statValueMuted]}>Generating…</Text>
-          ) : (
-            <TouchableOpacity onPress={() => handleRefreshEstimate()} disabled={refreshingValue} activeOpacity={0.7}>
-              <Text style={styles.statAction}>+ Generate</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Drinking Window</Text>
-          <Text style={[styles.statValue, { color: windowColor }]}>{windowLabel}</Text>
-          {!wine.is_spirit && wine.drinking_window_from && wine.drinking_window_to && (
-            <Text style={styles.statSub}>{wine.drinking_window_from}–{wine.drinking_window_to}</Text>
-          )}
-        </View>
-      </View>
-
-      {/* ARCHIVED: Your Review beside Vinster's Review — the two retrospective
-          blocks. A wine that's been drunk has no use for serving advice, so
-          Serving Suggestions takes no slot here and Vinster's Review moves up
-          into it (its standalone row below is skipped).
-          CELLAR LIST: Serving Suggestions full-width, exactly as before the
-          archive work; Your Review stays up beside Cellar Note. */}
-      {isArchived ? (
-        <>
-          <View style={styles.reviewRow}>
-            {renderYourReviewCol()}
-            <View style={styles.reviewCol}>
-              {renderVinstersReviewHeader()}
-            </View>
-          </View>
-          {renderVinstersReviewBody()}
-        </>
-      ) : !isWishlist ? (
-        <>
-          <View style={styles.reviewRow}>
-            {renderServingHeader()}
-          </View>
-          {servingOpen ? (
-            <View style={styles.reviewExpandedFull}>
-              {wine.serving_suggestion ? (
-                <View style={styles.servingBubble}>
-                  {wine.serving_suggestion.temperature ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Temperature · </Text>{wine.serving_suggestion.temperature}</Text> : null}
-                  {wine.serving_suggestion.decant ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Decanting · </Text>{wine.serving_suggestion.decant}</Text> : null}
-                  {wine.serving_suggestion.glassware ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Glassware · </Text>{wine.serving_suggestion.glassware}</Text> : null}
-                  {wine.serving_suggestion.aperitif?.style ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Drink Before · </Text>{wine.serving_suggestion.aperitif.style}{wine.serving_suggestion.aperitif.reason ? ` — ${wine.serving_suggestion.aperitif.reason}` : ''}</Text> : null}
-                  {wine.serving_suggestion.digestif?.style ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Drink After · </Text>{wine.serving_suggestion.digestif.style}{wine.serving_suggestion.digestif.reason ? ` — ${wine.serving_suggestion.digestif.reason}` : ''}</Text> : null}
-                </View>
-              ) : generatingServing ? (
-                <Text style={styles.tastingNotes}>Generating…</Text>
-              ) : (
-                <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateServing} activeOpacity={0.7}>
-                  <Text style={styles.generateNoteBtnText}>Generate</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : null}
-          {/* Chef Inspired Recipe Pairings — opens the recipe-requirements flow
-              (moved up from the button list at the foot of the card). */}
-          <View style={styles.reviewRow}>
-            <View style={styles.vinsterHeaderRow}>
-              <TouchableOpacity onPress={handleFindPairings} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-                <Text style={styles.vinsterReviewTitle}>Chef Inspired Recipe Pairings</Text>
-                <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </>
-      ) : null}
-
-      <View style={styles.cardDivider} />
-
-      <View style={[styles.statsGrid, { paddingBottom: 0 }]}>
-        {!isWishlist && (
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Purchase Price</Text>
-          {editingPrice ? (
-            <>
-              <TextInput
-                style={styles.statInput}
-                value={purchasePriceDraft}
-                onChangeText={setPurchasePriceDraft}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={colors.textMuted}
-                autoFocus
-              />
-              <View style={styles.statActions}>
-                <TouchableOpacity onPress={() => { setEditingPrice(false); setPurchasePriceDraft(wine.purchase_price != null ? String(wine.purchase_price) : ''); }}>
-                  <Text style={styles.statCancel}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleSavePrice} disabled={savingPrice}>
-                  <Text style={[styles.statAction, savingPrice && { opacity: 0.5 }]}>{savingPrice ? '…' : 'Save'}</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}>
-              {wine.purchase_price != null ? (
-                <>
-                  <Text style={styles.statValue}>{formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 0 })}</Text>
-                  {wine.estimated_value != null && Number(wine.purchase_price) === Number(wine.estimated_value) ? (
-                    <Text style={styles.priceEstimatedNote}>Estimated upon entry, update</Text>
-                  ) : null}
-                </>
-              ) : (
-                <Text style={styles.statAction}>+ Add Price</Text>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-        )}
-        <TouchableOpacity
-          style={styles.statCell}
-          onPress={() => handleRefreshEstimate()}
-          activeOpacity={refreshingValue ? 1 : 0.7}
-          disabled={refreshingValue}
-        >
-          <Text style={styles.statLabel}>Estimated Value</Text>
-          {refreshingValue ? (
-            <Text style={[styles.statValue, styles.statValueMuted]}>Estimating…</Text>
-          ) : wine.estimated_value != null ? (
-            <>
-              <Text style={[styles.statValue, styles.estimatedValueGold]}>
-                {formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}
-                <Text style={styles.estimateUpdateLink}> (update)</Text>
-              </Text>
-              {wine.estimated_value_low != null && wine.estimated_value_high != null ? (
-                <Text style={styles.statSub}>
-                  Range {formatCurrency(Number(wine.estimated_value_low), wine.estimated_value_currency, { decimals: 0 })}–{formatCurrency(Number(wine.estimated_value_high), wine.estimated_value_currency, { decimals: 0 })}
-                </Text>
-              ) : null}
-              {wine.estimated_value_at ? (
-                <Text style={styles.statSub}>
-                  {wine.estimated_value_source === 'wine-searcher'
-                    ? (wine.estimated_value_scope === 'all-vintage' ? 'WS · all vintages · ' : 'Wine-Searcher · ')
-                    : wine.estimated_value_source === 'vinster' ? 'Vinster estimate · ' : ''}
-                  {new Date(wine.estimated_value_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </Text>
-              ) : null}
-            </>
-          ) : (
-            <Text style={styles.statAction}>+ Generate</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* When no critic score is available, surface Vinster's brief
-          explanation so the dash doesn't feel like an error. */}
-      {wine.critic_score == null && wine.critic_score_note ? (
-        <View style={styles.scoreNoteBlock}>
-          <Text style={styles.scoreNoteLabel}>Why no critic score?</Text>
-          <Text style={styles.scoreNoteText}>{wine.critic_score_note}</Text>
-        </View>
-      ) : null}
-
-      {/* Honest market-value context, mirroring the scan intel card. Only after
-          a real generate attempt (estimated_value_at set), so it never shows on
-          a bare wine before Vinster has looked. */}
-      {!isWishlist && !isArchived && !refreshingValue && wine.estimated_value_at ? (
-        wine.estimated_value_source === 'wine-searcher' && wine.estimated_value_scope === 'all-vintage' ? (
-          <View style={styles.scoreNoteBlock}>
-            <Text style={styles.scoreNoteLabel}>About this value</Text>
-            <Text style={styles.scoreNoteText}>
-              No live market price for the {wine.vintage || 'listed'} vintage on Wine-Searcher — this is its global average across all vintages of the wine, in {wine.estimated_value_currency ?? 'GBP'}.
-            </Text>
-          </View>
-        ) : wine.estimated_value_source === 'vinster' && wine.estimated_value != null ? (
-          <View style={styles.scoreNoteBlock}>
-            <Text style={styles.scoreNoteLabel}>About this value</Text>
-            <Text style={styles.scoreNoteText}>
-              No market listing found on Wine-Searcher for this wine — this is Vinster's own estimate from the producer, region and vintage, in {wine.estimated_value_currency ?? 'GBP'}. Treat it as a guide, not a confirmed market price.
-            </Text>
-          </View>
-        ) : wine.estimated_value == null ? (
-          <View style={styles.scoreNoteBlock}>
-            <Text style={styles.scoreNoteLabel}>No market price</Text>
-            <Text style={styles.scoreNoteText}>
-              Wine-Searcher has no live listing for this wine and vintage, and Vinster couldn't confidently estimate one. Try the closest vintage, or check the wine's global page on Wine-Searcher.
-            </Text>
-          </View>
-        ) : null
-      ) : null}
-
-      {/* On-demand "Vinster's Market & Vintage Comparison" — how this vintage
-          compares and where its market value sits. Generated on command (not in
-          wine-card generation or "update intel") and cached on the wine. Not on
-          archived cards: what the vintage trades for is a buying/holding
-          question, and these bottles are gone. */}
-      {!isWishlist && !isArchived ? (
-        <>
-          <View style={styles.reviewRow}>
-            <View style={styles.vinsterHeaderRow}>
-              <TouchableOpacity onPress={() => setMarketOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-                <Text style={styles.vinsterReviewTitle}>Vinster's Market & Vintage Comparison</Text>
-                <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          {marketOpen ? (
-            <View style={styles.reviewExpandedFull}>
-              {generatingMarket ? (
-                <View style={styles.vintageLoading}>
-                  <ActivityIndicator color={colors.gold} />
-                  <Text style={styles.tastingNotes}>Checking Wine-Searcher across vintages…</Text>
-                </View>
-              ) : vintageRows && vintageRows.length > 0 ? (
-                <View style={styles.vintageTable}>
-                  <View style={[styles.vintageRow, styles.vintageHeadRow]}>
-                    <Text style={[styles.vintageCell, styles.vintageColYear, styles.vintageHeadCell]}>Vintage</Text>
-                    <Text style={[styles.vintageCell, styles.vintageColScore, styles.vintageHeadCell]}>Score</Text>
-                    <Text style={[styles.vintageCell, styles.vintageColPrice, styles.vintageHeadCell]}>Price</Text>
-                  </View>
-                  {vintageRows.map((r) => (
-                    <View key={r.vintage} style={[styles.vintageRow, String(r.vintage) === (wine.vintage ?? '') && styles.vintageRowThis]}>
-                      <Text style={[styles.vintageCell, styles.vintageColYear]}>{r.vintage}</Text>
-                      <Text style={[styles.vintageCell, styles.vintageColScore]}>{r.score != null ? `${r.score}/100` : '—'}</Text>
-                      <Text style={[styles.vintageCell, styles.vintageColPrice]}>{r.price != null ? formatCurrency(r.price, preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP', { decimals: 0 }) : '—'}</Text>
-                    </View>
-                  ))}
-                  <Text style={styles.vintageFootnote}>Wine-Searcher market value and aggregate critic score, by vintage.</Text>
-                  <TouchableOpacity onPress={handleGenerateMarket} activeOpacity={0.7}>
-                    <Text style={styles.diveDeeperLink}>Refresh →</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : vintageRows && marketNote ? (
-                // No Wine-Searcher per-vintage data → Vinster's written summary.
-                <View style={styles.servingBubble}>
-                  <Text style={styles.marketMissingNote}>Wine-Searcher has no per-vintage market data for this wine, so here's Vinster's assessment:</Text>
-                  {marketNote.vintage ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Vintage · </Text>{marketNote.vintage}</Text> : null}
-                  {marketNote.market ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Market · </Text>{marketNote.market}</Text> : null}
-                </View>
-              ) : vintageRows ? (
-                <Text style={styles.tastingNotes}>Wine-Searcher has no per-vintage market data for this wine.{marketUnknown ? " Vinster doesn't know this wine well enough to comment." : ''}</Text>
-              ) : (
-                <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateMarket} activeOpacity={0.7}>
-                  <Text style={styles.generateNoteBtnText}>Generate</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : null}
-        </>
-      ) : null}
-
-      {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
-          chevron toggle. Sits last of the three review blocks (after Your
-          Review and Personal Notes). The "(what's this)" link surfaces a
-          short explainer. Hidden for wishlist wines: their stored note is
-          the user's own, and Vinster's AI review only exists in the cellar. */}
-      {!isWishlist ? (
-        <>
-        {/* Vinster's Review — its body lays out full width below. (Vinster's Map
-            removed for now — to revisit later.) On an archived card this block
-            has already been rendered up in the Serving Suggestions slot, so it
-            isn't repeated here. */}
-        {!isArchived ? (
-          <>
-            <View style={styles.reviewRow}>
-              {renderVinstersReviewHeader()}
-            </View>
-            {renderVinstersReviewBody()}
-          </>
-        ) : null}
-
-        {/* The Inside Line — Vinster's sommelier-best-friend verdict, shown just
-            as on the scan Wine Intel card. Filled once the wine's intel runs. */}
-        {(hasRealInsiderNote(wine.insider_note) || !isArchived) ? (
-          <View style={styles.insiderSection}>
-            <Text style={styles.insiderTitle}>The Inside Line</Text>
-            {/* While intel is still filling the note, show "Generating…" — never
-                the jokey no-note placeholder. */}
-            <Text style={styles.insiderBody}>{hasRealInsiderNote(wine.insider_note) ? wine.insider_note?.trim() : 'Generating…'}</Text>
-            {!isArchived ? (
-              <TouchableOpacity onPress={() => router.push(`/cellar/wine-knowledge/${wine.id}`)} activeOpacity={0.7}>
-                <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        ) : null}
-
-        {/* Where this wine sits in the producer's range — as on the intel card. */}
-        {producerRangeLoading || rangeWines.length > 0 ? (
-          <View style={styles.rangeSection}>
-            <Text style={styles.rangeTitle}>The {wine.producer} range</Text>
-            {rangeWines.some((rw) => !rw.isThis) ? (
-              <Text style={styles.rangeHint}>Tap a wine for its inside line</Text>
-            ) : null}
-            {producerRange ? (
-              <>
-                {rangeWines.map((rw, i) => (
-                  // The current wine — and a consolidated entry-level line — aren't
-                  // tappable (no single inside line for a group of wines).
-                  <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => { setRangeNoteWine(rw.wineName); setRangeNoteTier(rw.tier ?? null); }} activeOpacity={(rw.isThis || rw.grouped) ? 1 : 0.7} disabled={rw.isThis || rw.grouped}>
-                    <View style={styles.rangeRowMain}>
-                      <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
-                      <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={rw.grouped ? 4 : 2}>{rw.wineName}</Text>
-                    </View>
-                    <View style={styles.rangeRight}>
-                      <Text style={[styles.rangeBand, rw.isThis && styles.rangeBandThis]}>{currencySymbol(preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP').repeat(rw.band)}</Text>
-                      {rw.tier ? <Text style={styles.rangeTier}>{rw.tier}</Text> : null}
-                    </View>
-                  </TouchableOpacity>
-                ))}
-                {producerRange.summary ? <Text style={styles.rangeSummary}>{producerRange.summary}</Text> : null}
-              </>
-            ) : (
-              <View style={styles.rangeLoading}>
-                <ActivityIndicator color={colors.gold} />
-                <Text style={styles.rangeLoadingText}>Mapping the range…</Text>
-              </View>
-            )}
-          </View>
-        ) : null}
-
-        {/* Inside-line note for a tapped range wine. */}
-        <RangeWineNoteSheet
-          producer={wine.producer}
-          wineName={rangeNoteWine}
-          region={wine.region}
-          tier={rangeNoteTier}
-          visible={!!rangeNoteWine}
-          onClose={() => setRangeNoteWine(null)}
-        />
-        </>
-      ) : null}
-
-      {!isWishlist && <View style={styles.cardDivider} />}
-
-      {isWishlist && (
-        <TouchableOpacity
-          style={[styles.chefBtn, { borderColor: colors.gold }]}
-          onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/cellar/list'); }}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.chefBtnText, { color: colors.gold }]}>Add to Cellar</Text>
-        </TouchableOpacity>
-      )}
-
-      {isWishlist && (
-        <TouchableOpacity
-          style={[styles.chefBtn, { borderColor: colors.gold }]}
-          onPress={handleDeleteFromWishlist}
-          disabled={removing}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.chefBtnText, { color: colors.gold }]}>Delete from Wish List</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Reviews-flow only: post the review to the community. (The recipe CTA
-          that used to share this slot is now "Chef Inspired Recipe Pairings"
-          beneath Serving Suggestions.) */}
-      {!isArchived && !isWishlist && cameFromReviews && (
-          <TouchableOpacity
-            style={[styles.chefBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted) && styles.chefBtnDisabled]}
-            onPress={handlePostToCommunity}
-            disabled={!COMMUNITY_ENABLED || postingReview || reviewPosted}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.chefBtnText}>
-              {!COMMUNITY_ENABLED ? 'Share Review To Community (coming soon)' : reviewPosted ? '✓ Shared to Community' : postingReview ? 'Sharing…' : 'Share Review To Community'}
-            </Text>
-          </TouchableOpacity>
-      )}
-
-      {/* Regenerate the wine card's intel from scratch — refreshes value, score,
-          tasting notes, drinking window AND fills The Inside Line for wines whose
-          intel predates that feature. Same handler as the value-refresh action. */}
-      {!isArchived && (
-        <TouchableOpacity
-          style={[styles.chefBtn, { marginTop: spacing.md }]}
-          onPress={() => handleRefreshEstimate()}
-          disabled={refreshingValue}
-          activeOpacity={refreshingValue ? 1 : 0.7}
-        >
-          {refreshingValue ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-              <Text style={[styles.chefBtnText, { marginLeft: spacing.xs }]}>Regenerating…</Text>
-            </View>
-          ) : (
-            <Text style={styles.chefBtnText}>Regenerate Wine Card Intel</Text>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {/* Export (share the wine card) — moved here from the top-right, as a
-          yellow button sitting directly above Archive / Delete. Not offered on
-          an archived card: the intel card is for a wine you hold. */}
-      {!isArchived ? (
-        <TouchableOpacity style={styles.exportBtn} onPress={handleShareIntel} disabled={sharingIntel} activeOpacity={0.85}>
-          <Text style={styles.exportBtnText}>{sharingIntel ? 'Preparing…' : 'Export Wine Intel'}</Text>
-        </TouchableOpacity>
-      ) : null}
-
-      {!isArchived && !isWishlist && (
-        <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
-          <Text style={styles.archiveAccessBtnText}>Archive or Delete Wine</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Removal history — cellar-list cards only. An archived card used to
-          repeat it here under an "Archived" heading, which duplicated the
-          Archive History popup now reachable from Bottles in My Archive. */}
-      {!isWishlist && !isArchived && removals.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Removal History</Text>
-          </View>
-          {removals.map((ev) => (
-            <RemovalRow key={ev.id} removal={ev} />
-          ))}
-          <Text style={styles.removalArchiveHint}>Edit your removal history in your archive folder.</Text>
-        </View>
-      )}
-
-      {/* The archived card's only action — sized like the Export Wine Intel
-          button it replaces, so the bottom of the card doesn't change weight. */}
-      {isArchived && (
-        <TouchableOpacity
-          style={[styles.exportBtn, styles.archivedDeleteBtn, removing && styles.buttonDisabled]}
-          onPress={() => setRemoveStep('confirm')}
-          disabled={removing}
-        >
-          <Text style={styles.exportBtnText}>Delete Wine From Your Records</Text>
-        </TouchableOpacity>
-      )}
+      <RangeWineNoteSheet
+        producer={wine.producer}
+        wineName={rangeNoteWine}
+        region={wine.region}
+        tier={rangeNoteTier}
+        visible={!!rangeNoteWine}
+        onClose={() => setRangeNoteWine(null)}
+      />
 
       <Modal
         visible={addBottlesOpen}
@@ -2902,6 +2837,68 @@ export default function CellarWineDetail() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // ---- Wine card layout E ----
+  wcTabBar: { flexDirection: 'row', backgroundColor: '#3E2120', paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  wcTab: { flex: 1, height: 46, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  wcTabOn: { borderBottomColor: colors.gold },
+  wcTabText: { fontFamily: fonts.headingBold, fontSize: 16, color: 'rgba(255,255,255,0.8)' },
+  wcTabTextOn: { color: colors.gold },
+  wcFacts: { flexDirection: 'row', marginTop: spacing.md, marginHorizontal: spacing.lg, backgroundColor: '#6A3B37', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
+  wcFact: { flex: 1, alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4, gap: 2, borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.1)' },
+  wcFactLast: { borderRightWidth: 0 },
+  wcFactLabel: { fontFamily: fonts.bodyRegular, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' },
+  wcFactValue: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text },
+  wcFactSub: { fontFamily: fonts.bodyRegular, fontSize: 10.5, color: 'rgba(255,255,255,0.8)' },
+  wcFactAction: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
+  wcBody: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.md },
+  wcCard: { backgroundColor: colors.surface, borderRadius: 14, padding: spacing.md, gap: 6 },
+  wcCardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  wcInside: { backgroundColor: '#3E2120', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)' },
+  wcH2: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text },
+  wcLabel: { fontFamily: fonts.bodyRegular, fontSize: 10.5, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' },
+  wcValue: { fontFamily: fonts.bodySemibold, fontSize: 19, color: colors.text },
+  wcGoldValue: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
+  wcGoldTitle: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold },
+  wcSmall: { fontFamily: fonts.bodyRegular, fontSize: 12.5, color: 'rgba(255,255,255,0.85)' },
+  wcSmallItalic: { fontFamily: fonts.bodyItalic, fontSize: 12, color: 'rgba(255,255,255,0.85)' },
+  wcBodyText: { fontFamily: fonts.bodyRegular, fontSize: 14.5, lineHeight: 22, color: colors.text },
+  wcLink: { fontFamily: fonts.bodyRegular, fontSize: 13.5, color: colors.gold },
+  wcLinkSmall: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.gold, marginTop: 2 },
+  wcScoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' },
+  wcBigScore: { fontFamily: fonts.headingBold, fontSize: 28, color: colors.gold },
+  wcBigScoreOf: { fontSize: 15 },
+  wcList: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', marginTop: 4 },
+  wcRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, minHeight: 44, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  wcRowLast: { borderBottomWidth: 0 },
+  wcRowText: { fontFamily: fonts.bodyRegular, fontSize: 14.5, color: colors.text, flexShrink: 1 },
+  wcRowRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  wcRowScore: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
+  wcChevron: { fontSize: 20, color: colors.gold },
+  wcNote: { gap: 4 },
+  wcNoteText: { fontFamily: fonts.bodyItalic, fontSize: 13.5, lineHeight: 19, color: colors.text },
+  wcTwoUp: { flexDirection: 'row', gap: spacing.sm },
+  wcHalf: { flex: 1 },
+  wcVsBar: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
+  wcVsValue: { fontFamily: fonts.bodySemibold, fontSize: 18, color: colors.gold },
+  wcVsDiff: { fontFamily: fonts.bodyRegular, fontSize: 13 },
+  wcTRow: { flexDirection: 'row', paddingVertical: 5 },
+  wcTHead: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  wcTCell: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 13.5, color: colors.text },
+  wcTYear: { flex: 1.5 },
+  wcTMine: { color: colors.gold, fontFamily: fonts.bodySemibold },
+  wcBestStar: { color: '#9BD18B' },
+  wcVerdict: { marginTop: 6, padding: spacing.sm, borderRadius: 12, backgroundColor: 'rgba(224,184,74,0.08)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', gap: 8 },
+  wcChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  wcChip: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', fontFamily: fonts.bodyRegular, fontSize: 12.5, color: colors.text, overflow: 'hidden' },
+  wcChipGold: { borderColor: colors.gold, color: colors.gold },
+  wcChipGreen: { borderColor: '#9BD18B', color: '#9BD18B' },
+  wcPairings: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: 14, borderWidth: 1, borderColor: colors.gold },
+  wcPairingsSub: { fontFamily: fonts.bodyItalic, fontSize: 13, lineHeight: 19, color: 'rgba(255,255,255,0.9)' },
+  wcPick: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, padding: spacing.sm, borderRadius: 10, backgroundColor: 'rgba(224,184,74,0.08)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)' },
+  wcPickName: { fontFamily: fonts.headingBold, fontSize: 16, color: colors.text },
+  wcPickNone: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  wcRegenWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 12 },
+  wcRegen: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, textDecorationLine: 'underline', textAlign: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   // Inter — error body
   errorText: { color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 16 },
