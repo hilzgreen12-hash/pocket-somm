@@ -42,6 +42,18 @@ let welcomeShownThisSession = false;
 
 // "How Scan works" — the help body behind the underlined Scan title, matching
 // the other tabs' tappable titles.
+// Search & Discover tile images (bundled). Restaurant interior: add a photo
+// at assets/images/tiles/restaurant-interior.jpg and point SD_RESTAURANT_IMAGE
+// at it — until then the tile shows a quiet fallback.
+const SD_LABEL_IMAGE = require('../../assets/images/placeholder-labels/label-1.jpg');
+const SD_RESTAURANT_IMAGE: number | null = null;
+const SD_COLLAGE_IMAGES = [
+  require('../../assets/images/placeholder-labels/label-2.jpg'),
+  require('../../assets/images/placeholder-labels/label-5.jpg'),
+  require('../../assets/images/placeholder-labels/label-7.jpg'),
+  require('../../assets/images/placeholder-labels/label-9.jpg'),
+];
+
 const SCAN_HELP = `Expert training + Wine Searcher Market API result in the most comprehensive and customized experience in wine exploration.
 
 Home is your starting point. Scan a label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — or scan a wine list for tailored picks from the menu. No label to hand? Search a Wine from Vinster's catalogue. Below, revisit your Recent Scans, see which cellar bottles are drinking now, and catch up on Community Musings.`;
@@ -355,54 +367,70 @@ export default function ScanLandingScreen() {
 
       <View style={styles.blurbSeparator} />
 
-      {/* 2×2 grid of scan actions. Each scan tile carries an "upload instead"
-          banner across its bottom; the Search tile opens the typeahead prompt. */}
-      <View style={styles.grid}>
-        {/* Scan a Wine Label → intel */}
-        <View style={styles.tile}>
-          <TouchableOpacity
-            style={styles.tileMain}
-            onPress={() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))}
-            onLongPress={() => requireAccount(handleViewLastIntel)}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="camera-outline" size={30} color="#FFFFFF" style={styles.tileIcon} allowFontScaling={false} />
-            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} allowFontScaling={false}>Scan a Label</Text>
-            <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2} allowFontScaling={false}>Generate Wine Intel{'\n'}Review &amp; Cellar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tileBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
-            <Feather name="upload" size={11} color="#FFFFFF" allowFontScaling={false} />
-            <Text style={styles.tileBannerText} allowFontScaling={false}>upload instead</Text>
-          </TouchableOpacity>
-        </View>
+      {/* Search & Discover — the three ways in, as a carousel matching the ones
+          below. Scan tiles keep their brown "upload instead" bar. */}
+      <Text style={styles.carouselHeader}>Search &amp; Discover</Text>
+      <View style={styles.carouselBleed}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sdCarousel}>
+          {/* Scan a Label → intel */}
+          <View style={styles.sdCard}>
+            <TouchableOpacity
+              style={styles.sdThumb}
+              onPress={() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))}
+              onLongPress={() => requireAccount(handleViewLastIntel)}
+              activeOpacity={0.85}
+            >
+              <Image source={SD_LABEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
+              <View style={styles.sdShade} pointerEvents="none" />
+              <TouchableOpacity style={styles.sdBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
+                <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
+                <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+            <Text style={styles.sdTitle} numberOfLines={1} allowFontScaling={false}>Scan a Label</Text>
+            <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Generate Wine Intel, Review &amp; Cellar</Text>
+          </View>
 
-        {/* Scan a Wine List → recommendations */}
-        <View style={styles.tile}>
-          <TouchableOpacity
-            style={styles.tileMain}
-            onPress={() => router.push('/scan/wine-list')}
-            onLongPress={() => requireAccount(handleViewLastListResult)}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="camera-outline" size={30} color="#FFFFFF" style={styles.tileIcon} allowFontScaling={false} />
-            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8} allowFontScaling={false}>Scan a List</Text>
-            <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2} allowFontScaling={false}>Tailored bottle picks from a wine menu</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tileBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
-            <Feather name="upload" size={11} color="#FFFFFF" allowFontScaling={false} />
-            <Text style={styles.tileBannerText} allowFontScaling={false}>upload instead</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Scan a List → recommendations */}
+          <View style={styles.sdCard}>
+            <TouchableOpacity
+              style={styles.sdThumb}
+              onPress={() => router.push('/scan/wine-list')}
+              onLongPress={() => requireAccount(handleViewLastListResult)}
+              activeOpacity={0.85}
+            >
+              {SD_RESTAURANT_IMAGE ? (
+                <Image source={SD_RESTAURANT_IMAGE} style={styles.sdImage} resizeMode="cover" />
+              ) : (
+                <View style={[styles.sdImage, styles.sdFallback]}>
+                  <Ionicons name="restaurant-outline" size={40} color="rgba(255,255,255,0.55)" allowFontScaling={false} />
+                </View>
+              )}
+              <View style={styles.sdShade} pointerEvents="none" />
+              <TouchableOpacity style={styles.sdBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
+                <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
+                <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+            <Text style={styles.sdTitle} numberOfLines={1} allowFontScaling={false}>Scan a List</Text>
+            <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Tailored Bottle Picks from a Wine List</Text>
+          </View>
 
+          {/* Search a Wine → the typeahead prompt */}
+          <View style={styles.sdCard}>
+            <TouchableOpacity style={styles.sdThumb} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
+              <View style={styles.sdCollage}>
+                {SD_COLLAGE_IMAGES.map((img, i) => (
+                  <Image key={i} source={img} style={styles.sdCollageCell} resizeMode="cover" />
+                ))}
+              </View>
+              <View style={styles.sdShade} pointerEvents="none" />
+            </TouchableOpacity>
+            <Text style={styles.sdTitle} numberOfLines={1} allowFontScaling={false}>Search a Wine</Text>
+            <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Market Intel Powered by Wine Searcher</Text>
+          </View>
+        </ScrollView>
       </View>
-
-      {/* Search bar directly beneath the two scan tiles (above the separator). */}
-      <TouchableOpacity style={styles.searchBar} onPress={() => setSearchModalOpen(true)} activeOpacity={0.7}>
-        <Feather name="search" size={18} color={colors.textMuted} style={styles.searchBarIcon} />
-        <Text style={styles.searchBarText} numberOfLines={1}>Search a Wine, powered by Wine Searcher</Text>
-      </TouchableOpacity>
 
       {/* Recent Scans — mixed label + list scans, most recent first. */}
       <View style={styles.sectionSeparator} />
@@ -607,32 +635,9 @@ const styles = StyleSheet.create({
   // the Reviews "Add +"). Absolute so it never shifts the centred title.
   voiceLink: { position: 'absolute', right: 0, top: -22 },
   voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
-  // Rule between the intro blurb and the 2×2 grid (Voice Command now lives in the
-  // header, so the grid moves up into the reclaimed space).
+  // Rule beneath the title row, above Search & Discover.
   blurbSeparator: { height: 1, backgroundColor: colors.divider, marginTop: 18, marginBottom: 18 },
 
-  // 2×2 grid of tiles — motif/icon, gold title, short divider, italic blurb,
-  // and (on scan tiles) an "upload instead" banner across the bottom.
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
-  tile: { width: '48%', aspectRatio: 1.0, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  tileMain: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
-  // Fixed line box so every tile's icon occupies the SAME vertical space — the
-  // search vs camera glyphs have different metrics, which pushed the Search a
-  // Wine title higher than its neighbours. A constant height keeps all four
-  // titles on the same line.
-  tileIcon: { marginBottom: spacing.sm, height: 34, lineHeight: 34, textAlign: 'center' },
-  tileTitle: { fontFamily: fonts.headingBold, fontSize: 19, color: '#FFFFFF', letterSpacing: 1, textAlign: 'center' },
-  tileDivider: { width: 34, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: spacing.xs },
-  // Fixed two-line height so every tile's blurb occupies the same space — a
-  // one-line blurb (Scan a Lineup) would otherwise shift its title down out of
-  // line with the two-line tiles beside it. Font is +1pt (14) per request.
-  tileDesc: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 18, minHeight: 36 },
-  tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
-  tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.3 },
-  // Separator + "Manually Search a Wine" bar beneath the two scan tiles.
-  searchBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginTop: spacing.md },
-  searchBarIcon: { marginRight: 2 },
-  searchBarText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.textMuted, letterSpacing: 0.3 },
   // Discover carousels — section header, full-width separator, and a bleed
   // wrapper so each carousel scrolls edge-to-edge past the scroll's h-padding.
   sectionSeparator: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.lg },
@@ -640,6 +645,21 @@ const styles = StyleSheet.create({
   // Gold stats line under a carousel header (matches the app-wide stats bars).
   carouselStats: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginTop: -spacing.sm, marginBottom: spacing.md },
   carouselBleed: { marginHorizontal: -spacing.xl },
+  // Search & Discover carousel — same card shape as the carousels below
+  // (220×165 image, title, gold note).
+  sdCarousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
+  sdCard: { width: 220 },
+  sdThumb: { width: 220, height: 165, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite },
+  sdImage: { width: '100%', height: '100%' },
+  sdFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  sdShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.15)' },
+  sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
+  sdCollageCell: { width: '50%', height: '50%' },
+  // The brown "upload instead" bar across the bottom of a scan tile.
+  sdBanner: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)' },
+  sdBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.3 },
+  sdTitle: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
+  sdNote: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
   // footprint). This same yellow-bubble treatment is used app-wide.
