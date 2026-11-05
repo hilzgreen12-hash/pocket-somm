@@ -1,7 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { View, Text } from 'react-native';
 import { router } from 'expo-router';
 import { useCellar } from '../hooks/useCellar';
+import { useChosenWines } from '../hooks/useChosenWines';
+import { buildSoundNameIndex, correctWineNamesBySound } from '../utils/soundAlike';
 import { usePreferences } from '../hooks/usePreferences';
 import { classifyDiscoverVoice, askMyData } from '../api/discoverVoice';
 import {
@@ -54,6 +56,14 @@ function marketPrice(m: MarketPoint | null): string | null {
 // my cellar" runs the same chat as Home).
 export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boolean; onClose: () => void; startWith?: 'cellar' }) {
   const { wines } = useCellar();
+  // "Ask about my reviews": snap misheard names to wines the user has reviewed
+  // or cellared, by sound ("chateau rear sack" → Château Rieussec).
+  const { chosenWines } = useChosenWines();
+  const soundIndex = useMemo(() => buildSoundNameIndex([
+    ...wines.flatMap((w) => [w.producer, w.wine_name]),
+    ...chosenWines.flatMap((c: any) => [c.producer, c.wine_name]),
+  ].filter(Boolean) as string[]), [wines, chosenWines]);
+  const soundFix = (q: string) => correctWineNamesBySound(q, soundIndex);
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const chat = useChat();
@@ -274,7 +284,7 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
     const history: { q: string; a: string }[] = [];
     let q = await chat.ask("What would you like to know? Ask about anything you've reviewed: scores, restaurants, dates, what you drank where", 'ie. Where did I drink a Cornas recently?');
     for (;;) {
-      const a = await chat.working('Looking through your records…', () => askMyData(q, history));
+      const a = await chat.working('Looking through your records…', () => askMyData(soundFix(q), history));
       chat.say(a);
       history.push({ q, a });
       if (history.length === 1) chat.push(<DoneButton onPress={onClose} />);

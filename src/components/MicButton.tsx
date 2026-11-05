@@ -5,7 +5,7 @@ import { showAlert } from './AppAlert';
 import { correctWineTerms } from '../utils/wineDictation';
 import { correctFoodTerms } from '../utils/foodDictation';
 import { correctVoiceTranscript } from '../api/correctVoice';
-import { useDictationCorrect, useDictationHints } from '../hooks/useDictationCorrect';
+import { useDictationCorrect, useDictationHints, useSoundCorrect } from '../hooks/useDictationCorrect';
 import { colors } from '../constants/theme';
 
 interface Props {
@@ -51,6 +51,10 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
   const refine = useDictationCorrect();
   // Cellar producer / cuvée names, passed to the recogniser as hints (wine only).
   const hints = useDictationHints();
+  // Sound-alike correction against the user's own wines (not for long notes).
+  const sound = useSoundCorrect();
+  const soundRef = useRef(sound);
+  soundRef.current = sound;
   const refineRef = useRef(refine);
   refineRef.current = refine;
 
@@ -79,7 +83,9 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
       // The fuzzy cellar-producer snap is wine-only; for food, the dictionary pass
       // above is the final correction.
       const base = baseRef.current;
-      const refined = domain === 'food' ? spoken : refineRef.current(spoken);
+      const refined = domain === 'food' ? spoken
+        : domain === 'note' ? refineRef.current(spoken)
+        : soundRef.current(refineRef.current(spoken));
       const joined = joinDictation(base, refined);
       onChangeText(joined);
       baseRef.current = joined;

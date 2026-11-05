@@ -17,6 +17,8 @@ import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
 import { supabase } from '../api/supabase';
 import { showFoundBanner } from './FoundBanner';
+import { rankWinesBySound } from '../utils/soundAlike';
+import { useSoundCorrect, setPriorityDictationHints } from '../hooks/useDictationCorrect';
 import { HomeVoiceModal } from './HomeVoiceModal';
 
 const MARK = require('../../assets/vinster-mark.png');
@@ -115,6 +117,14 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   const userId = session?.user.id;
   const qc = useQueryClient();
   const { wines } = useCellar();
+  const soundCorrect = useSoundCorrect();
+  // Speech hints: the wines in this location go first.
+  useEffect(() => {
+    if (!visible || !hereWineIds?.length) return;
+    const names = wines.filter((w) => hereWineIds.includes(w.id)).flatMap((w) => [w.producer, w.wine_name]).filter(Boolean) as string[];
+    setPriorityDictationHints(names);
+    return () => setPriorityDictationHints([]);
+  }, [visible, hereWineIds?.join('|'), wines]);
   const { data: locations = [] } = useQuery({
     queryKey: ['storage-locations', userId],
     queryFn: () => fetchStorageLocations(userId!),
@@ -247,11 +257,29 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
   // Resolve a spoken wine against the bottles in THIS location first, then the
   // whole cellar if nothing here matches.
-  async function parseHereFirst(act: CellarCommandAction, text: string): Promise<CellarCommandResult> {
+  async function parseHereFirst(act: CellarCommandAction, rawText: string): Promise<CellarCommandResult> {
+    // Snap misheard names to the user's own wines by sound first ("rear sack" →
+    // Rieussec), so Claude reads the real name.
+    const text = soundCorrect(rawText);
+    const hit = (r: CellarCommandResult) => !!r.wineId || (r.candidates?.length ?? 0) > 0;
+    if (act === 'add') return parseCellarCommand(act, text, wines, locations, units);
     const here = hereWineIds?.length ? wines.filter((w) => hereWineIds.includes(w.id)) : [];
-    if (here.length && act !== 'add') {
-      const r = await parseCellarCommand(act, text, here, locations, units);
-      if (r.wineId || (r.candidates?.length ?? 0) > 0) return r;
+    // The few wines that SOUND most like what was said (plus that producer's
+    // other vintages), so Claude chooses among a handful, not the whole cellar.
+    const shortlist = (pool: CellarWine[]) => {
+      const ranked = rankWinesBySound(rawText, pool, 6, 0.8);
+      if (!ranked.length) return [];
+      const top = ranked[0].score;
+      const producers = new Set(ranked.filter((m) => m.score >= top - 0.1).map((m) => (m.wine.producer ?? '').toLowerCase()));
+      return pool.filter((w) => ranked.some((m) => m.wine.id === w.id) || producers.has((w.producer ?? '').toLowerCase()));
+    };
+    const tries: CellarWine[][] = [];
+    if (here.length) { tries.push(shortlist(here)); tries.push(here); }
+    tries.push(shortlist(wines));
+    for (const pool of tries) {
+      if (!pool.length) continue;
+      const r = await parseCellarCommand(act, text, pool, locations, units);
+      if (hit(r)) return r;
     }
     return parseCellarCommand(act, text, wines, locations, units);
   }
