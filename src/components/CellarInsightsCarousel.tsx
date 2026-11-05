@@ -9,6 +9,7 @@ import { useCellar } from '../hooks/useCellar';
 import { useLabels } from '../hooks/useLabels';
 import { wineNameKey } from '../utils/wineIdentity';
 import { LabelThumb } from './LabelThumb';
+import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, placeholderLabelImages } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
 import { colors, spacing } from '../constants/theme';
@@ -23,21 +24,26 @@ const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
 // Order mirrors the real tiles so a populated tile replaces its own placeholder.
 // Wine tiles are label collages; Dined Out stays a restaurant photo.
-const INSIGHT_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY },
-  { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY },
-  { kind: 'image', uri: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY },
-  { kind: 'labelCollage', images: placeholderLabelImages(2, 4), title: 'Recipes Generated', stamp: '4 of your wines', overlay: INSIGHT_OVERLAY },
-  { kind: 'labelCollage', images: placeholderLabelImages(6, 4), title: 'Labels Scanned Last Month', stamp: '12 wine labels', overlay: INSIGHT_OVERLAY },
+// Each example is keyed to the real tile it stands in for, so an example only
+// ever shows when THAT tile has no data (never beside its own real tile).
+const INSIGHT_EXAMPLES: { key: string; card: PlaceholderCard }[] = [
+  { key: 'personality', card: { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY } },
+  { key: 'archived', card: { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY } },
+  { key: 'restaurants', card: { kind: 'image', uri: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY } },
+  { key: 'recipes-generated', card: { kind: 'labelCollage', images: placeholderLabelImages(2, 4), title: 'Recipes Generated', stamp: '4 of your wines', overlay: INSIGHT_OVERLAY } },
+  { key: 'labels-month', card: { kind: 'labelCollage', images: placeholderLabelImages(6, 4), title: 'Labels Scanned Last Month', stamp: '12 wine labels', overlay: INSIGHT_OVERLAY } },
 ];
 
 // Every insight tile shows a real IMAGE — a label collage or a photo. Tiles with
 // no image to show are omitted (we never render a plain brown/icon tile).
+type CollageItem = string | { producer: string | null; wineName: string | null };
 type Tile = {
   key: string;
   title: string;
   meta: string;
-  collage: string[];   // storage paths for a 1- or 2×2 thumbnail collage (required)
+  // Up to four thumbnails: a stored photo path, or a wine identity whose label
+  // is looked up (used when the user has no photo of that wine).
+  collage: CollageItem[];
   onTap?: () => void;
 };
 
@@ -179,16 +185,18 @@ export function CellarInsightsCarousel() {
     // Up to FOUR of the most recently paired wines' labels (newest first, deduped
     // by identity) — a collage, like the other Insights tiles.
     const recipeWineKeys = new Set<string>();
-    const recipeThumbs: string[] = [];
+    const recipeThumbs: CollageItem[] = [];
     const seenThumbKeys = new Set<string>();
     for (const s of recipeSessions as any[]) {
       const w = s.wine;
       if (!w) continue;
       const key = wineNameKey(w.producer, w.wineName);
       recipeWineKeys.add(key);
-      if (!seenThumbKeys.has(key)) {
-        const thumb = thumbByKey.get(key);
-        if (thumb && recipeThumbs.length < 4) { seenThumbKeys.add(key); recipeThumbs.push(thumb); }
+      if (!seenThumbKeys.has(key) && recipeThumbs.length < 4) {
+        seenThumbKeys.add(key);
+        // The user's own photo of that wine when there is one, else its label
+        // looked up by name — so a real recipe tile always shows.
+        recipeThumbs.push(thumbByKey.get(key) ?? { producer: w.producer ?? null, wineName: w.wineName ?? null });
       }
     }
     const recipeWineCount = recipeWineKeys.size;
@@ -223,7 +231,8 @@ export function CellarInsightsCarousel() {
 
   // Only tiles with a real image (collage) ever render — no brown/icon tiles.
   const shown = tiles.filter((t) => t.collage.length > 0).slice(0, MAX_TILES);
-  const fill = shown.length < INSIGHT_EXAMPLES.length ? INSIGHT_EXAMPLES.slice(shown.length) : [];
+  const shownKeys = new Set(shown.map((t) => t.key));
+  const fill = INSIGHT_EXAMPLES.filter((e) => !shownKeys.has(e.key)).map((e) => e.card);
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
@@ -240,15 +249,20 @@ export function CellarInsightsCarousel() {
 }
 
 // 2×2 thumbnail collage (up to 4) filling the 220×165 tile footprint.
-function Collage({ paths }: { paths: string[] }) {
+function CollageCell({ item, full }: { item: CollageItem; full?: boolean }) {
+  const st = full ? styles.collageFull : styles.collageCell;
+  if (typeof item === 'string') return <LabelThumb path={item} style={st} radius={full ? 12 : 0} frame={0} />;
+  return <View style={[st, { overflow: 'hidden' }]}><WineCardThumb producer={item.producer} wineName={item.wineName} fallbackText={item.wineName ?? item.producer ?? ''} style={st} /></View>;
+}
+function Collage({ paths }: { paths: CollageItem[] }) {
   const p = paths.slice(0, 4);
   if (p.length === 1) {
-    return <View style={styles.collageBox}><LabelThumb path={p[0]} style={styles.collageFull} radius={12} frame={0} /></View>;
+    return <View style={styles.collageBox}><CollageCell item={p[0]} full /></View>;
   }
   return (
     <View style={styles.collageBox}>
       <View style={styles.collageGrid}>
-        {p.map((pp, i) => <LabelThumb key={i} path={pp} style={styles.collageCell} radius={0} frame={0} />)}
+        {p.map((pp, i) => <CollageCell key={i} item={pp} />)}
       </View>
     </View>
   );
