@@ -98,16 +98,9 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, lea
     if (raf.current != null) { cancelAnimationFrame(raf.current); raf.current = null; }
     const st = live.current.step;
     const target = (d.next.indexOf(key) - d.start.indexOf(key)) * st;
-    // Picked up but never moved → it was a hold, not a drag.
-    const wasHold = Math.abs(d.translation) < 8 && d.next.join('|') === d.start.join('|');
     Animated.timing(offsetOf(key), { toValue: target, duration: 120, useNativeDriver: true }).start(() => {
       setActiveKey(null);
       setScrollLocked(false);
-      if (wasHold && live.current.onHold) {
-        for (const k of d.start) offsetOf(k).setValue(0);
-        live.current.onHold(key);
-        return;
-      }
       if (d.next.join('|') !== d.start.join('|')) {
         resetOnRedraw.current = d.start; // cleared in the redraw frame (below)
         live.current.onReorder(d.next);
@@ -127,13 +120,18 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, lea
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys.join('|')]);
 
+  // Hold-to-drag tiles: a hold released WITHOUT dragging opens the tile's menu.
+  // The drag (Pan) only switches on once the finger MOVES after the hold, so a
+  // still hold never reaches it — a separate LongPress detects that instead.
+  const draggedRef = useRef(false);
   const gestures = useMemo(() => {
-    const m: Record<string, ReturnType<typeof Gesture.Pan>> = {};
+    const m: Record<string, ReturnType<typeof Gesture.Pan> | ReturnType<typeof Gesture.Simultaneous>> = {};
     for (const key of keys) {
-      m[key] = Gesture.Pan()
+      const pan = Gesture.Pan()
         .runOnJS(true)
         .activateAfterLongPress(holdToDrag ? 300 : 150)
         .onStart((e) => {
+          draggedRef.current = true;
           drag.current = { key, start: [...keysRef.current], next: [...keysRef.current], translation: 0, absX: e.absoluteX, startX: scrollX.current };
           setActiveKey(key);
           setScrollLocked(true);
@@ -148,6 +146,17 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, lea
           if (raf.current == null) raf.current = requestAnimationFrame(tick);
         })
         .onFinalize(() => finish(key));
+      if (!holdToDrag) { m[key] = pan; continue; }
+      const hold = Gesture.LongPress()
+        .runOnJS(true)
+        .minDuration(400)
+        .maxDistance(10)
+        .onBegin(() => { draggedRef.current = false; })
+        .onStart(() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); })
+        .onEnd((_e, success) => {
+          if (success && !draggedRef.current) live.current.onHold?.(key);
+        });
+      m[key] = Gesture.Simultaneous(hold, pan);
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps

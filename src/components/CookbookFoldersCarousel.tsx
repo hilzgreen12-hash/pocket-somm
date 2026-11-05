@@ -150,8 +150,10 @@ export function CookbookFoldersCarousel() {
         items={collections.map((c) => ({
           key: c.id,
           label: c.name,
+          // onLongPress no-op: a hold opens the folder menu (ReorderableRow), so
+          // the release mustn't also open the folder.
           node: (
-            <TouchableOpacity style={styles.card} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.card} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} onLongPress={() => {}} delayLongPress={350} activeOpacity={0.8}>
               <FolderBg path={c.image_path} />
               <Text style={styles.cardType}>Your Folder</Text>
               <Text style={styles.cardName} numberOfLines={2}>{c.name}</Text>
