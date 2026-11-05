@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { View, Text, Animated, StyleSheet, useWindowDimensions, type ScrollView, type NativeSyntheticEvent, type NativeScrollEvent, type LayoutChangeEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { View, Text, Animated, StyleSheet, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent, type LayoutChangeEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { Gesture, GestureDetector, type ScrollView } from 'react-native-gesture-handler';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing } from '../constants/theme';

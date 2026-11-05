@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { View, Animated, ScrollView, StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { View, Animated, StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+// The gesture library's ScrollView: once a tile is picked up (the pan becomes
+// active) it cancels the carousel's own scrolling, so the two never fight for
+// the finger (the old RN ScrollView let a sideways drag scroll AND drag — stuck).
+import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 

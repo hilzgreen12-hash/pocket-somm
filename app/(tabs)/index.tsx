@@ -3,6 +3,9 @@ import { JournalCarousel } from '../../src/components/JournalCarousel';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
+// Page scroll from the gesture library, so a picked-up carousel section cancels
+// the page scroll instead of fighting it.
+import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -432,7 +435,7 @@ export default function ScanLandingScreen() {
 
   return (
     <TabSwipeView style={styles.container}>
-    <ScrollView {...homeScroll.scrollProps} style={{ flex: 1 }} scrollEnabled={!scrollLocked} contentContainerStyle={[styles.scroll, { paddingTop }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <GHScrollView {...homeScroll.scrollProps} style={{ flex: 1 }} scrollEnabled={!scrollLocked} contentContainerStyle={[styles.scroll, { paddingTop }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
       {/* This scroll has paddingHorizontal (other tabs pad per-section), which
           would push the mark inward — pull it back to the screen edge so the V
@@ -774,7 +777,7 @@ export default function ScanLandingScreen() {
 
       <HomeVoiceModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
 
-    </ScrollView>
+    </GHScrollView>
     </TabSwipeView>
   );
 }
