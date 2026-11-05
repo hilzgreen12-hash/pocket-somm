@@ -8,7 +8,6 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../src/components/AppAlert';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
-import { MicButton } from '../../src/components/MicButton';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
@@ -537,7 +536,6 @@ export default function ScanLandingScreen() {
           <View style={styles.searchModalSheet}>
             <View style={styles.searchModalHeaderRow}>
               <Text style={styles.searchModalTitle}>Search a Wine</Text>
-              <MicButton value={wineSearch} onChangeText={setWineSearch} onClear={() => setWineSearch('')} domain="wine" serverCorrect />
             </View>
             <View style={styles.searchRow}>
               <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
