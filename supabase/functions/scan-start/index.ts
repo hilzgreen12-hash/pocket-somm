@@ -95,13 +95,17 @@ interface ScanPrefs {
   favouriteRegions?: string[]; favouriteGrapes?: string[]; dislikedRegions?: string[]; dislikedGrapes?: string[];
   profileWineTypes?: string[]; profileStyleProfiles?: string[];
 }
-function applyScanFilters(wines: ExtractedWine[], preferences: ScanPrefs | null | undefined): ExtractedWine[] {
+function applyScanFilters(wines: ExtractedWine[], preferences: ScanPrefs | null | undefined, userCurrency = 'GBP'): ExtractedWine[] {
   if (!preferences) return wines;
   let out = wines;
+  // The budget is in the user's currency; only hard-filter prices listed in that
+  // same currency (a €150 bottle isn't "over £100" by number alone — recommend
+  // weighs other currencies approximately).
+  const sameCur = (w: ExtractedWine) => !w.currency || w.currency.toUpperCase() === userCurrency.toUpperCase();
   const budget = preferences.budget;
-  if (budget) out = out.filter((w) => w.menuPrice == null || w.menuPrice <= budget);
+  if (budget) out = out.filter((w) => w.menuPrice == null || !sameCur(w) || w.menuPrice <= budget);
   const budgetMin = preferences.budgetMin;
-  if (budgetMin) out = out.filter((w) => w.menuPrice == null || w.menuPrice >= budgetMin);
+  if (budgetMin) out = out.filter((w) => w.menuPrice == null || !sameCur(w) || w.menuPrice >= budgetMin);
   const types = preferences.wineTypes ?? [];
   if (types.length) {
     const byColour = out.filter((w) => !w.colour || colourMatches(w.colour, types));
@@ -169,7 +173,7 @@ Deno.serve(async (req) => {
         await patch({ status: 'reading' });
         // OCR every image in parallel (allSettled — one bad shot doesn't sink
         // the batch), then merge + dedup by name+producer. Mirrors the old client.
-        const results = await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64 }, authHeader)));
+        const results = await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader)));
         const merged: ExtractedWine[] = [];
         const failures: string[] = [];
         for (const r of results) {
@@ -202,7 +206,7 @@ Deno.serve(async (req) => {
           return;
         }
 
-        const winesForRecommend = applyScanFilters(preFilterWines(wines, profile), scanPreferences);
+        const winesForRecommend = applyScanFilters(preFilterWines(wines, profile), scanPreferences, currency);
 
         const rec = await callFn('recommend', {
           wines: winesForRecommend,

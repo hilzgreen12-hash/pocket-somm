@@ -242,11 +242,11 @@ Deno.serve(async (req) => {
         : 'No colour restriction — recommend the best option regardless of colour.';
 
     const budgetLine = budget
-      ? `HARD RULE — BUDGET (MAX): The diner's maximum budget is ${sym}${budget} per bottle (currency: ${cur}). Exclude every wine priced above ${sym}${budget} on the menu. Treat all menu prices as being in ${cur}. This is absolute.`
+      ? `HARD RULE — BUDGET (MAX): The diner's maximum budget is ${sym}${budget} per bottle (currency: ${cur}). Exclude every wine priced above ${sym}${budget} on the menu. Each wine's menu price is in its own listed currency (its "currency" field); when that isn't ${cur}, convert it approximately to ${cur} before comparing. This is absolute.`
       : '';
 
     const budgetMinLine = budgetMin
-      ? `HARD RULE — BUDGET (MIN): The diner's minimum budget is ${sym}${budgetMin} per bottle (currency: ${cur}). Exclude every wine priced BELOW ${sym}${budgetMin} on the menu — they want to spend at least this much. A wine whose menu price is unknown (null) may be included. This is absolute.`
+      ? `HARD RULE — BUDGET (MIN): The diner's minimum budget is ${sym}${budgetMin} per bottle (currency: ${cur}). Exclude every wine priced BELOW ${sym}${budgetMin} on the menu (converting a price in another currency approximately to ${cur} first) — they want to spend at least this much. A wine whose menu price is unknown (null) may be included. This is absolute.`
       : '';
 
     const dislikedRegionsLine = dislikedRegions?.length

@@ -25,13 +25,25 @@ const WINE_FIELDS = `For each wine return a JSON object with these fields:
   colour is genuinely impossible to determine. (string | null)
 - vintage: 4-digit year as integer, or null if non-vintage (number | null)
 - menuPrice: numeric price as listed on the menu, null if not shown (number | null).
+  A BARE NUMBER in the price position IS the price, even with no currency
+  symbol — most European lists print "70" or "115" or "45,00" with no €/£.
+  Read "45,00" / "45.00" as 45. Do NOT mistake these for prices: the vintage
+  (a 4-digit year like 2019), a bin / list number (usually at the START of the
+  line), a bottle size (75cl, 150cl, 37.5cl, 1.5L, Magnum) or an ABV (12.5%).
+  Keep each price with the wine ON ITS OWN LINE / ROW — never shift names or
+  prices onto a neighbouring row.
   IMPORTANT: many wine lists show two or more prices for the same wine —
   e.g. by-the-glass alongside by-the-bottle (175ml / 250ml / bottle, or
   similar pour-size columns). When multiple prices are shown for a single
   wine, always pick the HIGHEST one — that is the bottle price. Do not
   return the glass price. If a wine is genuinely glass-only (no bottle
   listed), return that price.
-- currency: 3-letter currency code, default "GBP" (string)
+- currency: the 3-letter currency code of the prices ON THIS LIST (string).
+  Use a printed symbol or code if there is one (£ GBP, € EUR, $ USD, CHF, …).
+  If NO symbol is printed anywhere, infer it from the list itself — its
+  language, place names, headings (a French or Italian list → EUR, a UK list
+  → GBP, a US list → USD) — and only if there is genuinely nothing to go on,
+  use the fallback currency given below.
 
 IMPORTANT: Return ONLY raw valid JSON — no markdown, no code blocks, no backticks, no explanation.
 Use this exact format:
@@ -40,6 +52,10 @@ Use this exact format:
 If you cannot identify any wines, return: { "wines": [] }`;
 
 const IMAGE_SYSTEM_PROMPT = `You are a wine list parser. Extract every wine from the provided image of a restaurant wine list.\n\n${WINE_FIELDS}`;
+// The user's currency, used only when the list shows no currency AND nothing
+// on it says where it's from.
+const promptFor = (fallbackCurrency: string) =>
+  `${IMAGE_SYSTEM_PROMPT}\n\nFallback currency (only if the list gives no clue): ${fallbackCurrency}`;
 
 Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization');
@@ -87,6 +103,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const { imageBase64, stream } = body;
+    const fallbackCurrency = typeof body.currency === 'string' && /^[A-Z]{3}$/.test(body.currency) ? body.currency : 'GBP';
 
     if (!imageBase64) {
       return new Response(JSON.stringify({ error: 'imageBase64 required' }), { status: 400 });
@@ -110,7 +127,7 @@ Deno.serve(async (req) => {
         // limit (the "timed out at 91%" bug). 16384 clears typical lists in one
         // attempt so the retry never triggers. Haiku 4.5 supports far more.
         max_tokens: 16384,
-        system: IMAGE_SYSTEM_PROMPT,
+        system: promptFor(fallbackCurrency),
         messages: [
           {
             role: 'user',
