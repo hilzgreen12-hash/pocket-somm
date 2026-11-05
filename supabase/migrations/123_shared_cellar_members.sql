@@ -1,7 +1,7 @@
 -- Shared household cellar.
 -- A cellar owner invites another Vinster account (by email) as a member with
--- 'view' or 'edit' access. Once accepted, the member's app opens the owner's
--- cellar: wines (incl. the archive), placements, racks/fridges/bins, alt
+-- 'view' or 'edit' access. Once accepted, the member can switch their Cellar
+-- tab between their own cellar and the owner's, which covers: wines (incl. the archive), placements, racks/fridges/bins, alt
 -- cellars, cases, removal history and custom filters. Rows keep the OWNER's
 -- user_id; members get access through the policies below. Reviews, taste
 -- profile, scans and wishlists stay personal (separate tables / own user_id).
@@ -22,9 +22,9 @@ create table if not exists public.cellar_members (
 create index if not exists cellar_members_owner_idx on public.cellar_members(owner_id);
 create index if not exists cellar_members_member_idx on public.cellar_members(member_id);
 create index if not exists cellar_members_email_idx on public.cellar_members(lower(invite_email));
--- One live invite per owner + email, and a member belongs to one shared cellar.
+-- One live invite per owner + email. A member can belong to several shared
+-- cellars and switch between them (and their own) in the Cellar tab.
 create unique index if not exists cellar_members_owner_email_uq on public.cellar_members(owner_id, lower(invite_email));
-create unique index if not exists cellar_members_one_cellar_uq on public.cellar_members(member_id) where status = 'accepted';
 
 alter table public.cellar_members enable row level security;
 
@@ -80,9 +80,6 @@ declare
   em text := lower(coalesce(auth.jwt() ->> 'email', ''));
 begin
   if auth.uid() is null then raise exception 'Not signed in'; end if;
-  if exists (select 1 from public.cellar_members where member_id = auth.uid() and status = 'accepted' and id <> invite_id) then
-    raise exception 'You are already in a shared cellar. Leave it before joining another.';
-  end if;
   update public.cellar_members
      set member_id = auth.uid(), status = 'accepted', accepted_at = now()
    where id = invite_id and lower(invite_email) = em and owner_id <> auth.uid();

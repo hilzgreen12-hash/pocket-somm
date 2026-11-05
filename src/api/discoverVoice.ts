@@ -1,5 +1,6 @@
 import { invokeResilient } from './invokeResilient';
 import type { CellarWine } from '../types/wine';
+import { getCellarContext } from './cellarContext';
 
 export type DiscoverIntent = 'cellar_mood' | 'consult' | 'intel' | 'my_data' | 'unclear';
 
@@ -45,7 +46,11 @@ export async function classifyDiscoverVoice(transcript: string, wines: CellarWin
 // Scoped server-side to the signed-in user. Returns a short natural answer.
 // history: earlier turns of the same chat, so follow-up questions make sense.
 export async function askMyData(question: string, history: { q: string; a: string }[] = []): Promise<string> {
-  const data = await invokeResilient('ask-my-data', { question, history }) as { answer?: string | null; error?: string };
+  // The cellar currently selected in the Cellar tab (own or a shared one), so
+  // answers about "my cellar" match what the user is looking at.
+  const ctx = getCellarContext();
+  const cellarOwnerId = ctx.ownerId ?? ctx.userId ?? undefined;
+  const data = await invokeResilient('ask-my-data', { question, history, cellarOwnerId }) as { answer?: string | null; error?: string };
   if (data?.error && !data?.answer) throw new Error(data.error);
   return (data?.answer ?? '').trim() || "I couldn't find that in your records.";
 }

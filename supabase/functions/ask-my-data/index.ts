@@ -17,7 +17,7 @@ function json(payload: unknown, status = 200): Response {
 
 Deno.serve(async (req) => {
   try {
-    const { question, history } = await req.json().catch(() => ({}));
+    const { question, history, cellarOwnerId } = await req.json().catch(() => ({}));
     // Earlier turns of the same chat (follow-up questions refer back to them).
     const turns: { q: string; a: string }[] = Array.isArray(history)
       ? history.filter((t: any) => typeof t?.q === 'string' && typeof t?.a === 'string').slice(-6)
@@ -59,6 +59,11 @@ Deno.serve(async (req) => {
     const { data: cellar, error: cellarErr } = await db
       .from('cellar_wines')
       .select('producer, wine_name, vintage, region, grape_variety, style, critic_score, review_score, review_note, quantity, archived_at, is_wishlist')
+      // Shared cellars: only the cellar selected in the app (plus the user's own
+      // wishlist — RLS already hides anyone else's). Older apps send nothing.
+      .or(typeof cellarOwnerId === 'string' && /^[0-9a-f-]{36}$/i.test(cellarOwnerId)
+        ? `user_id.eq.${cellarOwnerId},is_wishlist.eq.true`
+        : 'id.not.is.null')
       .order('created_at', { ascending: false })
       .limit(400);
     if (cellarErr) console.error('ask-my-data cellar query failed:', cellarErr.message);

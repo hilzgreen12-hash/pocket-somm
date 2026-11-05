@@ -10,6 +10,8 @@ import {
   fetchInvitesForMe, acceptCellarInvite, leaveOrDeclineCellar,
   type CellarMember, type CellarMemberRole,
 } from '../../src/api/cellarMembers';
+import { sharedCellarLabel } from '../../src/components/CellarSwitcher';
+import { setActiveCellar } from '../../src/api/cellarContext';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -37,7 +39,7 @@ export default function ShareCellarScreen() {
     queryFn: fetchInvitesForMe,
     enabled: !!userId,
   });
-  const joined = invites.find((i) => i.status === 'accepted' && i.member_id === userId) ?? null;
+  const joined = invites.filter((i) => i.status === 'accepted' && i.member_id === userId);
   const pending = invites.filter((i) => i.status === 'pending');
 
   const refresh = () => {
@@ -80,8 +82,9 @@ export default function ShareCellarScreen() {
   async function accept(inv: CellarMember) {
     try {
       await acceptCellarInvite(inv.id);
+      setActiveCellar(inv.owner_id); // open the newly shared cellar straight away
       refresh();
-      showAlert({ title: 'Cellar shared', body: `You're now in ${inv.owner_name ?? 'their'}'s cellar. Your Cellar tab shows it from now on.` });
+      showAlert({ title: 'Cellar shared', body: `${sharedCellarLabel(inv.owner_name)} is now in your Cellar tab. Use the switcher at the top to move between it and My Cellar.` });
     } catch (err) {
       showAlert({ title: 'Could not join', body: err instanceof Error ? err.message : 'Please try again.' });
     }
@@ -90,7 +93,7 @@ export default function ShareCellarScreen() {
   function confirmLeave(inv: CellarMember, declining: boolean) {
     showAlert({
       title: declining ? 'Decline this invite?' : 'Leave this cellar?',
-      body: declining ? undefined : "Your Cellar tab goes back to your own cellar. The shared cellar isn't changed.",
+      body: declining ? undefined : "It disappears from your Cellar tab switcher. The shared cellar itself isn't changed.",
       buttons: [
         {
           text: declining ? 'Decline' : 'Leave',
@@ -118,15 +121,15 @@ export default function ShareCellarScreen() {
         {loading ? <ActivityIndicator color={colors.gold} style={{ marginTop: spacing.xl }} /> : (
           <>
             {/* A cellar shared WITH me */}
-            {joined && (
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>{joined.owner_name ?? 'A shared'}'s cellar</Text>
-                <Text style={styles.cardBody}>You're sharing this cellar · {ROLE_LABEL[joined.role]}</Text>
-                <TouchableOpacity onPress={() => confirmLeave(joined, false)} style={styles.linkBtn}>
+            {joined.map((j) => (
+              <View key={j.id} style={styles.card}>
+                <Text style={styles.cardTitle}>{sharedCellarLabel(j.owner_name)}</Text>
+                <Text style={styles.cardBody}>Shared with you · {ROLE_LABEL[j.role]} · switch to it from the Cellar tab</Text>
+                <TouchableOpacity onPress={() => confirmLeave(j, false)} style={styles.linkBtn}>
                   <Text style={styles.linkText}>Leave this cellar</Text>
                 </TouchableOpacity>
               </View>
-            )}
+            ))}
 
             {pending.map((inv) => (
               <View key={inv.id} style={styles.card}>
@@ -143,12 +146,10 @@ export default function ShareCellarScreen() {
               </View>
             ))}
 
-            {(joined || pending.length > 0) && <View style={styles.divider} />}
+            {(joined.length > 0 || pending.length > 0) && <View style={styles.divider} />}
 
-            {/* Invite someone into MY cellar (not while using someone else's). */}
-            {joined ? (
-              <Text style={styles.blurb}>Leave the shared cellar above to invite people into your own cellar.</Text>
-            ) : (
+            {/* Invite someone into MY cellar. */}
+            {(
               <>
                 <Text style={styles.blurb}>
                   Invite someone to share your cellar. They'll see every bottle, rack, fridge, bin and cellar, plus the archive, on their own Vinster account. Reviews stay personal.

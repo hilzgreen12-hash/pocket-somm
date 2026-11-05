@@ -11,6 +11,7 @@ import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { showAlert } from '../../src/components/AppAlert';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpTitle } from '../../src/components/HelpTitle';
+import { CellarSwitcher } from '../../src/components/CellarSwitcher';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HomeStorageSection } from '../../src/components/HomeStorageSection';
 import { CellarCommandModal } from '../../src/components/CellarCommandModal';
@@ -152,6 +153,9 @@ export default function CellarTab() {
         </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
+
+      {/* Shared cellars — switch between My Cellar and any cellar shared with you. */}
+      <CellarSwitcher />
 
       {/* Add Wines — a full-width gold button (same size as "Your Cellar List"
           below), opening the Full Cellar List's scan/upload/manual chooser. */}
