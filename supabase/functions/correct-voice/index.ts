@@ -44,6 +44,8 @@ function buildPrompt(text: string, domain: string, candidates: string[] = []): s
     : 'a wine — its producer, appellation/region, grape or cuvée';
   return `A phone's speech-to-text produced the transcript below while the user was speaking ${scope}. STT routinely mangles French / Italian / German / Spanish wine and food terms phonetically. Correct ONLY the misheard words to their proper spelling — wine producers, appellations and regions, grape varieties, dishes and ingredients (e.g. "corn-ass" → "Cornas", "rush omoire" → "Roche aux Moines", "mullingar" → "Mullineux", "solomonie" → "sole meunière"). Preserve the user's exact wording, order and intent otherwise: do NOT answer any question, do NOT add, remove or reorder words, do NOT change ordinary English words. If nothing needs correcting, return the transcript unchanged.
 
+NEVER INVENT OR SPLICE WINES: a corrected wine must be a REAL wine — ideally one of the catalogue wines listed below, spelled exactly as listed. Never combine parts of different wines or appellations into a new name (e.g. never turn "francois cotat mont damnees" into "Francia Côte de Nuits Domaine Bizot" — it is François Cotat, Les Monts Damnés). If you are not confident which real wine was meant, leave those words exactly as spoken.
+
 ${candidates.length ? `\nWines in Vinster's catalogue that sound like what was said (the speaker very likely meant one of these if the sounds match — use its correct spelling; a producer may be spoken by the winemaker's name, e.g. "Eben Sadie" for Sadie Family Wines, so keep the speaker's form but spell it correctly):\n${candidates.map((c) => `- ${c}`).join('\n')}\n` : ''}
 Transcript: "${text}"
 
