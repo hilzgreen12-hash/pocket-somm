@@ -50,7 +50,7 @@ export function RangeWineNoteSheet({
             competes with the note's ScrollView for touch/scroll gestures. */}
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={styles.sheet}>
-          {producer ? <Text style={styles.producerLine} numberOfLines={1}>{producer}</Text> : null}
+          {producer ? <Text style={styles.producerLine} numberOfLines={2}>{producer}</Text> : null}
           <Text style={styles.title} numberOfLines={2}>{wineName ?? 'Wine'}</Text>
           {loading ? (
             <View style={styles.loadingRow}>
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
   noteScroll: { maxHeight: 340 },
   noteScrollContent: { paddingBottom: spacing.xs },
-  producerLine: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: 2, letterSpacing: 0.3 },
+  producerLine: { fontFamily: fonts.bodySemibold, fontSize: 20.5, color: colors.gold, textAlign: 'center', marginBottom: 4, letterSpacing: 0.3 },
   title: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm, letterSpacing: 0.3 },
   details: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.md, letterSpacing: 0.3 },
   note: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },
