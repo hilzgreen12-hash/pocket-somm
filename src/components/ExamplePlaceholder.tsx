@@ -11,16 +11,23 @@ export const RESTAURANT_IMG = 'https://images.unsplash.com/photo-1517248135467-4
 // Bundled generic wine-label images — shipped with the app so placeholder tiles
 // ALWAYS show real labels (no flaky per-wine web fetch). Used for the label
 // collages / single-label placeholders across the home carousels.
+// Real labels photographed for Vinster (labels 10–17, added 2026-11-05), named so
+// a placeholder can show the label that matches its title.
+export const NAMED_LABELS = {
+  denisMortet: require('../../assets/images/placeholder-labels/label-10.jpg'),      // Domaine Denis Mortet Gevrey-Chambertin Mes Cinq Terroirs
+  lynchBages: require('../../assets/images/placeholder-labels/label-11.jpg'),       // Château Lynch-Bages 2010
+  piperRare: require('../../assets/images/placeholder-labels/label-12.jpg'),        // Piper-Heidsieck Rare Millésime 2012
+  munjebel: require('../../assets/images/placeholder-labels/label-13.jpg'),         // Frank Cornelissen Munjebel CS 2016
+  gruaudLarose: require('../../assets/images/placeholder-labels/label-14.jpg'),     // Château Gruaud-Larose 1979
+  benditoDestino: require('../../assets/images/placeholder-labels/label-15.jpg'),   // Bendito Destino La Cabaña
+  donnhoff: require('../../assets/images/placeholder-labels/label-16.jpg'),         // Dönnhoff Krötenpfuhl Riesling GG 2019
+  rocDeCambes: require('../../assets/images/placeholder-labels/label-17.jpg'),      // Roc de Cambes 2015
+};
+
+// The new labels are interleaved with the originals so every offset-based
+// collage / lineup / storage tile mixes old and new.
 const PLACEHOLDER_LABELS: ImageSourcePropType[] = [
-  require('../../assets/images/placeholder-labels/label-1.jpg'),
-  require('../../assets/images/placeholder-labels/label-2.jpg'),
-  require('../../assets/images/placeholder-labels/label-3.jpg'),
-  require('../../assets/images/placeholder-labels/label-4.jpg'),
-  require('../../assets/images/placeholder-labels/label-5.jpg'),
-  require('../../assets/images/placeholder-labels/label-6.jpg'),
-  require('../../assets/images/placeholder-labels/label-7.jpg'),
-  require('../../assets/images/placeholder-labels/label-8.jpg'),
-  require('../../assets/images/placeholder-labels/label-9.jpg'),
+  require('../../assets/images/placeholder-labels/label-10.jpg'), require('../../assets/images/placeholder-labels/label-1.jpg'), require('../../assets/images/placeholder-labels/label-11.jpg'), require('../../assets/images/placeholder-labels/label-2.jpg'), require('../../assets/images/placeholder-labels/label-12.jpg'), require('../../assets/images/placeholder-labels/label-3.jpg'), require('../../assets/images/placeholder-labels/label-13.jpg'), require('../../assets/images/placeholder-labels/label-4.jpg'), require('../../assets/images/placeholder-labels/label-14.jpg'), require('../../assets/images/placeholder-labels/label-5.jpg'), require('../../assets/images/placeholder-labels/label-15.jpg'), require('../../assets/images/placeholder-labels/label-6.jpg'), require('../../assets/images/placeholder-labels/label-16.jpg'), require('../../assets/images/placeholder-labels/label-7.jpg'), require('../../assets/images/placeholder-labels/label-17.jpg'), require('../../assets/images/placeholder-labels/label-8.jpg'), require('../../assets/images/placeholder-labels/label-9.jpg'),
 ];
 
 // Pick `n` bundled label images starting at `offset` (wraps) — lets each tile

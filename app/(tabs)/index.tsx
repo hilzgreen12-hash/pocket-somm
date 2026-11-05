@@ -1,3 +1,4 @@
+import { NAMED_LABELS } from '../../src/components/ExamplePlaceholder';
 import { JournalCarousel } from '../../src/components/JournalCarousel';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
@@ -44,14 +45,9 @@ let welcomeShownThisSession = false;
 // the other tabs' tappable titles.
 // Search & Discover tile images (bundled). The restaurant photo is from Unsplash
 // (free licence) — see assets/images/tiles/CREDITS.md.
-const SD_LABEL_IMAGE = require('../../assets/images/placeholder-labels/label-1.jpg');
+const SD_LABEL_IMAGE = NAMED_LABELS.denisMortet;
 const SD_RESTAURANT_IMAGE: number | null = require('../../assets/images/tiles/restaurant-interior.jpg');
-const SD_COLLAGE_IMAGES = [
-  require('../../assets/images/placeholder-labels/label-2.jpg'),
-  require('../../assets/images/placeholder-labels/label-5.jpg'),
-  require('../../assets/images/placeholder-labels/label-7.jpg'),
-  require('../../assets/images/placeholder-labels/label-9.jpg'),
-];
+const SD_COLLAGE_IMAGES = [NAMED_LABELS.lynchBages, NAMED_LABELS.piperRare, NAMED_LABELS.donnhoff, NAMED_LABELS.benditoDestino];
 
 const SCAN_HELP = `Expert training + Wine Searcher Market API result in the most comprehensive and customized experience in wine exploration.
 

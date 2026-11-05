@@ -9,7 +9,7 @@ import { getArchivedWines } from '../api/cellar';
 import { wineNameKey } from '../utils/wineIdentity';
 import { effectiveMaturity } from '../utils/maturity';
 import { WineCardThumb } from './WineCardThumb';
-import { PlaceholderCardView, type PlaceholderCard, placeholderLabelImages } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, NAMED_LABELS } from './ExamplePlaceholder';
 import { wineHeaderLine } from '../utils/wineHeader';
 import type { CellarWine } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
@@ -17,9 +17,9 @@ import { fonts } from '../constants/fonts';
 
 // Example cards shown when the cellar has nothing to surface yet.
 const CELLAR_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'labelCollage', images: placeholderLabelImages(0, 1), title: 'Charles Heidsieck 1995', stamp: 'Last Call · final year', overlay: 'Cellar Insights appear here as you use Vinster' },
-  { kind: 'labelCollage', images: placeholderLabelImages(3, 1), title: "Dow's 1994", stamp: 'Running Low · 1 left', overlay: 'Cellar Insights appear here as you use Vinster' },
-  { kind: 'labelCollage', images: placeholderLabelImages(6, 1), title: 'Conterno 2010', stamp: 'Top Rated · 98 pts', overlay: 'Cellar Insights appear here as you use Vinster' },
+  { kind: 'labelCollage', images: [NAMED_LABELS.gruaudLarose], title: 'Château Gruaud-Larose 1979', stamp: 'Last Call · final year', overlay: 'Cellar Insights appear here as you use Vinster' },
+  { kind: 'labelCollage', images: [NAMED_LABELS.piperRare], title: 'Piper-Heidsieck Rare 2012', stamp: 'Running Low · 1 left', overlay: 'Cellar Insights appear here as you use Vinster' },
+  { kind: 'labelCollage', images: [NAMED_LABELS.munjebel], title: 'Cornelissen Munjebel CS 2016', stamp: 'Top Rated · by you', overlay: 'Cellar Insights appear here as you use Vinster' },
 ];
 
 // Last Call now = drinkable now AND the window closes within the next 3 years
