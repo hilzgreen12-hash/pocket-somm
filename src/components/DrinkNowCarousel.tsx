@@ -135,7 +135,10 @@ export function DrinkNowCarousel() {
   });
   const archivedKeys = new Set(archived.map(rlKey));
   const tiles = buildCellarInsights(homeWines, archivedKeys);
-  const fill = tiles.length < CELLAR_EXAMPLES.length ? CELLAR_EXAMPLES.slice(tiles.length) : [];
+  // An example only stands in for a badge the user has NO real wine for — never
+  // beside a real tile of the same kind (example stamps open with their badge).
+  const shownBadges = new Set(tiles.map((t) => t.badge.toLowerCase()));
+  const fill = CELLAR_EXAMPLES.filter((c) => !shownBadges.has(c.stamp.split(' · ')[0].toLowerCase()));
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>

@@ -203,7 +203,9 @@ export function RecentScansCarousel() {
   const merged = [...labelItems].sort((a, b) => b.ts - a.ts).slice(0, 8);
   // Real scans fill the carousel from the left, replacing placeholder tiles in
   // order; the remaining example tiles stay until there are at least three.
-  const fill = merged.length < SCAN_EXAMPLES.length ? SCAN_EXAMPLES.slice(merged.length) : [];
+  // Examples are generic, so they only show before the user's first scan —
+  // never padding out real scans.
+  const fill = merged.length === 0 ? SCAN_EXAMPLES : [];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
