@@ -6,7 +6,7 @@ import { MicButton } from './MicButton';
 import { showAlert } from './AppAlert';
 import { useAuth } from '../hooks/useAuth';
 import { useCellar } from '../hooks/useCellar';
-import { fetchStorageLocations } from '../api/storageLocations';
+import { fetchStorageLocations, fetchStorageLocationCases } from '../api/storageLocations';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine, deleteCellarWine } from '../api/cellar';
 import { getRacks, clearWineFromRacks, removeSlotsForWine } from '../api/racks';
 import { getBins } from '../api/bins';
@@ -85,19 +85,26 @@ const DEFAULT_SUGGESTIONS = [
 // examples. Spread into <CellarCommandModal {...HOME_STORAGE_VOICE} /> so all
 // four screen types stay identical.
 export const HOME_STORAGE_VOICE: { introText: string; suggestions: string[]; allowedActions: CellarCommandAction[] } = {
-  introText: 'Through your home storage locations you can use Quick Command to: Move wines from this location to another, Archive bottles, and permanently Delete bottles.',
+  introText: 'Through your home storage locations you can use Quick Command to: Move wines from this location to another, Archive bottles, Add bottles to this location, and permanently Delete bottles.',
   suggestions: [
     'Move two bottles of Rousseau 1999 to My Small Wine Bin',
     'Archive one bottle of Lafite 1961',
     'Delete three bottles of Barbaresco 2017 from this bin',
   ],
-  allowedActions: ['move', 'archive', 'delete'],
+  allowedActions: ['move', 'archive', 'add', 'delete'],
 };
 
 // `hereWineIds` = wines in the storage screen this was opened from. Spoken names
 // are matched against THESE first (a short list makes misheard names like
-// "rear sack" → Rieussec easy), then the whole cellar.
-export function CellarCommandModal({ visible, onClose, introText, suggestions, allowedActions, locationName, hereWineIds }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[]; allowedActions?: CellarCommandAction[]; locationName?: string | null; hereWineIds?: string[] }) {
+// "rear sack" → Rieussec easy), then the whole cellar. `scope` = that screen
+// itself, so "Add X bottles of…" files the new bottles into it.
+// "Two bottles…" in done lines (numbers above twelve stay as digits).
+function countWord(n: number): string {
+  const w = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+  return w[n] ?? String(n);
+}
+
+export function CellarCommandModal({ visible, onClose, introText, suggestions, allowedActions, locationName, hereWineIds, scope }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[]; allowedActions?: CellarCommandAction[]; locationName?: string | null; hereWineIds?: string[]; scope?: { kind: 'rack' | 'bin' | 'location'; id: string } }) {
   void introText; void suggestions; // superseded by the Quick Command layout (kept for callers)
   // Hide while another screen (e.g. the rack placement screen) is in front; come
   // back to the same state (e.g. the done line) when the user returns.
@@ -139,6 +146,14 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     enabled: !!userId,
   });
 
+  // Cases in this alt cellar, so "Add six bottles … to the XX Mixed Case" can
+  // file them straight into that case.
+  const { data: scopeCases = [] } = useQuery({
+    queryKey: ['storage-location-cases', scope?.kind === 'location' ? scope.id : null],
+    queryFn: () => fetchStorageLocationCases(scope!.id),
+    enabled: scope?.kind === 'location',
+  });
+  const [addCaseId, setAddCaseId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('speak');
   const [action, setAction] = useState<CellarCommandAction>('move');
   const [transcript, setTranscript] = useState('');
@@ -173,6 +188,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     setMoveToCellarList(false);
     setSuccess(null);
     setArchiveNote('');
+    setAddCaseId(null);
   }
 
   function handleClose() {
@@ -371,6 +387,19 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         setResult({ ...res, message: `${extName} is external storage, so bottles can't be moved into it from home. Choose a home location instead.` });
         setPhase('need');
         return;
+      }
+
+      // Add from a storage screen: the bottles go into THIS location unless the
+      // user named somewhere else. In an alt cellar, a named case is honoured.
+      if (act === 'add' && scope && !res.locationId && !res.unitId) {
+        res = scope.kind === 'location' ? { ...res, locationId: scope.id } : { ...res, unitId: scope.id };
+      }
+      if (act === 'add') {
+        const said = transcript.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const hitCase = res.locationId === scope?.id
+          ? scopeCases.find((c) => said.includes(c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')))
+          : undefined;
+        setAddCaseId(hitCase?.id ?? null);
       }
 
       setResult(res);
@@ -621,10 +650,12 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           label_favourite: false,
           bottle_size_ml: 750,
           storage_location_id: null,
-          // Into an alt cellar: filed there below as a placement. Otherwise loose,
-          // awaiting placement in the Cellar List.
+          // Into an alt cellar: filed there below as a placement. Into a rack /
+          // fridge / bin: waiting for that unit (its screen opens to place them).
+          // Otherwise loose, awaiting placement in the Cellar List.
           awaiting_placement: !result?.locationId,
-        };
+          awaiting_placement_unit_id: result?.unitId ?? null,
+        } as any;
         // One wine = one line: an identical wine already in the cellar just gets
         // the extra bottles.
         const norm = (x?: string | null) => (x ?? '').trim().toLowerCase();
@@ -632,26 +663,55 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           && norm(w.producer) === norm(payload.producer) && norm(w.wine_name) === norm(payload.wine_name) && norm(w.vintage) === norm(payload.vintage));
         let addedId: string;
         if (twin) {
-          await updateCellarWine(twin.id, { quantity: (twin.quantity ?? 0) + count });
+          await updateCellarWine(twin.id, {
+            quantity: (twin.quantity ?? 0) + count,
+            ...(result?.unitId ? { awaiting_placement: true, awaiting_placement_unit_id: result.unitId } : {}),
+          });
           addedId = twin.id;
         } else {
           const row = await addCellarWine(payload);
           addedId = row.id;
         }
-        if (result?.locationId) await addLocationPlacement(addedId, result.locationId, null, count);
+        if (result?.locationId) await addLocationPlacement(addedId, result.locationId, addCaseId, count);
         qc.invalidateQueries({ queryKey: ['placements', addedId] });
         qc.invalidateQueries({ queryKey: ['placements-list'] });
         qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
         qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
         qc.invalidateQueries({ queryKey: ['cellar', userId] });
-        setSuccess({
-          action: 'add',
-          wine: [a.producer, a.wineName].filter(Boolean).join(' ') || name,
-          meta: [a.region, a.vintage].filter(Boolean).join(' · '),
-          detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} added to Your Cellar List — awaiting placement`,
-          viewLabel: 'View in Your Cellar List',
-          viewRoute: '/cellar/list',
-        });
+        const label = [a.producer, a.wineName, a.vintage].filter(Boolean).join(' ') || name;
+        const spelled = `${countWord(count)} ${count === 1 ? 'bottle' : 'bottles'} of ${label} ${count === 1 ? 'is' : 'are'}`;
+        const caseName = addCaseId ? scopeCases.find((c) => c.id === addCaseId)?.name : null;
+        if (result?.unitId || result?.locationId) {
+          const destLabel = targetUnit?.name ?? targetLocation?.name ?? locationName ?? 'this location';
+          setSuccess({
+            action: 'add',
+            wine: [a.producer, a.wineName].filter(Boolean).join(' ') || name,
+            meta: [a.region, a.vintage].filter(Boolean).join(' · '),
+            detail: `Added. ${spelled} in your ${destLabel}${caseName ? `, in ${caseName}` : ''}.`,
+            viewLabel: 'View the wine card',
+            viewRoute: `/cellar/${addedId}`,
+          });
+        } else {
+          setSuccess({
+            action: 'add',
+            wine: [a.producer, a.wineName].filter(Boolean).join(' ') || name,
+            meta: [a.region, a.vintage].filter(Boolean).join(' · '),
+            detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} added to Your Cellar List — awaiting placement`,
+            viewLabel: 'View in Your Cellar List',
+            viewRoute: '/cellar/list',
+          });
+        }
+        // Rack / fridge / bin: open that unit to place the new bottles; this sheet
+        // shows the done line when the user comes back.
+        if (result?.unitId) {
+          setTranscript('');
+          setPhase('success');
+          setExecuting(false);
+          router.push((targetUnit?.storage_type === 'bin'
+            ? `/cellar/bin/${result.unitId}`
+            : `/cellar/rack/${result.unitId}?placeWine=${addedId}&placeLimit=${count}`) as any);
+          return;
+        }
       }
       setTranscript('');
       setPhase('success');
@@ -688,7 +748,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
       const a = result?.add;
       const label = [a?.producer, a?.wineName, a?.vintage].filter(Boolean).join(' ') || 'this wine';
       const n = Math.max(1, result?.quantity ?? 1);
-      return `Add ${n} ${n === 1 ? 'bottle' : 'bottles'} of ${label} to your cellar list?`;
+      return `Add ${n} ${n === 1 ? 'bottle' : 'bottles'} of ${label} to ${targetUnit?.name ?? targetLocation?.name ?? 'your cellar list'}?`;
     }
     const count = Math.min(chosenWine?.quantity ?? 1, Math.max(1, result?.quantity ?? (chosenWine?.quantity ?? 1)));
     const bottles = `${count} ${count === 1 ? 'bottle' : 'bottles'}`;
@@ -703,7 +763,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   // "Find a bottle in this location" instead of "Choose from my cellar".
   const scoped = !!allowedActions;
   const prompts = scoped
-    ? ['Archive X bottles of...', 'Move X bottles of... to another location', 'Delete X bottles of...']
+    ? ['Archive X bottles of...', 'Move X bottles of... to another location', 'Add X bottles of...', 'Delete X bottles of...']
     : ['Archive X bottles of...', 'Move X bottles of...', 'Add X bottles of...', 'Delete X bottles of...'];
 
   // Free `n` bottles from HOME storage only: rack/fridge slots first, then bin
@@ -835,7 +895,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         <View style={qs.card}>
           <Text style={qs.cardAction}>Add</Text>
           <Text style={qs.cardWine}>{[a?.producer, a?.wineName, a?.vintage].filter(Boolean).join(' · ') || 'This wine'}</Text>
-          <Text style={qs.cardLine}>{`${n} ${n === 1 ? 'bottle' : 'bottles'} · ${targetLocation?.name ?? 'Your Cellar List'}`}</Text>
+          <Text style={qs.cardLine}>{`${n} ${n === 1 ? 'bottle' : 'bottles'} · ${targetUnit?.name ?? targetLocation?.name ?? 'Your Cellar List'}${addCaseId ? ` · ${scopeCases.find((c) => c.id === addCaseId)?.name ?? ''}` : ''}`}</Text>
           <Text style={qs.cardLine}>Wine Intel builds in the background</Text>
         </View>
       );
@@ -853,7 +913,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   const confirmLabel = action === 'move'
     ? (result?.unitId ? 'Confirm & Select Placement' : 'Confirm move')
     : action === 'archive' ? 'Confirm archive'
-    : action === 'add' ? 'Confirm and add'
+    : action === 'add' ? (result?.unitId ? 'Confirm & Select Placement' : 'Confirm and add')
     : `Delete ${bottles}`;
 
   return (
@@ -943,7 +1003,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
             {phase === 'success' && success && (
               <>
                 <View style={qs.tick}><Text style={qs.tickText}>✓</Text></View>
-                <Text style={qs.doneLine}>{success.action === 'move' ? success.detail : `${success.action === 'archive' ? 'Wine Archived.' : success.action === 'add' ? 'Added.' : 'Deleted.'} ${success.detail.replace(/^\d+ bottles? · /, '')} · ${success.wine}`}</Text>
+                <Text style={qs.doneLine}>{success.action === 'move' || success.detail.startsWith('Added.') ? success.detail : `${success.action === 'archive' ? 'Wine Archived.' : success.action === 'add' ? 'Added.' : 'Deleted.'} ${success.detail.replace(/^\d+ bottles? · /, '')} · ${success.wine}`}</Text>
                 <RowLink label={success.viewLabel} onPress={() => { handleClose(); router.push(success.viewRoute as any); }} />
                 {success.action === 'archive' ? <RowLink label="Add Archive Note" onPress={() => setPhase('archiveNote')} /> : null}
                 <Text style={[qs.goldLabel, { marginTop: 8 }]}>Another command?</Text>

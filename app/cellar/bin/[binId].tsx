@@ -740,7 +740,7 @@ export default function BinDetailScreen() {
       />
 
       {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={bin?.name ?? null} hereWineIds={Array.from(new Set(entries.map((e) => e.wine.id)))} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={bin?.name ?? null} scope={binId ? { kind: 'bin', id: binId } : undefined} hereWineIds={Array.from(new Set(entries.map((e) => e.wine.id)))} />
 
       {/* Permanent delete — how many bottles? Shown for multi-bottle wines. */}
       <Modal visible={deleteWine !== null} transparent animationType="fade" onRequestClose={() => setDeleteWine(null)}>
