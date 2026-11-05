@@ -35,7 +35,7 @@ import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot }
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation, addLocationPlacement } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
-import { generateServingSuggestion, generateMarketVintage } from '../../src/api/wineExtras';
+import { generateServingSuggestion, generateMarketVintage, generateRarity } from '../../src/api/wineExtras';
 import { wineNameKey, looseWineMatch } from '../../src/utils/wineIdentity';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
@@ -565,6 +565,12 @@ export default function CellarWineDetail() {
         setVintageRows(saved.rows);
         setMarketNote(saved.vintage || saved.market ? { vintage: saved.vintage, market: saved.market } as any : null);
         setMarketUnknown(!!saved.unknown);
+        // Saved before rarity existed → add it once, quietly.
+        if (saved.rarity === undefined) {
+          void generateRarity(wine)
+            .then((r) => updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...saved, rarity: r ?? { level: null, label: '', text: '' } } } as any }))
+            .catch(() => {});
+        }
       } else if (vintageRows == null && !generatingMarket) {
         void handleGenerateMarket();
       }
@@ -823,6 +829,8 @@ export default function CellarWineDetail() {
     try {
       const currency = preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP';
       const scanned = parseInt(wine.vintage ?? '', 10);
+      // Rarity runs alongside the vintage table (both saved together).
+      const rarityP = generateRarity(wine).then((r) => r ?? { level: null, label: '', text: '' }).catch(() => undefined);
       const rows = await fetchVintageComparison(
         wineQueryName(wine.producer, wine.wine_name),
         currency,
@@ -844,7 +852,8 @@ export default function CellarWineDetail() {
       }
       // Saved on the wine so the Market tab reopens instantly next time.
       try {
-        await updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...(note ?? {}), rows, unknown, currency, at: new Date().toISOString() } } as any });
+        const rarity = await rarityP;
+        await updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...(note ?? {}), rows, unknown, currency, at: new Date().toISOString(), ...(rarity !== undefined ? { rarity } : {}) } } as any });
       } catch { /* the live table still shows */ }
     } catch {
       showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
@@ -2233,6 +2242,31 @@ export default function CellarWineDetail() {
           </>
         ) : null}
 
+        {/* Rarity — Vinster's assessment, generated with the Market tab. */}
+        {activeTab === 'market' && wine.market_vintage_note?.rarity ? (
+          <View style={styles.wcCard}>
+            <View style={styles.wcCardHead}>
+              <Text style={styles.wcH2}>Rarity</Text>
+              <Text style={styles.wcSmallItalic}>Vinster's assessment</Text>
+            </View>
+            {wine.market_vintage_note.rarity.level ? (
+              <>
+                <View style={styles.wcRarityRow}>
+                  <View style={styles.wcRarityMeter}>
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <View key={i} style={[styles.wcRarityStep, i <= (wine.market_vintage_note?.rarity?.level ?? 0) && styles.wcRarityStepOn]} />
+                    ))}
+                  </View>
+                  <Text style={styles.wcGoldValue}>{wine.market_vintage_note.rarity.label}</Text>
+                </View>
+                <Text style={styles.wcBodyText}>{wine.market_vintage_note.rarity.text}</Text>
+              </>
+            ) : (
+              <Text style={styles.wcSmall}>Vinster doesn't know this wine well enough to judge how rare it is.</Text>
+            )}
+          </View>
+        ) : null}
+
         {/* ================= SOMM ================= */}
         {activeTab === 'somm' ? (
           <>
@@ -2248,10 +2282,10 @@ export default function CellarWineDetail() {
             {serving ? (
               <>
                 <View style={styles.wcTwoUp}>
-                  {serving.temperature ? <View style={[styles.wcCard, styles.wcHalf]}><Text style={styles.wcLabel}>Temperature</Text><Text style={styles.wcGoldValue}>{serving.temperature}</Text></View> : null}
-                  {serving.decant ? <View style={[styles.wcCard, styles.wcHalf]}><Text style={styles.wcLabel}>Decanting</Text><Text style={styles.wcGoldValue}>{serving.decant}</Text></View> : null}
+                  {serving.temperature ? <View style={[styles.wcCard, styles.wcHalf]}><Text style={styles.wcLabel}>Temperature</Text><Text style={styles.wcGoldValue}>{serving.temperature}</Text>{serving.temperatureReason ? <Text style={styles.wcSmall}>{serving.temperatureReason}</Text> : null}</View> : null}
+                  {serving.decant ? <View style={[styles.wcCard, styles.wcHalf]}><Text style={styles.wcLabel}>Decanting</Text><Text style={styles.wcGoldValue}>{serving.decant}</Text>{serving.decantReason ? <Text style={styles.wcSmall}>{serving.decantReason}</Text> : null}</View> : null}
                 </View>
-                {serving.glassware ? <View style={styles.wcCard}><Text style={styles.wcLabel}>Glassware</Text><Text style={styles.wcGoldValue}>{serving.glassware}</Text></View> : null}
+                {serving.glassware ? <View style={styles.wcCard}><Text style={styles.wcLabel}>Glassware</Text><Text style={styles.wcGoldValue}>{serving.glassware}</Text>{serving.glasswareReason ? <Text style={styles.wcBodyText}>{serving.glasswareReason}</Text> : null}</View> : null}
                 {serving.aperitif?.style ? (
                   <View style={styles.wcCard}>
                     <Text style={styles.wcLabel}>Drink Before</Text>
@@ -2897,6 +2931,10 @@ const styles = StyleSheet.create({
   wcPick: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, padding: spacing.sm, borderRadius: 10, backgroundColor: 'rgba(224,184,74,0.08)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)' },
   wcPickName: { fontFamily: fonts.headingBold, fontSize: 16, color: colors.text },
   wcPickNone: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  wcRarityRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  wcRarityMeter: { flex: 1, flexDirection: 'row', gap: 4 },
+  wcRarityStep: { flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)' },
+  wcRarityStepOn: { backgroundColor: colors.gold },
   wcRegenWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 12 },
   wcRegen: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, textDecorationLine: 'underline', textAlign: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },

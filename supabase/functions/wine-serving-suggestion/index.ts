@@ -19,8 +19,11 @@ ${w.decantTime ? `\nTime available before serving (the user's words): "${w.decan
 Return ONLY valid JSON with this structure:
 {
   "temperature": "ideal serving temperature, e.g. '16-18°C, slightly cool'",
+  "temperatureReason": "1 short sentence why that temperature suits THIS wine",
   "decant": "whether to decant and for how long, e.g. 'Decant 45-60 min' or 'No need to decant'",
+  "decantReason": "1 short sentence why",
   "glassware": "the glass to use, e.g. 'Large Burgundy bowl' or 'Standard white-wine glass'",
+  "glasswareReason": "1 short sentence why that glass suits it",
   "aperitif": {
     "style": "a lighter wine STYLE to serve BEFORE this wine, e.g. 'Crémant de Loire'",
     "reason": "1 short sentence why — a palate-friendly opener, nothing too heavy"

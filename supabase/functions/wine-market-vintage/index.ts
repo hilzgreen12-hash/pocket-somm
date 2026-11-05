@@ -30,14 +30,53 @@ Return ONLY valid JSON with this structure:
 Be specific to this producer, wine and vintage. If the vintage is NV or unknown, focus the "vintage" field on the wine's typical style and consistency instead. Return raw JSON only. No markdown. No explanation.`;
 }
 
+// Rarity (wine card Market tab): how hard this wine is to find — production
+// size, how stocks are holding up for this vintage, scarce formats. Same
+// recognition gate: never judge a wine it doesn't genuinely know.
+function buildRarityPrompt(w: { producer?: string; wineName?: string; region?: string; vintage?: string; grape?: string }): string {
+  const identity = [w.producer, w.wineName, w.vintage].filter(Boolean).join(' ')
+    + [w.region ? `, ${w.region}` : '', w.grape ? ` (${w.grape})` : ''].join('');
+  return `You are a fine-wine market expert. Assess how RARE this specific wine is to find and buy today.
+
+Wine: ${identity}
+
+RECOGNITION GATE — set "identified" to true ONLY if you genuinely know this producer AND this specific wine. If not, return exactly {"identified": false, "level": null, "label": null, "text": null}. Never guess production figures for a wine you don't know, and never substitute a similar wine.
+
+Return ONLY valid JSON:
+{
+  "identified": <true|false>,
+  "level": <1-5: 1 = widely available, 2 = easy to find, 3 = uncommon, 4 = scarce, 5 = very rare / allocation only>,
+  "label": "<one of: Widely available | Easy to find | Uncommon | Scarce | Very rare>",
+  "text": "2 short sentences: roughly how much is made (use approximate, hedged figures you are confident of, e.g. 'a few thousand cases'), how stocks of the ${w.vintage ?? 'stated'} vintage are holding up now, and any formats that are harder to find."
+}
+
+Raw JSON only. No markdown.`;
+}
+
 Deno.serve(async (req) => {
   try {
     const limited = await checkRateLimit(req, 'wine-market-vintage', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
-    const { producer, wineName, region, vintage, grape, currency } = await req.json();
+    const { producer, wineName, region, vintage, grape, currency, mode } = await req.json();
     if (typeof producer !== 'string' && typeof wineName !== 'string') {
       return new Response(JSON.stringify({ error: 'wine identity required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (mode === 'rarity') {
+      const r = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: buildRarityPrompt({ producer, wineName, region, vintage, grape }) }],
+      });
+      const t = r.content.find((b) => b.type === 'text')?.text ?? '';
+      const m = t.match(/\{[\s\S]*\}/);
+      const parsed = m ? JSON.parse(m[0]) : null;
+      const level = Number(parsed?.level);
+      const ok = parsed?.identified === true && Number.isFinite(level) && level >= 1 && level <= 5 && typeof parsed?.text === 'string';
+      return new Response(JSON.stringify(ok
+        ? { identified: true, level: Math.round(level), label: String(parsed.label ?? ''), text: String(parsed.text) }
+        : { identified: false, level: null, label: null, text: null }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     const response = await client.messages.create({

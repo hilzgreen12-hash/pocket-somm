@@ -33,3 +33,14 @@ export async function generateMarketVintage(w: CellarWine, currency?: string | n
   if (data?.identified === false || (!data?.vintage && !data?.market)) return null;
   return { vintage: data.vintage ?? undefined, market: data.market ?? undefined };
 }
+
+// Vinster's rarity assessment (wine card Market tab). Null when the recognition
+// gate says Vinster doesn't genuinely know this wine.
+export type WineRarity = { level: number; label: string; text: string };
+export async function generateRarity(w: CellarWine): Promise<WineRarity | null> {
+  const data = await invokeResilient('wine-market-vintage', { ...identity(w), mode: 'rarity' }) as
+    { identified?: boolean; level?: number | null; label?: string | null; text?: string | null; error?: string };
+  if (data?.error) throw new Error(data.error);
+  if (data?.identified !== true || !data.level || !data.text) return null;
+  return { level: data.level, label: data.label ?? '', text: data.text };
+}

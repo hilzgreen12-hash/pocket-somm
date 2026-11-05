@@ -267,8 +267,11 @@ export interface DietaryFilters {
 // wine; never part of the auto wine-card generation or "update intel").
 export interface WineServingSuggestion {
   temperature?: string;
+  temperatureReason?: string;
   decant?: string;
+  decantReason?: string;
   glassware?: string;
+  glasswareReason?: string;
   aperitif?: { style?: string; reason?: string };
   digestif?: { style?: string; reason?: string };
 }
@@ -278,6 +281,8 @@ export interface WineMarketVintageNote {
   // Saved Market tab (wine card): the per-vintage Wine-Searcher table, whether
   // Vinster knew the wine, the currency and when it was fetched.
   rows?: { vintage: number; score: number | null; price: number | null }[];
+  // Vinster's rarity assessment (null level = it doesn't know the wine well enough).
+  rarity?: { level: number | null; label: string; text: string } | null;
   unknown?: boolean;
   currency?: string;
   at?: string;
