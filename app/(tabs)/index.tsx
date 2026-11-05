@@ -385,6 +385,7 @@ export default function ScanLandingScreen() {
         </TouchableOpacity>
       </View>
 
+      <Text style={styles.homeSubtitle}>The launchpad into your Vinous endeavours</Text>
       <View style={styles.blurbSeparator} />
 
       {/* Home carousels — each title has a grip at its left indent; hold and drag
@@ -657,6 +658,8 @@ const styles = StyleSheet.create({
   voiceLink: { position: 'absolute', right: 0, top: -22 },
   voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Rule beneath the title row, above Search & Discover.
+  // Short line under the Home title — same look as the Cellar tab's subtitle.
+  homeSubtitle: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 26 },
   blurbSeparator: { height: 1, backgroundColor: colors.divider, marginTop: 18, marginBottom: 18 },
 
   // Discover carousels — section header, full-width separator, and a bleed
