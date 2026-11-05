@@ -8,9 +8,9 @@ interface Props {
 }
 
 const LABEL_COLORS: Record<string, string> = {
-  Exceptional: '#5CB85C',
-  Excellent:   '#4AA84A',
-  Good:        '#6BAA72',
+  Exceptional: '#E0B84A',
+  Excellent:   '#D9AE52',
+  Good:        '#C9A05E',
   Average:     '#C4823A',
   Challenging: '#C46030',
   Poor:        '#C44040',

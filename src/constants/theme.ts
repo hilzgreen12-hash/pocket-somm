@@ -34,7 +34,7 @@ export const colors = {
   // Faded-gold content separators on the tab pages.
   divider: 'rgba(224,184,74,0.30)',
 
-  success: '#6DBF8A',
+  success: '#E0B84A', // gold — no green text anywhere in the app
   warning: '#D4923A',
   error: '#D44040',
 };

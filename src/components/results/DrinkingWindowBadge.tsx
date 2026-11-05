@@ -10,7 +10,7 @@ interface Props {
 const STATUS_COLORS: Record<string, string> = {
   'Too Young':   '#5B8DD9',
   'Approaching': '#5BAAD9',
-  'Peak':        '#5CB85C',
+  'Peak':        '#E0B84A',
   'Fading':      '#C4823A',
   'Past Peak':   '#C4823A',
 };
