@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../api/supabase';
 import { clearAllStores } from '../stores/clearAllStores';
+import { loadCellarContext, subscribeCellarContext } from '../api/cellarContext';
 
 interface AuthContextValue {
   session: Session | null;
@@ -44,6 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // wiping the old base key just cleans up pre-scoping data.
         AsyncStorage.multiRemove(['vinster_scan_history', 'vinster_city_history']).catch(() => {});
       }
+      // Shared household cellar: work out whose cellar this user is in. Loaded
+      // whenever the user changes (incl. first load); a change refetches all
+      // cellar data via the subscription below.
+      if (prevUserId.current !== nextUserId) void loadCellarContext(nextUserId);
       prevUserId.current = nextUserId;
       setSession(next);
     }
@@ -71,11 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       });
 
+    // Joining/leaving a shared cellar (or finishing the first load) switches
+    // which cellar every screen reads — refetch everything.
+    const unsubCellar = subscribeCellarContext(() => { void qc.invalidateQueries(); });
+
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       syncUser(session);
     });
 
-    return () => { clearTimeout(safety); listener.subscription.unsubscribe(); };
+    return () => { clearTimeout(safety); unsubCellar(); listener.subscription.unsubscribe(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

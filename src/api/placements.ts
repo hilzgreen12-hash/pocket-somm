@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cellarOwner, canEditCellar } from './cellarContext';
 import { removeSlotsForWine } from './racks';
 import { deleteStorageLocation } from './storageLocations';
 import { deleteCellarWine } from './cellar';
@@ -140,7 +141,7 @@ export async function fetchLatestLocationThumbs(userId: string): Promise<{
 }> {
   const result = { rack: {} as Record<string, string>, bin: {} as Record<string, string>, location: {} as Record<string, string> };
   // bin cell → bin id (so a bin placement can resolve to its unit).
-  const { data: binRows } = await supabase.from('wine_racks').select('id').eq('user_id', userId).eq('storage_type', 'bin');
+  const { data: binRows } = await supabase.from('wine_racks').select('id').eq('user_id', cellarOwner(userId)).eq('storage_type', 'bin');
   const binIds = (binRows ?? []).map((b) => b.id);
   const cellToBin: Record<string, string> = {};
   if (binIds.length) {
@@ -558,12 +559,12 @@ export async function reconcileLegacyLocationWines(
   userId: string, homeLocationIds: string[],
 ): Promise<number> {
   const homeSet = new Set(homeLocationIds.filter(Boolean));
-  if (homeSet.size === 0) return 0;
+  if (homeSet.size === 0 || !canEditCellar()) return 0;
   const rows = await selectAllPages<any>((from, to) =>
     supabase
       .from('cellar_wines')
       .select('id, producer, wine_name, vintage, bottle_size_ml, quantity, storage_location_id')
-      .eq('user_id', userId)
+      .eq('user_id', cellarOwner(userId))
       .is('archived_at', null)
       .eq('is_wishlist', false)
       .is('awaiting_placement_unit_id', null)
@@ -598,11 +599,12 @@ export async function reconcileLegacyLocationWines(
 // Narrow + idempotent: only touches rows that are genuinely inconsistent.
 // Returns how many rows were healed.
 export async function reconcileQuantityBelowPlacements(userId: string): Promise<number> {
+  if (!canEditCellar()) return 0; // view-only members can't heal the owner's rows
   const wines = await selectAllPages<{ id: string; quantity: number }>((from, to) =>
     supabase
       .from('cellar_wines')
       .select('id, quantity')
-      .eq('user_id', userId)
+      .eq('user_id', cellarOwner(userId))
       .is('archived_at', null)
       .eq('is_wishlist', false)
       .order('id', { ascending: true })

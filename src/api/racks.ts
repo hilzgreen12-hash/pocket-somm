@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cellarOwner, assertCanEditCellar } from './cellarContext';
 import { invokeResilient } from './invokeResilient';
 import type { WineRack, RackSlot } from '../types/wine';
 
@@ -6,7 +7,7 @@ export async function getRacks(userId: string): Promise<WineRack[]> {
   const { data, error } = await supabase
     .from('wine_racks')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', cellarOwner(userId))
     .order('created_at', { ascending: false });
   if (error) throw error;
   // Bins live in wine_racks too (storage_type='bin') but have their own list/
@@ -28,7 +29,8 @@ export async function createRack(
   storageType: 'rack' | 'fridge' = 'rack',
   largeFormat?: LargeFormatRowSpec | null,
 ): Promise<WineRack> {
-  const insert: Record<string, unknown> = { user_id: userId, name, rows, cols, storage_type: storageType };
+  assertCanEditCellar();
+  const insert: Record<string, unknown> = { user_id: cellarOwner(userId), name, rows, cols, storage_type: storageType };
   if (largeFormat) {
     insert.large_format_cols = largeFormat.cols;
     insert.large_format_bottle_size_ml = largeFormat.bottleSizeMl;

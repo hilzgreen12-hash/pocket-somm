@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cellarOwner } from './cellarContext';
 import { evictCachedLabel } from './labelImageCache';
 import { selectAllPages, selectAllInChunks, chunkIds } from './paging';
 import type { StorageLocation, StorageCase, CellarWine } from '../types/wine';
@@ -14,7 +15,7 @@ export async function fetchStorageLocations(userId: string): Promise<StorageLoca
   const { data, error } = await supabase
     .from('storage_locations')
     .select(LIST_COLS)
-    .eq('user_id', userId)
+    .eq('user_id', cellarOwner(userId))
     .order('created_at', { ascending: true });
   if (error) throw error;
   const locs = (data ?? []) as any[];
@@ -61,7 +62,7 @@ export async function fetchStorageLocation(id: string): Promise<StorageLocation 
 export async function createStorageLocation(userId: string, name: string, isExternal = false): Promise<StorageLocation> {
   const { data, error } = await supabase
     .from('storage_locations')
-    .insert({ user_id: userId, name: name.trim() || 'My Location', is_external: isExternal })
+    .insert({ user_id: cellarOwner(userId), name: name.trim() || 'My Location', is_external: isExternal })
     .select(LIST_COLS)
     .single();
   if (error) throw error;
@@ -146,7 +147,7 @@ export async function createStorageCase(
   const { data, error } = await supabase
     .from('storage_cases')
     .insert({
-      user_id: userId,
+      user_id: cellarOwner(userId),
       storage_location_id: input.storageLocationId,
       name: input.name.trim() || 'Case',
       note: input.note?.trim() || null,

@@ -1,4 +1,8 @@
-import { Tabs } from 'expo-router';
+import { useEffect } from 'react';
+import { Tabs, router } from 'expo-router';
+import { useAuth } from '../../src/hooks/useAuth';
+import { fetchInvitesForMe } from '../../src/api/cellarMembers';
+import { showAlert } from '../../src/components/AppAlert';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -7,7 +11,35 @@ function BottleIcon({ color }: { color: string }) {
   return <MaterialCommunityIcons name="bottle-wine-outline" size={20} color={color} />;
 }
 
+// Invites already prompted for this app session (so the prompt shows once).
+const promptedInvites = new Set<string>();
+
 export default function TabsLayout() {
+  // Shared cellar: when someone signs in with an email they've been invited
+  // with, ask once whether they want to look at the invite.
+  const { session } = useAuth();
+  const userId = session?.user.id;
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    fetchInvitesForMe()
+      .then((invites) => {
+        const inv = invites.find((i) => i.status === 'pending' && !promptedInvites.has(i.id));
+        if (cancelled || !inv) return;
+        promptedInvites.add(inv.id);
+        showAlert({
+          title: 'Shared cellar invite',
+          body: `${inv.owner_name ?? 'Someone'} has invited you to share their cellar.`,
+          buttons: [
+            { text: 'View Invite', onPress: () => router.push('/profile/share-cellar' as any) },
+            { text: 'Later', style: 'cancel' },
+          ],
+        });
+      })
+      .catch(() => { /* table not there yet, or offline — try next time */ });
+    return () => { cancelled = true; };
+  }, [userId]);
+
   return (
     <Tabs
       screenOptions={{

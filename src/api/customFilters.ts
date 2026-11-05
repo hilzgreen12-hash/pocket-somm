@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cellarOwner } from './cellarContext';
 
 export interface CustomFilter {
   id: string;
@@ -14,7 +15,7 @@ export async function fetchCustomFilters(userId: string, rackId: string): Promis
   const { data: filters, error } = await supabase
     .from('custom_filters')
     .select('id, name')
-    .eq('user_id', userId)
+    .eq('user_id', cellarOwner(userId))
     .eq('rack_id', rackId)
     .order('created_at', { ascending: true });
   if (error) throw new Error(error.message);
@@ -44,7 +45,7 @@ export async function fetchCellarLocations(userId: string): Promise<CustomFilter
   const { data: filters, error } = await supabase
     .from('custom_filters')
     .select('id, name')
-    .eq('user_id', userId)
+    .eq('user_id', cellarOwner(userId))
     .is('rack_id', null)
     .order('created_at', { ascending: true });
   if (error) throw new Error(error.message);
@@ -69,7 +70,7 @@ export async function fetchCellarLocations(userId: string): Promise<CustomFilter
 export async function createCellarLocation(userId: string, name: string, wineIds: string[]): Promise<void> {
   const { data, error } = await supabase
     .from('custom_filters')
-    .insert({ user_id: userId, name: name.trim(), rack_id: null })
+    .insert({ user_id: cellarOwner(userId), name: name.trim(), rack_id: null })
     .select('id')
     .single();
   if (error) throw new Error(error.message);
@@ -83,7 +84,7 @@ export async function fetchLocationFilters(userId: string, locationId: string): 
   const { data: filters, error } = await supabase
     .from('custom_filters')
     .select('id, name')
-    .eq('user_id', userId)
+    .eq('user_id', cellarOwner(userId))
     .eq('storage_location_id', locationId)
     .order('created_at', { ascending: true });
   if (error) throw new Error(error.message);
@@ -108,7 +109,7 @@ export async function fetchLocationFilters(userId: string, locationId: string): 
 export async function createLocationFilter(userId: string, name: string, wineIds: string[], locationId: string): Promise<void> {
   const { data, error } = await supabase
     .from('custom_filters')
-    .insert({ user_id: userId, name: name.trim(), storage_location_id: locationId })
+    .insert({ user_id: cellarOwner(userId), name: name.trim(), storage_location_id: locationId })
     .select('id')
     .single();
   if (error) throw new Error(error.message);
@@ -118,7 +119,7 @@ export async function createLocationFilter(userId: string, name: string, wineIds
 export async function createCustomFilter(userId: string, name: string, wineIds: string[], rackId: string): Promise<void> {
   const { data, error } = await supabase
     .from('custom_filters')
-    .insert({ user_id: userId, name: name.trim(), rack_id: rackId })
+    .insert({ user_id: cellarOwner(userId), name: name.trim(), rack_id: rackId })
     .select('id')
     .single();
   if (error) throw new Error(error.message);

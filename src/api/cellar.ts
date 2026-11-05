@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cellarOwner, assertCanEditCellar, canEditCellar, VIEW_ONLY_MESSAGE } from './cellarContext';
 import { selectAllPages } from './paging';
 import type { CellarWine } from '../types/wine';
 import { wineNameKey } from '../utils/wineIdentity';
@@ -15,7 +16,7 @@ export async function getCellarWines(userId: string): Promise<CellarWine[]> {
     const { data, error } = await supabase
       .from('cellar_wines')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', cellarOwner(userId))
       .eq('is_wishlist', false)
       .is('archived_at', null)
       .order('created_at', { ascending: false })
@@ -53,10 +54,12 @@ export async function listCellarWineRemovals(cellarWineId: string): Promise<Cell
 export async function addCellarWineRemoval(input: { cellarWineId: string; removedAt: string; count: number; note?: string | null }): Promise<CellarWineRemoval> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Sign in required');
+  assertCanEditCellar();
   const { data, error } = await supabase
     .from('cellar_wine_removals')
     .insert({
-      user_id: user.id,
+      // Shared cellar: removal history belongs to the cellar (owner's id).
+      user_id: cellarOwner(user.id),
       cellar_wine_id: input.cellarWineId,
       removed_at: input.removedAt,
       count: input.count,
@@ -95,7 +98,7 @@ export async function repairRackedWines(userId: string): Promise<number> {
   const { data: assignments, error: assignErr } = await supabase
     .from('rack_slots')
     .select('cellar_wine_id, wine_racks!inner(user_id)')
-    .eq('wine_racks.user_id', userId)
+    .eq('wine_racks.user_id', cellarOwner(userId))
     .not('cellar_wine_id', 'is', null);
   if (assignErr) {
     console.error('[repairRackedWines] could not read rack assignments:', assignErr);
@@ -140,6 +143,7 @@ export async function archiveCellarWine(id: string): Promise<void> {
   // match zero rows and return NO error — so the update silently does nothing.
   // Treat "affected nothing" as a failure so the UI can't falsely report success.
   if (!data || data.length === 0) {
+    if (!canEditCellar()) throw new Error(VIEW_ONLY_MESSAGE);
     throw new Error('That wine could not be updated — please pull to refresh (you may need to sign in again).');
   }
   // An archived wine has left physical storage, so detach it from EVERY spot:
@@ -159,7 +163,7 @@ export async function getArchivedWines(userId: string): Promise<CellarWine[]> {
   const { data, error } = await supabase
     .from('cellar_wines')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', cellarOwner(userId))
     .eq('is_wishlist', false)
     .not('archived_at', 'is', null)
     .order('archived_at', { ascending: false });
@@ -198,9 +202,13 @@ export async function getCellarWineById(id: string): Promise<CellarWine | null> 
 }
 
 export async function addCellarWine(wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>): Promise<CellarWine> {
+  // Cellar bottles go into the shared cellar (owner's id); wishlist rows stay personal.
+  const isWishlist = !!(wine as any).is_wishlist;
+  if (!isWishlist) assertCanEditCellar();
+  const row = isWishlist ? wine : { ...wine, user_id: cellarOwner((wine as any).user_id) };
   const { data, error } = await supabase
     .from('cellar_wines')
-    .insert(wine)
+    .insert(row)
     .select()
     .single();
   if (error) throw error;
@@ -218,6 +226,7 @@ export async function updateCellarWine(id: string, updates: Partial<CellarWine>)
   // silent no-op — the same guard archiveCellarWine/deleteCellarWine use. Without
   // it, a partial-archive quantity decrement could silently not happen.
   if (!data || data.length === 0) {
+    if (!canEditCellar()) throw new Error(VIEW_ONLY_MESSAGE);
     throw new Error('That wine could not be updated — please pull to refresh (you may need to sign in again).');
   }
 }
@@ -259,6 +268,7 @@ export async function deleteCellarWine(id: string): Promise<void> {
   // reads as success, the list optimistically clears, and the wine survives in
   // the database (the "deleted wines that came back" bug).
   if (!data || data.length === 0) {
+    if (!canEditCellar()) throw new Error(VIEW_ONLY_MESSAGE);
     throw new Error('That wine could not be deleted — please pull to refresh (you may need to sign in again).');
   }
 }
@@ -277,7 +287,7 @@ export async function findCellarWineByIdentity(
     supabase
       .from('cellar_wines')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', cellarOwner(userId))
       .is('archived_at', null)
       .eq('is_wishlist', false)
       .order('id', { ascending: true })

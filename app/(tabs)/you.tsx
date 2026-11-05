@@ -135,6 +135,9 @@ export default function YouScreen() {
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/settings')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Settings</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/share-cellar' as any)} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Share Your Cellar</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />

@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../api/supabase';
+import { cellarOwner } from '../api/cellarContext';
 import { useChefPairingHistory, useChefLabelHistory } from '../hooks/useChefHistory';
 import { useScanHistory } from '../hooks/useScanHistory';
 import { useCellar } from '../hooks/useCellar';
@@ -90,7 +91,7 @@ export function CellarInsightsCarousel() {
       const since = new Date(Date.now() - MONTH_MS).toISOString();
       const { data } = await supabase.from('cellar_wines')
         .select('id, label_image_path, quantity, archived_at')
-        .eq('user_id', userId!).not('archived_at', 'is', null).gte('archived_at', since)
+        .eq('user_id', cellarOwner(userId!)).not('archived_at', 'is', null).gte('archived_at', since)
         .order('archived_at', { ascending: false }).limit(12);
       return data ?? [];
     },

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { cellarOwner } from './cellarContext';
 import { fetchBinPlacementsForCells, clearBinCellPlacements, removeWineFromBinCell } from './placements';
 import type { WineRack, BinCell, CellarWine } from '../types/wine';
 
@@ -125,7 +126,7 @@ export async function getBins(userId: string): Promise<WineRack[]> {
   const { data, error } = await supabase
     .from('wine_racks')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', cellarOwner(userId))
     .eq('storage_type', 'bin')
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -142,7 +143,7 @@ export async function createBin(
   const { data: bin, error } = await supabase
     .from('wine_racks')
     .insert({
-      user_id: userId,
+      user_id: cellarOwner(userId),
       name,
       storage_type: 'bin',
       rows: null,
