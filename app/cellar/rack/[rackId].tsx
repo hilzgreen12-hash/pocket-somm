@@ -1631,6 +1631,14 @@ export default function RackGridScreen() {
     setAddMoreUpfront(null);
   }
 
+  // "Highlight All Bottles" — light up every slot of this wine in this rack
+  // (clears any search / maturity / saved-filter highlight first).
+  function highlightAllBottles(wineId: string) {
+    setActiveCustomFilterId(null); setSearchQuery(''); setMaturityHighlight('');
+    setBottleListOpen(false);
+    setHighlightedWineId(wineId);
+  }
+
   function pickUpSlot(row: number, col: number) {
     const slot = slotMap[`${row},${col}`];
     const wine = slot?.wine as CellarWine | null | undefined;
@@ -1645,6 +1653,7 @@ export default function RackGridScreen() {
         { separator: true, text: '' },
         { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${wineId}?from=rack&fromRackId=${rackId}&fromRow=${row}&fromCol=${col}` as any) },
         { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${wineId}` as any) },
+        { text: 'Highlight All Bottles', onPress: () => highlightAllBottles(wineId) },
         { separator: true, text: '' },
         { text: 'Add More Bottles', onPress: () => setDestPicker({ mode: 'addMore', wineId, wineName: title, row, col }) },
         { text: 'Move to Another Location', onPress: () => setDestPicker({ mode: 'move', wineId, wineName: title, row, col }) },
@@ -1820,6 +1829,7 @@ export default function RackGridScreen() {
       buttons: [
         { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${wine.id}?from=rack` as any) },
         { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${wine.id}` as any) },
+        { text: 'Highlight All Bottles', onPress: () => highlightAllBottles(wine.id) },
         {
           text: 'Archive Wine',
           onPress: () => setSingleArchive({ wineId: wine.id, wineName: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name, qty: wine.quantity ?? 1 }),
@@ -2396,6 +2406,24 @@ export default function RackGridScreen() {
                 No Matches — no bottles here are {MATURITY_OPTIONS.find((o) => o.value === maturityHighlight)?.label ?? 'that maturity'}.
               </Text>
             )}
+
+            {/* One wine highlighted (Highlight All Bottles / list tap) — say how
+                many slots are lit and offer a way to clear it. */}
+            {highlightedWineId && !searchQuery.trim() && !maturityHighlight && !activeCustomFilterId && (() => {
+              const n = slots.filter((s) => s.cellar_wine_id === highlightedWineId).length;
+              const hw = wines.find((w) => w.id === highlightedWineId);
+              if (n === 0) return null;
+              return (
+                <View style={styles.highlightNote}>
+                  <Text style={styles.highlightNoteText} numberOfLines={2}>
+                    {n} bottle{n === 1 ? '' : 's'} of {hw ? (wineHeaderLine(hw.producer, hw.wine_name, hw.vintage) || hw.wine_name) : 'this wine'} highlighted
+                  </Text>
+                  <TouchableOpacity onPress={() => setHighlightedWineId(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.highlightNoteClear}>Clear</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
 
             {/* Search bar — subtle (background-toned), sits below the carousel. */}
             <View style={styles.searchRow}>
@@ -3219,6 +3247,10 @@ const styles = StyleSheet.create({
   placeCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   // Inter — cancel link (not a button)
   placeCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  // "N bottles of X highlighted · Clear" line above the search bar.
+  highlightNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
+  highlightNoteText: { flex: 1, fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.text },
+  highlightNoteClear: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
   // Destination rows in the "Move to a Cellar or Bin" picker.
   destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
   // The single divider between "Another slot in this rack" and the first home

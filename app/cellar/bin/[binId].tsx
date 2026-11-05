@@ -315,6 +315,23 @@ export default function BinDetailScreen() {
 
   // Long-press a wine in the list → the same verbs as a rack slot. `cellId` is the
   // diamond this bottle sits in (so moves/archives/deletes are cell-scoped).
+  // "Highlight All Bottles" — light up every diamond holding this wine and list
+  // where they are, e.g. "2x75cl in D2b".
+  function showWineCells(w: CellarWine) {
+    const mine = entries.filter((e) => e.wine.id === w.id);
+    const total = mine.reduce((s, e) => s + (e.wine.bin_cell_quantity ?? e.wine.quantity ?? 1), 0);
+    setActiveCustomFilterId(null); setSearchQuery(''); setListOpen(false);
+    setHighlightedWineId(w.id);
+    showAlert({
+      title: [w.producer, w.wine_name, w.vintage].filter(Boolean).join(' '),
+      body: [
+        `${total} bottle${total === 1 ? '' : 's'} in ${bin?.name ?? 'this bin'}`,
+        ...mine.map((e) => `${e.wine.bin_cell_quantity ?? e.wine.quantity ?? 1}x${bottleSizeLabel(e.wine.bottle_size_ml ?? 750)} in ${e.label ?? 'a diamond'}`),
+      ].join('\n'),
+      buttons: [{ text: 'OK', style: 'cancel' }],
+    });
+  }
+
   function openWineMenu(w: CellarWine, cellId: string) {
     const cellQty = Math.max(1, w.bin_cell_quantity ?? w.quantity ?? 1);
     showAlert({
@@ -323,6 +340,7 @@ export default function BinDetailScreen() {
       buttons: [
         { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${w.id}` as any) },
         { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
+        { text: 'Highlight All Bottles', onPress: () => showWineCells(w) },
         { text: 'Move to Another Diamond', onPress: () => { setMovingWine({ id: w.id, name: w.wine_name, fromCellId: cellId, qty: cellQty }); setListOpen(false); setSearchQuery(''); setHighlightedWineId(null); } },
         {
           text: 'Archive Wine',

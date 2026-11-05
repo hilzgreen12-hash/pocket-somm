@@ -689,6 +689,31 @@ export default function StorageLocationScreen() {
 
   // Long-press a wine → a per-wine action pop-up (replaces the select-mode dark
   // bar), for consistency with the rack/fridge grids.
+  // "Highlight All Bottles" — filter the list to this wine and list where its
+  // bottles sit here, e.g. "2x75cl in XX Mixed Case", "6x75cl Loose".
+  function showWineHere(w: CellarWine) {
+    const rowsHere = wines.filter((r) => r.id === w.id);
+    const byCase = new Map<string | null, number>();
+    for (const r of rowsHere) {
+      const k = (r as any).case_id ?? null;
+      byCase.set(k, (byCase.get(k) ?? 0) + (r.quantity ?? 0));
+    }
+    const total = Array.from(byCase.values()).reduce((s, n) => s + n, 0);
+    const size = `${bottleSizeCl(w.bottle_size_ml ?? 750)}cl`;
+    const lines = Array.from(byCase.entries())
+      .filter(([, n]) => n > 0)
+      .sort(([a], [b]) => (a === null ? 1 : 0) - (b === null ? 1 : 0)) // cases first, loose last
+      .map(([caseId, n]) => caseId
+        ? `${n}x${size} in ${cases.find((c) => c.id === caseId)?.name ?? 'a case'}`
+        : `${n}x${size} Loose`);
+    setHighlightOnly(w.id);
+    showAlert({
+      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+      body: [`${total} bottle${total === 1 ? '' : 's'} in ${location?.name ?? 'this cellar'}`, ...lines].join('\n'),
+      buttons: [{ text: 'OK', style: 'cancel' }],
+    });
+  }
+
   function openWineActions(w: CellarWine) {
     const qty = w.quantity ?? 1;
     const cl = bottleSizeCl(w.bottle_size_ml ?? 750);
@@ -701,6 +726,7 @@ export default function StorageLocationScreen() {
       buttons: [
         { text: 'Move Bottles', onPress: () => openMoveBottlesMenu(w) },
         { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
+        { text: 'Highlight All Bottles', onPress: () => showWineHere(w) },
         { text: 'Archive Wine', onPress: () => openArchiveWine(w) },
         { text: 'Delete Wine', style: 'destructive', onPress: () => {
           const qty = w.quantity ?? 1;
