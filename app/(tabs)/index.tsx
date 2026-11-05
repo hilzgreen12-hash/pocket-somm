@@ -26,7 +26,12 @@ import { File, Paths } from 'expo-file-system';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { tidyWineRegion } from '../../src/utils/regionFormat';
-import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
+import { generateWineIntel, fetchPricing, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
+import { vintageVerdict } from '../../src/utils/wineCardInsights';
+import { useCellar } from '../../src/hooks/useCellar';
+import { wineNameKey } from '../../src/utils/wineIdentity';
+import { wineQueryName } from '../../src/utils/wineIdentity';
+import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
@@ -90,6 +95,8 @@ export default function ScanLandingScreen() {
   const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError, reset: resetLabelStore } = useLabelStore();
   const { setExtractedWines, setRecommendation } = useScanStore();
   const { preferences } = usePreferences();
+  // The user's cellar — search results say when they already own the wine.
+  const { wines: cellarWines } = useCellar();
 
   const [wineSearch, setWineSearch] = useState('');
   // Predictive "Search a Wine" dropdown, powered by the wines_catalog.
@@ -101,6 +108,10 @@ export default function ScanLandingScreen() {
   // A wine picked from the dropdown, awaiting only its vintage before intel.
   const [vintageWine, setVintageWine] = useState<WineSearchResult | null>(null);
   const [vintageDraft, setVintageDraft] = useState('');
+  // "Compare Vintages" — Vinster's Market & Vintage Comparison for the picked wine.
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareRows, setCompareRows] = useState<VintageComparisonRow[] | null>(null);
   const [generatingIntel, setGeneratingIntel] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
@@ -240,6 +251,38 @@ export default function ScanLandingScreen() {
   // Vintage entered (or carried in from the search query) → generate intel
   // straight to the card, with a label thumbnail. `wineArg` lets selectWine pass
   // the picked wine directly, bypassing the vintage-prompt state.
+  // Compare Vintages: the same per-vintage Wine-Searcher table as the wine card's
+  // Market tab, in a pop-up. Tapping a vintage generates its intel.
+  // "You have X bottles of this wine in your cellar" for a search result: same
+  // wine (producer + name), and the same vintage when one was typed.
+  function cellarHoldings(r: WineSearchResult): { n: number; id: string } | null {
+    const key = wineNameKey(r.producer, r.wineName);
+    if (!key) return null;
+    const v = (r.vintage ?? '').trim();
+    const matches = cellarWines.filter((w) => !w.archived_at && !w.is_wishlist && (w.quantity ?? 0) > 0
+      && wineNameKey(w.producer, w.wine_name) === key && (!v || (w.vintage ?? '').trim() === v));
+    if (!matches.length) return null;
+    const n = matches.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+    const top = [...matches].sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))[0];
+    return { n, id: top.id };
+  }
+
+  async function openCompareVintages() {
+    const wine = vintageWine;
+    if (!wine) return;
+    setCompareOpen(true);
+    setCompareRows(null);
+    setCompareLoading(true);
+    try {
+      const rows = await fetchVintageComparison(wineQueryName(wine.producer, wine.wineName), preferences?.defaultCurrency ?? 'GBP', null);
+      setCompareRows(rows);
+    } catch {
+      setCompareRows([]);
+    } finally {
+      setCompareLoading(false);
+    }
+  }
+
   async function generateSelectedIntel(vintage: string, wineArg?: WineSearchResult | null) {
     const wine = wineArg ?? vintageWine;
     if (!wine) return;
@@ -492,13 +535,13 @@ export default function ScanLandingScreen() {
       </Modal>
 
       {/* "What's the Vintage?" — the only thing Vinster needs after a pick. */}
-      <Modal visible={!!vintageWine} transparent animationType="fade" onRequestClose={() => setVintageWine(null)}>
+      <Modal visible={!!vintageWine && !compareOpen} transparent animationType="fade" onRequestClose={() => setVintageWine(null)}>
         <View style={styles.vintageOverlay}>
           <View style={styles.vintageSheet}>
             <Text style={styles.vintageWine} numberOfLines={2}>
               {vintageWine ? formatWineTitle({ producer: vintageWine.producer, wineName: vintageWine.wineName, region: vintageWine.region }) : ''}
             </Text>
-            <Text style={styles.vintageTitle}>Input Vintage</Text>
+            <Text style={styles.vintageTitle}>Input Vintage or Compare Vintage Data</Text>
             <TextInput
               style={styles.vintageInput}
               value={vintageDraft}
@@ -514,9 +557,78 @@ export default function ScanLandingScreen() {
             <TouchableOpacity style={styles.vintageBtn} onPress={() => generateSelectedIntel(/^(nv|non[\s-]?vintage)$/i.test(vintageDraft.trim()) ? 'NV' : vintageDraft)} activeOpacity={0.8}>
               <Text style={styles.vintageBtnText}>Generate Intel</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={[styles.vintageBtn, { marginTop: spacing.sm }]} onPress={() => void openCompareVintages()} activeOpacity={0.8}>
+              <Text style={styles.vintageBtnText}>Compare Vintages</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => setVintageWine(null)} style={styles.vintageCancel}>
               <Text style={styles.vintageCancelText}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Vinster's Market & Vintage Comparison — from "Compare Vintages". */}
+      <Modal visible={compareOpen} transparent animationType="fade" onRequestClose={() => setCompareOpen(false)}>
+        <View style={styles.vintageOverlay}>
+          <View style={[styles.vintageSheet, styles.cmpSheet]}>
+            <View style={styles.cmpHead}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.vintageWine, { textAlign: 'left' }]} numberOfLines={2}>
+                  {vintageWine ? formatWineTitle({ producer: vintageWine.producer, wineName: vintageWine.wineName, region: vintageWine.region }) : ''}
+                </Text>
+                <Text style={[styles.vintageTitle, { textAlign: 'left', marginBottom: 0 }]}>Vinster's Market & Vintage Comparison</Text>
+              </View>
+              <TouchableOpacity onPress={() => setCompareOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close" style={styles.cmpClose}>
+                <Text style={styles.cmpCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {compareLoading ? (
+              <View style={styles.cmpLoading}>
+                <ActivityIndicator color={colors.gold} />
+                <Text style={styles.cmpNote}>Checking Wine-Searcher across vintages…</Text>
+              </View>
+            ) : compareRows && compareRows.length > 0 ? (() => {
+              const cur = preferences?.defaultCurrency ?? 'GBP';
+              const sym = currencySymbol(cur);
+              const verdict = vintageVerdict(compareRows, null, (n) => formatCurrency(n, cur, { decimals: 0 }));
+              return (
+                <ScrollView style={{ maxHeight: height * 0.62 }}>
+                  <View style={[styles.cmpRow, styles.cmpHeadRow]}>
+                    <Text style={[styles.cmpCell, styles.cmpYear, styles.cmpLabel]}>Vintage</Text>
+                    <Text style={[styles.cmpCell, styles.cmpLabel]}>Score</Text>
+                    <Text style={[styles.cmpCell, styles.cmpLabel]}>Price</Text>
+                    <Text style={[styles.cmpCell, styles.cmpLabel]}>{sym} / pt</Text>
+                    <View style={styles.cmpChevCol} />
+                  </View>
+                  {verdict.rows.map((r) => {
+                    const best = r.vintage === verdict.bestValueVintage;
+                    const top = r.vintage === verdict.topScoreVintage;
+                    return (
+                      <TouchableOpacity key={r.vintage} style={styles.cmpRow} onPress={() => { setCompareOpen(false); void generateSelectedIntel(String(r.vintage)); }} activeOpacity={0.7} accessibilityLabel={`Generate intel for ${r.vintage}`}>
+                        <Text style={[styles.cmpCell, styles.cmpYear]}>{r.vintage}</Text>
+                        <Text style={[styles.cmpCell, top && styles.cmpGold]}>{r.score ?? '—'}</Text>
+                        <Text style={styles.cmpCell}>{r.price != null ? formatCurrency(r.price, cur, { decimals: 0 }) : '—'}</Text>
+                        <Text style={[styles.cmpCell, best && styles.cmpGold]}>{r.ppt != null ? `${sym}${r.ppt.toFixed(2)}${best ? ' ★' : ''}` : '—'}</Text>
+                        <Text style={[styles.cmpChevCol, styles.cmpChev]}>›</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <Text style={styles.cmpNote}>Wine-Searcher market value and aggregate critic score, by vintage. Tap a vintage to generate its intel.</Text>
+                  {verdict.text ? (
+                    <View style={styles.cmpVerdict}>
+                      <Text style={styles.cmpVerdictTitle}>Vinster's verdict</Text>
+                      <View style={styles.cmpChips}>
+                        {verdict.bestValueVintage != null ? <Text style={styles.cmpChip}>Best value: {verdict.bestValueVintage}</Text> : null}
+                        {verdict.topScoreVintage != null ? <Text style={styles.cmpChip}>Top score: {verdict.topScoreVintage}</Text> : null}
+                      </View>
+                      <Text style={styles.cmpVerdictText}>{verdict.text}</Text>
+                    </View>
+                  ) : null}
+                </ScrollView>
+              );
+            })() : (
+              <Text style={styles.cmpNote}>Wine-Searcher has no per-vintage market data for this wine. Enter a vintage to generate its intel.</Text>
+            )}
           </View>
         </View>
       </Modal>
@@ -573,6 +685,16 @@ export default function ScanLandingScreen() {
                         </View>
                         {/* Region + grape in gold beneath the white name (shared style). */}
                         {tidyWineRegion(r.region) || r.grape ? <Text style={[styles.searchOptionMeta, { color: colors.gold }]} numberOfLines={1}>{[tidyWineRegion(r.region), r.grape].filter(Boolean).join(' · ')}</Text> : null}
+                        {(() => {
+                          const h = cellarHoldings(r);
+                          if (!h) return null;
+                          return (
+                            <Text style={styles.searchHolding}>
+                              You have {h.n} {h.n === 1 ? 'bottle' : 'bottles'} of this wine in your cellar ·{' '}
+                              <Text style={styles.searchHoldingLink} onPress={() => { setSearchModalOpen(false); setSearchOpen(false); router.push(`/cellar/${h.id}` as any); }}>View in Cellar</Text>
+                            </Text>
+                          );
+                        })()}
                       </TouchableOpacity>
                       </View>
                     ))}
@@ -705,6 +827,8 @@ const styles = StyleSheet.create({
   searchModalHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   searchModalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, letterSpacing: 0.5, flexShrink: 1 },
   searchModalCancel: { alignItems: 'center', paddingTop: spacing.md },
+  searchHolding: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: colors.text, marginTop: 3 },
+  searchHoldingLink: { fontFamily: fonts.bodySemibold, fontStyle: 'normal', color: colors.gold, textDecorationLine: 'underline' },
   searchDidYouMean: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 2 },
   searchModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   // "Search a Wine Name for Intel" — magnifying-glass icon left of the field.
@@ -727,6 +851,25 @@ const styles = StyleSheet.create({
   vintageWine: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   vintageTitle: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.gold, textAlign: 'center', marginBottom: spacing.md },
   vintageInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, fontSize: 18, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', marginBottom: spacing.md },
+  cmpSheet: { padding: spacing.lg },
+  cmpHead: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm },
+  cmpClose: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  cmpCloseText: { fontSize: 20, color: colors.text },
+  cmpLoading: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
+  cmpRow: { flexDirection: 'row', alignItems: 'center', minHeight: 44, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  cmpHeadRow: { minHeight: 30, borderBottomColor: 'rgba(255,255,255,0.15)' },
+  cmpCell: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
+  cmpYear: { flex: 1.1 },
+  cmpLabel: { fontSize: 10.5, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' },
+  cmpGold: { color: colors.gold, fontFamily: fonts.bodySemibold },
+  cmpChevCol: { width: 18 },
+  cmpChev: { fontSize: 18, color: colors.gold, textAlign: 'right' },
+  cmpNote: { fontFamily: fonts.bodyItalic, fontSize: 12.5, lineHeight: 18, color: 'rgba(255,255,255,0.9)', marginTop: spacing.sm },
+  cmpVerdict: { marginTop: spacing.md, padding: spacing.sm, borderRadius: 12, backgroundColor: 'rgba(224,184,74,0.08)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', gap: 8 },
+  cmpVerdictTitle: { fontFamily: fonts.bodySemibold, fontSize: 12.5, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.gold },
+  cmpChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  cmpChip: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.gold, color: colors.gold, fontFamily: fonts.bodyRegular, fontSize: 12.5, overflow: 'hidden' },
+  cmpVerdictText: { fontFamily: fonts.bodyRegular, fontSize: 14, lineHeight: 21, color: colors.text },
   vintageBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   vintageBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   vintageNv: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', paddingVertical: spacing.md },

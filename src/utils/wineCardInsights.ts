@@ -8,6 +8,7 @@ import { effectiveMaturity } from './maturity';
 export type VintageVerdict = {
   rows: (VintageComparisonRow & { ppt: number | null })[];
   bestValueVintage: number | null;
+  topScoreVintage: number | null; // highest critic score in the run
   qualityRank: number | null; // this vintage's rank by critic score (1 = best)
   valueRank: number | null; // this vintage's rank by price per point (1 = best value)
   total: number;
@@ -19,9 +20,10 @@ export type VintageVerdict = {
 export function vintageVerdict(rows: VintageComparisonRow[], thisVintage: string | number | null | undefined, fmt: (n: number) => string): VintageVerdict {
   const withPpt = rows.map((r) => ({ ...r, ppt: r.price != null && r.score ? r.price / r.score : null }));
   const scored = withPpt.filter((r) => r.ppt != null);
-  const empty: VintageVerdict = { rows: withPpt, bestValueVintage: null, qualityRank: null, valueRank: null, total: scored.length, text: null };
+  const empty: VintageVerdict = { rows: withPpt, bestValueVintage: null, topScoreVintage: null, qualityRank: null, valueRank: null, total: scored.length, text: null };
   if (scored.length < 2) return empty;
   const best = scored.reduce((a, b) => ((b.ppt as number) < (a.ppt as number) ? b : a));
+  const top = scored.reduce((a, b) => ((b.score as number) > (a.score as number) ? b : a));
   const mine = scored.find((r) => String(r.vintage) === String(thisVintage ?? '').trim());
   const n = scored.length;
   const qualityRank = mine ? 1 + scored.filter((r) => (r.score as number) > (mine.score as number)).length : null;
@@ -37,9 +39,12 @@ export function vintageVerdict(rows: VintageComparisonRow[], thisVintage: string
       text += ` Your ${mine.vintage} ranks #${qualityRank} of ${n} for quality and #${valueRank} of ${n} for value.`;
       if (qualityRank === 1) text += ' It is the top-scoring year, so the premium buys you the best vintage.';
       else if (valueRank === n) text += ' It carries the biggest premium per point in this run.';
+    } else if (!mine && top.vintage !== best.vintage) {
+      // No vintage chosen yet (comparing before picking one).
+      text += ` The ${top.vintage} is the top-scoring year (${top.score}) and carries a premium for it.`;
     }
   }
-  return { rows: withPpt, bestValueVintage: best.vintage, qualityRank, valueRank, total: n, text };
+  return { rows: withPpt, bestValueVintage: best.vintage, topScoreVintage: top.vintage, qualityRank, valueRank, total: n, text };
 }
 
 // Wine styles / names a "Drink Before" or "Drink After" suggestion may name.
