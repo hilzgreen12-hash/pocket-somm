@@ -22,7 +22,12 @@ type Domain = 'wine' | 'food' | 'query' | 'note';
 export class ChatCancelled extends Error { constructor() { super('cancelled'); } }
 
 interface Item { key: string; node: ReactNode }
-interface Pending { placeholder: string; domain: Domain; links?: { label: string; onPress: () => void }[] }
+interface Pending { placeholder: string; domain: Domain; links?: { label: string; onPress: () => void }[]; alt?: { label: string; placeholder: string } }
+
+// Marks an answer given in the question's alternative field (e.g. "Or, Single
+// Prompt Command") so the flow can tell it apart: ask() resolves with this
+// prefix + the text.
+export const ALT_ANSWER = '\u2063ALT\u2063';
 
 // A small engine that lets each flow be written as straight-line async code:
 //   const dish = await chat.ask('What are you eating?', 'ie. Roast chicken')
@@ -44,10 +49,10 @@ export function useChat() {
   const say = useCallback((text: string) => push(<VBubble text={text} />), [push]);
   const hear = useCallback((text: string) => push(<UBubble text={text} />), [push]);
 
-  const ask = useCallback((question: string | string[] | null, placeholder: string, domain: Domain = 'query', links?: Pending['links']): Promise<string> => {
+  const ask = useCallback((question: string | string[] | null, placeholder: string, domain: Domain = 'query', links?: Pending['links'], alt?: Pending['alt']): Promise<string> => {
     const mine = run.current;
     (Array.isArray(question) ? question : question ? [question] : []).forEach((q) => say(q));
-    setPending({ placeholder, domain, links });
+    setPending({ placeholder, domain, links, alt });
     return new Promise<string>((resolve, reject) => {
       resolver.current = {
         resolve: (text: string) => (run.current === mine ? resolve(text) : reject(new ChatCancelled())),
@@ -65,6 +70,17 @@ export function useChat() {
     setPending(null);
     hear(t);
     r.resolve(t);
+  }, [hear]);
+
+  // Answer from the question's alternative field (resolves with ALT_ANSWER + text).
+  const answerAlt = useCallback((text: string) => {
+    const t = text.trim();
+    if (!t || !resolver.current) return;
+    const r = resolver.current;
+    resolver.current = null;
+    setPending(null);
+    hear(t);
+    r.resolve(ALT_ANSWER + t);
   }, [hear]);
 
   // Run work with Vinster's "working" bubble + spinner showing.
@@ -96,7 +112,7 @@ export function useChat() {
   const token = () => run.current;
   const alive = (t: number) => run.current === t;
 
-  return { items, pending, busy, push, say, hear, ask, answer, working, reset, token, alive };
+  return { items, pending, busy, push, say, hear, ask, answer, answerAlt, working, reset, token, alive };
 }
 export type Chat = ReturnType<typeof useChat>;
 
@@ -155,6 +171,8 @@ export function ChatSheet({ visible, onClose, chat, opening, children }: {
                 domain={chat.pending.domain}
                 onSend={chat.answer}
                 links={chat.pending.links}
+                alt={chat.pending.alt}
+                onSendAlt={chat.answerAlt}
               />
             ) : null}
           </ScrollView>
@@ -221,11 +239,34 @@ export function UBubble({ text, children }: { text?: string; children?: ReactNod
   );
 }
 
-function AnswerField({ placeholder, domain, onSend, links }: { placeholder: string; domain: Domain; onSend: (t: string) => void; links?: Pending['links'] }) {
+function AnswerField({ placeholder, domain, onSend, links, alt, onSendAlt }: { placeholder: string; domain: Domain; onSend: (t: string) => void; links?: Pending['links']; alt?: Pending['alt']; onSendAlt?: (t: string) => void }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <InputField placeholder={placeholder} domain={domain} onSend={onSend} />
+      {links?.length ? (
+        <View style={{ gap: 6 }}>
+          {links.map((l) => (
+            <TouchableOpacity key={l.label} onPress={l.onPress} hitSlop={{ top: 6, bottom: 6 }}>
+              <Text style={styles.textLink}>{l.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+      {alt && onSendAlt ? (
+        <View style={{ gap: 8, marginTop: 6 }}>
+          <Text style={styles.altLabel}>{alt.label}</Text>
+          <InputField placeholder={alt.placeholder} domain="query" onSend={onSendAlt} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function InputField({ placeholder, domain, onSend }: { placeholder: string; domain: Domain; onSend: (t: string) => void }) {
   const [value, setValue] = useState('');
   const can = !!value.trim();
   return (
-    <View style={{ gap: 8 }}>
+    <View>
       <View style={styles.field}>
         <TextInput
           style={styles.fieldInput}
@@ -244,15 +285,6 @@ function AnswerField({ placeholder, domain, onSend, links }: { placeholder: stri
           <Text style={[styles.sendText, !can && { opacity: 0.4 }]}>›</Text>
         </TouchableOpacity>
       </View>
-      {links?.length ? (
-        <View style={{ gap: 6 }}>
-          {links.map((l) => (
-            <TouchableOpacity key={l.label} onPress={l.onPress} hitSlop={{ top: 6, bottom: 6 }}>
-              <Text style={styles.textLink}>{l.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -401,6 +433,8 @@ const styles = StyleSheet.create({
   fieldInput: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, paddingVertical: 6, minHeight: 30, maxHeight: 140 },
   send: { width: 30, height: 44, alignItems: 'center', justifyContent: 'center' },
   sendText: { fontSize: 28, lineHeight: 30, color: colors.gold },
+  // "Or, Single Prompt Command" — heads the alternative answer field.
+  altLabel: { fontFamily: fonts.headingItalic, fontSize: 19, color: colors.text, marginTop: 4 },
   textLink: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   card: { gap: 6, padding: 14, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
   cardLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: 'rgba(255,255,255,0.75)', marginTop: 4 },

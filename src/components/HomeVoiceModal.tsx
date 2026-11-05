@@ -19,7 +19,7 @@ import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import {
   useChat, ChatSheet, ChatCancelled, Greeting, Starters, Starter, Card, CardLabel, CardBody, Tag,
-  ResultRow, GoldLink, DoneButton, ServingSuggestions, chatErrorText,
+  ResultRow, GoldLink, DoneButton, ServingSuggestions, chatErrorText, ALT_ANSWER,
 } from './chat/ChatKit';
 
 // "Ask Vinster" on Home — a guided chat (design: the Voice Command Mockups
@@ -105,11 +105,22 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
       return;
     }
     chat.say(CTX);
-    const eating = await chat.ask('What are you eating with it, if anything? Tap the mic and tell me in as much detail as you can', 'ie. Roast chicken with morels and asparagus', 'food');
-    const occasion = await chat.ask("What's the occasion or mood?", "ie. An intimate birthday gathering of good friends so we need something special, and warming as it's cold outside");
-    const decant = await chat.ask('Are you opening this now or is there time to decant?', "ie. I've got up to 3 hours to decant");
-    const serving = isYes(await chat.ask('Do you need help with your stemwear or what wines to serve before or after?', 'ie. Yes help me with both'));
-    const budget = await chat.ask('Lastly, do you have a cost per bottle in mind? I will use Wine Searcher to compare market values', 'ie. Around £60 a bottle');
+    const first = await chat.ask('What are you eating with it, if anything? Tap the mic and tell me in as much detail as you can', 'ie. Roast chicken with morels and asparagus', 'food', undefined,
+      { label: 'Or, Single Prompt Command', placeholder: "ie. Roast chicken with friends for a birthday, I've got an hour to decant, help with glasses, around £60 a bottle" });
+    let eating: string, occasion: string, decant: string, serving: boolean, budget: string;
+    if (first.startsWith(ALT_ANSWER)) {
+      // Everything in one go: skip the rest; the server reads decant time and
+      // budget out of the free text.
+      const prompt = first.slice(ALT_ANSWER.length);
+      eating = prompt; occasion = ''; decant = prompt; budget = prompt;
+      serving = /stem|glass|before|after|serv/i.test(prompt);
+    } else {
+      eating = first;
+      occasion = await chat.ask("What's the occasion or mood?", "ie. An intimate birthday gathering of good friends so we need something special, and warming as it's cold outside");
+      decant = await chat.ask('Are you opening this now or is there time to decant?', "ie. I've got up to 3 hours to decant");
+      serving = isYes(await chat.ask('Do you need help with your stemwear or what wines to serve before or after?', 'ie. Yes help me with both'));
+      budget = await chat.ask('Lastly, do you have a cost per bottle in mind? I will use Wine Searcher to compare market values', 'ie. Around £60 a bottle');
+    }
     const res = await chat.working('Choosing three bottles from your cellar…', () =>
       chooseFromCellar({ eating, occasion, decantText: decant, budgetText: budget, serving, currency, wines }));
     const picks = res.picks.map((p) => ({ p, w: wines.find((x) => x.id === p.id) })).filter((x) => x.w) as { p: typeof res.picks[0]; w: CellarWine }[];
