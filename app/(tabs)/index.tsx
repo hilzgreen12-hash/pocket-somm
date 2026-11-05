@@ -532,7 +532,7 @@ export default function ScanLandingScreen() {
             ),
           },
           // Recent Scans — mixed label + list scans, most recent first.
-          { key: 'scans', title: 'Your Recent Label Scans', content: <View style={styles.carouselBleed}><RecentScansMemo /></View> },
+          { key: 'scans', title: 'Label Scan Library', content: <View style={styles.carouselBleed}><RecentScansMemo /></View> },
           // Drink Now — cellar bottles at last call, most urgent first.
           { key: 'cellar', title: 'Home Cellar Insights', content: <View style={styles.carouselBleed}><DrinkNowMemo /></View> },
           // Running-low bottles to replenish, then facts buried in the data.

@@ -1,6 +1,16 @@
-import { View, ScrollView, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { useQueryClient } from '@tanstack/react-query';
 import { useChefArchiveCollections } from '../hooks/useChefArchiveCollections';
+import { useAuth } from '../hooks/useAuth';
+import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
+import { ReorderableRow } from './ReorderableRow';
+import { showAlert } from './AppAlert';
+import { ensureMediaPermission } from '../utils/mediaPermissions';
+import { uploadCookbookPhoto } from '../api/labelPhotos';
+import { setChefCollectionImage, reorderChefCollections, type ChefArchiveCollection } from '../api/chefArchiveCollections';
 import { useChefLabelHistory } from '../hooks/useChefHistory';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -14,8 +24,95 @@ function recipeLabel(n: number): string {
   return `${n} ${n === 1 ? 'Recipe' : 'Recipes'}`;
 }
 
+// A folder's cover photo, faded under a scrim so the name stays readable.
+function FolderBg({ path }: { path?: string | null }) {
+  const uri = useLabelImageUrl(path ?? null);
+  if (!uri) return null;
+  return (
+    <>
+      <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,11,10,0.5)' }]} />
+    </>
+  );
+}
+
+const TILE_W = 220;
+
 export function CookbookFoldersCarousel() {
-  const { collections } = useChefArchiveCollections();
+  const { collections, rename } = useChefArchiveCollections();
+  const { session } = useAuth();
+  const userId = session?.user.id ?? '';
+  const qc = useQueryClient();
+  const [renaming, setRenaming] = useState<ChefArchiveCollection | null>(null);
+  const [renameVal, setRenameVal] = useState('');
+
+  // Drag to reorder (hold a folder, then drag). Saved to the account.
+  async function saveOrder(ids: string[]) {
+    qc.setQueryData<ChefArchiveCollection[]>(['chef-archive-collections', userId], (old) =>
+      old ? ids.map((id) => old.find((c) => c.id === id)).filter(Boolean) as ChefArchiveCollection[] : old);
+    try { await reorderChefCollections(ids); }
+    catch (err) { showAlert({ title: 'Could not save the order', body: err instanceof Error ? err.message : 'Please try again.' }); }
+    qc.invalidateQueries({ queryKey: ['chef-archive-collections', userId] });
+  }
+
+  // Hold (without dragging) → Rename Folder / Add Image.
+  function openFolderMenu(c: ChefArchiveCollection) {
+    showAlert({
+      title: c.name,
+      buttons: [
+        { text: 'Rename Folder', onPress: () => { setRenameVal(c.name); setRenaming(c); } },
+        { text: c.image_path ? 'Change Image' : 'Add Image', onPress: () => setTimeout(() => openImageMenu(c), 350) },
+        ...(c.image_path ? [{ text: 'Remove Image', style: 'destructive' as const, onPress: () => void setImage(c, null) }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
+  function openImageMenu(c: ChefArchiveCollection) {
+    showAlert({
+      title: c.image_path ? 'Change Image' : 'Add Image',
+      buttons: [
+        // AppAlert fires as it dismisses; the picker can't open mid-dismiss on iOS.
+        { text: 'Take a Photo', onPress: () => setTimeout(() => void pickImage(c, 'camera'), 350) },
+        { text: 'Upload a Photo', onPress: () => setTimeout(() => void pickImage(c, 'library'), 350) },
+        { text: 'Find a Photo Online', onPress: () => router.push(`/chef/find-folder-photo?folderId=${c.id}&name=${encodeURIComponent(c.name)}` as any) },
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
+  async function pickImage(c: ChefArchiveCollection, source: 'camera' | 'library') {
+    try {
+      if (!userId) return;
+      if (!(await ensureMediaPermission(source))) return;
+      const res = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (res.canceled || !res.assets[0]) return;
+      const path = await uploadCookbookPhoto(userId, res.assets[0].uri, c.id);
+      await setImage(c, path);
+    } catch (err) {
+      showAlert({ title: 'Could not add that photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  async function setImage(c: ChefArchiveCollection, path: string | null) {
+    try {
+      await setChefCollectionImage(c.id, path);
+      qc.invalidateQueries({ queryKey: ['chef-archive-collections', userId] });
+    } catch (err) {
+      showAlert({ title: 'Could not update the image', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  async function saveRename() {
+    const c = renaming;
+    const name = renameVal.trim();
+    if (!c || !name) { setRenaming(null); return; }
+    try { await rename.mutateAsync({ id: c.id, name }); setRenaming(null); }
+    catch (err) { showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' }); }
+  }
+
   const { sessions } = useChefLabelHistory();
   const recipeCount = sessions.length;
   const favouritesCount = sessions.filter((s) => !!s.is_starred).length;
@@ -34,25 +131,55 @@ export function CookbookFoldersCarousel() {
       </TouchableOpacity>
       <View style={styles.statsSep} />
 
-      {/* Folders as boxes — mirrors the Cellar storage / Review carousels. */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-        <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
-          <Text style={styles.cardType}>Cookbook</Text>
-          <Text style={styles.cardName} numberOfLines={2}>★ Favourites</Text>
-          <Text style={styles.cardCount}>{recipeLabel(favouritesCount)}</Text>
-        </TouchableOpacity>
-        {collections.map((c) => (
-          <TouchableOpacity key={c.id} style={styles.card} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} activeOpacity={0.8}>
-            <Text style={styles.cardType}>Your Folder</Text>
-            <Text style={styles.cardName} numberOfLines={2}>{c.name}</Text>
-            <Text style={styles.cardCount}>{recipeLabel(c.item_count)}</Text>
+      {/* Folders as boxes. Tap to open; hold for Rename / Add Image; hold and
+          drag to reorder. Favourites stays first. */}
+      <ReorderableRow
+        contentContainerStyle={styles.carousel}
+        itemWidth={TILE_W}
+        gap={spacing.sm}
+        holdToDrag
+        onHold={(id) => { const c = collections.find((x) => x.id === id); if (c) openFolderMenu(c); }}
+        onReorder={(ids) => void saveOrder(ids)}
+        leading={
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
+            <Text style={styles.cardType}>Cookbook</Text>
+            <Text style={styles.cardName} numberOfLines={2}>★ Favourites</Text>
+            <Text style={styles.cardCount}>{recipeLabel(favouritesCount)}</Text>
           </TouchableOpacity>
-        ))}
-        <TouchableOpacity style={styles.cardAdd} onPress={() => router.push('/chef/archive?addFolder=1' as any)} activeOpacity={0.8}>
-          <Text style={styles.cardAddText}>+ Add folder</Text>
-        </TouchableOpacity>
-      </ScrollView>
-      <Text style={styles.filterHint}>Listed by recently added · Swipe to add and view folders →</Text>
+        }
+        items={collections.map((c) => ({
+          key: c.id,
+          label: c.name,
+          node: (
+            <TouchableOpacity style={styles.card} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} activeOpacity={0.8}>
+              <FolderBg path={c.image_path} />
+              <Text style={styles.cardType}>Your Folder</Text>
+              <Text style={styles.cardName} numberOfLines={2}>{c.name}</Text>
+              <Text style={styles.cardCount}>{recipeLabel(c.item_count)}</Text>
+            </TouchableOpacity>
+          ),
+        }))}
+        trailing={
+          <TouchableOpacity style={styles.cardAdd} onPress={() => router.push('/chef/archive?addFolder=1' as any)} activeOpacity={0.8}>
+            <Text style={styles.cardAddText}>+ Add folder</Text>
+          </TouchableOpacity>
+        }
+      />
+
+      {/* Rename Folder */}
+      <Modal visible={!!renaming} transparent animationType="fade" onRequestClose={() => setRenaming(null)}>
+        <KeyboardAvoidingView style={styles.renameOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.renameSheet}>
+            <Text style={styles.renameTitle}>Rename Folder</Text>
+            <TextInput style={styles.renameInput} value={renameVal} onChangeText={setRenameVal} autoFocus maxLength={40} returnKeyType="done" onSubmitEditing={() => void saveRename()} placeholder="Folder name" placeholderTextColor={colors.textMuted} />
+            <View style={styles.renameRow}>
+              <TouchableOpacity style={styles.renameBtn} onPress={() => setRenaming(null)} activeOpacity={0.7}><Text style={styles.renameBtnText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.renameBtn, styles.renameBtnPrimary, !renameVal.trim() && { opacity: 0.5 }]} onPress={() => void saveRename()} disabled={!renameVal.trim()} activeOpacity={0.85}><Text style={[styles.renameBtnText, { color: colors.gold }]}>Save</Text></TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Text style={styles.filterHint}>Hold a folder to rename it or add an image · Hold and drag to reorder →</Text>
     </View>
   );
 }
@@ -83,10 +210,18 @@ const styles = StyleSheet.create({
   // Box tiles — 220×165 to match the Your Lineups carousel (LineupsCarousel).
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingVertical: spacing.md },
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
-  card: { width: 220, height: 165, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between' },
+  card: { width: 220, height: 165, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between', overflow: 'hidden' },
   cardType: { fontSize: 11, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
   cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardCount: { fontSize: 13, fontFamily: fonts.headingRegular, color: colors.textMuted },
   cardAdd: { width: 220, height: 165, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   cardAddText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
+  renameOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  renameSheet: { width: '100%', maxWidth: 400, borderRadius: 16, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg, gap: spacing.md },
+  renameTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center' },
+  renameInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface },
+  renameRow: { flexDirection: 'row', gap: spacing.sm },
+  renameBtn: { flex: 1, height: 46, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  renameBtnPrimary: { borderColor: colors.gold },
+  renameBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
 });

@@ -161,3 +161,22 @@ export async function labelSignedUrl(path: string | null | undefined, expiresIn 
   if (error) return null;
   return data?.signedUrl ?? null;
 }
+
+// Cookbook folder cover photo → wine-labels/{userId}/cookbook/{folderId}-{ts}.jpg
+// (unique per upload so a replaced photo shows straight away).
+export async function uploadCookbookPhoto(userId: string, localUri: string, folderId: string): Promise<string> {
+  const base64 = await processToBase64(localUri);
+  const bytes = base64ToBytes(base64);
+  const path = `${userId}/cookbook/${folderId}-${Date.now()}.jpg`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, { contentType: 'image/jpeg', upsert: true });
+  if (error) throw error;
+  primeCachedLabel(path, bytes);
+  return path;
+}
+
+export async function uploadCookbookPhotoFromUrl(userId: string, imageUrl: string, folderId: string): Promise<string> {
+  const dest = new File(Paths.cache, `fetched-cookbook-${folderId}.img`);
+  try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
+  const file = await File.downloadFileAsync(imageUrl, dest);
+  return uploadCookbookPhoto(userId, file.uri, folderId);
+}

@@ -6,6 +6,9 @@ export interface ChefArchiveCollection {
   name: string;
   created_at: string;
   item_count: number;
+  // Migration 126: cover photo + the user's own order (null = not yet ordered).
+  image_path?: string | null;
+  sort_order?: number | null;
 }
 
 export interface ChefArchiveItemRef {
@@ -15,11 +18,21 @@ export interface ChefArchiveItemRef {
 }
 
 export async function listChefArchiveCollections(userId: string): Promise<ChefArchiveCollection[]> {
-  const { data: rows, error } = await supabase
+  // User order first (sort_order), then oldest-first for folders not yet placed.
+  // Falls back to the pre-126 columns if the migration hasn't been applied.
+  let { data: rows, error } = await supabase
     .from('chef_archive_collections')
-    .select('id, user_id, name, created_at')
+    .select('id, user_id, name, created_at, image_path, sort_order')
     .eq('user_id', userId)
+    .order('sort_order', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true });
+  if (error) {
+    ({ data: rows, error } = await supabase
+      .from('chef_archive_collections')
+      .select('id, user_id, name, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true }) as any);
+  }
   if (error) throw error;
 
   const collections = (rows ?? []) as Omit<ChefArchiveCollection, 'item_count'>[];
@@ -125,4 +138,18 @@ export async function setPairingSessionStarred(id: string, starred: boolean): Pr
     .update({ is_starred: starred })
     .eq('id', id);
   if (error) throw error;
+}
+
+// Cover photo for a cookbook folder (a path in the wine-labels bucket), or null.
+export async function setChefCollectionImage(id: string, imagePath: string | null): Promise<void> {
+  const { error } = await supabase.from('chef_archive_collections').update({ image_path: imagePath }).eq('id', id);
+  if (error) throw error;
+}
+
+// Save the user's folder order (carousel drag): position = index in `ids`.
+export async function reorderChefCollections(ids: string[]): Promise<void> {
+  const results = await Promise.all(ids.map((id, i) =>
+    supabase.from('chef_archive_collections').update({ sort_order: i }).eq('id', id)));
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
 }

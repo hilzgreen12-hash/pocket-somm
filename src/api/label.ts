@@ -379,6 +379,15 @@ export async function searchRestaurantImages(input: { restaurant?: string | null
   return data.images ?? [];
 }
 
+// Photos for a cookbook folder ("Fish Recipes" → food photography), via the same
+// image-search function with a free-text query.
+export async function searchFolderImages(folderName: string): Promise<LabelImageCandidate[]> {
+  const q = `${folderName.trim()} food dish photography`;
+  const data = await invokeFunction('label-image-search', { query: q }) as { images?: LabelImageCandidate[]; error?: string };
+  if (data.error) throw new Error(data.error);
+  return data.images ?? [];
+}
+
 // Live web lookup for a name Vinster didn't recognise (misheard / misread):
 // returns the real wine it most plausibly is, backed by a cited web page, or
 // null. Server-side it also adds the wine to the catalogue for next time.

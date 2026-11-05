@@ -37,9 +37,9 @@ function stampDate(d: Date): string {
 
 // Example cards shown when a new user has no scans yet.
 const SCAN_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'labelCollage', images: [NAMED_LABELS.lynchBages], title: 'Château Lynch-Bages 2010', stamp: '01 Jan 2030', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
-  { kind: 'labelCollage', images: [NAMED_LABELS.donnhoff], title: 'Dönnhoff Krötenpfuhl Riesling GG 2019', stamp: '20 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
-  { kind: 'labelCollage', images: [NAMED_LABELS.rocDeCambes], title: 'Roc de Cambes 2015', stamp: '18 Dec 2029', overlay: 'Your Recent Label Scans appear here as you use Vinster' },
+  { kind: 'labelCollage', images: [NAMED_LABELS.lynchBages], title: 'Château Lynch-Bages 2010', stamp: '01 Jan 2030', overlay: 'Your Label Scan Library fills up here as you use Vinster' },
+  { kind: 'labelCollage', images: [NAMED_LABELS.donnhoff], title: 'Dönnhoff Krötenpfuhl Riesling GG 2019', stamp: '20 Dec 2029', overlay: 'Your Label Scan Library fills up here as you use Vinster' },
+  { kind: 'labelCollage', images: [NAMED_LABELS.rocDeCambes], title: 'Roc de Cambes 2015', stamp: '18 Dec 2029', overlay: 'Your Label Scan Library fills up here as you use Vinster' },
 ];
 
 // Identity key for de-duping re-scans of the same wine (newest kept).

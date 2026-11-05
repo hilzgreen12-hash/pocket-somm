@@ -20,6 +20,12 @@ type Props = {
   onReorder: (keys: string[]) => void;
   // Rendered after the tiles (e.g. a "+ Add" tile); not draggable.
   trailing?: ReactNode;
+  // Rendered before the tiles (e.g. a fixed "Favourites" tile); not draggable.
+  leading?: ReactNode;
+  // Hold anywhere on a tile to pick it up (instead of a corner grip). A hold
+  // released WITHOUT moving calls onHold (e.g. to open the tile's menu).
+  holdToDrag?: boolean;
+  onHold?: (key: string) => void;
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
 };
@@ -27,7 +33,7 @@ type Props = {
 const EDGE = 70;
 const MAX_STEP = 14;
 
-export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, style, contentContainerStyle }: Props) {
+export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, leading, holdToDrag, onHold, style, contentContainerStyle }: Props) {
   const { width: winW } = useWindowDimensions();
   const step = itemWidth + gap;
   const keys = items.map((i) => i.key);
@@ -45,8 +51,8 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, sty
   const contentW = useRef(0);
   const raf = useRef<number | null>(null);
   const drag = useRef<{ key: string; start: string[]; next: string[]; translation: number; absX: number; startX: number } | null>(null);
-  const live = useRef({ onReorder, step, winW });
-  live.current = { onReorder, step, winW };
+  const live = useRef({ onReorder, step, winW, onHold });
+  live.current = { onReorder, step, winW, onHold };
 
   function apply() {
     const d = drag.current;
@@ -92,9 +98,16 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, sty
     if (raf.current != null) { cancelAnimationFrame(raf.current); raf.current = null; }
     const st = live.current.step;
     const target = (d.next.indexOf(key) - d.start.indexOf(key)) * st;
+    // Picked up but never moved → it was a hold, not a drag.
+    const wasHold = Math.abs(d.translation) < 8 && d.next.join('|') === d.start.join('|');
     Animated.timing(offsetOf(key), { toValue: target, duration: 120, useNativeDriver: true }).start(() => {
       setActiveKey(null);
       setScrollLocked(false);
+      if (wasHold && live.current.onHold) {
+        for (const k of d.start) offsetOf(k).setValue(0);
+        live.current.onHold(key);
+        return;
+      }
       if (d.next.join('|') !== d.start.join('|')) {
         resetOnRedraw.current = d.start; // cleared in the redraw frame (below)
         live.current.onReorder(d.next);
@@ -119,7 +132,7 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, sty
     for (const key of keys) {
       m[key] = Gesture.Pan()
         .runOnJS(true)
-        .activateAfterLongPress(150)
+        .activateAfterLongPress(holdToDrag ? 300 : 150)
         .onStart((e) => {
           drag.current = { key, start: [...keysRef.current], next: [...keysRef.current], translation: 0, absX: e.absoluteX, startX: scrollX.current };
           setActiveKey(key);
@@ -138,7 +151,7 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, sty
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keys.join('|')]);
+  }, [keys.join('|'), holdToDrag]);
 
   useEffect(() => () => { if (raf.current != null) cancelAnimationFrame(raf.current); }, []);
 
@@ -165,6 +178,7 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, sty
       style={style}
       contentContainerStyle={contentContainerStyle}
     >
+      {leading}
       {items.map((it) => {
         const lifted = activeKey === it.key;
         return (
@@ -175,7 +189,20 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, sty
               lifted && { zIndex: 10, elevation: 10, opacity: 0.95 },
             ]}
           >
-            {it.node}
+            {holdToDrag ? (
+              <GestureDetector gesture={gestures[it.key]}>
+                <View
+                  collapsable={false}
+                  accessible
+                  accessibilityHint="Hold to open options, or hold and drag to move"
+                  accessibilityActions={[{ name: 'increment', label: 'Move right' }, { name: 'decrement', label: 'Move left' }]}
+                  onAccessibilityAction={(e) => moveBy(it.key, e.nativeEvent.actionName === 'increment' ? 1 : -1)}
+                >
+                  {it.node}
+                </View>
+              </GestureDetector>
+            ) : it.node}
+            {holdToDrag ? null : (
             <GestureDetector gesture={gestures[it.key]}>
               <View
                 style={styles.grip}
@@ -190,6 +217,7 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, sty
                 <MaterialCommunityIcons name="drag" size={18} color="rgba(255,255,255,0.75)" allowFontScaling={false} style={styles.gripIcon} />
               </View>
             </GestureDetector>
+            )}
           </Animated.View>
         );
       })}
