@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Animated, ScrollView, StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -90,12 +90,26 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, sty
     const st = live.current.step;
     const target = (d.next.indexOf(key) - d.start.indexOf(key)) * st;
     Animated.timing(offsetOf(key), { toValue: target, duration: 120, useNativeDriver: true }).start(() => {
-      for (const k of d.start) offsetOf(k).setValue(0);
       setActiveKey(null);
       setScrollLocked(false);
-      if (d.next.join('|') !== d.start.join('|')) live.current.onReorder(d.next);
+      if (d.next.join('|') !== d.start.join('|')) {
+        resetOnRedraw.current = d.start; // cleared in the redraw frame (below)
+        live.current.onReorder(d.next);
+      } else {
+        for (const k of d.start) offsetOf(k).setValue(0);
+      }
     });
   }
+
+  // Clear the drag offsets in the same frame the reordered row is drawn — no
+  // flash back to the old slot.
+  const resetOnRedraw = useRef<string[] | null>(null);
+  useLayoutEffect(() => {
+    if (!resetOnRedraw.current) return;
+    for (const k of resetOnRedraw.current) offsetOf(k).setValue(0);
+    resetOnRedraw.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keys.join('|')]);
 
   const gestures = useMemo(() => {
     const m: Record<string, ReturnType<typeof Gesture.Pan>> = {};

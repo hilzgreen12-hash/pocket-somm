@@ -1,6 +1,6 @@
 import { NAMED_LABELS } from '../../src/components/ExamplePlaceholder';
 import { JournalCarousel } from '../../src/components/JournalCarousel';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -49,6 +49,13 @@ let welcomeShownThisSession = false;
 const SD_LABEL_IMAGE = NAMED_LABELS.denisMortet;
 const SD_RESTAURANT_IMAGE: number | null = require('../../assets/images/tiles/restaurant-interior.jpg');
 const SD_COLLAGE_IMAGES = [NAMED_LABELS.lynchBages, NAMED_LABELS.piperRare, NAMED_LABELS.donnhoff, NAMED_LABELS.benditoDestino];
+
+// The Home carousels take no props, so memoised copies don't redraw when only
+// Home's own state changes (e.g. while a section is being dragged).
+const RecentScansMemo = memo(RecentScansCarousel);
+const DrinkNowMemo = memo(DrinkNowCarousel);
+const CellarInsightsMemo = memo(CellarInsightsCarousel);
+const JournalMemo = memo(JournalCarousel);
 
 const HOME_ORDER_KEY = 'home_section_order_v1';
 const HOME_SECTION_DEFAULT = ['search', 'scans', 'cellar', 'insights', 'musings'];
@@ -460,13 +467,13 @@ export default function ScanLandingScreen() {
             ),
           },
           // Recent Scans — mixed label + list scans, most recent first.
-          { key: 'scans', title: 'Your Recent Label Scans', content: <View style={styles.carouselBleed}><RecentScansCarousel /></View> },
+          { key: 'scans', title: 'Your Recent Label Scans', content: <View style={styles.carouselBleed}><RecentScansMemo /></View> },
           // Drink Now — cellar bottles at last call, most urgent first.
-          { key: 'cellar', title: 'Home Cellar Insights', content: <View style={styles.carouselBleed}><DrinkNowCarousel /></View> },
+          { key: 'cellar', title: 'Home Cellar Insights', content: <View style={styles.carouselBleed}><DrinkNowMemo /></View> },
           // Running-low bottles to replenish, then facts buried in the data.
-          { key: 'insights', title: "Vinster's Insights", content: <View style={styles.carouselBleed}><CellarInsightsCarousel /></View> },
+          { key: 'insights', title: "Vinster's Insights", content: <View style={styles.carouselBleed}><CellarInsightsMemo /></View> },
           // The Journal entries (the website blog feed, each card opening its post).
-          { key: 'musings', title: 'Community Musings', content: <View style={styles.carouselBleed}><JournalCarousel /></View> },
+          { key: 'musings', title: 'Community Musings', content: <View style={styles.carouselBleed}><JournalMemo /></View> },
         ]}
       />
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { View, Text, Animated, StyleSheet, useWindowDimensions, type ScrollView, type NativeSyntheticEvent, type NativeScrollEvent, type LayoutChangeEvent, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -138,12 +138,28 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
     const oldTops = topsFor(d.start);
     const newTops = topsFor(d.next);
     Animated.timing(offsetOf(key), { toValue: newTops[key] - oldTops[key], duration: 120, useNativeDriver: true }).start(() => {
-      for (const k of d.start) offsetOf(k).setValue(0);
       setActiveKey(null);
       onDragActive?.(false);
-      if (d.next.join('|') !== d.start.join('|')) onReorder(d.next);
+      if (d.next.join('|') !== d.start.join('|')) {
+        // Apply the new order FIRST; the offsets are cleared in the same frame
+        // the list redraws (layout effect below) — clearing them before the
+        // redraw flashed the section back at its old slot.
+        resetOnRedraw.current = d.start;
+        onReorder(d.next);
+      } else {
+        for (const k of d.start) offsetOf(k).setValue(0);
+      }
     });
   }
+
+  // Clear the drag offsets in the same frame the reordered list is drawn.
+  const resetOnRedraw = useRef<string[] | null>(null);
+  useLayoutEffect(() => {
+    if (!resetOnRedraw.current) return;
+    for (const k of resetOnRedraw.current) offsetOf(k).setValue(0);
+    resetOnRedraw.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keys.join('|')]);
 
   // One pan per section key. Hold briefly, then drag — so a normal swipe on the
   // grip still scrolls the page.
