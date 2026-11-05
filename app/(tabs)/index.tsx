@@ -367,6 +367,20 @@ export default function ScanLandingScreen() {
       <Text style={styles.carouselHeader}>Search &amp; Discover</Text>
       <View style={styles.carouselBleed}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sdCarousel}>
+          {/* Search a Wine → the typeahead prompt */}
+          <View style={styles.sdCard}>
+            <TouchableOpacity style={styles.sdThumb} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
+              <View style={styles.sdCollage}>
+                {SD_COLLAGE_IMAGES.map((img, i) => (
+                  <Image key={i} source={img} style={styles.sdCollageCell} resizeMode="cover" />
+                ))}
+              </View>
+              <View style={styles.sdShade} pointerEvents="none" />
+              <View style={styles.sdTitleWrap} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search a Wine</Text></View>
+            </TouchableOpacity>
+            <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Market Intel Powered by Wine Searcher</Text>
+          </View>
+
           {/* Scan a Label → intel */}
           <View style={styles.sdCard}>
             <TouchableOpacity
@@ -377,16 +391,16 @@ export default function ScanLandingScreen() {
             >
               <Image source={SD_LABEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
               <View style={styles.sdShade} pointerEvents="none" />
+              <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Label</Text></View>
               <TouchableOpacity style={styles.sdBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
                 <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
                 <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
               </TouchableOpacity>
             </TouchableOpacity>
-            <Text style={styles.sdTitle} numberOfLines={1} allowFontScaling={false}>Scan a Label</Text>
             <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Generate Wine Intel, Review &amp; Cellar</Text>
           </View>
 
-          {/* Scan a List → recommendations */}
+          {/* Scan a Wine List → recommendations */}
           <View style={styles.sdCard}>
             <TouchableOpacity
               style={styles.sdThumb}
@@ -402,27 +416,13 @@ export default function ScanLandingScreen() {
                 </View>
               )}
               <View style={styles.sdShade} pointerEvents="none" />
+              <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Wine List</Text></View>
               <TouchableOpacity style={styles.sdBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
                 <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
                 <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
               </TouchableOpacity>
             </TouchableOpacity>
-            <Text style={styles.sdTitle} numberOfLines={1} allowFontScaling={false}>Scan a List</Text>
             <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Tailored Bottle Picks from a Wine List</Text>
-          </View>
-
-          {/* Search a Wine → the typeahead prompt */}
-          <View style={styles.sdCard}>
-            <TouchableOpacity style={styles.sdThumb} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
-              <View style={styles.sdCollage}>
-                {SD_COLLAGE_IMAGES.map((img, i) => (
-                  <Image key={i} source={img} style={styles.sdCollageCell} resizeMode="cover" />
-                ))}
-              </View>
-              <View style={styles.sdShade} pointerEvents="none" />
-            </TouchableOpacity>
-            <Text style={styles.sdTitle} numberOfLines={1} allowFontScaling={false}>Search a Wine</Text>
-            <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Market Intel Powered by Wine Searcher</Text>
           </View>
         </ScrollView>
       </View>
@@ -645,16 +645,21 @@ const styles = StyleSheet.create({
   sdCarousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   sdCard: { width: 220 },
   sdThumb: { width: 220, height: 165, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite },
-  sdImage: { width: '100%', height: '100%' },
+  // Faded like the Community Musings cards: image at 55% under a dark scrim.
+  sdImage: { width: '100%', height: '100%', opacity: 0.55 },
   sdFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
-  sdShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.15)' },
+  sdShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.45)' },
   sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
-  sdCollageCell: { width: '50%', height: '50%' },
+  sdCollageCell: { width: '50%', height: '50%', opacity: 0.55 },
   // The brown "upload instead" bar across the bottom of a scan tile.
   sdBanner: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)' },
   sdBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.3 },
-  sdTitle: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
-  sdNote: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
+  // Title overlaid on the tile, centred — gold, like the Community Musings cards.
+  sdTitleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  // Keeps the title centred in the image area above the "upload instead" bar.
+  sdTitleWrapBanner: { bottom: 36 },
+  sdTitle: { fontFamily: fonts.headingSemibold, fontSize: 21, color: colors.gold, lineHeight: 26, textAlign: 'center' },
+  sdNote: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
   // footprint). This same yellow-bubble treatment is used app-wide.
