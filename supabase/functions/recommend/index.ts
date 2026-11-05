@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { HOUSE_RULES } from '../_shared/houseRules.ts';
 
 // maxRetries covers transient request-setup failures (429/5xx/529 overloaded,
 // connection resets) with the SDK's own exponential backoff. Bumped above the
@@ -320,6 +321,7 @@ ${countryLine}
             text: SYSTEM_PROMPT,
             cache_control: { type: 'ephemeral' },
           },
+          { type: 'text', text: HOUSE_RULES },
         ],
         messages: [{ role: 'user', content: userPrompt }],
         stream: true,

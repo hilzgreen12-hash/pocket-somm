@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { HOUSE_RULES } from '../_shared/houseRules.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -48,6 +49,7 @@ Deno.serve(async (req) => {
     }
 
     const response = await client.messages.create({
+      system: HOUSE_RULES,
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4000,
       messages: [{ role: 'user', content: buildPrompt({ producer, wineName, region, vintage, grape, style, decantTime: typeof decantTime === "string" ? decantTime.slice(0, 200) : undefined }) }],

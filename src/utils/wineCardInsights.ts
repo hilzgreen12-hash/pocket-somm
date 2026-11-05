@@ -49,7 +49,7 @@ export function vintageVerdict(rows: VintageComparisonRow[], thisVintage: string
 
 // Wine styles / names a "Drink Before" or "Drink After" suggestion may name.
 const STYLE_WORDS = [
-  'champagne', 'sparkling', 'cava', 'cremant', 'prosecco', 'franciacorta', 'sekt', 'blanc de blancs',
+  'champagne', 'sparkling', 'cava', 'cremant', 'franciacorta', 'sekt', 'blanc de blancs',
   'riesling', 'chablis', 'sancerre', 'sauvignon', 'chenin', 'vouvray', 'muscadet', 'albarino', 'gruner',
   'sherry', 'fino', 'manzanilla', 'amontillado', 'oloroso', 'palo cortado', 'port', 'tawny', 'madeira',
   'marsala', 'sauternes', 'barsac', 'tokaji', 'muscat', 'moscato', 'eiswein', 'ice wine', 'vin santo',
@@ -71,6 +71,7 @@ export function pickFromCellar(style: string | null | undefined, wines: CellarWi
   for (const w of wines) {
     if (w.id === excludeId || (w.quantity ?? 0) <= 0 || w.archived_at || w.is_wishlist) continue;
     const hay = fold([w.producer, w.wine_name, w.region, w.grape_variety, w.style].filter(Boolean).join(' '));
+    if (/\bprosecco\b/.test(hay)) continue; // house rule: never pick Prosecco
     let score = 0;
     words.forEach((k, i) => { if (new RegExp(`\\b${k}\\b`).test(hay)) score += words.length - i; });
     if (score === 0) continue;

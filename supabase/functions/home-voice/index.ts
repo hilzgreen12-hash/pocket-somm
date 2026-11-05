@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { HOUSE_RULES } from '../_shared/houseRules.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -206,6 +207,7 @@ Deno.serve(async (req) => {
     }
 
     const response = await client.messages.create({
+      system: HOUSE_RULES,
       model: 'claude-sonnet-5-5',
       max_tokens: 2500,
       messages: [{ role: 'user', content: prompt }],

@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { HOUSE_RULES } from '../_shared/houseRules.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -194,6 +195,7 @@ Deno.serve(async (req) => {
       : buildGeneralPrompt(dish, stylePreference, budget, currency, userPreferences);
 
     const response = await client.messages.create({
+      system: HOUSE_RULES,
       model: 'claude-sonnet-5-5',
       thinking: { type: 'between_tools' },
       // sonnet-5-5 emits a default thinking block; 2048 was consumed by it, leaving no
