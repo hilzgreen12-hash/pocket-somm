@@ -53,7 +53,7 @@ import { PackagingPrompt } from '../../src/components/PackagingPrompt';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
-import { vintageVerdict, pickFromCellar } from '../../src/utils/wineCardInsights';
+import { vintageVerdict, pickFromCellar, type CellarPick } from '../../src/utils/wineCardInsights';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
@@ -1952,12 +1952,21 @@ export default function CellarWineDetail() {
   const afterPick = pickFromCellar(serving?.digestif?.style, wines, wine.id);
   const cellaredOn = wine.date_received ?? wine.created_at;
 
-  function pickRow(pick: CellarWine | null) {
-    if (!pick) return <Text style={styles.wcPickNone}>Nothing in this style in your cellar yet.</Text>;
+  function pickRow(found: CellarPick | null, slot: 'before' | 'after', suggested: string) {
+    if (!found) {
+      // Nothing suitable at all → offer three styles from the wider market.
+      return (
+        <TouchableOpacity onPress={() => router.push({ pathname: '/cellar/serve-market', params: { wineId: wine!.id, slot, suggested } } as any)} activeOpacity={0.7}>
+          <Text style={styles.wcPickNone}>Nothing in this style is available in your cellar yet, would you like some specific suggestions from the wider market?</Text>
+          <Text style={[styles.wcLink, { marginTop: 4 }]}>View suggestions ›</Text>
+        </TouchableOpacity>
+      );
+    }
+    const pick = found.wine;
     return (
       <TouchableOpacity style={styles.wcPick} onPress={() => router.push(`/cellar/${pick.id}` as any)} activeOpacity={0.7}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.wcLabel}>Top pick from your cellar</Text>
+          <Text style={styles.wcLabel}>{found.exact ? 'Top pick from your cellar' : 'The closest match in your cellar is:'}</Text>
           <Text style={styles.wcPickName} numberOfLines={2}>{[pick.producer, pick.wine_name, pick.vintage].filter(Boolean).join(' ')}</Text>
           <Text style={styles.wcSmall}>{[pick.region, `${pick.quantity ?? 1} ${(pick.quantity ?? 1) === 1 ? 'bottle' : 'bottles'}`].filter(Boolean).join(' · ')}</Text>
         </View>
@@ -2299,7 +2308,7 @@ export default function CellarWineDetail() {
                     <Text style={styles.wcLabel}>Drink Before</Text>
                     <Text style={styles.wcGoldTitle}>{serving.aperitif.style}</Text>
                     {serving.aperitif.reason ? <Text style={styles.wcBodyText}>{serving.aperitif.reason}</Text> : null}
-                    {pickRow(beforePick)}
+                    {pickRow(beforePick, 'before', serving.aperitif.style)}
                   </View>
                 ) : null}
                 {serving.digestif?.style ? (
@@ -2307,7 +2316,7 @@ export default function CellarWineDetail() {
                     <Text style={styles.wcLabel}>Drink After</Text>
                     <Text style={styles.wcGoldTitle}>{serving.digestif.style}</Text>
                     {serving.digestif.reason ? <Text style={styles.wcBodyText}>{serving.digestif.reason}</Text> : null}
-                    {pickRow(afterPick)}
+                    {pickRow(afterPick, 'after', serving.digestif.style)}
                   </View>
                 ) : null}
                 <TouchableOpacity onPress={handleGenerateServing} disabled={generatingServing} activeOpacity={0.7}>

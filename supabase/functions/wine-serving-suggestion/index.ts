@@ -38,14 +38,53 @@ Return ONLY valid JSON with this structure:
 Tailor every field to THIS wine's colour, body, age and style. Return raw JSON only. No markdown. No explanation.`;
 }
 
+// "Wider market" (wine card Serve tab, when the cellar has nothing suitable):
+// three wine STYLES to buy for before/after this wine, each justified and with
+// a typical retail price range. Styles, not invented bottles.
+function buildMarketPrompt(w: { producer?: string; wineName?: string; region?: string; vintage?: string; grape?: string }, slot: 'before' | 'after', suggested: string, currency: string): string {
+  const identity = [w.producer, w.wineName, w.vintage].filter(Boolean).join(' ') + (w.region ? `, ${w.region}` : '');
+  return `You are a world-class sommelier. The user is opening ${identity} and wants something to drink ${slot === 'before' ? 'BEFORE it (an aperitif / opener)' : 'AFTER it (to follow it or finish the evening)'}. Vinster suggested: "${suggested}". They have nothing suitable in their cellar, so suggest three wine STYLES they could buy.
+
+Return ONLY valid JSON:
+{
+  "styles": [
+    {
+      "style": "a specific wine style / appellation, e.g. 'Crémant de Bourgogne Blanc de Blancs' or '10-Year-Old Tawny Port'",
+      "reason": "2 short sentences: why this style works ${slot === 'before' ? 'before' : 'after'} THIS wine, and what to look for when buying",
+      "priceRange": "typical retail price per bottle in ${currency}, e.g. '£18–£30'"
+    }
+  ]
+}
+
+Exactly three styles, best first, giving the user a real choice (different price points or characters). Styles only — do not name individual producers or bottles. Price ranges must be realistic for ${currency} retail today. Raw JSON only. No markdown.`;
+}
+
 Deno.serve(async (req) => {
   try {
     const limited = await checkRateLimit(req, 'wine-serving-suggestion', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
-    const { producer, wineName, region, vintage, grape, style, decantTime } = await req.json();
+    const body = await req.json();
+    const { producer, wineName, region, vintage, grape, style, decantTime } = body;
     if (typeof producer !== 'string' && typeof wineName !== 'string') {
       return new Response(JSON.stringify({ error: 'wine identity required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (body.mode === 'market') {
+      const slot = body.slot === 'after' ? 'after' : 'before';
+      const suggested = String(body.suggested ?? '').slice(0, 200);
+      const currency = String(body.currency ?? 'GBP').slice(0, 3).toUpperCase();
+      const r = await client.messages.create({
+        system: HOUSE_RULES,
+        model: 'claude-sonnet-5-5',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: buildMarketPrompt({ producer, wineName, region, vintage, grape }, slot, suggested, currency) }],
+      });
+      const t = r.content.find((b) => b.type === 'text')?.text ?? '';
+      const m = t.match(/\{[\s\S]*\}/);
+      const parsed = m ? JSON.parse(m[0]) : null;
+      const styles = Array.isArray(parsed?.styles) ? parsed.styles.filter((x: any) => x?.style && !/prosecco/i.test(JSON.stringify(x))).slice(0, 3) : [];
+      return new Response(JSON.stringify({ styles }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     const response = await client.messages.create({

@@ -192,6 +192,7 @@ export default function RootLayout() {
             <Stack.Screen name="cellar/stats" />
             <Stack.Screen name="cellar/regions-map" />
             <Stack.Screen name="cellar/add" />
+            <Stack.Screen name="cellar/serve-market" />
             <Stack.Screen name="cellar/import-preview" />
             <Stack.Screen name="cellar/racks" />
             <Stack.Screen name="cellar/rack/[rackId]" />

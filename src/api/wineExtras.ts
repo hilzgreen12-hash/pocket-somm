@@ -24,6 +24,15 @@ export async function generateServingSuggestion(w: CellarWine, decantTime?: stri
   return data;
 }
 
+// "Wider market" for the Serve tab: three styles to buy for before/after this
+// wine (each with a reason and price range), when the cellar has nothing fit.
+export type MarketStyle = { style: string; reason: string; priceRange: string };
+export async function suggestMarketStyles(w: CellarWine, slot: 'before' | 'after', suggested: string, currency: string): Promise<MarketStyle[]> {
+  const data = await invokeResilient('wine-serving-suggestion', { ...identity(w), mode: 'market', slot, suggested, currency }) as { styles?: MarketStyle[]; error?: string };
+  if (data?.error) throw new Error(data.error);
+  return data?.styles ?? [];
+}
+
 // Generate Vinster's Market & Vintage Comparison on demand. Returns null when
 // the server's recognition gate says the model doesn't genuinely know this wine
 // (identified !== true / no text) — the caller shows an honest line instead.
