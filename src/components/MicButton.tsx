@@ -93,7 +93,12 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
       // after the local text is already shown; replaces it only if the server
       // returns something different. Re-joins onto the SAME base so a slow
       // response can't clobber text typed/dictated afterwards being rare here.
-      if (serverCorrect && refined.trim()) {
+      // If the on-phone pass already snapped a name to one of the user's OWN
+      // wines, trust it: the server corrector matches against the whole wine
+      // catalogue and could swap the user's wine for one they don't own
+      // ("Rieussec" → "d'Armailhac").
+      const ownWineHit = domain !== 'food' && refined !== spoken;
+      if (serverCorrect && !ownWineHit && refined.trim()) {
         correctVoiceTranscript(refined, domain)
           .then((corrected) => {
             const c = (corrected ?? '').trim();

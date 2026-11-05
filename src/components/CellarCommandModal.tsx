@@ -17,7 +17,7 @@ import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
 import { supabase } from '../api/supabase';
 import { showFoundBanner } from './FoundBanner';
-import { rankWinesBySound } from '../utils/soundAlike';
+import { rankWinesBySound, likelyProducerWines } from '../utils/soundAlike';
 import { useSoundCorrect, setPriorityDictationHints } from '../hooks/useDictationCorrect';
 import { HomeVoiceModal } from './HomeVoiceModal';
 
@@ -154,6 +154,10 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     enabled: scope?.kind === 'location',
   });
   const [addCaseId, setAddCaseId] = useState<string | null>(null);
+  // The words actually sent for the current command (the field can change
+  // afterwards, e.g. a late dictation correction) — replies always refer to this.
+  const [sentText, setSentText] = useState('');
+  const [pickIntro, setPickIntro] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('speak');
   const [action, setAction] = useState<CellarCommandAction>('move');
   const [transcript, setTranscript] = useState('');
@@ -189,6 +193,8 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     setSuccess(null);
     setArchiveNote('');
     setAddCaseId(null);
+    setSentText('');
+    setPickIntro(null);
   }
 
   function handleClose() {
@@ -344,6 +350,9 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
       return;
     }
     setAction(act);
+    setSentText(transcript);
+    setResult(null);
+    setPickIntro(null);
     setPhase('parsing');
     try {
       // 'delete' resolves identically to 'archive' (a wine + a count, no
@@ -420,6 +429,22 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         const distinct = distinctCandidateIds(res.candidates, wines);
         if (distinct.length > 1) { setResult({ ...res, candidates: distinct }); setPhase('pick'); return; }
         if (distinct.length === 1) { setChosenWineId(distinct[0]); setPhase('confirm'); return; }
+        // Nothing matched exactly — but if the PRODUCER is recognisable ("René
+        // Engel La Brulli"), offer that producer's wines rather than "not found".
+        const here = hereWineIds?.length ? wines.filter((w) => hereWineIds.includes(w.id)) : [];
+        const fallback = (here.length ? likelyProducerWines(transcript, here) : null) ?? likelyProducerWines(transcript, wines);
+        if (fallback?.wines.length) {
+          if (fallback.wines.length === 1) {
+            setPickIntro(`I couldn't match that exactly, but you have ${wineLabel(fallback.wines[0])}.`);
+            setChosenWineId(fallback.wines[0].id);
+            setPhase('confirm');
+          } else {
+            setResult({ ...res, candidates: fallback.wines.map((w) => w.id) });
+            setPickIntro(`I couldn't match that exactly, but you have ${fallback.wines.length} wines from ${fallback.producer}. Which one did you mean?`);
+            setPhase('pick');
+          }
+          return;
+        }
         setPhase('need');
         return;
       }
@@ -784,7 +809,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     return freed;
   }
 
-  function restate() { setTranscript(''); setResult(null); setChosenWineId(null); setPhase('speak'); }
+  function restate() { setTranscript(''); setSentText(''); setPickIntro(null); setResult(null); setChosenWineId(null); setPhase('speak'); }
 
   // ---- Find a bottle ----------------------------------------------------
   // One location → that location's real screen opens straight away with the
@@ -793,7 +818,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   const [findText, setFindText] = useState('');
   const [findResult, setFindResult] = useState<
     | { kind: 'many'; label: string; total: number; places: { name: string; route: string; count: number }[] }
-    | { kind: 'others'; asked: string; others: { label: string; places: { name: string; route: string; count: number }[] }[] }
+    | { kind: 'others'; asked: string; others: { label: string; places: { name: string; route: string; count: number }[] }[]; producer?: string }
     | { kind: 'none'; asked: string }
     | null
   >(null);
@@ -874,6 +899,14 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         const withPlaces = await Promise.all(others.slice(0, 4).map(async (w) => ({ label: wineLabel(w), places: await placesFor(w) })));
         setFindResult({ kind: 'others', asked, others: withPlaces });
       } else {
+        const here = hereWineIds?.length ? wines.filter((w) => hereWineIds.includes(w.id)) : [];
+        const fb = (here.length ? likelyProducerWines(asked, here) : null) ?? likelyProducerWines(asked, wines);
+        if (fb?.wines.length) {
+          const withPlaces = await Promise.all(fb.wines.slice(0, 4).map(async (w) => ({ label: wineLabel(w), places: await placesFor(w) })));
+          setFindResult({ kind: 'others', asked, others: withPlaces, producer: fb.producer });
+          setPhase('found');
+          return;
+        }
         setFindResult({ kind: 'none', asked });
       }
       setPhase('found');
@@ -960,8 +993,8 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
             {phase === 'pick' && (
               <>
-                <UserLine text={transcript} />
-                <VinsterLine text="Which wine did you mean?" />
+                <UserLine text={sentText || transcript} />
+                <VinsterLine text={pickIntro ?? 'Which wine did you mean?'} />
                 <View>
                   {candidateWines.map((w, i) => (
                     <RowLink key={w.id} first={i === 0} label={wineLabel(w)} sub={w.region ?? ''} onPress={() => { setChosenWineId(w.id); setPhase('confirm'); }} />
@@ -973,7 +1006,8 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
             {phase === 'confirm' && (
               <>
-                <UserLine text={transcript} />
+                <UserLine text={sentText || transcript} />
+                {pickIntro ? <VinsterLine text={pickIntro} /> : null}
                 <ConfirmCard />
                 {executing ? <ActivityIndicator color={colors.gold} /> : (
                   <>
@@ -987,7 +1021,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
             {phase === 'need' && (
               <>
-                <UserLine text={transcript} />
+                <UserLine text={sentText || transcript} />
                 <VinsterLine text={result?.message?.trim() || (action === 'move' ? "I couldn't match the wine or where it's going. Tell me again: the wine, how many, and where to." : "I couldn't match that to a wine in your cellar. Tell me again with the producer and vintage.")} />
                 <OutlineBtn label="Restate Command" onPress={restate} />
               </>
@@ -1039,7 +1073,9 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
                   </>
                 ) : findResult.kind === 'others' ? (
                   <>
-                    <VinsterLine text={`I can't find ${findResult.asked} anywhere in your cellar, but you do have ${findResult.others.length === 1 ? 'another vintage' : 'other vintages'}.`} />
+                    <VinsterLine text={findResult.producer
+                      ? `I couldn't match ${findResult.asked} exactly, but you have ${findResult.others.length === 1 ? 'this wine' : 'these wines'} from ${findResult.producer}.`
+                      : `I can't find ${findResult.asked} anywhere in your cellar, but you do have ${findResult.others.length === 1 ? 'another vintage' : 'other vintages'}.`} />
                     {findResult.others.map((o) => (
                       <View key={o.label} style={{ gap: 4 }}>
                         <View style={qs.card}>
@@ -1073,7 +1109,11 @@ function CommandField({ value, onChange, onSend, placeholder }: { value: string;
   return (
     <View style={qs.field}>
       <TextInput style={qs.fieldInput} value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="rgba(255,255,255,0.4)" multiline returnKeyType="send" blurOnSubmit onSubmitEditing={() => { if (can) onSend(); }} />
-      <MicButton value={value} onChangeText={onChange} domain="query" serverCorrect />
+      {/* No catalogue (server) correction here: Quick Command is about bottles
+          the user OWNS, which the on-phone cellar sound-match handles — the
+          catalogue pass could turn their wine into one they don't have, and it
+          lands late, changing the text after it was sent. */}
+      <MicButton value={value} onChangeText={onChange} domain="query" />
       <TouchableOpacity onPress={() => { if (can) onSend(); }} disabled={!can} accessibilityLabel="Send" style={qs.send} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
         <Text style={[qs.sendText, !can && { opacity: 0.4 }]}>›</Text>
       </TouchableOpacity>

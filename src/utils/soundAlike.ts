@@ -89,6 +89,47 @@ function bestWindowScore(nameWords: string[], spoken: string[]): number {
 
 export type SoundMatch = { wine: CellarWine; score: number };
 
+function runTogether(nameWords: string[], spoken: string[]): boolean {
+  const keys = nameWords.map(soundKey).filter((k) => k.length >= 3);
+  if (!keys.length) return false;
+  const spokenKeys = spoken.map(soundKey).filter((k) => k.length >= 4);
+  return keys.some((k) => spokenKeys.some((sk) => sk !== k && (
+    sk.startsWith(k) || sk.includes(k) || (k.length >= 4 && sk.includes(k.slice(0, -1)))
+  )));
+}
+
+// The producer the user most likely meant, by sound — used when the exact
+// wine can't be matched ("René Engel La Brulli" → René Engel), so Vinster can
+// offer that producer's wines instead of saying it found nothing.
+export function likelyProducerWines(spokenText: string, wines: CellarWine[]): { producer: string; wines: CellarWine[] } | null {
+  const spoken = words(spokenText);
+  if (!spoken.length) return null;
+  const byProducer = new Map<string, { producer: string; wines: CellarWine[]; score: number }>();
+  for (const w of wines) {
+    const name = (w.producer ?? '').trim();
+    const pw = words(name);
+    if (!pw.length) continue;
+    const key = pw.join(' ');
+    let entry = byProducer.get(key);
+    if (!entry) {
+      let score = bestWindowScore(pw, spoken);
+      if (score < 0.75 && runTogether(pw, spoken)) score = 0.75;
+      // Any single distinctive producer word heard clearly ("engel").
+      if (score < 0.75 && pw.some((t) => soundKey(t).length >= 3 && spoken.some((sp) => soundKey(sp) === soundKey(t)))) score = 0.75;
+      // Longer producer names are more specific ("René Engel" over "Engel Family").
+      if (score >= 0.75) score += Math.min(0.08, keyOfWords(pw).length * 0.01);
+      entry = { producer: name, wines: [], score };
+      byProducer.set(key, entry);
+    }
+    entry.wines.push(w);
+  }
+  const best = Array.from(byProducer.values()).filter((e) => e.score >= 0.75).sort((a, b) => b.score - a.score);
+  if (!best.length) return null;
+  // Ambiguous between two producers equally → let the normal flow handle it.
+  if (best.length > 1 && best[1].score === best[0].score) return null;
+  return { producer: best[0].producer, wines: best[0].wines };
+}
+
 // Rank wines by how closely what was said SOUNDS like them. Producer and cuvée
 // are scored separately (people say either) and a spoken vintage that matches
 // gives a small boost. Returns the best `max` with a usable score.
@@ -100,11 +141,23 @@ export function rankWinesBySound(spokenText: string, wines: CellarWine[], max = 
   for (const w of wines) {
     const p = words(w.producer);
     const n = words(w.wine_name);
-    let score = Math.max(
-      p.length ? bestWindowScore(p, spoken) : 0,
-      n.length ? bestWindowScore(n, spoken) : 0,
-      p.length && n.length ? bestWindowScore([...p, ...n], spoken) : 0,
-    );
+    // Each part scored on its own, plus a small bonus for a longer (more
+    // specific) name, so "René Engel" beats "Engel Family" on "rene engel".
+    const part = (ws: string[]) => {
+      if (!ws.length) return 0;
+      let sc = bestWindowScore(ws, spoken);
+      // Speech-to-text often runs words together ("Engel Les Brûlées" →
+      // "engelabrule"): hearing a distinctive word inside a longer one counts.
+      if (sc < 0.8 && runTogether(ws, spoken)) sc = 0.8;
+      return sc ? sc + Math.min(0.08, keyOfWords(ws).length * 0.01) : 0;
+    };
+    const ps = part(p);
+    // Cuvée: the whole name, or any one distinctive word of it ("Brûlées" in
+    // "Vosne-Romanée Les Brûlées") — people say part of a long name.
+    const ns = Math.max(part(n), ...n.filter((t) => soundKey(t).length >= 3).map((t) => part([t]) - 0.02));
+    let score = Math.max(ps, ns, p.length && n.length ? part([...p, ...n]) : 0);
+    // Heard the producer AND something of the cuvée → the more complete match wins.
+    if (ps >= 0.8 && ns >= 0.6) score += 0.05;
     if (score < minScore) continue;
     if (year && String(w.vintage ?? '').trim() === year) score += 0.05;
     out.push({ wine: w, score });
