@@ -51,9 +51,10 @@ export function foldAccents(s: string | null | undefined): string {
 export function wineQueryName(
   producer: string | null | undefined,
   wineName: string | null | undefined,
+  region?: string | null,
 ): string {
   const p = (producer ?? '').trim();
-  const n = (wineName ?? '').trim();
+  const n = lookupWineName(producer, wineName, region);
   if (!p) return n;
   if (!n) return p;
   const pl = p.toLowerCase();
@@ -100,4 +101,26 @@ export function looseWineMatch(
   const [small, big] = at.size <= bt.size ? [at, bt] : [bt, at];
   for (const t of small) if (!big.has(t)) return false;
   return true;
+}
+
+// The wine name to LOOK UP with. When the stored name is blank or just repeats
+// the producer ("Il Marroneto" / "Il Marroneto"), the wine is the producer's
+// appellation wine, so borrow the appellation from the region — only when the
+// region is "Appellation, Region, Country" (3+ parts), so a broad "Tuscany,
+// Italy" never gets bolted on. "Il Marroneto" + "Brunello di Montalcino,
+// Tuscany, Italy" → "Brunello di Montalcino" (Wine-Searcher and the model both
+// miss the bare producer name).
+export function lookupWineName(
+  producer: string | null | undefined,
+  wineName: string | null | undefined,
+  region?: string | null,
+): string {
+  const n = (wineName ?? '').trim();
+  const repeatsProducer = !n || norm(n) === norm(producer);
+  if (!repeatsProducer || !region) return n;
+  const parts = region.split(',').map((x) => x.trim()).filter(Boolean);
+  if (parts.length < 3) return n;
+  const appellation = parts[0];
+  if (norm(producer).includes(norm(appellation))) return n;
+  return appellation;
 }

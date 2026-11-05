@@ -53,13 +53,29 @@ Return ONLY valid JSON:
 Raw JSON only. No markdown.`;
 }
 
+// When the wine name is blank or just repeats the producer ("Il Marroneto" /
+// "Il Marroneto"), it's the producer's appellation wine — borrow the
+// appellation from an "Appellation, Region, Country" region so the model
+// recognises it ("Il Marroneto Brunello di Montalcino"). Mirrors the app's
+// lookupWineName (older builds send the bare name).
+const fold = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function lookupWineName(producer: unknown, wineName: unknown, region: unknown): string {
+  const n = String(wineName ?? '').trim();
+  if ((n && fold(n) !== fold(producer)) || typeof region !== 'string') return n;
+  const parts = region.split(',').map((x) => x.trim()).filter(Boolean);
+  if (parts.length < 3 || fold(producer).includes(fold(parts[0]))) return n;
+  return parts[0];
+}
+
 Deno.serve(async (req) => {
   try {
     const limited = await checkRateLimit(req, 'wine-market-vintage', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
-    const { producer, wineName, region, vintage, grape, currency, mode } = await req.json();
-    if (typeof producer !== 'string' && typeof wineName !== 'string') {
+    const body = await req.json();
+    const { producer, region, vintage, grape, currency, mode } = body;
+    const wineName = lookupWineName(producer, body.wineName, region);
+    if (typeof producer !== 'string' && typeof body.wineName !== 'string') {
       return new Response(JSON.stringify({ error: 'wine identity required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 

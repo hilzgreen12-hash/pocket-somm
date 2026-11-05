@@ -832,7 +832,7 @@ export default function CellarWineDetail() {
       // Rarity runs alongside the vintage table (both saved together).
       const rarityP = generateRarity(wine).then((r) => r ?? { level: null, label: '', text: '' }).catch(() => undefined);
       const rows = await fetchVintageComparison(
-        wineQueryName(wine.producer, wine.wine_name),
+        wineQueryName(wine.producer, wine.wine_name, wine.region),
         currency,
         Number.isFinite(scanned) ? scanned : null,
       );

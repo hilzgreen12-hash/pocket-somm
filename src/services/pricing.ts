@@ -153,7 +153,7 @@ export async function valueWine(
   currency: string = 'GBP',
 ): Promise<WineValuation> {
   // Build the Wine-Searcher query from producer + wine name for the best match.
-  const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
+  const queryName = wineQueryName(wine.producer, wine.wineName, wine.region) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
   const vintageArg = Number.isFinite(vintageNum) ? vintageNum : null;
@@ -217,7 +217,7 @@ export async function generateWineIntel(
   // Classified Bordeaux: fill classification (wine name) + appellation (region)
   // when blank, so intel is complete on EVERY path (scan, lineup, search…).
   const wine = withBordeauxInfo(wineIn);
-  const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
+  const queryName = wineQueryName(wine.producer, wine.wineName, wine.region) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
   const vintageArg = Number.isFinite(vintageNum) ? vintageNum : null;

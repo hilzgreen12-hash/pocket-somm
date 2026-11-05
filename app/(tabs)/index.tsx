@@ -296,7 +296,7 @@ export default function ScanLandingScreen() {
     setCompareRows(null);
     setCompareLoading(true);
     try {
-      const rows = await fetchVintageComparison(wineQueryName(wine.producer, wine.wineName), preferences?.defaultCurrency ?? 'GBP', null);
+      const rows = await fetchVintageComparison(wineQueryName(wine.producer, wine.wineName, wine.region), preferences?.defaultCurrency ?? 'GBP', null);
       setCompareRows(rows);
     } catch {
       setCompareRows([]);

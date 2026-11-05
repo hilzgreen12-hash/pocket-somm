@@ -1,3 +1,4 @@
+import { lookupWineName } from '../utils/wineIdentity';
 import { invokeResilient } from './invokeResilient';
 import type { CellarWine, WineServingSuggestion, WineMarketVintageNote } from '../types/wine';
 
@@ -5,7 +6,7 @@ import type { CellarWine, WineServingSuggestion, WineMarketVintageNote } from '.
 function identity(w: CellarWine) {
   return {
     producer: w.producer ?? '',
-    wineName: w.wine_name ?? '',
+    wineName: lookupWineName(w.producer, w.wine_name, w.region),
     region: w.region ?? '',
     vintage: w.vintage ?? '',
     grape: w.grape_variety ?? '',
