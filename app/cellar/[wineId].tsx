@@ -2009,6 +2009,30 @@ export default function CellarWineDetail() {
   }
   drinkingHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // Overview → "Your History With This Wine": where the bottles are (home /
+  // each external cellar), what's in the archive, and the latest review.
+  function historyLines(): { key: string; text: string; link: string; onPress: () => void }[] {
+    const lines: { key: string; text: string; link: string; onPress: () => void }[] = [];
+    const toCellarTab = () => setCardTab('cellar');
+    const b = (n: number) => `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
+    const entries = buildCellarEntries();
+    const homeQty = entries.filter((e) => !e.isExternal).reduce((s, e) => s + (e.quantity ?? 0), 0) + Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
+    const homePlaces = Array.from(new Set(entries.filter((e) => !e.isExternal).map((e) => e.label)));
+    if (homeQty > 0) {
+      lines.push({ key: 'home', text: `You have ${b(homeQty)} of this at home${homePlaces.length === 1 ? `, in ${homePlaces[0]}` : homePlaces.length > 1 ? ` across ${homePlaces.length} locations` : ''}`, link: 'View', onPress: toCellarTab });
+    }
+    for (const e of entries.filter((x) => x.isExternal)) {
+      lines.push({ key: `ext-${e.key}`, text: `You have ${b(e.quantity ?? 0)} of this in an external cellar, ${e.label}`, link: 'View', onPress: toCellarTab });
+    }
+    if (bottlesInArchive > 0) lines.push({ key: 'archive', text: `You have ${b(bottlesInArchive)} in your archive`, link: 'View', onPress: toCellarTab });
+    const latest = reviews[0];
+    if (latest) {
+      const when = fmtDay(latest.date ?? latest.savedAt);
+      lines.push({ key: 'review', text: `You reviewed this wine on ${when}${latest.location ? ` at ${latest.location}` : ''}${reviews.length > 1 ? ` (and ${reviews.length - 1} more ${reviews.length - 1 === 1 ? 'time' : 'times'})` : ''}`, link: 'View review', onPress: () => router.push(reviewOpenHref as any) });
+    }
+    return lines;
+  }
+
   function pickRow(found: CellarPick | null, slot: 'before' | 'after', suggested: string) {
     if (!found) {
       // Nothing suitable at all → offer three styles from the wider market.
@@ -2093,6 +2117,21 @@ export default function CellarWineDetail() {
         {/* ================= OVERVIEW ================= */}
         {activeTab === 'overview' ? (
           <>
+            {(() => {
+              const lines = isWishlist ? [] : historyLines();
+              if (!lines.length) return null;
+              return (
+                <View style={styles.wcHistory}>
+                  <Text style={styles.wcHistoryTitle}>Your History With This Wine</Text>
+                  {lines.map((l, i) => (
+                    <TouchableOpacity key={l.key} style={[styles.wcHistoryRow, i === lines.length - 1 && styles.wcRowLast]} onPress={l.onPress} activeOpacity={0.7}>
+                      <Text style={styles.wcHistoryText}>{l.text}</Text>
+                      <Text style={styles.wcLink}>{l.link} ›</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              );
+            })()}
             <View style={styles.wcCard}>
               <View style={styles.wcCardHead}>
                 <Text style={styles.wcH2}>Your Reviews</Text>
@@ -3042,6 +3081,11 @@ const styles = StyleSheet.create({
   wcFactSub: { fontFamily: fonts.bodyRegular, fontSize: 10.5, color: 'rgba(255,255,255,0.8)' },
   wcFactAction: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
   wcBody: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.md },
+  // "Your History With This Wine" — dark card, gold rule, gold caps title.
+  wcHistory: { backgroundColor: '#3E2120', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+  wcHistoryTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  wcHistoryRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  wcHistoryText: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 14, lineHeight: 20, color: colors.text },
   wcCellared: { fontFamily: fonts.headingItalic, fontSize: 18, color: colors.text, textAlign: 'center' },
   // Cellar Note in place: reads as text, not a field; tap to type.
   wcCellarNoteRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: -6 },
