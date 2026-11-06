@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useCellar } from '../hooks/useCellar';
+import { useAuth } from '../hooks/useAuth';
+import { fetchStorageLocations } from '../api/storageLocations';
+import { fetchPlacementsForWines } from '../api/placements';
 import { useChefLabelHistory } from '../hooks/useChefHistory';
 import { usePreferences } from '../hooks/usePreferences';
 import { classifyDiscoverVoice } from '../api/discoverVoice';
@@ -63,6 +66,7 @@ function cookbookMatches(sessions: ChefLabelSession[], said: string): ChefLabelS
 export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { visible: boolean; onClose: () => void; startWith?: 'dishForWine' | 'wineForDish'; presetWine?: WineDetailsComplete | null }) {
   const { wines } = useCellar();
   const { sessions } = useChefLabelHistory();
+  const { session } = useAuth();
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const chat = useChat();
@@ -88,28 +92,42 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
   const runWineForDish = () => start(async () => {
     chat.hear('A wine for my dish');
     const dish = await chat.ask("Tell me what's cooking in as much detail as you can.", 'ie. Pan-fried sea bass with brown butter and capers', 'food');
-    // Two tap-to-choose commands instead of a typed answer.
+    // Tap-to-choose commands instead of a typed answer.
     chat.say('Should I pull some bottles from your cellar, or are you trying something new?');
-    let fromCellar = await new Promise<boolean>((resolve) => {
+    const choice = await new Promise<'home' | 'all' | 'new'>((resolve) => {
       let done = false;
-      const pickIt = (cellar: boolean, label: string) => { if (done) return; done = true; chat.hear(label); resolve(cellar); };
+      const pickIt = (c: 'home' | 'all' | 'new', label: string) => { if (done) return; done = true; chat.hear(label); resolve(c); };
       chat.push(
         <Starters>
-          <Starter first label="Pull from my cellar" onPress={() => pickIt(true, 'Pull from my cellar')} />
-          <Starter label="Suggest something new" onPress={() => pickIt(false, 'Suggest something new')} />
+          <Starter first label="Pull from my home cellar" onPress={() => pickIt('home', 'Pull from my home cellar')} />
+          <Starter label="Pull from my home or external cellars" onPress={() => pickIt('all', 'Pull from my home or external cellars')} />
+          <Starter label="Suggest something new" onPress={() => pickIt('new', 'Suggest something new')} />
         </Starters>,
       );
     });
-    if (fromCellar && !wines.length) {
-      chat.say("Your cellar is empty, so I'll find something to buy instead.");
-      fromCellar = false;
+    let fromCellar = choice !== 'new';
+    // "Home cellar" = only bottles NOT held in an external cellar (a wine split
+    // between home and an external cellar still counts if any are at home).
+    let pool: CellarWine[] = wines;
+    if (fromCellar && choice === 'home' && wines.length && session?.user.id) {
+      pool = await chat.working('Checking what you have at home…', async () => {
+        const [locs, pls] = await Promise.all([fetchStorageLocations(session.user.id), fetchPlacementsForWines(wines.map((w) => w.id))]);
+        const ext = new Set(locs.filter((l) => l.is_external).map((l) => l.id));
+        const extQty = new Map<string, number>();
+        for (const p of pls) if (p.kind === 'location' && p.storage_location_id && ext.has(p.storage_location_id)) extQty.set(p.cellar_wine_id, (extQty.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+        return wines.filter((w) => (w.quantity ?? 0) - (extQty.get(w.id) ?? 0) > 0);
+      });
+    }
+    if (fromCellar && !pool.length) {
+      chat.say(choice === 'home' && wines.length ? "Everything you have is in an external cellar, so I'll look there too." : "Your cellar is empty, so I'll find something to buy instead.");
+      if (choice === 'home' && wines.length) pool = wines; else fromCellar = false;
     }
     if (fromCellar) {
       const shown: string[] = [];
       const showCellar = async (alt: boolean) => {
         const res = await chat.working(alt ? 'Finding three fresh suggestions…' : 'Finding wines for your dish…', () =>
-          chooseFromCellar({ eating: dish, occasion: '', currency, wines, excludeIds: alt ? shown : [] }));
-        const picks = res.picks.map((p) => ({ p, w: wines.find((x) => x.id === p.id) })).filter((x) => x.w) as { p: typeof res.picks[0]; w: CellarWine }[];
+          chooseFromCellar({ eating: dish, occasion: '', currency, wines: pool, excludeIds: alt ? shown : [] }));
+        const picks = res.picks.map((p) => ({ p, w: pool.find((x) => x.id === p.id) })).filter((x) => x.w) as { p: typeof res.picks[0]; w: CellarWine }[];
         if (!picks.length) { chat.say("I couldn't find a good match in your cellar for that."); chat.push(<DoneButton onPress={onClose} />); return; }
         picks.forEach(({ w }) => shown.push(w.id));
         chat.say(res.brief);
