@@ -337,7 +337,7 @@ export default function ReviewRequirementsScreen() {
       </View>
 
       <TouchableOpacity style={styles.askBtn} onPress={() => setAskOpen(true)} activeOpacity={0.8} accessibilityRole="button">
-        <Text style={styles.askBtnText}>Ask Vinster</Text>
+        <Text style={styles.askBtnText}>Quick Command</Text>
       </TouchableOpacity>
       <PairVoiceModal visible={askOpen} onClose={() => setAskOpen(false)} startWith="dishForWine" presetWine={isFromCellar ? wineDetailsConfirmed : null} />
 
