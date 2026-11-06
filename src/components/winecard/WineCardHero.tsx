@@ -16,13 +16,22 @@ type Props = {
   onPhotoLongPress: () => void;
   onTitlePress: () => void;
   badge?: React.ReactNode;
+  // A local / already-resolved image (Wine Intel's scanned or web label) used
+  // instead of the stored `path`.
+  uri?: string | null;
+  // Shown when there's no image at all (instead of "Tap to add a label photo").
+  placeholder?: React.ReactNode;
+  // Top-right action (e.g. Wine Intel's "Edit Wine").
+  rightAction?: React.ReactNode;
 };
 
 const HERO_H = 400;
 const DARK = '#3E2120';
 
-export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress, onPhotoLongPress, onTitlePress, badge }: Props) {
-  const { uri, pending } = useLabelImageState(path);
+export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress, onPhotoLongPress, onTitlePress, badge, uri: uriProp, placeholder, rightAction }: Props) {
+  const stored = useLabelImageState(uriProp ? null : path);
+  const uri = uriProp ?? stored.uri;
+  const pending = uriProp ? false : stored.pending;
   return (
     <View style={styles.hero}>
       <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onPhotoPress} onLongPress={onPhotoLongPress} delayLongPress={350} activeOpacity={0.9} accessibilityLabel={path ? 'View label photo' : 'Add a label photo'}>
@@ -34,6 +43,8 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
           </>
         ) : pending ? (
           <View style={styles.empty}><ActivityIndicator color={colors.gold} /></View>
+        ) : placeholder ? (
+          <View style={styles.empty}>{placeholder}</View>
         ) : (
           <View style={styles.empty}><Text style={styles.emptyText}>Tap to add a label photo</Text></View>
         )}
@@ -48,7 +59,7 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         {chip ? <Text style={styles.chip}>{chip}</Text> : null}
-        <View style={styles.backBtn} />
+        {rightAction ?? <View style={styles.backBtn} />}
       </View>
 
       <TouchableOpacity style={styles.identity} onPress={onTitlePress} activeOpacity={0.8} accessibilityLabel="Edit wine details">

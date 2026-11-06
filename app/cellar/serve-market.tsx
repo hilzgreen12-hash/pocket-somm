@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { suggestMarketStyles } from '../../src/api/wineExtras';
+import type { CellarWine } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -11,10 +12,13 @@ import { fonts } from '../../src/constants/fonts';
 // cellar: three wine styles to buy from the wider market, each justified and
 // with a price range.
 export default function ServeMarketScreen() {
-  const { wineId, slot, suggested } = useLocalSearchParams<{ wineId?: string; slot?: string; suggested?: string }>();
+  // wineId for a cellar wine; or the wine's identity (sp/sw/sr/sv/sg) from a
+  // Wine Intel screen, where the bottle isn't in the cellar.
+  const { wineId, slot, suggested, sp, sw, sr, sv, sg } = useLocalSearchParams<{ wineId?: string; slot?: string; suggested?: string; sp?: string; sw?: string; sr?: string; sv?: string; sg?: string }>();
   const { wines } = useCellar();
   const { preferences } = usePreferences();
-  const wine = wines.find((w) => w.id === wineId) ?? null;
+  const wine = wines.find((w) => w.id === wineId)
+    ?? (sp || sw ? ({ id: 'intel', producer: sp ?? null, wine_name: sw ?? sp ?? '', region: sr ?? null, vintage: sv ?? null, grape_variety: sg ?? null, style: null } as unknown as CellarWine) : null);
   const when: 'before' | 'after' = slot === 'after' ? 'after' : 'before';
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const wineLabel = wine ? [wine.producer, wine.wine_name !== wine.producer ? wine.wine_name : null, wine.vintage].filter(Boolean).join(' ') : '';
