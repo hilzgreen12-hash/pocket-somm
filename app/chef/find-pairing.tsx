@@ -204,7 +204,7 @@ export default function FindPairingScreen() {
       {/* What are you cooking — label with the mic + bin to its right,
           bottom-aligned, the whole phrase centred as one row. */}
       <View style={styles.cookingHeaderRow}>
-        <Text style={[styles.fieldLabel, { marginBottom: 0 }]}>What are you cooking?</Text>
+        <Text style={styles.cookingLabel}>What are you cooking?</Text>
         <MicButton value={dish} onChangeText={setDishLocal} onClear={() => setDishLocal('')} domain="food" serverCorrect />
       </View>
       <TextInput
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   loadingBody: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   loadingStay: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textAlign: 'center', opacity: 0.8 },
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.xl, paddingTop: 112, paddingBottom: 60 },
+  content: { paddingHorizontal: 20, paddingTop: 112, paddingBottom: 60 },
   backRow: { alignSelf: 'flex-start', marginBottom: spacing.xl },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, width: 44 },
   // Cellar-style header bar.
@@ -331,23 +331,23 @@ const styles = StyleSheet.create({
   // regional inputs, matching the rest of the app's input labels.
   fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, letterSpacing: 0.3, marginBottom: spacing.xs },
   // "What are you cooking?" left-aligned, with the mic/bin pushed to the right.
-  cookingHeaderRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.sm },
+  cookingLabel: { fontFamily: fonts.headingRegular, fontSize: 19, color: colors.text },
+  cookingHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   centredLabel: { textAlign: 'center', alignSelf: 'stretch' },
   // Label above each preference bubble group.
   chipFieldLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
   // Expanded accordion body holding the bubbles.
-  pickerWrap: { marginTop: spacing.xs, marginBottom: spacing.lg, paddingHorizontal: spacing.xs },
+  pickerWrap: { marginTop: spacing.sm, marginBottom: spacing.sm },
   regionInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
   helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
   micRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.sm },
-  cookingLabel: { marginBottom: 0, flexShrink: 1 },
   styleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: spacing.lg },
   rowLabel: { marginBottom: 0, flexShrink: 1 },
   // Wine Style row — mirrors the Recipe Requirements accordion input rows.
-  styleAccordion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, marginTop: spacing.sm, marginBottom: spacing.lg },
-  styleAccordionLeft: { flex: 1, alignItems: 'center' },
-  styleQuestion: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
-  styleAccordionSummary: { fontFamily: fonts.bodyMedium, fontSize: 14, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
+  styleAccordion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)', paddingVertical: 8 },
+  styleAccordionLeft: { flex: 1, alignItems: 'flex-start' },
+  styleQuestion: { fontFamily: fonts.headingRegular, fontSize: 18, color: '#FFFFFF' },
+  styleAccordionSummary: { fontFamily: fonts.bodyRegular, fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 1 },
   // Gold once a region (named or confirmed custom) is chosen.
   styleAccordionSummaryActive: { color: colors.gold },
   // 'Other' custom-region input row + Confirm button (input hides on confirm).
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   leftLabel: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.text, alignSelf: 'flex-start', marginBottom: spacing.xs },
   fieldHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   helperLeft: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'left', alignSelf: 'flex-start', lineHeight: 19, marginBottom: spacing.sm },
-  inputLeft: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 90, marginBottom: spacing.xl, width: '100%', textAlign: 'left' },
+  inputLeft: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 10, padding: 12, fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 84, marginBottom: spacing.sm, width: '100%', textAlign: 'left' },
   dropdownChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'flex-start', minWidth: 160, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.xl },
   dropdownChipText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   dropdownChevron: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, marginLeft: spacing.md },
@@ -384,21 +384,21 @@ const styles = StyleSheet.create({
   dropdownCheck: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
   // Lower-case helper line beneath "What are you cooking?".
   helperText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.md },
-  budgetBlock: { width: '100%', marginBottom: spacing.xl },
+  budgetBlock: { width: '100%', marginTop: spacing.md, marginBottom: spacing.sm },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 17, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 90, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
   difficultyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xl, width: '100%' },
   difficultyBtn: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', width: '48.5%' },
   difficultyBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
   difficultyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.textMuted },
   difficultyBtnTextActive: { color: colors.gold },
-  toggleRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm, marginBottom: spacing.sm, width: '100%' },
-  toggleBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
+  toggleRow: { flexDirection: 'row', alignItems: 'stretch', marginBottom: spacing.md, width: '100%', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 12, overflow: 'hidden' },
+  toggleBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: spacing.sm, alignItems: 'center' },
   // Thin vertical rule between the From My Cellar / Suggest a Style buttons.
   toggleDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
-  toggleBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.08)' },
-  toggleText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.textMuted },
-  toggleTextActive: { color: colors.gold },
-  toggleSub: { fontSize: 11, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  toggleBtnActive: { backgroundColor: 'rgba(224,184,74,0.15)' },
+  toggleText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.text },
+  toggleTextActive: { color: colors.gold, fontFamily: fonts.headingBold },
+  toggleSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
   toggleSubActive: { color: colors.gold },
   styleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xl, width: '100%', justifyContent: 'center' },
   styleBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
