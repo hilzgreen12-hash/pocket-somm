@@ -2457,6 +2457,10 @@ export default function CellarWineDetail() {
               {bottlesInCellar > 0 && !isArchived ? (
                 <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}><Text style={styles.statAction}>Add to Archive →</Text></TouchableOpacity>
               ) : null}
+              {!isArchived && !isWishlist ? (
+                // Opens the same "delete from your records" confirmation.
+                <TouchableOpacity onPress={() => setRemoveStep('confirm')} disabled={removing} activeOpacity={0.7}><Text style={styles.statAction}>Delete Wine</Text></TouchableOpacity>
+              ) : null}
             </View>
             {!isArchived && rackRemovalMsg ? <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text> : null}
 
