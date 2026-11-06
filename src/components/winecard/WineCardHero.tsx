@@ -23,12 +23,14 @@ type Props = {
   placeholder?: React.ReactNode;
   // Top-right action (e.g. Wine Intel's "Edit Wine").
   rightAction?: React.ReactNode;
+  // Saving a new photo — a spinner over the image.
+  busy?: boolean;
 };
 
 const HERO_H = 400;
 const DARK = '#3E2120';
 
-export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress, onPhotoLongPress, onTitlePress, badge, uri: uriProp, placeholder, rightAction }: Props) {
+export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress, onPhotoLongPress, onTitlePress, badge, uri: uriProp, placeholder, rightAction, busy }: Props) {
   const stored = useLabelImageState(uriProp ? null : path);
   const uri = uriProp ?? stored.uri;
   const pending = uriProp ? false : stored.pending;
@@ -49,6 +51,13 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
           <View style={styles.empty}><Text style={styles.emptyText}>Tap to add a label photo</Text></View>
         )}
       </TouchableOpacity>
+
+      {busy ? (
+        <View pointerEvents="none" style={styles.busy}>
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.busyText}>Saving photo…</Text>
+        </View>
+      ) : null}
 
       {/* One even shade behind the title (no lighter upper tier). */}
       <View pointerEvents="none" style={[styles.fade, { height: 130, opacity: 0.7 }]} />
@@ -74,6 +83,8 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
 const styles = StyleSheet.create({
   hero: { height: HERO_H, backgroundColor: DARK, overflow: 'hidden' },
   photo: { position: 'absolute', left: 0, right: 0, top: 86, bottom: 70 },
+  busy: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(62,33,32,0.35)' },
+  busyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.text },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted },
   fade: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: DARK },

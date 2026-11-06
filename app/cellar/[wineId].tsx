@@ -285,6 +285,9 @@ export default function CellarWineDetail() {
   const [savingPrice, setSavingPrice] = useState(false);
   const [refreshingValue, setRefreshingValue] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  // The just-picked photo, shown instantly while it uploads (kept until the
+  // card leaves so the stored copy's reload never flashes the old label).
+  const [localPhotoUri, setLocalPhotoUri] = useState<string | null>(null);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
   const [archiveHistoryOpen, setArchiveHistoryOpen] = useState(false);
 
@@ -504,6 +507,8 @@ export default function CellarWineDetail() {
         ? await ImagePicker.launchCameraAsync({ quality: 1 })
         : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
       if (result.canceled || !result.assets?.[0]) return;
+      // Show the picked photo at once; the upload carries on behind a spinner.
+      setLocalPhotoUri(result.assets[0].uri);
       setUploadingPhoto(true);
       try {
         const path = await uploadLabelImage(session.user.id, result.assets[0].uri, wine.id);
@@ -516,6 +521,7 @@ export default function CellarWineDetail() {
         // wine id, so without this the cached URL/bitmap would persist).
         qc.invalidateQueries({ queryKey: ['label-image', path] });
       } catch (err) {
+        setLocalPhotoUri(null);
         showAlert({ title: 'Could not save photo', body: err instanceof Error ? err.message : 'Please try again.' });
       } finally {
         setUploadingPhoto(false);
@@ -2118,6 +2124,8 @@ export default function CellarWineDetail() {
     >
       <WineCardHero
         path={wine.label_image_path}
+        uri={localPhotoUri}
+        busy={uploadingPhoto}
         title={[wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ')}
         subtitle={[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}
         chip={isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : ''}
@@ -2127,7 +2135,6 @@ export default function CellarWineDetail() {
         onTitlePress={openWineEdit}
         badge={wine.is_spirit ? <SpiritBadge /> : null}
       />
-      {uploadingPhoto ? <Text style={styles.photoSaving}>Saving photo…</Text> : null}
 
       {/* Tabs */}
       <View style={styles.wcTabBar} accessibilityRole="tablist">
