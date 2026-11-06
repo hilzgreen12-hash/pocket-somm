@@ -13,6 +13,7 @@ import { PlaceholderCardView, type PlaceholderCard, NAMED_LABELS } from './Examp
 import { wineHeaderLine } from '../utils/wineHeader';
 import type { CellarWine } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
+import { homeOnlyWines } from '../utils/homeWines';
 import { fonts } from '../constants/fonts';
 
 // Example cards shown when the cellar has nothing to surface yet.
@@ -115,18 +116,7 @@ export function DrinkNowCarousel() {
     queryFn: () => fetchPlacementsForWines(wineIds),
     enabled: !!userId && wineIds.length > 0 && externalIds.size > 0,
   });
-  const extByWine = new Map<string, number>();
-  for (const p of placements) {
-    if (p.kind === 'location' && p.storage_location_id && externalIds.has(p.storage_location_id)) {
-      extByWine.set(p.cellar_wine_id, (extByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
-    }
-  }
-  const homeWines = externalIds.size === 0 ? wines : wines.filter((w) => {
-    const ext = extByWine.get(w.id) ?? 0;
-    // Legacy single-location filing straight on the row.
-    if (!!w.storage_location_id && externalIds.has(w.storage_location_id) && ext === 0) return false;
-    return (w.quantity ?? 0) - ext > 0; // at least one home/loose bottle
-  });
+  const homeWines = homeOnlyWines(wines, placements, externalIds);
   // Archive identities, so "Running Low" only tags wines actually drunk down.
   const { data: archived = [] } = useQuery({
     queryKey: ['archived-wines', userId],

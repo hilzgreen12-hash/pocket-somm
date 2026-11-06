@@ -305,16 +305,17 @@ export async function fetchAutoLabelUri(producer?: string | null, wineName?: str
   const p = (producer ?? '').trim();
   const w = (wineName ?? '').trim();
   if (!p && !w) return null;
+  // Producer + name, then the producer alone. Never the name alone: "Brunello
+  // di Montalcino" or "Riesling" by itself finds OTHER producers' labels.
   const queries: { producer: string; wineName: string }[] = [{ producer: p, wineName: w }];
   if (p && w && w.toLowerCase() !== p.toLowerCase()) queries.push({ producer: p, wineName: '' });
-  if (w && p) queries.push({ producer: w, wineName: '' });
   const tried = new Set<string>();
   const base = `autolabel-${p}-${w}`.replace(/[^a-z0-9]+/gi, '-').slice(0, 70);
   let n = 0;
   for (const q of queries) {
     let cands: LabelImageCandidate[] = [];
     try { cands = await searchLabelImages(q); } catch { continue; }
-    for (const c of cands) {
+    for (const c of cands.slice(0, 4)) {
       for (const url of [c.url, c.thumbnail]) {
         if (!url || !url.startsWith('http') || tried.has(url)) continue;
         tried.add(url);
@@ -333,7 +334,7 @@ async function downloadImage(url: string, name: string): Promise<string | null> 
     try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
     const file = await Promise.race([
       File.downloadFileAsync(url, dest),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 10_000)),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 6_000)),
     ]);
     if ((file.size ?? 0) < 1500) return null; // an error page / pixel, not a label
     const ok = await new Promise<boolean>((resolve) => {

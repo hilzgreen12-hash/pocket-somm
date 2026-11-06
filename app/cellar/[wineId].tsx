@@ -156,11 +156,6 @@ export default function CellarWineDetail() {
   const isArchived = !!wine?.archived_at;
   const isWishlist = !!wine?.is_wishlist;
 
-  const { data: removals = [] } = useQuery({
-    queryKey: ['cellar-removals', wineId],
-    queryFn: () => listCellarWineRemovals(wineId!),
-    enabled: !!wineId,
-  });
 
   const rackIds = racks.map((r) => r.id);
   const { data: slotAssignments = [] } = useQuery({
@@ -239,6 +234,12 @@ export default function CellarWineDetail() {
   // (external cellars, or a home wine split across locations).
   const [cellarViewOpen, setCellarViewOpen] = useState(false);
   const [noteText, setNoteText] = useState(wine?.cellar_note ?? '');
+  // Inline Cellar Note: true once the user types; keeps the field in step with
+  // the saved note until then (the card can render before the wine loads).
+  const noteDirtyRef = useRef(false);
+  useEffect(() => {
+    if (!noteDirtyRef.current) setNoteText(wine?.cellar_note ?? '');
+  }, [wine?.id, wine?.cellar_note]);
   const [savingNote, setSavingNote] = useState(false);
   // Archive Note — the archive-context sibling of Cellar Note (migration 117).
   // Behaves IDENTICALLY to Cellar Note: a short private note (<=100 chars) shown
@@ -289,7 +290,6 @@ export default function CellarWineDetail() {
   // card leaves so the stored copy's reload never flashes the old label).
   const [localPhotoUri, setLocalPhotoUri] = useState<string | null>(null);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
-  const [archiveHistoryOpen, setArchiveHistoryOpen] = useState(false);
 
   // "Confirm this wine" grape prompt. Fires before the intel card is committed
   // when the wine is genuinely ambiguous — the same producer + name sold as more
@@ -581,6 +581,13 @@ export default function CellarWineDetail() {
   const [aiVerdict, setAiVerdict] = useState<VintageVerdictAI | null>(null);
   const [aiVerdictLoading, setAiVerdictLoading] = useState(false);
   const aiVerdictKeyRef = useRef<string | null>(null);
+  // The latest wine row — the verdict lands seconds later, after a Refresh may
+  // have saved a new table, so it merges into what's current, not a snapshot.
+  const latestWineRef = useRef(wine);
+  // A verdict that arrived before its table was first saved — attached when the
+  // table save lands (handleGenerateMarket).
+  const pendingVerdictRef = useRef<{ key: string; res: VintageVerdictAI } | null>(null);
+  latestWineRef.current = wine;
   useEffect(() => {
     if (!wine || cardTab !== 'market' || !vintageRows || vintageRows.length < 2) return;
     const key = `${wine.id}:${vintageRows.map((r) => `${r.vintage}-${r.price}`).join('|')}`;
@@ -601,7 +608,11 @@ export default function CellarWineDetail() {
       .then((res) => {
         if (!res) return;
         setAiVerdict(res);
-        if (saved?.rows) void updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...saved, verdictData: res } } as any }).catch(() => {});
+        const now = latestWineRef.current?.market_vintage_note;
+        const nowKey = now?.rows ? `${wine.id}:${now.rows.map((r) => `${r.vintage}-${r.price}`).join('|')}` : null;
+        // Save only onto the table it was written for (a newer table gets its own).
+        if (now && nowKey === key) void updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...now, verdictData: res } } as any }).catch(() => {});
+        else if (!now) pendingVerdictRef.current = { key, res };
       })
       .catch(() => { aiVerdictKeyRef.current = null; })
       .finally(() => setAiVerdictLoading(false));
@@ -948,7 +959,10 @@ export default function CellarWineDetail() {
       // Saved on the wine so the Market tab reopens instantly next time.
       try {
         const rarity = await rarityP;
-        await updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...(note ?? {}), rows, unknown, currency, at: new Date().toISOString(), ...(rarity !== undefined ? { rarity } : {}) } } as any });
+        const pv = pendingVerdictRef.current;
+        const tableKey = `${wine.id}:${rows.map((r) => `${r.vintage}-${r.price}`).join('|')}`;
+        pendingVerdictRef.current = null;
+        await updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...(note ?? {}), rows, unknown, currency, at: new Date().toISOString(), ...(rarity !== undefined ? { rarity } : {}), ...(pv && pv.key === tableKey ? { verdictData: pv.res } : {}) } } as any });
       } catch { /* the live table still shows */ }
     } catch (e) {
       if (isWineSearcherUnavailable(e)) { showAlert({ title: "Wine-Searcher isn't responding", body: 'Vinster couldn\'t reach Wine-Searcher just now (it may have hit its daily limit). Please try again later.' }); return; }
@@ -1923,45 +1937,7 @@ export default function CellarWineDetail() {
     );
   }
 
-  // Cellar Note — a short private note, card-only. The chevron opens a read-only
-  // popup (Edit / Delete) when a note exists, or the input popup when it doesn't.
-  function renderCellarNoteCol() {
-    if (isWishlist) return <View style={styles.reviewCol} />;
-    return (
-      <View style={styles.reviewCol}>
-        <View style={styles.vinsterHeaderRow}>
-          <TouchableOpacity onPress={() => wine!.cellar_note ? setCellarNoteViewOpen(true) : openCellarNote()} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-            <Text style={styles.vinsterReviewTitle}>Cellar Note</Text>
-            <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-          </TouchableOpacity>
-        </View>
-        {wine!.cellar_note ? (
-          <TouchableOpacity onPress={() => setCellarNoteViewOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.cellarNotePreview} numberOfLines={1}>{wine!.cellar_note}</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-    );
-  }
 
-  // Archive Note — the archive sibling of Cellar Note. Archived cards only.
-  function renderArchiveNoteCol() {
-    return (
-      <View style={styles.reviewCol}>
-        <View style={styles.vinsterHeaderRow}>
-          <TouchableOpacity onPress={() => wine!.archive_note ? setArchiveNoteViewOpen(true) : openArchiveNote()} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-            <Text style={styles.vinsterReviewTitle}>Archive Note</Text>
-            <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-          </TouchableOpacity>
-        </View>
-        {wine!.archive_note ? (
-          <TouchableOpacity onPress={() => setArchiveNoteViewOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.cellarNotePreview} numberOfLines={1}>{wine!.archive_note}</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-    );
-  }
 
   // Serving Suggestions toggle — cellar-list cards only (full-width row).
   function renderServingHeader() {
@@ -2049,7 +2025,10 @@ export default function CellarWineDetail() {
   // Cellar Note, edited in place under the Cellared date: saved when the field
   // loses focus (only if it changed).
   async function saveInlineCellarNote() {
-    const next = noteText.trim().slice(0, 35);
+    // Only an actual edit saves — a tap in and out never touches the note.
+    if (!noteDirtyRef.current) return;
+    noteDirtyRef.current = false;
+    const next = noteText.trim();
     if (next === (wine!.cellar_note ?? '')) return;
     try {
       await updateWine.mutateAsync({ id: wine!.id, updates: { cellar_note: next || null } });
@@ -2552,12 +2531,12 @@ export default function CellarWineDetail() {
                 <TextInput
                   style={styles.wcCellarNoteInput}
                   value={noteText}
-                  onChangeText={(t) => setNoteText(t.slice(0, 35))}
+                  onChangeText={(t) => { noteDirtyRef.current = true; setNoteText(t.slice(0, Math.max(35, (wine.cellar_note ?? '').length))); }}
                   onBlur={() => void saveInlineCellarNote()}
                   onSubmitEditing={() => Keyboard.dismiss()}
                   placeholder="Add Cellar Note"
                   placeholderTextColor={colors.gold}
-                  maxLength={35}
+                  maxLength={Math.max(35, (wine.cellar_note ?? '').length)}
                   returnKeyType="done"
                   blurOnSubmit
                   accessibilityLabel="Cellar Note"
@@ -2711,32 +2690,6 @@ export default function CellarWineDetail() {
         onClose={() => setPhotoViewerOpen(false)}
       />
 
-      <Modal visible={archiveHistoryOpen} transparent animationType="fade" onRequestClose={() => setArchiveHistoryOpen(false)}>
-        <View style={styles.titleEditOverlay}>
-          <View style={styles.titleEditSheet}>
-            <TouchableOpacity style={styles.cnCloseX} onPress={() => setArchiveHistoryOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.cnCloseXText}>✕</Text>
-            </TouchableOpacity>
-            <Text style={styles.titleEditHeading}>Archive History</Text>
-            <View style={[styles.ahRow, styles.ahHeadRow]}>
-              <Text style={[styles.ahCell, styles.ahColDate, styles.ahHeadCell]} numberOfLines={1}>Date</Text>
-              <Text style={[styles.ahCell, styles.ahColCount, styles.ahHeadCell]} numberOfLines={1}>Bottles</Text>
-              <Text style={[styles.ahCell, styles.ahColNote, styles.ahHeadCell]}>Archive Note</Text>
-            </View>
-            <ScrollView style={{ maxHeight: 360 }}>
-              {removals.map((ev) => (
-                <View key={ev.id} style={styles.ahRow}>
-                  <Text style={[styles.ahCell, styles.ahColDate]}>
-                    {new Date(ev.removed_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                  </Text>
-                  <Text style={[styles.ahCell, styles.ahColCount]}>{ev.count}</Text>
-                  <Text style={[styles.ahCell, styles.ahColNote]}>{ev.note?.trim() || '—'}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       <Modal visible={grapeConfirmOpen} transparent animationType="fade" onRequestClose={() => setGrapeConfirmOpen(false)}>
         <View style={styles.candOverlay}>

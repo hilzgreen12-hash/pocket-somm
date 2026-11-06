@@ -25,11 +25,17 @@ export interface WineLike {
   grape_variety?: string | null;
 }
 
-// The cuvée name, with a name that merely repeats the producer ("Il Marroneto"
-// / "Il Marroneto") read as the appellation from the region ("Brunello di
-// Montalcino"), so a producer-only scan matches the full wine.
 function nameOf(w: WineLike): string | null | undefined {
-  const n = w.wine_name ?? w.wineName;
+  return w.wine_name ?? w.wineName;
+}
+
+// The name with a producer-repeating name read as the region's appellation
+// ("Il Marroneto" / "Il Marroneto" → "Brunello di Montalcino"). Used ONLY for an
+// EXACT key match below — never the loose subset match, which would fold a
+// self-named château ("Château Latour" → "Pauillac") into its "Le Pauillac de
+// Château Latour" (the key keeps "de", so exact keys stay distinct).
+function appellationName(w: WineLike): string | null | undefined {
+  const n = nameOf(w);
   return lookupWineName(w.producer, n, w.region) || n;
 }
 
@@ -50,9 +56,17 @@ export function sameWineIdentity(a: WineLike, b: WineLike): boolean {
   const keyB = wineNameKey(b.producer, nameOf(b));
   if (keyA && keyB && keyA === keyB) return true;
 
+  // Producer-only name on one side ("Il Marroneto" / "Il Marroneto", region
+  // Brunello…) vs the full wine ("Marroneto" / "Brunello di Montalcino").
+  const appA = wineNameKey(a.producer, appellationName(a));
+  const appB = wineNameKey(b.producer, appellationName(b));
+  if (appA && appB && (appA === keyB || keyA === appB || appA === appB) && (appA !== keyA || appB !== keyB)) return true;
+
+  // Grape deliberately NOT passed: with it a producer-only row ("Domaine Jamet"
+  // + Syrah) would subset-match any same-grape cuvée ("Jamet Côte-Rôtie").
   return looseWineMatch(
-    { producer: a.producer, wineName: nameOf(a), grape: a.grape_variety, vintage: a.vintage },
-    { producer: b.producer, wineName: nameOf(b), grape: b.grape_variety, vintage: b.vintage },
+    { producer: a.producer, wineName: nameOf(a), vintage: a.vintage },
+    { producer: b.producer, wineName: nameOf(b), vintage: b.vintage },
   );
 }
 

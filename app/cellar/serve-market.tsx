@@ -24,7 +24,7 @@ export default function ServeMarketScreen() {
   const wineLabel = wine ? [wine.producer, wine.wine_name !== wine.producer ? wine.wine_name : null, wine.vintage].filter(Boolean).join(' ') : '';
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['serve-market', wineId, when, suggested, currency],
+    queryKey: ['serve-market', wineId ?? null, sp ?? null, sw ?? null, sv ?? null, when, suggested, currency],
     enabled: !!wine,
     staleTime: Infinity,
     queryFn: () => suggestMarketStyles(wine!, when, suggested ?? '', currency),

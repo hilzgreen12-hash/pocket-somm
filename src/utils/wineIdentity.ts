@@ -51,7 +51,6 @@ export function foldAccents(s: string | null | undefined): string {
 export function wineQueryName(
   producer: string | null | undefined,
   wineName: string | null | undefined,
-  _region?: string | null,
 ): string {
   // The PLAIN producer + name is always the first query: adding an appellation
   // can match a different listing ("Château Lafite Rothschild Pauillac" priced
@@ -132,6 +131,9 @@ export function lookupWineName(
   const n = (wineName ?? '').trim();
   const repeatsProducer = !n || norm(n) === norm(producer);
   if (!repeatsProducer || !region) return n;
+  // A self-named Château / Clos / Domaine IS its wine ("Château Latour" is the
+  // Grand Vin, not "Pauillac") — never swap in the appellation.
+  if (/^(ch[aâ]teau|chateau|clos|domaine|dom\.?)\b/i.test((producer ?? '').trim())) return n;
   const parts = region.split(',').map((x) => x.trim()).filter(Boolean);
   if (parts.length < 3) return n;
   const appellation = parts[0];

@@ -98,6 +98,7 @@ const fold = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[\u0300-\
 function lookupWineName(producer: unknown, wineName: unknown, region: unknown): string {
   const n = String(wineName ?? '').trim();
   if ((n && fold(n) !== fold(producer)) || typeof region !== 'string') return n;
+  if (/^(chateau|clos|domaine|dom)\b/.test(fold(producer))) return n; // self-named estate = its own wine
   const parts = region.split(',').map((x) => x.trim()).filter(Boolean);
   if (parts.length < 3 || fold(producer).includes(fold(parts[0]))) return n;
   return parts[0];

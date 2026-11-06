@@ -5,6 +5,7 @@ import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
 import { fetchStorageLocations } from '../api/storageLocations';
 import { fetchPlacementsForWines } from '../api/placements';
+import { homeOnlyWines } from '../utils/homeWines';
 import { useChefLabelHistory } from '../hooks/useChefHistory';
 import { usePreferences } from '../hooks/usePreferences';
 import { classifyDiscoverVoice } from '../api/discoverVoice';
@@ -111,11 +112,10 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
     let pool: CellarWine[] = wines;
     if (fromCellar && choice === 'home' && wines.length && session?.user.id) {
       pool = await chat.working('Checking what you have at home…', async () => {
-        const [locs, pls] = await Promise.all([fetchStorageLocations(session.user.id), fetchPlacementsForWines(wines.map((w) => w.id))]);
-        const ext = new Set(locs.filter((l) => l.is_external).map((l) => l.id));
-        const extQty = new Map<string, number>();
-        for (const p of pls) if (p.kind === 'location' && p.storage_location_id && ext.has(p.storage_location_id)) extQty.set(p.cellar_wine_id, (extQty.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
-        return wines.filter((w) => (w.quantity ?? 0) - (extQty.get(w.id) ?? 0) > 0);
+        const locs = await fetchStorageLocations(session.user.id);
+        if (!locs.some((l) => l.is_external)) return wines; // no external cellars — everything is home
+        const pls = await fetchPlacementsForWines(wines.map((w) => w.id));
+        return homeOnlyWines(wines, pls, new Set(locs.filter((l) => l.is_external).map((l) => l.id)));
       });
     }
     if (fromCellar && !pool.length) {

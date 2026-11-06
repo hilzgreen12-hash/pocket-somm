@@ -10,7 +10,6 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { generatePairings, fetchAutoLabelUri, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
-import { lookupWineName } from '../../src/utils/wineIdentity';
 import { findSameCellarWine } from '../../src/utils/wineMatch';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { File, Paths } from 'expo-file-system';
@@ -506,7 +505,7 @@ export default function LabelConfirmScreen() {
       } else {
         const saved = await addWine.mutateAsync({
           user_id: userId,
-          wine_name: lookupWineName(producer, wineName, region) || producer.trim(),
+          wine_name: wineName.trim() || producer.trim(),
           producer: producer.trim(),
           region: region.trim(),
           vintage: vintage.trim(),
@@ -592,7 +591,7 @@ export default function LabelConfirmScreen() {
         } else {
           const saved = await addWine.mutateAsync({
             user_id: userId,
-            wine_name: lookupWineName(confirmed.producer, confirmed.wineName, confirmed.region) || confirmed.producer,
+            wine_name: confirmed.wineName?.trim() || confirmed.producer,
             producer: confirmed.producer,
             region: confirmed.region,
             vintage: confirmed.vintage,

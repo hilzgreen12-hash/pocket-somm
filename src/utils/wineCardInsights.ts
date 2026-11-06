@@ -86,12 +86,23 @@ const NEAR: Record<Family, Family[]> = {
   Spirit: ['Fortified'],
   Red: [],
 };
+// Compiled once — these run per cellar wine on every render of the Serve tab.
+const FAMILY_RES: [Family, RegExp][] = FAMILY_WORDS.map(([fam, words]) => [fam, new RegExp(`\\b(?:${words.join('|')})\\b`)]);
+const STYLE_RES: [string, RegExp][] = STYLE_WORDS.map((w) => [w, new RegExp(`\\b${w}\\b`)]);
 function familyOfText(text: string): Family | null {
   const t = fold(text);
-  for (const [fam, words] of FAMILY_WORDS) if (words.some((w) => new RegExp(`\\b${w}\\b`).test(t))) return fam;
+  for (const [fam, re] of FAMILY_RES) if (re.test(t)) return fam;
   return null;
 }
+// A wine's family doesn't change between renders — remember it per row object.
+const familyCache = new WeakMap<CellarWine, Family | null>();
 function familyOfWine(w: CellarWine): Family | null {
+  if (familyCache.has(w)) return familyCache.get(w) ?? null;
+  const f = computeFamilyOfWine(w);
+  familyCache.set(w, f);
+  return f;
+}
+function computeFamilyOfWine(w: CellarWine): Family | null {
   if ((w as any).is_spirit) return 'Spirit';
   const named = familyOfText([w.wine_name, w.region, w.style].filter(Boolean).join(' '));
   if (named === 'Sweet' || named === 'DrySherry' || named === 'Fortified' || named === 'Spirit' || named === 'Sparkling') return named;
@@ -115,13 +126,13 @@ export function pickFromCellar(style: string | null | undefined, wines: CellarWi
   const s = fold(style);
   if (!s) return null;
   const pool = wines.filter((w) => available(w, excludeId));
-  const words = STYLE_WORDS.filter((w) => new RegExp(`\\b${w}\\b`).test(s));
+  const words = STYLE_RES.filter(([, re]) => re.test(s));
   let best: { w: CellarWine; score: number } | null = null;
   for (const w of pool) {
     if (!words.length) break;
     const hay = fold([w.producer, w.wine_name, w.region, w.grape_variety, w.style].filter(Boolean).join(' '));
     let score = 0;
-    words.forEach((k, i) => { if (new RegExp(`\\b${k}\\b`).test(hay)) score += words.length - i; });
+    words.forEach(([, re], i) => { if (re.test(hay)) score += words.length - i; });
     if (score === 0) continue;
     score += readiness(w);
     if (!best || score > best.score) best = { w, score };

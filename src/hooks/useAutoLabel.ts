@@ -15,16 +15,12 @@ export function useAutoLabel(
   const w = (wineName ?? '').trim();
   const { data } = useQuery({
     queryKey: ['auto-label', `${p.toLowerCase()}|${w.toLowerCase()}`],
-    // A miss throws so it's retried (and not remembered as "no image" for a day).
-    queryFn: async () => {
-      const uri = await fetchAutoLabelUri(p, w);
-      if (!uri) throw new Error('no label image');
-      return uri;
-    },
-    retry: 2,
-    retryDelay: 1500,
+    queryFn: () => fetchAutoLabelUri(p, w),
     enabled: enabled && (!!p || !!w),
-    staleTime: 1000 * 60 * 60 * 24,
+    // A found label is kept for a day; a miss only for 15 minutes, so a
+    // passing failure is retried later without re-running the search on
+    // every open.
+    staleTime: (q) => (q.state.data ? 1000 * 60 * 60 * 24 : 1000 * 60 * 15),
     gcTime: 1000 * 60 * 60 * 24,
   });
   return data ?? null;

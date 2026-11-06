@@ -2944,31 +2944,6 @@ export default function LabelResultsScreen() {
         </>
       )}
 
-      {/* Generate Wine Intel (view-only) gets the two deep-dive actions beneath
-          Vinster's note. Estimated value now lives in the compact grid above,
-          so it isn't repeated here. */}
-      {false ? (
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.saveReviewBtn} onPress={handleSaveToReviews} activeOpacity={0.85}>
-            <Text style={styles.saveReviewBtnText}>Add/View Your Wine Review</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.saveReviewBtn, { marginTop: spacing.sm }]}
-            onPress={() => {
-              // Seed the price field with Vinster's estimate so the user adjusts
-              // rather than typing from scratch (mirrors the dedicated add flow).
-              if (!purchasePrice && intel.estimatedValue != null) setPurchasePrice(String(intel.estimatedValue));
-              setAddingToCellar(true);
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.saveReviewBtnText}>Save to Your Cellar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.saveReviewBtn, { marginTop: spacing.sm }]} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
-            <Text style={styles.saveReviewBtnText}>{sharing ? 'Exporting…' : 'Export Wine Intel'}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
 
       {!isAddFlow && !isIntelOnlyFlow && (
         <View style={styles.section}>
