@@ -88,8 +88,18 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
   const runWineForDish = () => start(async () => {
     chat.hear('A wine for my dish');
     const dish = await chat.ask("Tell me what's cooking in as much detail as you can.", 'ie. Pan-fried sea bass with brown butter and capers', 'food');
-    const src = await chat.ask('Should I pull some bottles from your cellar, or are you trying something new?', "ie. Something new, I'd like to buy a bottle");
-    let fromCellar = /cellar|pull|my own|i have|i've got|from mine/i.test(src) && !/\b(buy|new|shop|purchase)\b/i.test(src);
+    // Two tap-to-choose commands instead of a typed answer.
+    chat.say('Should I pull some bottles from your cellar, or are you trying something new?');
+    let fromCellar = await new Promise<boolean>((resolve) => {
+      let done = false;
+      const pickIt = (cellar: boolean, label: string) => { if (done) return; done = true; chat.hear(label); resolve(cellar); };
+      chat.push(
+        <Starters>
+          <Starter first label="Pull from my cellar" onPress={() => pickIt(true, 'Pull from my cellar')} />
+          <Starter label="Suggest something new" onPress={() => pickIt(false, 'Suggest something new')} />
+        </Starters>,
+      );
+    });
     if (fromCellar && !wines.length) {
       chat.say("Your cellar is empty, so I'll find something to buy instead.");
       fromCellar = false;
