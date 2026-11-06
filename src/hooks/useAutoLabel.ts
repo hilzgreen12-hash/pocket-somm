@@ -15,7 +15,14 @@ export function useAutoLabel(
   const w = (wineName ?? '').trim();
   const { data } = useQuery({
     queryKey: ['auto-label', `${p.toLowerCase()}|${w.toLowerCase()}`],
-    queryFn: () => fetchAutoLabelUri(p, w),
+    // A miss throws so it's retried (and not remembered as "no image" for a day).
+    queryFn: async () => {
+      const uri = await fetchAutoLabelUri(p, w);
+      if (!uri) throw new Error('no label image');
+      return uri;
+    },
+    retry: 2,
+    retryDelay: 1500,
     enabled: enabled && (!!p || !!w),
     staleTime: 1000 * 60 * 60 * 24,
     gcTime: 1000 * 60 * 60 * 24,

@@ -24,7 +24,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
-import { prepareImageBase64, scanLabel, searchWines, searchLabelImages, type WineSearchResult } from '../../src/api/label';
+import { prepareImageBase64, scanLabel, searchWines, fetchAutoLabelUri, type WineSearchResult } from '../../src/api/label';
 import { File, Paths } from 'expo-file-system';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
@@ -245,12 +245,8 @@ export default function ScanLandingScreen() {
     try {
       if (useLabelStore.getState().imageUri) return;
       if (!producer.trim()) return;
-      const cands = await searchLabelImages({ producer, wineName });
-      if (!cands.length) return;
-      const dest = new File(Paths.cache, `autolabel-${Date.now()}.img`);
-      try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
-      const file = await File.downloadFileAsync(cands[0].url, dest);
-      useLabelStore.getState().setImageUri(file.uri);
+      const uri = await fetchAutoLabelUri(producer, wineName);
+      if (uri && !useLabelStore.getState().imageUri) useLabelStore.getState().setImageUri(uri);
     } catch { /* no thumbnail is fine */ }
   }
 

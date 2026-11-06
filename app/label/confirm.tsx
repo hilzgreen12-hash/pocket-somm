@@ -7,7 +7,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { generatePairings, searchLabelImages, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
+import { generatePairings, fetchAutoLabelUri, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { lookupWineName } from '../../src/utils/wineIdentity';
@@ -266,12 +266,8 @@ export default function LabelConfirmScreen() {
     if (useLabelStore.getState().imageUri) return;
     if (!pProducer.trim()) return;
     try {
-      const cands = await searchLabelImages({ producer: pProducer, wineName: pWineName });
-      if (!cands.length) return;
-      const dest = new File(Paths.cache, `autolabel-${Date.now()}.img`);
-      try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
-      const file = await File.downloadFileAsync(cands[0].url, dest);
-      useLabelStore.getState().setImageUri(file.uri);
+      const uri = await fetchAutoLabelUri(pProducer, pWineName);
+      if (uri && !useLabelStore.getState().imageUri) useLabelStore.getState().setImageUri(uri);
     } catch { /* best-effort — no thumbnail is fine */ }
   }
 

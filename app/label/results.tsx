@@ -2120,7 +2120,18 @@ export default function LabelResultsScreen() {
             <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85} style={styles.heroFrame}>
               <Image source={{ uri: heroUri }} style={styles.heroImage} resizeMode="cover" />
             </TouchableOpacity>
-          ) : null}
+          ) : (
+            // No photo (and no web label yet / at all): a designed label tile so
+            // the card is never imageless; a found label replaces it.
+            <View style={styles.heroFrame}>
+              <View style={[styles.heroImage, styles.heroPlaceholder]}>
+                <Text style={styles.heroPhProducer} numberOfLines={3}>{wine.producer || wine.wineName}</Text>
+                <View style={styles.heroPhRule} />
+                {wine.wineName && wine.wineName !== wine.producer ? <Text style={styles.heroPhName} numberOfLines={3}>{wine.wineName}</Text> : null}
+                {wine.vintage ? <Text style={styles.heroPhVintage}>{wine.vintage}</Text> : null}
+              </View>
+            </View>
+          )}
           <View style={styles.headerText}>
             {/* Full wine identity — Producer · Name · Vintage (white), Region +
                 Grape (gold) — the app-wide format, wrapping rather than truncating. */}
@@ -3069,6 +3080,11 @@ const styles = StyleSheet.create({
   // wine identity in the header row.
   heroFrame: { backgroundColor: colors.cream, padding: 5, borderRadius: 12, marginRight: spacing.md, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
   heroImage: { width: 120, aspectRatio: 3 / 4, borderRadius: 7, backgroundColor: colors.surface },
+  heroPlaceholder: { backgroundColor: '#3E2120', alignItems: 'center', justifyContent: 'center', padding: 8, gap: 4, borderWidth: 1, borderColor: 'rgba(224,184,74,0.5)' },
+  heroPhProducer: { fontFamily: fonts.headingBold, fontSize: 13, color: colors.gold, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.6 },
+  heroPhRule: { width: 28, height: 1, backgroundColor: 'rgba(224,184,74,0.6)' },
+  heroPhName: { fontFamily: fonts.headingItalic, fontSize: 12.5, color: colors.text, textAlign: 'center' },
+  heroPhVintage: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
   // Generating-intel screen: full-screen container + a larger label thumbnail.
   genContainer: { flex: 1, backgroundColor: colors.background },
   genThumb: { width: 200, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface },

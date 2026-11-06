@@ -1,5 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
+import { Image as RNImage } from 'react-native';
 import { invokeResilient, isNetworkError } from './invokeResilient';
 import { streamPairings } from './pairingsStream';
 import { streamEdgeFunction } from './streamEdge';
@@ -294,15 +295,51 @@ export async function searchLabelImages(input: { producer?: string | null; wineN
 // null on any failure). Best-effort: used to give imageless wines a thumbnail on
 // the Wine Intel card, mirroring the Confirm-Wine-Details auto-fetch. This is a
 // TRANSIENT image for display; it is not persisted.
+//
+// Robust on purpose (it used to try only the FIRST result, so one hot-link-
+// blocked or broken URL meant no thumbnail): every candidate is tried in turn —
+// full image, then its search-engine thumbnail, which almost always downloads —
+// and each download must decode as an image. If producer + name finds nothing
+// usable, it retries with the producer alone, then the name alone.
 export async function fetchAutoLabelUri(producer?: string | null, wineName?: string | null): Promise<string | null> {
-  if (!producer?.trim()) return null;
+  const p = (producer ?? '').trim();
+  const w = (wineName ?? '').trim();
+  if (!p && !w) return null;
+  const queries: { producer: string; wineName: string }[] = [{ producer: p, wineName: w }];
+  if (p && w && w.toLowerCase() !== p.toLowerCase()) queries.push({ producer: p, wineName: '' });
+  if (w && p) queries.push({ producer: w, wineName: '' });
+  const tried = new Set<string>();
+  const base = `autolabel-${p}-${w}`.replace(/[^a-z0-9]+/gi, '-').slice(0, 70);
+  let n = 0;
+  for (const q of queries) {
+    let cands: LabelImageCandidate[] = [];
+    try { cands = await searchLabelImages(q); } catch { continue; }
+    for (const c of cands) {
+      for (const url of [c.url, c.thumbnail]) {
+        if (!url || !url.startsWith('http') || tried.has(url)) continue;
+        tried.add(url);
+        const uri = await downloadImage(url, `${base}-${n++}.img`);
+        if (uri) return uri;
+      }
+    }
+  }
+  return null;
+}
+
+// Download one image to the cache; null unless it arrived and decodes.
+async function downloadImage(url: string, name: string): Promise<string | null> {
   try {
-    const cands = await searchLabelImages({ producer, wineName });
-    if (!cands.length) return null;
-    const dest = new File(Paths.cache, `autolabel-${producer}-${wineName ?? ''}`.replace(/[^a-z0-9]+/gi, '-').slice(0, 80) + '.img');
+    const dest = new File(Paths.cache, name);
     try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
-    const file = await File.downloadFileAsync(cands[0].url, dest);
-    return file.uri;
+    const file = await Promise.race([
+      File.downloadFileAsync(url, dest),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 10_000)),
+    ]);
+    if ((file.size ?? 0) < 1500) return null; // an error page / pixel, not a label
+    const ok = await new Promise<boolean>((resolve) => {
+      RNImage.getSize(file.uri, (wd, ht) => resolve(wd >= 60 && ht >= 60), () => resolve(false));
+    });
+    return ok ? file.uri : null;
   } catch { return null; }
 }
 
