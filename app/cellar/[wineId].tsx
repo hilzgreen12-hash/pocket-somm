@@ -32,6 +32,7 @@ import { generatePairings, fetchProducerRange, type ProducerRange, type Producer
 import { valueWine, isWineNotFound, fetchVintageComparison, isWineSearcherUnavailable, type VintageComparisonRow } from '../../src/services/pricing';
 import { wineQueryName } from '../../src/utils/wineIdentity';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
+import { getBins } from '../../src/api/bins';
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation, addLocationPlacement } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals, stampPurchasePriceDate } from '../../src/api/cellar';
@@ -136,6 +137,11 @@ export default function CellarWineDetail() {
   const { wines, updateWine, isLoading: cellarLoading } = useCellar();
   const { wines: wishlistWines, isLoading: wishlistLoading, deleteWine: deleteWishlistWine } = useWishList();
   const { racks, isLoading: racksLoading } = useRacks();
+  const { data: allBins = [] } = useQuery({
+    queryKey: ['bins', session?.user.id],
+    queryFn: () => getBins(session!.user.id),
+    enabled: !!session?.user.id,
+  });
   const { preferences } = usePreferences();
   const { setWineDetailsConfirmed, setPairings, setFilters, setError } = useLabelStore();
   const { setPendingWineId, setPendingAddMode } = useRackStore();
@@ -260,6 +266,13 @@ export default function CellarWineDetail() {
   const [justDeleted, setJustDeleted] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   const [addBottlesOpen, setAddBottlesOpen] = useState(false);
+  // Cellar tab → "Add Bottles": where the NEW bottles go (rack/fridge → its
+  // slots; bin / alt cellar → how many, then that screen; Full Cellar List →
+  // the count box; or a new location).
+  const [addPickerOpen, setAddPickerOpen] = useState(false);
+  const [addToDest, setAddToDest] = useState<{ kind: 'bin' | 'location'; id: string; name: string } | null>(null);
+  const [addToCount, setAddToCount] = useState('1');
+  const [addingTo, setAddingTo] = useState(false);
   const [addBottlesCount, setAddBottlesCount] = useState('1');
   const [addingBottles, setAddingBottles] = useState(false);
 
@@ -753,6 +766,44 @@ export default function CellarWineDetail() {
     setPendingLocationId(null);
     setAddBottlesCount('1');
     setAddBottlesOpen(true);
+  }
+
+  // Add Bottles → a non-rack destination: bump the count, record where they go,
+  // then open that location's screen to see / arrange them.
+  async function confirmAddToDest() {
+    const d = addToDest;
+    if (!d || !wine) return;
+    const n = Math.max(1, parseInt(addToCount, 10) || 1);
+    setAddingTo(true);
+    try {
+      await updateWine.mutateAsync({ id: wine.id, updates: { quantity: (wine.quantity ?? 0) + n, ...(d.kind === 'bin' ? { awaiting_placement: true, awaiting_placement_unit_id: d.id } : {}) } });
+      if (d.kind === 'location') await addLocationPlacement(wine.id, d.id, null, n);
+      for (const k of ['cellar', 'placements', 'placements-list', 'storage-location-wines', 'storage-locations', 'bins', 'bin-cells']) qc.invalidateQueries({ queryKey: [k] });
+      setAddToDest(null);
+      setAddToCount('1');
+      router.push((d.kind === 'bin' ? `/cellar/bin/${d.id}?highlight=${wine.id}` : `/cellar/storage-location/${d.id}?highlight=${wine.id}`) as any);
+    } catch (err) {
+      showAlert({ title: 'Could not add bottles', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setAddingTo(false);
+    }
+  }
+
+  // Add Bottles → "Add New Location": set up the storage first. A new rack or
+  // fridge carries the wine so its grid asks where to place the new bottles.
+  function addToNewLocation() {
+    setAddPickerOpen(false);
+    showAlert({
+      title: 'What Kind of Storage Location?',
+      body: 'Set up the new location, then place your bottles in it.',
+      buttons: [
+        { text: 'Rack', onPress: () => { setPendingWineId(wine!.id); setPendingAddMode(true); useRackStore.getState().setPendingStorageType('rack'); router.push('/cellar/rack/resize' as any); } },
+        { text: 'Fridge', onPress: () => { setPendingWineId(wine!.id); setPendingAddMode(true); useRackStore.getState().setPendingStorageType('fridge'); router.push('/cellar/rack/resize' as any); } },
+        { text: 'Bin (diamonds)', onPress: () => router.push('/cellar/bin/resize' as any) },
+        { text: 'Alt Cellar', onPress: () => router.push('/cellar/storage-location/new' as any) },
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
   }
 
   function handleAddBottlesEntry() {
@@ -2493,6 +2544,9 @@ export default function CellarWineDetail() {
               {cellarEntries.length === 0 && !isArchived ? (
                 <TouchableOpacity onPress={handleAddToLocation}><Text style={styles.statAction}>Add to Location</Text></TouchableOpacity>
               ) : null}
+              {!isArchived && !isWishlist ? (
+                <TouchableOpacity onPress={() => setAddPickerOpen(true)} activeOpacity={0.7}><Text style={styles.statAction}>Add Bottles</Text></TouchableOpacity>
+              ) : null}
               {bottlesInCellar > 0 && !isArchived ? (
                 <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}><Text style={styles.statAction}>Add to Archive →</Text></TouchableOpacity>
               ) : null}
@@ -2868,6 +2922,71 @@ export default function CellarWineDetail() {
           qc.invalidateQueries({ queryKey: ['cellar'] });
         }}
       />
+
+      {/* Add Bottles — "Add <wine> to Your Cellar": every home storage location
+          (external cellars excluded: bottles only ever move OUT of them), a new
+          location, or the Full Cellar List. */}
+      <Modal visible={addPickerOpen} transparent animationType="fade" onRequestClose={() => setAddPickerOpen(false)}>
+        <View style={styles.cnOverlay}>
+          <View style={[styles.cnSheet, { maxHeight: '80%' }]}>
+            <Text style={styles.cnTitle}>Add {[wine.producer, wine.wine_name !== wine.producer ? wine.wine_name : null, wine.vintage].filter(Boolean).join(' ')} to Your Cellar</Text>
+            <ScrollView style={{ marginTop: spacing.sm }}>
+              {racks.map((r) => (
+                <TouchableOpacity key={r.id} style={styles.addDestRow} activeOpacity={0.7} onPress={() => { setAddPickerOpen(false); router.push(`/cellar/rack/${r.id}?addMoreWine=${wine.id}` as any); }}>
+                  <Text style={styles.addDestName} numberOfLines={1}>{r.name}</Text>
+                  <Text style={styles.addDestType}>{r.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
+                </TouchableOpacity>
+              ))}
+              {allBins.map((b) => (
+                <TouchableOpacity key={b.id} style={styles.addDestRow} activeOpacity={0.7} onPress={() => { setAddPickerOpen(false); setAddToCount('1'); setAddToDest({ kind: 'bin', id: b.id, name: b.name }); }}>
+                  <Text style={styles.addDestName} numberOfLines={1}>{b.name}</Text>
+                  <Text style={styles.addDestType}>Bin</Text>
+                </TouchableOpacity>
+              ))}
+              {storageLocations.filter((l) => !l.is_external).map((l) => (
+                <TouchableOpacity key={l.id} style={styles.addDestRow} activeOpacity={0.7} onPress={() => { setAddPickerOpen(false); setAddToCount('1'); setAddToDest({ kind: 'location', id: l.id, name: l.name }); }}>
+                  <Text style={styles.addDestName} numberOfLines={1}>{l.name}</Text>
+                  <Text style={styles.addDestType}>Alt Cellar</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.addDestRow} activeOpacity={0.7} onPress={addToNewLocation}>
+                <Text style={[styles.addDestName, { color: colors.gold }]}>+ Add New Location</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.addDestRow, { borderBottomWidth: 0 }]} activeOpacity={0.7} onPress={() => { setAddPickerOpen(false); startAddToCellarList(); }}>
+                <Text style={[styles.addDestName, { color: colors.gold }]}>Add to Full Cellar List</Text>
+                <Text style={styles.addDestType}>Unplaced</Text>
+              </TouchableOpacity>
+            </ScrollView>
+            <TouchableOpacity style={styles.cnCancel} onPress={() => setAddPickerOpen(false)}>
+              <Text style={styles.cnDeleteText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Bottles → bin / alt cellar: how many? */}
+      <Modal visible={!!addToDest} transparent animationType="fade" onRequestClose={() => setAddToDest(null)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.cnOverlay}>
+          <View style={styles.cnSheet}>
+            <Text style={styles.cnTitle}>How many bottles?</Text>
+            <Text style={[styles.cnBody, { marginTop: spacing.xs }]}>How many bottles of {wine.wine_name || wine.producer} to add to {addToDest?.name}?</Text>
+            <TextInput
+              style={styles.cnInput}
+              value={addToCount}
+              onChangeText={(t) => setAddToCount(t.replace(/[^0-9]/g, '').slice(0, 3))}
+              keyboardType="number-pad"
+              autoFocus
+              selectTextOnFocus
+            />
+            <TouchableOpacity style={styles.cnSaveBtn} onPress={() => void confirmAddToDest()} disabled={addingTo} activeOpacity={0.85}>
+              <Text style={styles.cnSaveText}>{addingTo ? 'Adding…' : `Add to ${addToDest?.name ?? ''}`}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cnCancel} onPress={() => setAddToDest(null)}>
+              <Text style={styles.cnDeleteText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Archive history entry note — View Note / Add Note on the Cellar tab. */}
       <Modal visible={!!archiveEntryEdit} transparent animationType="fade" onRequestClose={() => setArchiveEntryEdit(null)}>
@@ -3550,6 +3669,9 @@ const styles = StyleSheet.create({
   // "View Full Review(s)" link — drills to the wine's review card.
   viewFullReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: spacing.xs, textDecorationLine: 'underline' },
   // Cellar Note popup.
+  addDestRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, borderBottomWidth: 1, borderBottomColor: colors.border },
+  addDestName: { flex: 1, fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
+  addDestType: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted },
   cnOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: spacing.xl },
   cnSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
   // Close "✕" top-right, matching the one AppAlert offers via showCloseX.
