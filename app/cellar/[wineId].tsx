@@ -36,7 +36,8 @@ import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBo
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals, stampPurchasePriceDate } from '../../src/api/cellar';
 import { generateServingSuggestion, generateMarketVintage, generateRarity } from '../../src/api/wineExtras';
-import { wineNameKey, looseWineMatch } from '../../src/utils/wineIdentity';
+import { wineNameKey } from '../../src/utils/wineIdentity';
+import { sameWineIdentity } from '../../src/utils/wineMatch';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -239,6 +240,10 @@ export default function CellarWineDetail() {
   const [archiveNoteOpen, setArchiveNoteOpen] = useState(false);
   const [archiveNoteViewOpen, setArchiveNoteViewOpen] = useState(false);
   const [archiveNoteText, setArchiveNoteText] = useState(wine?.archive_note ?? '');
+  // Cellar tab → Archive history: the per-entry note editor (an archived row's
+  // archive_note), opened from "View Note" / "Add Note".
+  const [archiveEntryEdit, setArchiveEntryEdit] = useState<{ id: string; label: string; text: string; had: boolean } | null>(null);
+  const [savingArchiveEntry, setSavingArchiveEntry] = useState(false);
 
   const [removeCount, setRemoveCount] = useState('1');
   const [removeDate, setRemoveDate] = useState(todayISO());
@@ -1721,10 +1726,7 @@ export default function CellarWineDetail() {
   const matchesIdentity = (w: typeof wine) =>
     (wineNameKey(w.producer, w.wine_name) === wineKey &&
       norm(w.vintage) === norm(wine.vintage)) ||
-    looseWineMatch(
-      { producer: wine.producer, wineName: wine.wine_name, grape: wine.grape_variety, vintage: wine.vintage },
-      { producer: w.producer, wineName: w.wine_name, grape: w.grape_variety, vintage: w.vintage },
-    );
+    sameWineIdentity(wine, w);
   const bottlesInCellar = wines.filter(matchesIdentity).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
   const archivedMatches = archivedWines.filter(matchesIdentity);
   const bottlesInArchive = archivedMatches.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
@@ -1952,6 +1954,58 @@ export default function CellarWineDetail() {
   const afterPick = pickFromCellar(serving?.digestif?.style, wines, wine.id);
   const cellaredOn = wine.date_received ?? wine.created_at;
 
+  // Cellar Note, edited in place under the Cellared date: saved when the field
+  // loses focus (only if it changed).
+  async function saveInlineCellarNote() {
+    const next = noteText.trim().slice(0, 35);
+    if (next === (wine!.cellar_note ?? '')) return;
+    try {
+      await updateWine.mutateAsync({ id: wine!.id, updates: { cellar_note: next || null } });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+    } catch {
+      showAlert({ title: 'Error', body: 'Could not save note.' });
+    }
+  }
+
+  async function saveArchiveEntryNote(clear?: boolean) {
+    if (!archiveEntryEdit) return;
+    setSavingArchiveEntry(true);
+    try {
+      await updateWine.mutateAsync({ id: archiveEntryEdit.id, updates: { archive_note: clear ? null : (archiveEntryEdit.text.trim().slice(0, 35) || null) } });
+      setArchiveEntryEdit(null);
+    } catch {
+      showAlert({ title: 'Error', body: 'Could not save note.' });
+    } finally {
+      setSavingArchiveEntry(false);
+    }
+  }
+
+  // Archive history: each archived entry of this wine, newest first.
+  const archiveHistory = [...archivedMatches]
+    .filter((a) => a.archived_at)
+    .sort((a, b) => new Date(b.archived_at!).getTime() - new Date(a.archived_at!).getTime());
+
+  // Drinking History: when this wine was opened and the occasion — archived
+  // bottles (their note, else the review's location that day) plus reviews with
+  // no archive entry. Rows with a review link through to it.
+  const dayOf = (d: string | null | undefined) => (d ?? '').slice(0, 10);
+  const reviewDays = new Map(reviews.map((r) => [dayOf(r.date ?? r.savedAt), r] as const));
+  const linkedDays = new Set<string>();
+  const drinkingHistory: { key: string; date: string; occasion: string | null; bottles: number | null; hasReview: boolean }[] = [];
+  for (const a of archiveHistory) {
+    const day = dayOf(a.archived_at);
+    const r = reviewDays.get(day);
+    if (r) linkedDays.add(day);
+    drinkingHistory.push({ key: a.id, date: a.archived_at!, occasion: a.archive_note?.trim() || r?.location || null, bottles: a.quantity ?? null, hasReview: !!r });
+  }
+  for (const r of reviews) {
+    const day = dayOf(r.date ?? r.savedAt);
+    if (!day || linkedDays.has(day)) continue;
+    linkedDays.add(day);
+    drinkingHistory.push({ key: `r-${r.id}`, date: day, occasion: r.location || null, bottles: null, hasReview: true });
+  }
+  drinkingHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   function pickRow(found: CellarPick | null, slot: 'before' | 'after', suggested: string) {
     if (!found) {
       // Nothing suitable at all → offer three styles from the wider market.
@@ -1988,7 +2042,7 @@ export default function CellarWineDetail() {
         path={wine.label_image_path}
         title={[wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ')}
         subtitle={[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}
-        chip={isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : 'Wine Card'}
+        chip={isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : ''}
         onBack={() => router.back()}
         onPhotoPress={() => (wine.label_image_path ? setPhotoViewerOpen(true) : handleAddPhoto())}
         onPhotoLongPress={() => (wine.label_image_path ? handlePhotoMenu() : handleAddPhoto())}
@@ -2156,8 +2210,11 @@ export default function CellarWineDetail() {
                   ) : pp != null ? (
                     <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}>
                       <Text style={styles.wcValue}>{formatCurrency(pp, wine.purchase_price_currency, { decimals: 0 })}</Text>
-                      <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Estimated' : 'Entered by you'}</Text>
-                      {(wine.purchase_price_at ?? cellaredOn) ? <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Market value on ' : ''}{fmtDay(wine.purchase_price_at ?? cellaredOn)}</Text> : null}
+                      <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Estimated Market Value' : 'Entered by you'}</Text>
+                      {wine.purchase_price_estimated && wine.estimated_value_source ? (
+                        <Text style={styles.wcSmall}>{wine.estimated_value_source === 'wine-searcher' ? 'Wine-Searcher' : 'Vinster estimate'}</Text>
+                      ) : null}
+                      {(wine.purchase_price_at ?? cellaredOn) ? <Text style={styles.wcSmall}>{fmtDay(wine.purchase_price_at ?? cellaredOn)}</Text> : null}
                       <Text style={styles.wcLinkSmall}>Edit</Text>
                     </TouchableOpacity>
                   ) : (
@@ -2176,10 +2233,12 @@ export default function CellarWineDetail() {
                       <Text style={styles.wcSmall}>Range {formatCurrency(Number(wine.estimated_value_low), wine.estimated_value_currency, { decimals: 0 })}–{formatCurrency(Number(wine.estimated_value_high), wine.estimated_value_currency, { decimals: 0 })}</Text>
                     ) : null}
                     {wine.estimated_value_at ? (
-                      <Text style={styles.wcSmall}>
-                        {wine.estimated_value_source === 'wine-searcher' ? (wine.estimated_value_scope === 'all-vintage' ? 'WS · all vintages · ' : 'Wine-Searcher · ') : wine.estimated_value_source === 'vinster' ? 'Vinster estimate · ' : ''}
-                        {fmtDay(wine.estimated_value_at)}
-                      </Text>
+                      <>
+                        {wine.estimated_value_source === 'wine-searcher' || wine.estimated_value_source === 'vinster' ? (
+                          <Text style={styles.wcSmall}>{wine.estimated_value_source === 'vinster' ? 'Vinster estimate' : wine.estimated_value_scope === 'all-vintage' ? 'Wine-Searcher · all vintages' : 'Wine-Searcher'}</Text>
+                        ) : null}
+                        <Text style={styles.wcSmall}>{fmtDay(wine.estimated_value_at)}</Text>
+                      </>
                     ) : null}
                   </>
                 ) : (
@@ -2336,7 +2395,25 @@ export default function CellarWineDetail() {
         {/* ================= CELLAR ================= */}
         {activeTab === 'cellar' ? (
           <>
-            {cellaredOn ? <Text style={styles.wcSmall}>Cellared {new Date(cellaredOn).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Text> : null}
+            {cellaredOn ? <Text style={styles.wcCellared}>Cellared {new Date(cellaredOn).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Text> : null}
+            {!isWishlist ? (
+              <View style={styles.wcCellarNoteRow}>
+                {noteText.trim() ? <Text style={styles.wcCellarNoteLabel}>Cellar Note: </Text> : null}
+                <TextInput
+                  style={styles.wcCellarNoteInput}
+                  value={noteText}
+                  onChangeText={(t) => setNoteText(t.slice(0, 35))}
+                  onBlur={() => void saveInlineCellarNote()}
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                  placeholder="Add Cellar Note"
+                  placeholderTextColor={colors.gold}
+                  maxLength={35}
+                  returnKeyType="done"
+                  blurOnSubmit
+                  accessibilityLabel="Cellar Note"
+                />
+              </View>
+            ) : null}
 
             <View style={styles.wcCard}>
               <Text style={styles.wcLabel}>Bottles in My Cellar</Text>
@@ -2385,27 +2462,51 @@ export default function CellarWineDetail() {
               {bottlesInArchive === 0
                 ? <Text style={[styles.wcValue, styles.statValueMuted]}>{bottleLabel(0)}</Text>
                 : <Text style={styles.wcValue}>{bottlesInArchive}×{bottleSizeCl(archiveBottleMl)}cl</Text>}
-              {removals.length > 0 ? (
+              {archiveHistory.length > 0 ? (
                 <View style={styles.wcList}>
-                  {removals.map((ev2, i) => (
-                    <TouchableOpacity key={ev2.id} style={[styles.wcRow, i === removals.length - 1 && styles.wcRowLast]} onPress={() => setArchiveHistoryOpen(true)} activeOpacity={0.7}>
-                      <View style={{ flex: 1, gap: 1 }}>
-                        <Text style={styles.wcRowText}>{fmtDay(ev2.removed_at)} · {bottleLabel(ev2.count)}</Text>
-                        {ev2.note?.trim() ? <Text style={styles.wcSmallItalic} numberOfLines={2}>{ev2.note.trim()}</Text> : null}
+                  {archiveHistory.map((a, i) => {
+                    const label = `${fmtDay(a.archived_at)} · ${bottleLabel(a.quantity ?? 0)}`;
+                    const note = a.archive_note?.trim() ?? '';
+                    return (
+                      <View key={a.id} style={[styles.wcRow, i === archiveHistory.length - 1 && styles.wcRowLast]}>
+                        <Text style={[styles.wcRowText, { flex: 1 }]}>{label}</Text>
+                        <TouchableOpacity onPress={() => setArchiveEntryEdit({ id: a.id, label, text: note, had: !!note })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                          <Text style={styles.wcLink}>{note ? 'View Note' : 'Add Note'}</Text>
+                        </TouchableOpacity>
                       </View>
-                      <Text style={styles.wcChevron}>›</Text>
-                    </TouchableOpacity>
-                  ))}
+                    );
+                  })}
                 </View>
               ) : null}
             </View>
 
-            <View style={[styles.wcCard, { paddingVertical: spacing.xs }]}>
-              <View style={styles.reviewRow}>
-                {renderCellarNoteCol()}
-                {isArchived ? renderArchiveNoteCol() : null}
+            {!isWishlist ? (
+              <View style={styles.wcCard}>
+                <Text style={styles.wcLabel}>Drinking History</Text>
+                {drinkingHistory.length === 0 ? (
+                  <Text style={styles.wcSmall}>No bottles opened yet.</Text>
+                ) : (
+                  <View style={styles.wcList}>
+                    {drinkingHistory.map((h, i) => {
+                      const body = (
+                        <>
+                          <View style={{ flex: 1, gap: 1 }}>
+                            <Text style={styles.wcRowText}>{fmtDay(h.date)}{h.bottles ? ` · ${bottleLabel(h.bottles)}` : ''}</Text>
+                            <Text style={h.occasion ? styles.wcSmallItalic : styles.wcSmall} numberOfLines={2}>{h.occasion ?? 'No occasion noted'}</Text>
+                          </View>
+                          {h.hasReview ? <Text style={styles.wcLink}>View review ›</Text> : null}
+                        </>
+                      );
+                      return h.hasReview ? (
+                        <TouchableOpacity key={h.key} style={[styles.wcRow, i === drinkingHistory.length - 1 && styles.wcRowLast]} onPress={() => router.push(reviewOpenHref as any)} activeOpacity={0.7}>{body}</TouchableOpacity>
+                      ) : (
+                        <View key={h.key} style={[styles.wcRow, i === drinkingHistory.length - 1 && styles.wcRowLast]}>{body}</View>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
-            </View>
+            ) : null}
           </>
         ) : null}
 
@@ -2727,6 +2828,42 @@ export default function CellarWineDetail() {
         }}
       />
 
+      {/* Archive history entry note — View Note / Add Note on the Cellar tab. */}
+      <Modal visible={!!archiveEntryEdit} transparent animationType="fade" onRequestClose={() => setArchiveEntryEdit(null)}>
+        <View style={styles.cnOverlay}>
+          <View style={styles.cnSheet}>
+            <View style={styles.cnHeaderRow}>
+              <Text style={styles.cnTitle}>Archive Note</Text>
+              <View style={styles.cnHeaderRight}>
+                <TouchableOpacity onPress={() => setArchiveEntryEdit(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
+                  <Text style={styles.cnCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <Text style={styles.cnWineLine} numberOfLines={2}>{archiveEntryEdit?.label}</Text>
+            <TextInput
+              style={styles.cnInput}
+              value={archiveEntryEdit?.text ?? ''}
+              onChangeText={(t) => setArchiveEntryEdit((e) => (e ? { ...e, text: t.slice(0, 35) } : e))}
+              placeholder="e.g. Birthday dinner with friends"
+              placeholderTextColor={colors.textMuted}
+              maxLength={35}
+              multiline
+              autoFocus={!archiveEntryEdit?.had}
+            />
+            <Text style={styles.cnCount}>{(archiveEntryEdit?.text ?? '').length}/35</Text>
+            <TouchableOpacity style={styles.cnSaveBtn} onPress={() => void saveArchiveEntryNote()} disabled={savingArchiveEntry} activeOpacity={0.85}>
+              <Text style={styles.cnSaveText}>{savingArchiveEntry ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+            {archiveEntryEdit?.had ? (
+              <TouchableOpacity style={styles.cnCancel} onPress={() => void saveArchiveEntryNote(true)} disabled={savingArchiveEntry}>
+                <Text style={styles.cnDeleteText}>Delete Note</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
       {/* Cellar Note popup — dictate or type a short private note (<=50 chars).
           Card-only; never touches the review. */}
       <Modal visible={cellarNoteOpen} transparent animationType="fade" onRequestClose={() => setCellarNoteOpen(false)}>
@@ -2889,11 +3026,12 @@ export default function CellarWineDetail() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // ---- Wine card layout E ----
-  wcTabBar: { flexDirection: 'row', backgroundColor: '#3E2120', paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  wcTab: { flex: 1, height: 46, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  wcTabOn: { borderBottomColor: colors.gold },
-  wcTabText: { fontFamily: fonts.headingBold, fontSize: 16, color: 'rgba(255,255,255,0.8)' },
-  wcTabTextOn: { color: colors.gold },
+  // Segmented tabs: each tab a gold-outlined pill; the open one filled gold.
+  wcTabBar: { flexDirection: 'row', gap: 6, backgroundColor: '#3E2120', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  wcTab: { flex: 1, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
+  wcTabOn: { backgroundColor: colors.gold, borderColor: colors.gold },
+  wcTabText: { fontFamily: fonts.headingBold, fontSize: 15, color: colors.gold },
+  wcTabTextOn: { color: '#3E2120' },
   wcFacts: { flexDirection: 'row', marginTop: spacing.md, marginHorizontal: spacing.lg, backgroundColor: '#6A3B37', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
   wcFact: { flex: 1, alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4, gap: 2, borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.1)' },
   wcFactLast: { borderRightWidth: 0 },
@@ -2902,6 +3040,11 @@ const styles = StyleSheet.create({
   wcFactSub: { fontFamily: fonts.bodyRegular, fontSize: 10.5, color: 'rgba(255,255,255,0.8)' },
   wcFactAction: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
   wcBody: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.md },
+  wcCellared: { fontFamily: fonts.headingItalic, fontSize: 18, color: colors.text, textAlign: 'center' },
+  // Cellar Note in place: reads as text, not a field; tap to type.
+  wcCellarNoteRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: -6 },
+  wcCellarNoteLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
+  wcCellarNoteInput: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.text, padding: 0, margin: 0, minWidth: 40, textAlign: 'center' },
   wcCard: { backgroundColor: colors.surface, borderRadius: 14, padding: spacing.md, gap: 6 },
   wcCardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   wcInside: { backgroundColor: '#3E2120', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)' },

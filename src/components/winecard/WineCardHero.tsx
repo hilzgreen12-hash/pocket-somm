@@ -39,17 +39,15 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
         )}
       </TouchableOpacity>
 
-      {/* Fade into the dark band (no gradient lib: stacked translucent bands). */}
-      <View pointerEvents="none" style={[styles.fade, { height: 70, opacity: 0.25 }]} />
-      <View pointerEvents="none" style={[styles.fade, { height: 120, opacity: 0.35 }]} />
-      <View pointerEvents="none" style={[styles.fade, { height: 160, opacity: 0.45 }]} />
+      {/* One even shade behind the title (no lighter upper tier). */}
+      <View pointerEvents="none" style={[styles.fade, { height: 130, opacity: 0.7 }]} />
       <View pointerEvents="none" style={styles.topShade} />
 
       <View style={styles.topBar}>
         <TouchableOpacity onPress={onBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={styles.backBtn} accessibilityLabel="Back">
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.chip}>{chip}</Text>
+        {chip ? <Text style={styles.chip}>{chip}</Text> : null}
         <View style={styles.backBtn} />
       </View>
 
@@ -64,12 +62,12 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
 
 const styles = StyleSheet.create({
   hero: { height: HERO_H, backgroundColor: DARK, overflow: 'hidden' },
-  photo: { position: 'absolute', left: 0, right: 0, top: 50, bottom: 70 },
+  photo: { position: 'absolute', left: 0, right: 0, top: 86, bottom: 70 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted },
   fade: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: DARK },
-  topShade: { position: 'absolute', left: 0, right: 0, top: 0, height: 64, backgroundColor: 'rgba(62,33,32,0.45)' },
-  topBar: { position: 'absolute', left: spacing.md, right: spacing.md, top: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  topShade: { position: 'absolute', left: 0, right: 0, top: 0, height: 96, backgroundColor: 'rgba(62,33,32,0.45)' },
+  topBar: { position: 'absolute', left: spacing.md, right: spacing.md, top: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   backText: { color: colors.gold, fontSize: 24, fontFamily: fonts.bodyRegular },
   chip: { fontFamily: fonts.headingBold, fontSize: 15, letterSpacing: 1.5, color: colors.gold, textTransform: 'uppercase' },
