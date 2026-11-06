@@ -8,6 +8,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { searchFolderImages, type LabelImageCandidate } from '../../src/api/label';
 import { uploadCookbookPhotoFromUrl } from '../../src/api/labelPhotos';
 import { setChefCollectionImage } from '../../src/api/chefArchiveCollections';
+import { FAVOURITES_ID, setFavouritesCover } from '../../src/api/cookbookFavouritesCover';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -45,8 +46,13 @@ export default function FindFolderPhotoScreen() {
     setStage('saving');
     try {
       const path = await uploadCookbookPhotoFromUrl(session.user.id, c.url, folderId);
-      await setChefCollectionImage(folderId, path);
-      qc.invalidateQueries({ queryKey: ['chef-archive-collections'] });
+      if (folderId === FAVOURITES_ID) {
+        await setFavouritesCover(session.user.id, path);
+        qc.invalidateQueries({ queryKey: ['cookbook-favourites-cover'] });
+      } else {
+        await setChefCollectionImage(folderId, path);
+        qc.invalidateQueries({ queryKey: ['chef-archive-collections'] });
+      }
       router.back();
     } catch (err) {
       showAlert({ title: 'Could not save that photo', body: err instanceof Error ? err.message : 'Pick another, or try again.' });

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FAVOURITES_ID, getFavouritesCover, setFavouritesCover } from '../api/cookbookFavouritesCover';
 import { useChefArchiveCollections } from '../hooks/useChefArchiveCollections';
 import { useAuth } from '../hooks/useAuth';
 import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
@@ -38,6 +39,16 @@ function FolderBg({ path }: { path?: string | null }) {
 
 const TILE_W = 220;
 
+// "+ Add Image" under a tile's name (gold, not capitals) — opens Take / Upload /
+// Find Online. Reads "Change Image" once the tile has one.
+function AddImageLink({ has, onPress }: { has: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={{ alignSelf: 'flex-start', marginTop: 4 }} accessibilityRole="button">
+      <Text style={styles.addImage}>{has ? 'Change Image' : '+ Add Image'}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export function CookbookFoldersCarousel() {
   const { collections, rename } = useChefArchiveCollections();
   const { session } = useAuth();
@@ -45,6 +56,13 @@ export function CookbookFoldersCarousel() {
   const qc = useQueryClient();
   const [renaming, setRenaming] = useState<ChefArchiveCollection | null>(null);
   const [renameVal, setRenameVal] = useState('');
+  // Favourites' cover lives on the device (it isn't a real folder).
+  const { data: favCover = null } = useQuery({
+    queryKey: ['cookbook-favourites-cover', userId],
+    enabled: !!userId,
+    queryFn: () => getFavouritesCover(userId),
+  });
+  const favouritesTile = { id: FAVOURITES_ID, name: 'Favourites', image_path: favCover } as unknown as ChefArchiveCollection;
 
   // Drag to reorder (hold a folder, then drag). Saved to the account.
   async function saveOrder(ids: string[]) {
@@ -76,6 +94,7 @@ export function CookbookFoldersCarousel() {
         { text: 'Take a Photo', onPress: () => setTimeout(() => void pickImage(c, 'camera'), 350) },
         { text: 'Upload a Photo', onPress: () => setTimeout(() => void pickImage(c, 'library'), 350) },
         { text: 'Find a Photo Online', onPress: () => router.push(`/chef/find-folder-photo?folderId=${c.id}&name=${encodeURIComponent(c.name)}` as any) },
+        ...(c.image_path ? [{ text: 'Remove Image', style: 'destructive' as const, onPress: () => void setImage(c, null) }] : []),
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
@@ -98,6 +117,11 @@ export function CookbookFoldersCarousel() {
 
   async function setImage(c: ChefArchiveCollection, path: string | null) {
     try {
+      if (c.id === FAVOURITES_ID) {
+        await setFavouritesCover(userId, path);
+        qc.invalidateQueries({ queryKey: ['cookbook-favourites-cover', userId] });
+        return;
+      }
       await setChefCollectionImage(c.id, path);
       qc.invalidateQueries({ queryKey: ['chef-archive-collections', userId] });
     } catch (err) {
@@ -142,8 +166,12 @@ export function CookbookFoldersCarousel() {
         onReorder={(ids) => void saveOrder(ids)}
         leading={
           <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
+            <FolderBg path={favCover} />
             <Text style={styles.cardType}>Cookbook</Text>
-            <Text style={styles.cardName} numberOfLines={2}>★ Favourites</Text>
+            <View>
+              <Text style={styles.cardName} numberOfLines={2}>★ Favourites</Text>
+              <AddImageLink has={!!favCover} onPress={() => openImageMenu(favouritesTile)} />
+            </View>
             <Text style={styles.cardCount}>{recipeLabel(favouritesCount)}</Text>
           </TouchableOpacity>
         }
@@ -156,7 +184,10 @@ export function CookbookFoldersCarousel() {
             <TouchableOpacity style={styles.card} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} onLongPress={() => {}} delayLongPress={350} activeOpacity={0.8}>
               <FolderBg path={c.image_path} />
               <Text style={styles.cardType}>Your Folder</Text>
-              <Text style={styles.cardName} numberOfLines={2}>{c.name}</Text>
+              <View>
+                <Text style={styles.cardName} numberOfLines={2}>{c.name}</Text>
+                <AddImageLink has={!!c.image_path} onPress={() => openImageMenu(c)} />
+              </View>
               <Text style={styles.cardCount}>{recipeLabel(c.item_count)}</Text>
             </TouchableOpacity>
           ),
@@ -216,6 +247,7 @@ const styles = StyleSheet.create({
   cardType: { fontSize: 11, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
   cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardCount: { fontSize: 13, fontFamily: fonts.headingRegular, color: colors.textMuted },
+  addImage: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   cardAdd: { width: 220, height: 165, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   cardAddText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   renameOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
