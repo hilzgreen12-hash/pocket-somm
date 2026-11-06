@@ -33,6 +33,26 @@ export async function suggestMarketStyles(w: CellarWine, slot: 'before' | 'after
   return data?.styles ?? [];
 }
 
+// Vinster's Verdict for the vintage table: a considered judgement (age, drinking
+// window, rarity, recommendation) that doesn't restate the ranks shown above it.
+export async function generateVintageVerdict(w: CellarWine, input: {
+  rows: { vintage: number; score: number | null; price: number | null }[];
+  currency: string;
+  qualityRank: number | null;
+  valueRank: number | null;
+  total: number;
+  bestValueVintage: number | null;
+  window?: { from?: number | string | null; to?: number | string | null; status?: string | null } | null;
+  rarity?: string | null;
+}): Promise<VintageVerdictAI | null> {
+  const data = await invokeResilient('wine-market-vintage', { ...identity(w), mode: 'verdict', ...input }) as VintageVerdictAI & { error?: string };
+  if (data?.error) throw new Error(data.error);
+  if (!data?.verdict && !data?.drinkNow && !data?.layDown) return null;
+  return { verdict: data.verdict ?? null, drinkNow: data.drinkNow ?? null, layDown: data.layDown ?? null };
+}
+export type VintagePick = { vintages: number[]; reason: string };
+export type VintageVerdictAI = { verdict: string | null; drinkNow: VintagePick | null; layDown: VintagePick | null };
+
 // Generate Vinster's Market & Vintage Comparison on demand. Returns null when
 // the server's recognition gate says the model doesn't genuinely know this wine
 // (identified !== true / no text) — the caller shows an honest line instead.

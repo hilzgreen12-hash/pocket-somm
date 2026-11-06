@@ -135,3 +135,10 @@ export function pickFromCellar(style: string | null | undefined, wines: CellarWi
   }
   return null;
 }
+
+// 1 → "1st", 2 → "2nd", 11 → "11th", 22 → "22nd".
+export function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`;
+}

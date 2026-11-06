@@ -36,7 +36,7 @@ import { getBins } from '../../src/api/bins';
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation, addLocationPlacement } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals, stampPurchasePriceDate } from '../../src/api/cellar';
-import { generateServingSuggestion, generateMarketVintage, generateRarity } from '../../src/api/wineExtras';
+import { generateServingSuggestion, generateMarketVintage, generateRarity, generateVintageVerdict, type VintageVerdictAI } from '../../src/api/wineExtras';
 import { wineNameKey, wineQueryAltName } from '../../src/utils/wineIdentity';
 import { sameWineIdentity } from '../../src/utils/wineMatch';
 import { publishCommunityReview } from '../../src/api/community';
@@ -55,7 +55,7 @@ import { PackagingPrompt } from '../../src/components/PackagingPrompt';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
-import { vintageVerdict, pickFromCellar, type CellarPick } from '../../src/utils/wineCardInsights';
+import { vintageVerdict, pickFromCellar, ordinal, type CellarPick } from '../../src/utils/wineCardInsights';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
@@ -575,6 +575,38 @@ export default function CellarWineDetail() {
     if (!wine) return;
     router.push(`/cellar/edit-wine/${wine.id}` as any);
   }
+
+  // Vinster's Verdict prose (Market tab) — generated once the vintage table is
+  // in, saved with it so the tab reopens instantly; a Refresh regenerates.
+  const [aiVerdict, setAiVerdict] = useState<VintageVerdictAI | null>(null);
+  const [aiVerdictLoading, setAiVerdictLoading] = useState(false);
+  const aiVerdictKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wine || cardTab !== 'market' || !vintageRows || vintageRows.length < 2) return;
+    const key = `${wine.id}:${vintageRows.map((r) => `${r.vintage}-${r.price}`).join('|')}`;
+    if (aiVerdictKeyRef.current === key) return;
+    aiVerdictKeyRef.current = key;
+    const saved = wine.market_vintage_note;
+    const savedKey = saved?.rows ? `${wine.id}:${saved.rows.map((r) => `${r.vintage}-${r.price}`).join('|')}` : null;
+    if (saved?.verdictData && savedKey === key) { setAiVerdict(saved.verdictData); return; }
+    const cur = preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP';
+    const v = vintageVerdict(vintageRows, wine.vintage, (n) => formatCurrency(n, cur, { decimals: 0 }));
+    setAiVerdict(null);
+    setAiVerdictLoading(true);
+    generateVintageVerdict(wine, {
+      rows: vintageRows, currency: cur, qualityRank: v.qualityRank, valueRank: v.valueRank, total: v.total, bestValueVintage: v.bestValueVintage,
+      window: { from: wine.drinking_window_from, to: wine.drinking_window_to, status: effectiveMaturity(wine) },
+      rarity: saved?.rarity?.label || null,
+    })
+      .then((res) => {
+        if (!res) return;
+        setAiVerdict(res);
+        if (saved?.rows) void updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...saved, verdictData: res } } as any }).catch(() => {});
+      })
+      .catch(() => { aiVerdictKeyRef.current = null; })
+      .finally(() => setAiVerdictLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardTab, vintageRows, wine?.id]);
 
   // Tabs generate on first open, then reopen from what's saved on the wine.
   const tabLoadedRef = useRef<string | null>(null);
@@ -2383,15 +2415,33 @@ export default function CellarWineDetail() {
                       );
                     })}
                     <Text style={styles.vintageFootnote}>Wine-Searcher market value and aggregate critic score, by vintage.</Text>
-                    {verdict.text ? (
+                    {verdict.total >= 2 ? (
                       <View style={styles.wcVerdict}>
                         <Text style={styles.insiderTitle}>Vinster's verdict</Text>
-                        <View style={styles.wcChips}>
-                          {verdict.qualityRank != null ? <Text style={[styles.wcChip, styles.wcChipGold]}>Yours: #{verdict.qualityRank} of {verdict.total} for quality</Text> : null}
-                          {verdict.valueRank != null ? <Text style={styles.wcChip}>#{verdict.valueRank} of {verdict.total} for value</Text> : null}
-                          {verdict.bestValueVintage != null ? <Text style={[styles.wcChip, styles.wcChipGreen]}>Best value: {verdict.bestValueVintage}</Text> : null}
+                        <View style={{ gap: 2 }}>
+                          {verdict.qualityRank != null ? <Text style={styles.wcVerdictPoint}>Your Wine Quality: <Text style={styles.wcVerdictPointGold}>{ordinal(verdict.qualityRank)} of {verdict.total} vintages</Text></Text> : null}
+                          {verdict.valueRank != null ? <Text style={styles.wcVerdictPoint}>Your Wine Value: <Text style={styles.wcVerdictPointGold}>{ordinal(verdict.valueRank)} of {verdict.total} vintages</Text></Text> : null}
+                          {verdict.bestValueVintage != null ? <Text style={styles.wcVerdictPoint}>Best Value Vintage: <Text style={styles.wcVerdictPointGold}>{verdict.bestValueVintage}</Text></Text> : null}
                         </View>
-                        <Text style={styles.wcBodyText}>{verdict.text}</Text>
+                        {aiVerdictLoading ? (
+                          <View style={styles.vintageLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.wcSmall}>Vinster is weighing up this vintage…</Text></View>
+                        ) : aiVerdict ? (
+                          <>
+                            {aiVerdict.verdict ? <Text style={styles.wcBodyText}>{aiVerdict.verdict}</Text> : null}
+                            {aiVerdict.drinkNow ? (
+                              <View style={{ gap: 2 }}>
+                                <Text style={styles.wcVerdictPoint}>Best for Drinking Now: <Text style={styles.wcVerdictPointGold}>{aiVerdict.drinkNow.vintages.join(', ')}</Text></Text>
+                                {aiVerdict.drinkNow.reason ? <Text style={styles.wcSmallItalic}>{aiVerdict.drinkNow.reason}</Text> : null}
+                              </View>
+                            ) : null}
+                            {aiVerdict.layDown ? (
+                              <View style={{ gap: 2 }}>
+                                <Text style={styles.wcVerdictPoint}>Best to Lay Down: <Text style={styles.wcVerdictPointGold}>{aiVerdict.layDown.vintages.join(', ')}</Text></Text>
+                                {aiVerdict.layDown.reason ? <Text style={styles.wcSmallItalic}>{aiVerdict.layDown.reason}</Text> : null}
+                              </View>
+                            ) : null}
+                          </>
+                        ) : null}
                       </View>
                     ) : null}
                     <TouchableOpacity onPress={handleGenerateMarket} activeOpacity={0.7}><Text style={styles.diveDeeperLink}>Refresh →</Text></TouchableOpacity>
@@ -2549,17 +2599,17 @@ export default function CellarWineDetail() {
                 </View>
               ) : null}
               {cellarEntries.length === 0 && !isArchived ? (
-                <TouchableOpacity onPress={handleAddToLocation}><Text style={styles.statAction}>Add to Location</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleAddToLocation}><Text style={[styles.statAction, styles.cellarCommand]}>Add to Location</Text></TouchableOpacity>
               ) : null}
               {!isArchived && !isWishlist ? (
-                <TouchableOpacity onPress={() => setAddPickerOpen(true)} activeOpacity={0.7}><Text style={styles.statAction}>Add Bottles</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setAddPickerOpen(true)} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Add Bottles</Text></TouchableOpacity>
               ) : null}
               {bottlesInCellar > 0 && !isArchived ? (
-                <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}><Text style={styles.statAction}>Add to Archive →</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Add to Archive →</Text></TouchableOpacity>
               ) : null}
               {!isArchived && !isWishlist ? (
                 // Opens the same "delete from your records" confirmation.
-                <TouchableOpacity onPress={() => setRemoveStep('confirm')} disabled={removing} activeOpacity={0.7}><Text style={styles.statAction}>Delete Wine</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setRemoveStep('confirm')} disabled={removing} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Delete Wine</Text></TouchableOpacity>
               ) : null}
             </View>
             {!isArchived && rackRemovalMsg ? <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text> : null}
@@ -3254,6 +3304,8 @@ const styles = StyleSheet.create({
   wcTMine: { color: colors.gold, fontFamily: fonts.bodySemibold },
   wcBestStar: { color: colors.gold },
   wcVerdict: { marginTop: 6, padding: spacing.sm, borderRadius: 12, backgroundColor: 'rgba(224,184,74,0.08)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', gap: 8 },
+  wcVerdictPoint: { fontFamily: fonts.bodyRegular, fontSize: 14.5, color: colors.text, lineHeight: 22 },
+  wcVerdictPointGold: { fontFamily: fonts.bodySemibold, color: colors.gold },
   wcChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   wcChip: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', fontFamily: fonts.bodyRegular, fontSize: 12.5, color: colors.text, overflow: 'hidden' },
   wcChipGold: { borderColor: colors.gold, color: colors.gold },
@@ -3601,6 +3653,8 @@ const styles = StyleSheet.create({
     color: colors.gold,
     marginTop: 4,
   },
+  // Bottles in My Cellar commands — one point larger than other stat actions.
+  cellarCommand: { fontSize: 13 },
   // Informational (non-tappable) placement note — muted italic.
   statActionMuted: {
     fontSize: 12,

@@ -286,6 +286,10 @@ export interface WineMarketVintageNote {
   unknown?: boolean;
   currency?: string;
   at?: string;
+  // Vinster's Verdict prose for the saved table (regenerated with a refresh).
+  verdictText?: string | null;
+  // …plus Best for Drinking Now / Best to Lay Down vintage picks.
+  verdictData?: { verdict: string | null; drinkNow: { vintages: number[]; reason: string } | null; layDown: { vintages: number[]; reason: string } | null } | null;
 }
 
 // Cellar types

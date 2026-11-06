@@ -25,7 +25,7 @@ import { useCellar, useWishList, useArchive } from '../../src/hooks/useCellar';
 import { findSameCellarWine, sameWineIdentity } from '../../src/utils/wineMatch';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
 import { wc } from '../../src/components/winecard/wcStyles';
-import { vintageVerdict, pickFromCellar, type CellarPick } from '../../src/utils/wineCardInsights';
+import { vintageVerdict, pickFromCellar, ordinal, type CellarPick } from '../../src/utils/wineCardInsights';
 import { entriesOf } from '../../src/utils/cellarReview';
 import { wineQueryName, wineQueryAltName } from '../../src/utils/wineIdentity';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
@@ -42,7 +42,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
-import { generateServingSuggestion, generateRarity } from '../../src/api/wineExtras';
+import { generateServingSuggestion, generateRarity, generateVintageVerdict, type VintageVerdictAI } from '../../src/api/wineExtras';
 import type { WineServingSuggestion } from '../../src/types/wine';
 import { peekIntelCurrency } from '../../src/utils/localCurrency';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
@@ -295,6 +295,29 @@ export default function LabelResultsScreen() {
   const [vintageRows, setVintageRows] = useState<VintageComparisonRow[] | null>(null);
   const [vintagesLoading, setVintagesLoading] = useState(false);
   const vintagesTriedRef = useRef(false);
+  // Vinster's Verdict prose for the Market tab's vintage table.
+  const [intelVerdict, setIntelVerdict] = useState<VintageVerdictAI | null>(null);
+  const [intelVerdictLoading, setIntelVerdictLoading] = useState(false);
+  const intelVerdictKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const w = wineDetailsConfirmed;
+    if (!w || intelTab !== 'market' || !vintageRows || vintageRows.length < 2) return;
+    const key = vintageRows.map((r) => `${r.vintage}-${r.price}`).join('|');
+    if (intelVerdictKeyRef.current === key) return;
+    intelVerdictKeyRef.current = key;
+    const v = vintageVerdict(vintageRows, w.vintage, (n) => formatCurrency(n, userCurrency, { decimals: 0 }));
+    const intelNow = intelligence;
+    setIntelVerdictLoading(true);
+    generateVintageVerdict({ producer: w.producer, wine_name: w.wineName, region: w.region, vintage: w.vintage, grape_variety: w.grape ?? null, style: w.style ?? null } as unknown as Parameters<typeof generateVintageVerdict>[0], {
+      rows: vintageRows, currency: userCurrency, qualityRank: v.qualityRank, valueRank: v.valueRank, total: v.total, bestValueVintage: v.bestValueVintage,
+      window: intelNow ? { from: intelNow.drinkingWindowFrom, to: intelNow.drinkingWindowTo, status: intelNow.drinkingWindowStatus } : null,
+      rarity: intelRarity?.label || null,
+    })
+      .then((t) => setIntelVerdict(t))
+      .catch(() => { intelVerdictKeyRef.current = null; })
+      .finally(() => setIntelVerdictLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intelTab, vintageRows]);
   // Serving Suggestions — a fourth collapsible (same gold-bubble layout as the
   // wine card), generated on first expand from the confirmed wine details.
   const [servingExpanded, setServingExpanded] = useState(false);
@@ -2356,15 +2379,33 @@ export default function LabelResultsScreen() {
                     );
                   })}
                   <Text style={wc.footnote}>Wine-Searcher market value and aggregate critic score, by vintage.</Text>
-                  {verdict.text ? (
+                  {verdict.total >= 2 ? (
                     <View style={wc.Verdict}>
                       <Text style={wc.insideTitle}>Vinster's verdict</Text>
-                      <View style={wc.Chips}>
-                        {verdict.qualityRank != null ? <Text style={[wc.Chip, wc.ChipGold]}>This vintage: #{verdict.qualityRank} of {verdict.total} for quality</Text> : null}
-                        {verdict.valueRank != null ? <Text style={wc.Chip}>#{verdict.valueRank} of {verdict.total} for value</Text> : null}
-                        {verdict.bestValueVintage != null ? <Text style={[wc.Chip, wc.ChipGold]}>Best value: {verdict.bestValueVintage}</Text> : null}
+                      <View style={{ gap: 2 }}>
+                        {verdict.qualityRank != null ? <Text style={wc.BodyText}>This Wine's Quality: <Text style={{ color: colors.gold, fontFamily: fonts.bodySemibold }}>{ordinal(verdict.qualityRank)} of {verdict.total} vintages</Text></Text> : null}
+                        {verdict.valueRank != null ? <Text style={wc.BodyText}>This Wine's Value: <Text style={{ color: colors.gold, fontFamily: fonts.bodySemibold }}>{ordinal(verdict.valueRank)} of {verdict.total} vintages</Text></Text> : null}
+                        {verdict.bestValueVintage != null ? <Text style={wc.BodyText}>Best Value Vintage: <Text style={{ color: colors.gold, fontFamily: fonts.bodySemibold }}>{verdict.bestValueVintage}</Text></Text> : null}
                       </View>
-                      <Text style={wc.BodyText}>{verdict.text}</Text>
+                      {intelVerdictLoading ? (
+                        <View style={wc.loadingRow}><ActivityIndicator color={colors.gold} /><Text style={wc.Small}>Vinster is weighing up this vintage…</Text></View>
+                      ) : intelVerdict ? (
+                        <>
+                          {intelVerdict.verdict ? <Text style={wc.BodyText}>{intelVerdict.verdict}</Text> : null}
+                          {intelVerdict.drinkNow ? (
+                            <View style={{ gap: 2 }}>
+                              <Text style={wc.BodyText}>Best for Drinking Now: <Text style={{ color: colors.gold, fontFamily: fonts.bodySemibold }}>{intelVerdict.drinkNow.vintages.join(', ')}</Text></Text>
+                              {intelVerdict.drinkNow.reason ? <Text style={wc.SmallItalic}>{intelVerdict.drinkNow.reason}</Text> : null}
+                            </View>
+                          ) : null}
+                          {intelVerdict.layDown ? (
+                            <View style={{ gap: 2 }}>
+                              <Text style={wc.BodyText}>Best to Lay Down: <Text style={{ color: colors.gold, fontFamily: fonts.bodySemibold }}>{intelVerdict.layDown.vintages.join(', ')}</Text></Text>
+                              {intelVerdict.layDown.reason ? <Text style={wc.SmallItalic}>{intelVerdict.layDown.reason}</Text> : null}
+                            </View>
+                          ) : null}
+                        </>
+                      ) : null}
                     </View>
                   ) : null}
                 </>
