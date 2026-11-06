@@ -2540,11 +2540,6 @@ export default function CellarWineDetail() {
             <Text style={styles.exportBtnText}>{sharingIntel ? 'Preparing…' : 'Export Wine Intel'}</Text>
           </TouchableOpacity>
         ) : null}
-        {!isArchived && !isWishlist ? (
-          <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
-            <Text style={styles.archiveAccessBtnText}>Archive or Delete Wine</Text>
-          </TouchableOpacity>
-        ) : null}
         {!isArchived ? (
           <TouchableOpacity onPress={() => handleRefreshEstimate()} disabled={refreshingValue} activeOpacity={0.7} style={styles.wcRegenWrap}>
             {refreshingValue
