@@ -164,7 +164,6 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
     if (preset) chat.say(`We're pairing ${presetLabel}.`);
     const wineSaid = preset ? presetLabel : await chat.ask('Which wine are we pairing?', 'ie. Domaine Jamet Côte-Rôtie 2015', 'wine', [
       ...(wines.length ? [{ label: 'Or choose from my cellar', onPress: () => setCellarPickerOpen(true) }] : []),
-      { label: 'Or search for the wine', onPress: () => setSearchOpen(true) },
     ]);
     const mode = await chat.ask('Do you want a full recipe or a list of pairing ingredients to inspire you?', 'ie. Just a list of classic pairing ingredients');
     const wantsList = /ingredient|list/i.test(mode) && !/full recipe/i.test(mode);

@@ -118,7 +118,8 @@ Deno.serve(async (req) => {
     if (mode === 'verdict') {
       const r = await client.messages.create({
         model: 'claude-sonnet-5-5',
-        max_tokens: 900,
+        // Sonnet 5.5 thinks first by default — leave room for the answer.
+        max_tokens: 6000,
         messages: [{ role: 'user', content: buildVerdictPrompt({ ...body, producer, wineName, region, vintage }) }],
       });
       const t = r.content.find((x) => x.type === 'text')?.text ?? '';
