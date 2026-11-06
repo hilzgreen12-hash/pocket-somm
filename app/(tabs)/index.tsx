@@ -29,12 +29,12 @@ import { File, Paths } from 'expo-file-system';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { tidyWineRegion } from '../../src/utils/regionFormat';
-import { generateWineIntel, fetchPricing, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
+import { generateWineIntel, fetchPricing, fetchVintageComparison, isWineSearcherUnavailable, type VintageComparisonRow } from '../../src/services/pricing';
 import { vintageVerdict } from '../../src/utils/wineCardInsights';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { wineNameKey } from '../../src/utils/wineIdentity';
-import { wineQueryName } from '../../src/utils/wineIdentity';
+import { wineQueryName, wineQueryAltName } from '../../src/utils/wineIdentity';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
@@ -118,6 +118,8 @@ export default function ScanLandingScreen() {
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareRows, setCompareRows] = useState<VintageComparisonRow[] | null>(null);
+  // Wine-Searcher didn't answer (down / daily limit) — distinct from "no data".
+  const [compareDown, setCompareDown] = useState(false);
   const [generatingIntel, setGeneratingIntel] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
@@ -290,11 +292,13 @@ export default function ScanLandingScreen() {
     if (!wine) return;
     setCompareOpen(true);
     setCompareRows(null);
+    setCompareDown(false);
     setCompareLoading(true);
     try {
-      const rows = await fetchVintageComparison(wineQueryName(wine.producer, wine.wineName, wine.region), preferences?.defaultCurrency ?? 'GBP', null);
+      const rows = await fetchVintageComparison(wineQueryName(wine.producer, wine.wineName), preferences?.defaultCurrency ?? 'GBP', null, wineQueryAltName(wine.producer, wine.wineName, wine.region));
       setCompareRows(rows);
-    } catch {
+    } catch (e) {
+      setCompareDown(isWineSearcherUnavailable(e));
       setCompareRows([]);
     } finally {
       setCompareLoading(false);
@@ -645,7 +649,9 @@ export default function ScanLandingScreen() {
                 </ScrollView>
               );
             })() : (
-              <Text style={styles.cmpNote}>Wine-Searcher has no per-vintage market data for this wine. Enter a vintage to generate its intel.</Text>
+              <Text style={styles.cmpNote}>{compareDown
+                ? "Wine-Searcher isn't responding just now, so Vinster can't compare vintages. Please try again later, or enter a vintage to generate its intel."
+                : 'Wine-Searcher has no per-vintage market data for this wine. Enter a vintage to generate its intel.'}</Text>
             )}
           </View>
         </View>

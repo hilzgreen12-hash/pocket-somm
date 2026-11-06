@@ -256,12 +256,16 @@ Deno.serve(async (req) => {
     const hasRealVintage = vintageParam !== 'NV';
     let result: Awaited<ReturnType<typeof lookupWineSearcher>> = null;
     let priceScope: 'vintage' | 'all-vintage' = 'vintage';
+    // Set when a lookup failed transiently (timeout / 5xx / suspension or
+    // daily limit) — so a blank answer can say "down", not "no such wine".
+    let down = false;
     // Exact vintage first. A transient throw here must NOT stop us broadening to
     // the all-vintage average — catch it and fall through to that query.
     try {
       result = await lookupWineSearcher(wineName, String(vintageParam), cur);
     } catch (e) {
       console.error('[wine-searcher-proxy] exact-vintage lookup failed transiently:', e instanceof Error ? e.message : 'error');
+      down = true;
     }
     // Broaden to the all-vintage average when the exact vintage EITHER didn't
     // match OR matched but carries no market price (some vintages list a score
@@ -277,13 +281,14 @@ Deno.serve(async (req) => {
         }
       } catch (e) {
         console.error('[wine-searcher-proxy] all-vintage lookup failed transiently:', e instanceof Error ? e.message : 'error');
+        down = true;
       }
     }
 
     // Genuine no-match (or both queries down after retries) → the client falls
     // back to a labelled Vinster estimate, so a price is still shown.
     if (!result) {
-      return new Response(JSON.stringify(UNAVAILABLE), {
+      return new Response(JSON.stringify(down ? { ...UNAVAILABLE, down: true } : UNAVAILABLE), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -355,7 +360,7 @@ Deno.serve(async (req) => {
     console.error('Wine-Searcher proxy error:', err);
     // 200 with an "unavailable" payload (not 5xx) so the client treats it as a
     // clean miss and falls back to the Claude estimate without surfacing an error.
-    return new Response(JSON.stringify(UNAVAILABLE), {
+    return new Response(JSON.stringify({ ...UNAVAILABLE, down: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });

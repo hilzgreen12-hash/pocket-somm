@@ -51,10 +51,13 @@ export function foldAccents(s: string | null | undefined): string {
 export function wineQueryName(
   producer: string | null | undefined,
   wineName: string | null | undefined,
-  region?: string | null,
+  _region?: string | null,
 ): string {
+  // The PLAIN producer + name is always the first query: adding an appellation
+  // can match a different listing ("Château Lafite Rothschild Pauillac" priced
+  // above the Grand Vin). See wineQueryAltName for the fallback.
   const p = (producer ?? '').trim();
-  const n = lookupWineName(producer, wineName, region);
+  const n = (wineName ?? '').trim();
   if (!p) return n;
   if (!n) return p;
   const pl = p.toLowerCase();
@@ -134,4 +137,20 @@ export function lookupWineName(
   const appellation = parts[0];
   if (norm(producer).includes(norm(appellation))) return n;
   return appellation;
+}
+
+// FALLBACK query when the plain name finds nothing on Wine-Searcher: when the
+// name is blank or only repeats the producer, producer + the region's
+// appellation ("Il Marroneto" → "Il Marroneto Brunello di Montalcino"). Null
+// when there's no better name to try.
+export function wineQueryAltName(
+  producer: string | null | undefined,
+  wineName: string | null | undefined,
+  region?: string | null,
+): string | null {
+  const plain = wineQueryName(producer, wineName);
+  const n = lookupWineName(producer, wineName, region);
+  const p = (producer ?? '').trim();
+  const alt = !p ? n : !n ? p : `${p} ${n}`;
+  return alt && alt.toLowerCase() !== plain.toLowerCase() ? alt : null;
 }

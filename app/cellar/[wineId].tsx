@@ -29,14 +29,14 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
-import { valueWine, isWineNotFound, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
+import { valueWine, isWineNotFound, fetchVintageComparison, isWineSearcherUnavailable, type VintageComparisonRow } from '../../src/services/pricing';
 import { wineQueryName } from '../../src/utils/wineIdentity';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation, addLocationPlacement } from '../../src/api/placements';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals, stampPurchasePriceDate } from '../../src/api/cellar';
 import { generateServingSuggestion, generateMarketVintage, generateRarity } from '../../src/api/wineExtras';
-import { wineNameKey } from '../../src/utils/wineIdentity';
+import { wineNameKey, wineQueryAltName } from '../../src/utils/wineIdentity';
 import { sameWineIdentity } from '../../src/utils/wineMatch';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
@@ -837,9 +837,10 @@ export default function CellarWineDetail() {
       // Rarity runs alongside the vintage table (both saved together).
       const rarityP = generateRarity(wine).then((r) => r ?? { level: null, label: '', text: '' }).catch(() => undefined);
       const rows = await fetchVintageComparison(
-        wineQueryName(wine.producer, wine.wine_name, wine.region),
+        wineQueryName(wine.producer, wine.wine_name),
         currency,
         Number.isFinite(scanned) ? scanned : null,
+        wineQueryAltName(wine.producer, wine.wine_name, wine.region),
       );
       setVintageRows(rows);
       // Wine-Searcher had no per-vintage data → fall back to Vinster's written
@@ -860,7 +861,9 @@ export default function CellarWineDetail() {
         const rarity = await rarityP;
         await updateWine.mutateAsync({ id: wine.id, updates: { market_vintage_note: { ...(note ?? {}), rows, unknown, currency, at: new Date().toISOString(), ...(rarity !== undefined ? { rarity } : {}) } } as any });
       } catch { /* the live table still shows */ }
-    } catch {
+    } catch (e) {
+      if (isWineSearcherUnavailable(e)) { showAlert({ title: "Wine-Searcher isn't responding", body: 'Vinster couldn\'t reach Wine-Searcher just now (it may have hit its daily limit). Please try again later.' }); return; }
+      
       showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
     } finally {
       setGeneratingMarket(false);

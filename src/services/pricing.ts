@@ -1,7 +1,7 @@
 import { fetchWinePrice } from '../api/wine-searcher';
 import { getWineIntelligence, resolveWine } from '../api/label';
 import { fetchWineFacts } from '../api/wineFacts';
-import { wineQueryName } from '../utils/wineIdentity';
+import { wineQueryName, wineQueryAltName } from '../utils/wineIdentity';
 import { withBordeauxInfo } from '../constants/bordeauxClassification';
 import type { GrapeVariant, PricingData, WineDetailsComplete, WineIntelligence } from '../types/wine';
 
@@ -72,8 +72,19 @@ export async function fetchPricing(
       currency: currency ?? 'GBP',
       criticScore: null,
       source: 'unavailable',
-    };
+      down: true,
+    } as PricingData;
   }
+}
+
+// Plain name first; on a clean miss, the appellation fallback (see
+// wineQueryAltName). Returns the pricing and the name that matched.
+async function fetchPricingWithAlt(queryName: string, altName: string | null, vintage: number | null, currency: string): Promise<{ pricing: PricingData; name: string }> {
+  const first = await fetchPricing(queryName, vintage, currency);
+  const matched = first.source === 'wine-searcher' && first.matched !== false;
+  if (matched || !altName || (first as PricingData & { down?: boolean }).down) return { pricing: first, name: queryName };
+  const alt = await fetchPricing(altName, vintage, currency);
+  return alt.source === 'wine-searcher' && alt.matched !== false ? { pricing: alt, name: altName } : { pricing: first, name: queryName };
 }
 
 // One row of the "Vintage & Market Comparison" table — a single vintage's
@@ -93,12 +104,16 @@ export async function fetchVintageComparison(
   queryName: string,
   currency: string,
   scannedVintage: number | null,
+  // Appellation fallback (wineQueryAltName): tried only if the plain name finds
+  // no vintages at all.
+  altName?: string | null,
 ): Promise<VintageComparisonRow[]> {
   const nowYear = new Date().getFullYear();
   const years: number[] = [];
   for (let y = nowYear - 1; y >= nowYear - 12; y--) years.push(y);
   if (scannedVintage && Number.isFinite(scannedVintage) && !years.includes(scannedVintage)) years.push(scannedVintage);
   const rows: VintageComparisonRow[] = [];
+  let unavailable = 0;
   // Small batches keep the Wine-Searcher request rate modest (the proxy handles
   // its own rate-limit retries).
   const BATCH = 3;
@@ -106,13 +121,26 @@ export async function fetchVintageComparison(
     const batch = years.slice(i, i + BATCH);
     const results = await Promise.all(batch.map(async (y) => {
       const p = await fetchPricing(queryName, y, currency);
+      if ((p as PricingData & { down?: boolean }).down) unavailable++;
       const exactHit = p.matched !== false && p.priceScope !== 'all-vintage' && (p.averageMarketPrice != null || p.criticScore != null);
       return exactHit ? { vintage: y, score: p.criticScore ?? null, price: p.averageMarketPrice ?? null } : null;
     }));
     for (const r of results) if (r) rows.push(r);
   }
   rows.sort((a, b) => b.vintage - a.vintage);
+  // Nothing came back AND most lookups errored (Wine-Searcher down, or its
+  // daily lookup limit reached) — that is NOT "no data for this wine". Throw so
+  // callers say "try again later" and never save an empty table.
+  if (rows.length === 0 && unavailable >= Math.ceil(years.length / 2)) throw new WineSearcherUnavailableError();
+  if (rows.length === 0 && altName && altName.toLowerCase() !== queryName.toLowerCase()) return fetchVintageComparison(altName, currency, scannedVintage, null);
   return rows;
+}
+
+export class WineSearcherUnavailableError extends Error {
+  constructor() { super("Wine-Searcher isn't responding right now."); this.name = 'WineSearcherUnavailableError'; }
+}
+export function isWineSearcherUnavailable(e: unknown): boolean {
+  return e instanceof Error && e.name === 'WineSearcherUnavailableError';
 }
 
 // Combined valuation for the wine card: real Wine-Searcher market data when
@@ -153,11 +181,11 @@ export async function valueWine(
   currency: string = 'GBP',
 ): Promise<WineValuation> {
   // Build the Wine-Searcher query from producer + wine name for the best match.
-  const queryName = wineQueryName(wine.producer, wine.wineName, wine.region) || (wine.wineName ?? '');
+  const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
   const vintageArg = Number.isFinite(vintageNum) ? vintageNum : null;
-  const first = await fetchPricing(queryName, vintageArg, currency);
+  const { pricing: first } = await fetchPricingWithAlt(queryName, wineQueryAltName(wine.producer, wine.wineName, wine.region), vintageArg, currency);
   const firstMatched = first.source === 'wine-searcher' && first.matched !== false;
 
   // Claude fills drinking window, tasting notes, grape, (anchored) score, and a
@@ -217,7 +245,7 @@ export async function generateWineIntel(
   // Classified Bordeaux: fill classification (wine name) + appellation (region)
   // when blank, so intel is complete on EVERY path (scan, lineup, search…).
   const wine = withBordeauxInfo(wineIn);
-  const queryName = wineQueryName(wine.producer, wine.wineName, wine.region) || (wine.wineName ?? '');
+  const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
   const vintageArg = Number.isFinite(vintageNum) ? vintageNum : null;
@@ -233,13 +261,13 @@ export async function generateWineIntel(
     // Fast path: we already hold a real WS score to anchor Claude, so fetch the
     // (volatile) price and generate intel IN PARALLEL rather than waiting for WS.
     [first, intel] = await Promise.all([
-      fetchPricing(queryName, vintageArg, currency),
+      fetchPricingWithAlt(queryName, wineQueryAltName(wine.producer, wine.wineName, wine.region), vintageArg, currency).then((r) => r.pricing),
       getWineIntelligence(wine, currency, facts.criticScore),
     ]);
   } else {
     // No permanent score yet → keep the original sequence so Claude is still
     // anchored to THIS session's WS score when there is one (no regression).
-    first = await fetchPricing(queryName, vintageArg, currency);
+    first = await fetchPricingWithAlt(queryName, wineQueryAltName(wine.producer, wine.wineName, wine.region), vintageArg, currency).then((r) => r.pricing);
     const firstMatched = first.source === 'wine-searcher' && first.matched !== false;
     // Claude fills the rich fields; wsScore anchors its critic score to WS. It also
     // returns wsSearchName — the canonical WS query we retry with on a miss.

@@ -23,6 +23,7 @@ import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
 import { captureCity } from '../../src/utils/captureCity';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { findSameCellarWine } from '../../src/utils/wineMatch';
+import { wineQueryName, wineQueryAltName } from '../../src/utils/wineIdentity';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { patchChosenWine } from '../../src/api/chosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
@@ -1958,9 +1959,9 @@ export default function LabelResultsScreen() {
     if (opening && !vintagesTriedRef.current && wine) {
       vintagesTriedRef.current = true;
       setVintagesLoading(true);
-      const queryName = [wine.producer, wine.wineName].filter(Boolean).join(' ').trim() || (wine.wineName ?? '');
+      const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
       const scanned = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : NaN;
-      fetchVintageComparison(queryName, userCurrency, Number.isFinite(scanned) ? scanned : null)
+      fetchVintageComparison(queryName, userCurrency, Number.isFinite(scanned) ? scanned : null, wineQueryAltName(wine.producer, wine.wineName, wine.region))
         .then((rows) => setVintageRows(rows))
         .catch(() => setVintageRows([]))
         .finally(() => setVintagesLoading(false));
