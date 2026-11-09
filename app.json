@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vinster",
     "slug": "pocket-som",
-    "version": "1.7.25",
+    "version": "1.7.26",
     "orientation": "default",
     "scheme": "vinster",
     "icon": "./assets/icon.png",
