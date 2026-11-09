@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation, type PriceBandExample, type ServingSuggestion, type ComplementaryWine } from '../../src/stores/foodPairingStore';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
@@ -197,7 +198,8 @@ export default function PairingResultsScreen() {
   const { fromHistory, savedAt, city } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string }>();
   const isFromHistory = fromHistory === 'true';
   const { dish, mode, cellarResult, generalResult, generalSummary, stylePreference, budget, setCellarResult, setMode } = useFoodPairingStore();
-  const { wines } = useCellar();
+  // Only bottles kept at home are recommended (never external storage).
+  const { wines } = useHomeCellarWines();
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const userCurrency = preferences?.defaultCurrency ?? 'GBP';

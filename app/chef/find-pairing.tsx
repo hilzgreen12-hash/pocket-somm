@@ -10,7 +10,7 @@ import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { ChipPicker } from '../../src/components/preferences/ChipPicker';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useAuth } from '../../src/hooks/useAuth';
 import { findFoodWinePairing } from '../../src/api/label';
@@ -23,7 +23,8 @@ import { fonts } from '../../src/constants/fonts';
 export default function FindPairingScreen() {
   useKeepAwake();
   const { session } = useAuth();
-  const { wines } = useCellar();
+  // Pairings only ever recommend bottles kept at home, never external storage.
+  const { wines, allWines, ready: homeReady } = useHomeCellarWines();
   const { preferences: savedPreferences } = usePreferences();
   const { setCellarResult, setGeneralResult, setDish, setMode, setStylePreference: storeStyle, setBudget: storeBudget, generalResult, cellarResult } = useFoodPairingStore();
   const { sessions: pairingSessions, save: savePairing } = useChefPairingHistory();
@@ -91,8 +92,14 @@ export default function FindPairingScreen() {
       showAlert({ title: 'What are you cooking?', body: 'Please describe your dish first.' });
       return;
     }
+    if (mode === 'cellar' && !homeReady) {
+      showAlert({ title: 'One moment', body: 'Vinster is still checking which bottles you have at home. Please try again.' });
+      return;
+    }
     if (mode === 'cellar' && wines.length === 0) {
-      showAlert({ title: 'Empty cellar', body: 'Your cellar is empty. Switch to "Suggest a Style" to get a general recommendation.' });
+      showAlert(allWines.length > 0
+        ? { title: 'Nothing at home', body: 'All your bottles are in external storage. Switch to "Suggest a Style" to get a general recommendation.' }
+        : { title: 'Empty cellar', body: 'Your cellar is empty. Switch to "Suggest a Style" to get a general recommendation.' });
       return;
     }
 

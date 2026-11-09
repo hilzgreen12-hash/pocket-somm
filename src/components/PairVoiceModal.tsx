@@ -119,8 +119,8 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
       });
     }
     if (fromCellar && !pool.length) {
-      chat.say(choice === 'home' && wines.length ? "Everything you have is in an external cellar, so I'll look there too." : "Your cellar is empty, so I'll find something to buy instead.");
-      if (choice === 'home' && wines.length) pool = wines; else fromCellar = false;
+      chat.say(choice === 'home' && wines.length ? "Everything you have is in an external cellar, so I'll suggest something to buy instead." : "Your cellar is empty, so I'll find something to buy instead.");
+      fromCellar = false;
     }
     if (fromCellar) {
       const shown: string[] = [];

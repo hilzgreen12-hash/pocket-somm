@@ -22,6 +22,7 @@ import { useLabels } from '../../src/hooks/useLabels';
 import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
 import { captureCity } from '../../src/utils/captureCity';
 import { useCellar, useWishList, useArchive } from '../../src/hooks/useCellar';
+import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { findSameCellarWine, sameWineIdentity } from '../../src/utils/wineMatch';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
 import { wc } from '../../src/components/winecard/wcStyles';
@@ -145,6 +146,8 @@ export default function LabelResultsScreen() {
   const heroUri = imageUri ?? autoLabelUri;
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
+  // Serve before/after picks come only from bottles kept at home.
+  const { wines: homeWines } = useHomeCellarWines();
   const { addWine: addToWishList } = useWishList();
   const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
   const { create: createLabel, remove: removeLabel, labels } = useLabels();
@@ -2455,7 +2458,7 @@ export default function LabelResultsScreen() {
                     <Text style={wc.Label}>Drink Before</Text>
                     <Text style={wc.GoldTitle}>{serving.aperitif.style}</Text>
                     {serving.aperitif.reason ? <Text style={wc.BodyText}>{serving.aperitif.reason}</Text> : null}
-                    {intelPickRow(pickFromCellar(serving.aperitif.style, wines), 'before', serving.aperitif.style)}
+                    {intelPickRow(pickFromCellar(serving.aperitif.style, homeWines), 'before', serving.aperitif.style)}
                   </View>
                 ) : null}
                 {serving.digestif?.style ? (
@@ -2463,7 +2466,7 @@ export default function LabelResultsScreen() {
                     <Text style={wc.Label}>Drink After</Text>
                     <Text style={wc.GoldTitle}>{serving.digestif.style}</Text>
                     {serving.digestif.reason ? <Text style={wc.BodyText}>{serving.digestif.reason}</Text> : null}
-                    {intelPickRow(pickFromCellar(serving.digestif.style, wines), 'after', serving.digestif.style)}
+                    {intelPickRow(pickFromCellar(serving.digestif.style, homeWines), 'after', serving.digestif.style)}
                   </View>
                 ) : null}
               </>

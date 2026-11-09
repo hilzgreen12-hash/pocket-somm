@@ -13,6 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCellar, useArchive, useWishList } from '../../src/hooks/useCellar';
+import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
@@ -135,6 +136,8 @@ export default function CellarWineDetail() {
   const cameFromWishlist = from === 'wishlist';
   const { session } = useAuth();
   const { wines, updateWine, isLoading: cellarLoading } = useCellar();
+  // Serve before/after picks come only from bottles kept at home.
+  const { wines: homeWines } = useHomeCellarWines();
   const { wines: wishlistWines, isLoading: wishlistLoading, deleteWine: deleteWishlistWine } = useWishList();
   const { racks, isLoading: racksLoading } = useRacks();
   const { data: allBins = [] } = useQuery({
@@ -2018,8 +2021,8 @@ export default function CellarWineDetail() {
   const cellarEntries = buildCellarEntries();
   const unplacedHere = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
   const serving = wine.serving_suggestion ?? null;
-  const beforePick = pickFromCellar(serving?.aperitif?.style, wines, wine.id);
-  const afterPick = pickFromCellar(serving?.digestif?.style, wines, wine.id);
+  const beforePick = pickFromCellar(serving?.aperitif?.style, homeWines, wine.id);
+  const afterPick = pickFromCellar(serving?.digestif?.style, homeWines, wine.id);
   const cellaredOn = wine.date_received ?? wine.created_at;
 
   // Cellar Note, edited in place under the Cellared date: saved when the field
