@@ -42,8 +42,8 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
-import { generateServingSuggestion, generateRarity, generateVintageVerdict, type VintageVerdictAI } from '../../src/api/wineExtras';
+import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
+import { generateServingSuggestion, generateRarity, generateVintageVerdict, generateMarketVintage, type VintageVerdictAI } from '../../src/api/wineExtras';
 import type { WineServingSuggestion } from '../../src/types/wine';
 import { peekIntelCurrency } from '../../src/utils/localCurrency';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
@@ -297,6 +297,11 @@ export default function LabelResultsScreen() {
   const [vintagesExpanded, setVintagesExpanded] = useState(false);
   const [vintageRows, setVintageRows] = useState<VintageComparisonRow[] | null>(null);
   const [vintagesLoading, setVintagesLoading] = useState(false);
+  // Same fallbacks as the wine card's Market tab: Vinster's written assessment
+  // when Wine-Searcher has no per-vintage data, and a clear note when it's down.
+  const [intelMarketNote, setIntelMarketNote] = useState<{ vintage?: string; market?: string } | null>(null);
+  const [intelMarketUnknown, setIntelMarketUnknown] = useState(false);
+  const [vintagesDown, setVintagesDown] = useState(false);
   const vintagesTriedRef = useRef(false);
   // Vinster's Verdict prose for the Market tab's vintage table.
   const [intelVerdict, setIntelVerdict] = useState<VintageVerdictAI | null>(null);
@@ -1994,13 +1999,37 @@ export default function LabelResultsScreen() {
     setVintagesExpanded(opening);
     if (opening && !vintagesTriedRef.current && wine) {
       vintagesTriedRef.current = true;
-      setVintagesLoading(true);
+      void loadVintages();
+    }
+  }
+
+  // Wine-Searcher per-vintage table; with no data, Vinster's written market &
+  // vintage assessment instead (as on the wine card). Refresh re-runs it.
+  async function loadVintages() {
+    if (!wine) return;
+    setVintagesLoading(true);
+    setVintagesDown(false);
+    setIntelMarketNote(null);
+    setIntelMarketUnknown(false);
+    intelVerdictKeyRef.current = null;
+    setIntelVerdict(null);
+    try {
       const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
       const scanned = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : NaN;
-      fetchVintageComparison(queryName, userCurrency, Number.isFinite(scanned) ? scanned : null, wineQueryAltName(wine.producer, wine.wineName, wine.region))
-        .then((rows) => setVintageRows(rows))
-        .catch(() => setVintageRows([]))
-        .finally(() => setVintagesLoading(false));
+      const rows = await fetchVintageComparison(queryName, userCurrency, Number.isFinite(scanned) ? scanned : null, wineQueryAltName(wine.producer, wine.wineName, wine.region));
+      setVintageRows(rows);
+      if (rows.length === 0) {
+        try {
+          const note = await generateMarketVintage({ producer: wine.producer, wine_name: wine.wineName, region: wine.region, vintage: wine.vintage, grape_variety: wine.grape ?? null, style: wine.style ?? null } as unknown as Parameters<typeof generateMarketVintage>[0], userCurrency);
+          setIntelMarketNote(note);
+          setIntelMarketUnknown(note === null);
+        } catch { /* leave the plain no-data line */ }
+      }
+    } catch (e) {
+      setVintageRows([]);
+      if (isWineSearcherUnavailable(e)) setVintagesDown(true);
+    } finally {
+      setVintagesLoading(false);
     }
   }
 
@@ -2411,9 +2440,25 @@ export default function LabelResultsScreen() {
                       ) : null}
                     </View>
                   ) : null}
+                  <TouchableOpacity onPress={() => void loadVintages()} activeOpacity={0.7}><Text style={styles.diveDeeperLink}>Refresh →</Text></TouchableOpacity>
                 </>
+              ) : vintagesDown ? (
+                <>
+                  <Text style={wc.Small}>Vinster couldn't reach Wine-Searcher just now (it may have hit its daily limit). Please try again later.</Text>
+                  <TouchableOpacity onPress={() => void loadVintages()} activeOpacity={0.7}><Text style={styles.diveDeeperLink}>Refresh →</Text></TouchableOpacity>
+                </>
+              ) : vintageRows && intelMarketNote ? (
+                <View style={styles.servingBubble}>
+                  <Text style={styles.marketMissingNote}>Wine-Searcher has no per-vintage market data for this wine, so here's Vinster's assessment:</Text>
+                  {intelMarketNote.vintage ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Vintage · </Text>{intelMarketNote.vintage}</Text> : null}
+                  {intelMarketNote.market ? <Text style={styles.servingLine}><Text style={styles.servingTitle}>Market · </Text>{intelMarketNote.market}</Text> : null}
+                  <TouchableOpacity onPress={() => void loadVintages()} activeOpacity={0.7}><Text style={styles.diveDeeperLink}>Refresh →</Text></TouchableOpacity>
+                </View>
               ) : vintageRows ? (
-                <Text style={wc.Small}>Wine-Searcher has no per-vintage market data for this wine.</Text>
+                <>
+                  <Text style={wc.Small}>Wine-Searcher has no per-vintage market data for this wine.{intelMarketUnknown ? " Vinster doesn't know this wine well enough to comment." : ''}</Text>
+                  <TouchableOpacity onPress={() => void loadVintages()} activeOpacity={0.7}><Text style={styles.diveDeeperLink}>Refresh →</Text></TouchableOpacity>
+                </>
               ) : null}
             </View>
 
@@ -3622,6 +3667,7 @@ const styles = StyleSheet.create({
   servingBubble: { backgroundColor: 'rgba(224,184,74,0.06)', borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.lg, marginTop: spacing.md },
   servingLine: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22, marginBottom: spacing.md },
   servingTitle: { fontFamily: fonts.bodySemibold, color: colors.gold },
+  marketMissingNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.md },
   // Compact 2-column stat grid mirroring the cellar wine card.
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   statCell: { width: '50%', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
