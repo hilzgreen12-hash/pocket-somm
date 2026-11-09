@@ -2133,8 +2133,21 @@ export default function CellarWineDetail() {
     const entries = buildCellarEntries();
     const homeQty = entries.filter((e) => !e.isExternal).reduce((s, e) => s + (e.quantity ?? 0), 0) + Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
     const homePlaces = Array.from(new Set(entries.filter((e) => !e.isExternal).map((e) => e.label)));
+    const unplaced = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
+    const placeCount = homePlaces.length + (unplaced > 0 && homePlaces.length > 0 ? 1 : 0);
+    const your = (name: string) => (/^(your|my|the)\b/i.test(name) ? name : `your ${name}`);
+    // First line: how many bottles came into the cellar, and when.
+    const everAdded = bottlesInCellar + bottlesInArchive;
+    if (everAdded > 0 && cellaredOn) {
+      const n = everAdded;
+      lines.push({ key: 'added', text: `${n} ${n === 1 ? 'Bottle' : 'Bottles'} added to your cellar on ${fmtDay(cellaredOn)}`, link: 'View', onPress: toCellarTab });
+    }
     if (homeQty > 0) {
-      lines.push({ key: 'home', text: `You have ${b(homeQty)} of this at home${homePlaces.length === 1 ? `, in ${homePlaces[0]}` : homePlaces.length > 1 ? ` across ${homePlaces.length} locations` : ''}`, link: 'View', onPress: toCellarTab });
+      const where = placeCount === 1 && homePlaces.length === 1 ? ` in ${your(homePlaces[0])}`
+        : placeCount > 1 ? ` across ${placeCount} home locations`
+        : ' at home';
+      const t = b(homeQty);
+      lines.push({ key: 'home', text: `${t.charAt(0).toUpperCase()}${t.slice(1)}${where}`, link: 'View', onPress: toCellarTab });
     }
     for (const e of entries.filter((x) => x.isExternal)) {
       lines.push({ key: `ext-${e.key}`, text: `You have ${b(e.quantity ?? 0)} of this in an external cellar, ${e.label}`, link: 'View', onPress: toCellarTab });
