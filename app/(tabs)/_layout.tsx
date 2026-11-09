@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { Tabs, router } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchCookbook } from '../../src/api/cookbookPrefetch';
 import { fetchInvitesForMe } from '../../src/api/cellarMembers';
 import { showAlert } from '../../src/components/AppAlert';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -39,6 +41,15 @@ export default function TabsLayout() {
       .catch(() => { /* table not there yet, or offline — try next time */ });
     return () => { cancelled = true; };
   }, [userId]);
+
+  // Preload the Pair tab's cookbook (folders, counts, cover images) shortly
+  // after launch so the carousel is ready before the tab is opened.
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!userId) return;
+    const t = setTimeout(() => { void prefetchCookbook(qc, userId); }, 1500);
+    return () => clearTimeout(t);
+  }, [userId, qc]);
 
   return (
     <Tabs

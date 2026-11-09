@@ -18,6 +18,21 @@ export interface ChefArchiveItemRef {
 }
 
 export async function listChefArchiveCollections(userId: string): Promise<ChefArchiveCollection[]> {
+  // One round trip: folders in the user's order with their recipe counts
+  // embedded. Falls back to the two-step fetch below if that fails.
+  const { data: withCounts, error: embedErr } = await supabase
+    .from('chef_archive_collections')
+    .select('id, user_id, name, created_at, image_path, sort_order, chef_archive_collection_items(count)')
+    .eq('user_id', userId)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
+  if (!embedErr && withCounts) {
+    return (withCounts as any[]).map(({ chef_archive_collection_items: items, ...c }) => ({
+      ...c,
+      item_count: Array.isArray(items) ? (items[0]?.count ?? 0) : 0,
+    })) as ChefArchiveCollection[];
+  }
+
   // User order first (sort_order), then oldest-first for folders not yet placed.
   // Falls back to the pre-126 columns if the migration hasn't been applied.
   let { data: rows, error } = await supabase
