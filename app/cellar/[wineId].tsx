@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCellar, useArchive, useWishList } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
+import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
@@ -2159,7 +2160,7 @@ export default function CellarWineDetail() {
     const latest = reviews[0];
     if (latest) {
       const when = fmtDay(latest.date ?? latest.savedAt);
-      lines.push({ key: 'review', text: `You reviewed this wine on ${when}${latest.location ? ` at ${latest.location}` : ''}${reviews.length > 1 ? ` (and ${reviews.length - 1} more ${reviews.length - 1 === 1 ? 'time' : 'times'})` : ''}`, link: 'View review', onPress: () => router.push(reviewOpenHref as any) });
+      lines.push({ key: 'review', text: `Reviewed on ${when}${reviewPlaceLabel(latest.location) ? `, at ${reviewPlaceLabel(latest.location)}` : ''}${reviews.length > 1 ? ` (and ${reviews.length - 1} more ${reviews.length - 1 === 1 ? 'time' : 'times'})` : ''}`, link: 'View review', onPress: () => router.push(reviewOpenHref as any) });
     }
     return lines;
   }

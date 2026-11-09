@@ -23,6 +23,7 @@ import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
 import { captureCity } from '../../src/utils/captureCity';
 import { useCellar, useWishList, useArchive } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
+import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
 import { findSameCellarWine, sameWineIdentity } from '../../src/utils/wineMatch';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
 import { wc } from '../../src/components/winecard/wcStyles';
@@ -2175,7 +2176,7 @@ export default function LabelResultsScreen() {
     if (archived > 0) lines.push({ key: 'archive', text: `You have ${b(archived)} in your archive`, link: 'View', onPress: () => router.push('/cellar/archive' as any) });
     if (latestIntelReview) {
       const more = intelReviews.length - 1;
-      lines.push({ key: 'review', text: `You reviewed this wine on ${fmtIntelDay(latestIntelReview.date)}${latestIntelReview.place ? ` at ${latestIntelReview.place}` : ''}${more > 0 ? ` (and ${more} more ${more === 1 ? 'time' : 'times'})` : ''}`, link: 'View review', onPress: latestIntelReview.open });
+      lines.push({ key: 'review', text: `Reviewed on ${fmtIntelDay(latestIntelReview.date)}${reviewPlaceLabel(latestIntelReview.place) ? `, at ${reviewPlaceLabel(latestIntelReview.place)}` : ''}${more > 0 ? ` (and ${more} more ${more === 1 ? 'time' : 'times'})` : ''}`, link: 'View review', onPress: latestIntelReview.open });
     }
     return lines;
   }
