@@ -191,7 +191,12 @@ export function CellarInsightsCarousel() {
     const recipeThumbs: CollageItem[] = [];
     let recipeFallback: CollageItem | null = null;
     const photoRows = [...wines, ...archivedWines].filter((x) => x.label_image_path);
+    const photoByKey = new Map<string, string>();
+    for (const x of photoRows) { const k = wineNameKey(x.producer, x.wine_name); if (k && !photoByKey.has(k)) photoByKey.set(k, x.label_image_path as string); }
     const recipePhotoFor = (rw: { producer?: string | null; wineName?: string | null; vintage?: string | null }): string | null => {
+      // Exact name first (cheap); the fuzzy identity match only on a miss.
+      const exact = photoByKey.get(wineNameKey(rw.producer ?? null, rw.wineName ?? null));
+      if (exact) return exact;
       const hit = photoRows.find((x) => sameWineIdentity(
         { producer: x.producer, wine_name: x.wine_name, vintage: null } as any,
         { producer: rw.producer ?? null, wine_name: rw.wineName ?? null, vintage: null } as any,

@@ -64,7 +64,7 @@ function buildVerdictPrompt(b: any): string {
     .map((r: any) => `${r.vintage}: score ${r.score ?? '—'}, price ${r.price != null ? `${Math.round(r.price)} ${b.currency ?? ''}` : '—'}`).join('\n');
   // No vintage chosen (Home → Search a Wine → Compare Vintages): weigh the whole
   // range instead of one year.
-  if (!String(b.vintage ?? '').trim()) {
+  if (b.scope === 'range') {
     return `You are a world-class fine-wine merchant and sommelier writing Vinster's Verdict across the vintages of one wine.
 
 Wine: ${identity}

@@ -99,11 +99,16 @@ Deno.serve(async (req) => {
       const t = r.content.find((b) => b.type === 'text')?.text ?? '';
       const m = t.match(/\{[\s\S]*\}/);
       const parsed = m ? JSON.parse(m[0]) : null;
-      const types = new Set(['protein', 'herb', 'vegetable']);
       const ingredients = Array.isArray(parsed?.ingredients)
         ? parsed.ingredients
             .filter((x: any) => typeof x?.name === 'string' && x.name.trim())
-            .map((x: any) => ({ name: String(x.name).trim().slice(0, 40), type: types.has(x.type) ? x.type : 'vegetable' }))
+            .map((x: any) => {
+              // Normalise the type: 'Herb', 'spice', 'spices' → herb; drop anything unknown.
+              const t = String(x.type ?? '').toLowerCase().trim();
+              const type = /^(herb|spice)/.test(t) ? 'herb' : /^protein|^meat|^fish/.test(t) ? 'protein' : /^veg|^mushroom/.test(t) ? 'vegetable' : null;
+              return type ? { name: String(x.name).trim().slice(0, 40), type } : null;
+            })
+            .filter(Boolean)
             .slice(0, 6)
         : [];
       return new Response(JSON.stringify({ ingredients }), { headers: { 'Content-Type': 'application/json' } });

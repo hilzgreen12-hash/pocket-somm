@@ -300,8 +300,8 @@ function courseFilter(said: string): string | null {
   if (/starter|appeti|first course|entr[eé]e/.test(s)) return 'Starter';
   // 'main' before dessert: a combined answer like "a main, something sweet and
   // sour" is still a main course.
-  if (/\bmain/.test(s)) return 'Main';
-  if (/dessert|pudding/.test(s)) return 'Pudding / Dessert';
+  if (/\bmain(s|\s+course)?\b/.test(s)) return 'Main';
+  if (/dessert|pudding|\bsweet\b/.test(s)) return 'Pudding / Dessert';
   return null;
 }
 

@@ -438,6 +438,7 @@ export default function CellarWineDetail() {
   const [ingredients, setIngredients] = useState<PairingIngredient[] | null>(null);
   const [ingredientsLoading, setIngredientsLoading] = useState(false);
   const ingredientsForRef = useRef<string | null>(null);
+  const ingredientsRef = useRef<PairingIngredient[] | null>(null);
   const [generatingMarket, setGeneratingMarket] = useState(false);
   // Wine card tabs. Only Overview is built on open; Market and Serve generate the
   // first time they're opened, are saved on the wine, and reopen instantly after
@@ -991,13 +992,19 @@ export default function CellarWineDetail() {
   useEffect(() => {
     if (!wine || cardTab !== 'somm') return;
     const saved = wine.serving_suggestion?.pairingIngredients;
-    if (saved?.length) { setIngredients(saved); return; }
+    if (saved?.length) { ingredientsRef.current = saved; setIngredients(saved); return; }
+    // Found earlier this visit but serving advice wasn't saved yet: save them now.
+    if (ingredientsRef.current?.length && ingredientsForRef.current === wine.id) {
+      if (wine.serving_suggestion) void updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...wine.serving_suggestion, pairingIngredients: ingredientsRef.current } } }).catch(() => {});
+      return;
+    }
     if (ingredientsForRef.current === wine.id) return;
     ingredientsForRef.current = wine.id;
     setIngredientsLoading(true);
     generatePairingIngredients(wine)
       .then((list) => {
         if (!list.length) return;
+        ingredientsRef.current = list;
         setIngredients(list);
         const now = latestWineRef.current?.serving_suggestion;
         if (now && latestWineRef.current?.id === wine.id) {
@@ -1017,7 +1024,7 @@ export default function CellarWineDetail() {
     try {
       const data = await generateServingSuggestion(wine);
       // Keep the pairing ingredients already found for this wine.
-      const keep = wine.serving_suggestion?.pairingIngredients ?? ingredients ?? undefined;
+      const keep = latestWineRef.current?.serving_suggestion?.pairingIngredients ?? ingredientsRef.current ?? undefined;
       await updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...data, ...(keep ? { pairingIngredients: keep } : {}) } } });
     } catch {
       showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });

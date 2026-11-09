@@ -536,6 +536,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
               locationName={locName}
               onLocationName={setLocName}
               showLocation={false}
+              requireCity
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={setDrinkingWindow}
               wishlistActive={wishlist}

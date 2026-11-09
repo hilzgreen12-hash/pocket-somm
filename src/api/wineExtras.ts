@@ -52,6 +52,8 @@ export async function generateVintageVerdict(w: CellarWine, input: {
   bestValueVintage: number | null;
   window?: { from?: number | string | null; to?: number | string | null; status?: string | null } | null;
   rarity?: string | null;
+  // 'range' = no single vintage chosen (Home → Compare Vintages → Dive Deeper).
+  scope?: 'range';
 }): Promise<VintageVerdictAI | null> {
   const data = await invokeResilient('wine-market-vintage', { ...identity(w), mode: 'verdict', ...input }) as VintageVerdictAI & { error?: string };
   if (data?.error) throw new Error(data.error);

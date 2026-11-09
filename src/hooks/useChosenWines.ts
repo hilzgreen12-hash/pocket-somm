@@ -6,6 +6,7 @@ import type { ChosenWine, CellarWine } from '../types/wine';
 import { fetchAutoLabelUri } from '../api/label';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { sameWineIdentity } from '../utils/wineMatch';
+import { supabase } from '../api/supabase';
 
 export function useChosenWines() {
   const { session } = useAuth();
@@ -38,6 +39,10 @@ export function useChosenWines() {
           if (!uri) return;
           path = await uploadLabelImage(userId, uri, `review-${row.id}`);
         }
+        // Only fill a still-empty photo: the caller may have attached the
+        // user's own photo while this lookup ran — never overwrite it.
+        const { data: cur } = await supabase.from('chosen_wines').select('label_image_path').eq('id', row.id).maybeSingle();
+        if (cur?.label_image_path) return;
         await patchChosenWine(row.id, { label_image_path: path });
         qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
       } catch { /* best-effort: the review stands without a photo */ }

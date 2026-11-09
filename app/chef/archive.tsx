@@ -17,6 +17,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useLabels } from '../../src/hooks/useLabels';
 import { sameWineIdentity } from '../../src/utils/wineMatch';
+import { wineNameKey } from '../../src/utils/wineIdentity';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { WineCardThumb } from '../../src/components/WineCardThumb';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
@@ -46,11 +47,23 @@ export default function ChefArchiveScreen() {
     ...[...cellarWines, ...archivedWines].filter((w) => w.label_image_path).map((w) => ({ producer: w.producer, wine_name: w.wine_name, path: w.label_image_path as string })),
     ...(labels as any[]).filter((l) => l.label_image_path).map((l) => ({ producer: l.producer, wine_name: l.wine_name, path: l.label_image_path as string })),
   ], [cellarWines, archivedWines, labels]);
+  const photoByKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of photoRows) { const k = wineNameKey(r.producer, r.wine_name); if (k && !m.has(k)) m.set(k, r.path); }
+    return m;
+  }, [photoRows]);
+  // Fuzzy matches cached per recipe wine so the list doesn't rescan the cellar each render.
+  const fuzzyCache = useMemo(() => new Map<string, string | null>(), [photoRows]);
   function winePhotoFor(w: { producer?: string | null; wineName?: string | null }): string | null {
+    const key = wineNameKey(w.producer ?? null, w.wineName ?? null);
+    const exact = photoByKey.get(key);
+    if (exact) return exact;
+    if (fuzzyCache.has(key)) return fuzzyCache.get(key) ?? null;
     const hit = photoRows.find((r) => sameWineIdentity(
       { producer: r.producer, wine_name: r.wine_name, vintage: null },
       { producer: w.producer ?? null, wine_name: w.wineName ?? null, vintage: null },
     ));
+    fuzzyCache.set(key, hit?.path ?? null);
     return hit?.path ?? null;
   }
   // "Update image" on a recipe tile.

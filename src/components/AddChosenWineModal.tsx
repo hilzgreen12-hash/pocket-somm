@@ -599,6 +599,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               locationName={locName}
               onLocationName={edited(setLocName)}
               showLocation={false}
+              requireCity
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={edited(setDrinkingWindow)}
               saving={saveManual.isPending || update.isPending}

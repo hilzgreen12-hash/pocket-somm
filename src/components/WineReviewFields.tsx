@@ -38,6 +38,9 @@ interface Props {
   // used where the location is fixed elsewhere (a restaurant visit) or edited
   // via the card's Edit popup rather than typed inline.
   showLocation?: boolean;
+  // Block saving without a city even when the city is edited elsewhere (the
+  // review screens' date · City · Venue line). Defaults to showLocation.
+  requireCity?: boolean;
   // Optional editable review date (YYYY-MM-DD). Rendered above Location when
   // both are provided; used where the review's date should be correctable inline.
   date?: string;
@@ -72,7 +75,7 @@ export function WineReviewFields({
   score, onScore, pricePaid, onPricePaid, currency,
   estimatedValue, estimatedValueAt, estimating, onEstimate,
   review, onReview, personalNotes, onPersonalNotes, showPersonalNotes = true,
-  city, onCity, locationName, onLocationName, showLocation = true, date, onDate, drinkingWindow, onDrinkingWindow,
+  city, onCity, locationName, onLocationName, showLocation = true, requireCity, date, onDate, drinkingWindow, onDrinkingWindow,
   wishlistActive, onWishlist, onAddToCellar,
   saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
 }: Props) {
@@ -262,7 +265,7 @@ export function WineReviewFields({
       <TouchableOpacity
         style={[styles.saveButton, (saved || goldSave) && styles.saveButtonSaved]}
         onPress={() => {
-          if (showLocation && !city.trim()) { showAlert({ title: 'Add a location', body: 'Add at least a city before saving your review.' }); return; }
+          if ((requireCity ?? showLocation) && !(city ?? '').trim()) { showAlert({ title: 'Add a location', body: 'Add at least a city before saving your review.' }); return; }
           onSave();
         }}
         disabled={saving}

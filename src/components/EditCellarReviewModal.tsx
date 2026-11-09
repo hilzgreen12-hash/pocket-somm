@@ -377,6 +377,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
               locationName={locName}
               onLocationName={(v) => { setLocName(v); setSaved(false); }}
               showLocation={false}
+              requireCity
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={(v) => { setDrinkingWindow(v); setSaved(false); }}
               saving={saving || updateWine.isPending}

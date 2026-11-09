@@ -126,6 +126,7 @@ export default function ScanLandingScreen() {
   const [deepVerdict, setDeepVerdict] = useState<VintageVerdictAI | null>(null);
   const [deepLoading, setDeepLoading] = useState(false);
   const [deepTried, setDeepTried] = useState(false);
+  const deepReqRef = useRef(0);
   const [generatingIntel, setGeneratingIntel] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
@@ -296,18 +297,19 @@ export default function ScanLandingScreen() {
   async function diveDeeper(bestValueVintage: number | null, total: number) {
     const wine = vintageWine;
     if (!wine || !compareRows?.length || deepLoading) return;
+    const req = ++deepReqRef.current;
     setDeepLoading(true);
     setDeepTried(true);
     try {
       const res = await generateVintageVerdict(
         { producer: wine.producer, wine_name: wine.wineName, region: wine.region, vintage: null, grape_variety: (wine as any).grape ?? null, style: (wine as any).style ?? null } as any,
-        { rows: compareRows, currency: preferences?.defaultCurrency ?? 'GBP', qualityRank: null, valueRank: null, total, bestValueVintage, window: null, rarity: null },
+        { rows: compareRows, currency: preferences?.defaultCurrency ?? 'GBP', qualityRank: null, valueRank: null, total, bestValueVintage, window: null, rarity: null, scope: 'range' },
       );
-      setDeepVerdict(res);
+      if (req === deepReqRef.current) setDeepVerdict(res);
     } catch {
-      setDeepVerdict(null);
+      if (req === deepReqRef.current) setDeepVerdict(null);
     } finally {
-      setDeepLoading(false);
+      if (req === deepReqRef.current) setDeepLoading(false);
     }
   }
 
@@ -319,6 +321,8 @@ export default function ScanLandingScreen() {
     setCompareDown(false);
     setDeepVerdict(null);
     setDeepTried(false);
+    setDeepLoading(false);
+    deepReqRef.current += 1; // drop any analysis still on its way for the last wine
     setCompareLoading(true);
     try {
       const rows = await fetchVintageComparison(wineQueryName(wine.producer, wine.wineName), preferences?.defaultCurrency ?? 'GBP', null, wineQueryAltName(wine.producer, wine.wineName, wine.region));
