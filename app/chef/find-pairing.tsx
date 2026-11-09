@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
   fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, letterSpacing: 0.3, marginBottom: spacing.xs },
   // "What are you cooking?" left-aligned, with the mic/bin pushed to the right.
   cookingLabel: { fontFamily: fonts.headingRegular, fontSize: 19, color: colors.text },
-  cookingHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  cookingHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm },
   centredLabel: { textAlign: 'center', alignSelf: 'stretch' },
   // Label above each preference bubble group.
   chipFieldLabel: { marginTop: spacing.md, marginBottom: spacing.sm },

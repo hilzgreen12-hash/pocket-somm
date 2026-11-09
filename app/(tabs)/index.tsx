@@ -877,13 +877,15 @@ const styles = StyleSheet.create({
   // (220×165 image, title, gold note).
   sdCarousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   sdCard: { width: 220 },
-  sdThumb: { width: 220, height: 165, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite },
+  // Same framing as the tiles in the carousels below: the photo inset 6pt
+  // inside the white-edged tile, with its own rounded corners.
+  sdThumb: { width: 220, height: 165, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: 6 },
   // Faded like the Community Musings cards: image at 55% under a dark scrim.
-  sdImage: { width: '100%', height: '100%', opacity: 0.85 },
+  sdImage: { width: '100%', height: '100%', opacity: 0.85, borderRadius: 8 },
   sdFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   // Title sits on its own dark band so the photos around it stay bright.
   sdTitleBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
-  sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
+  sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap', borderRadius: 8, overflow: 'hidden' },
   sdCollageCell: { width: '50%', height: '50%', opacity: 0.85 },
   // The brown "upload instead" bar across the bottom of a scan tile.
   sdBanner: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)' },
