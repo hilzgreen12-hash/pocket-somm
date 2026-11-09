@@ -6,7 +6,8 @@ import { supabase } from '../api/supabase';
 import { cellarOwner } from '../api/cellarContext';
 import { useChefPairingHistory, useChefLabelHistory } from '../hooks/useChefHistory';
 import { useScanHistory } from '../hooks/useScanHistory';
-import { useCellar } from '../hooks/useCellar';
+import { useCellar, useArchive } from '../hooks/useCellar';
+import { sameWineIdentity } from '../utils/wineMatch';
 import { useLabels } from '../hooks/useLabels';
 import { wineNameKey } from '../utils/wineIdentity';
 import { LabelThumb } from './LabelThumb';
@@ -55,6 +56,7 @@ export function CellarInsightsCarousel() {
   const { sessions: recipeSessions } = useChefLabelHistory();
   const { archive } = useScanHistory();
   const { wines } = useCellar();
+  const { wines: archivedWines } = useArchive();
   const { labels } = useLabels();
   // Cellar wine thumbnails by id — for the pairings collage.
   const thumbById = new Map(wines.filter((w) => w.label_image_path).map((w) => [w.id, w.label_image_path as string]));
@@ -187,6 +189,15 @@ export function CellarInsightsCarousel() {
     // by identity) — a collage, like the other Insights tiles.
     const recipeWineKeys = new Set<string>();
     const recipeThumbs: CollageItem[] = [];
+    let recipeFallback: CollageItem | null = null;
+    const photoRows = [...wines, ...archivedWines].filter((x) => x.label_image_path);
+    const recipePhotoFor = (rw: { producer?: string | null; wineName?: string | null; vintage?: string | null }): string | null => {
+      const hit = photoRows.find((x) => sameWineIdentity(
+        { producer: x.producer, wine_name: x.wine_name, vintage: null } as any,
+        { producer: rw.producer ?? null, wine_name: rw.wineName ?? null, vintage: null } as any,
+      ));
+      return (hit?.label_image_path as string | undefined) ?? null;
+    };
     const seenThumbKeys = new Set<string>();
     for (const s of recipeSessions as any[]) {
       const w = s.wine;
@@ -195,11 +206,17 @@ export function CellarInsightsCarousel() {
       recipeWineKeys.add(key);
       if (!seenThumbKeys.has(key) && recipeThumbs.length < 4) {
         seenThumbKeys.add(key);
-        // The user's own photo of that wine when there is one, else its label
-        // looked up by name — so a real recipe tile always shows.
-        recipeThumbs.push(thumbByKey.get(key) ?? { producer: w.producer ?? null, wineName: w.wineName ?? null });
+        // The user's own photo of that wine — cellar, archive or a label scan,
+        // matched by identity (not exact spelling) so archived and slightly
+        // differently named bottles still find their picture. Wines with no
+        // stored photo are left out rather than showing a name-only square.
+        const photo = thumbByKey.get(key) ?? recipePhotoFor(w);
+        if (photo) recipeThumbs.push(photo);
+        else if (!recipeFallback) recipeFallback = { producer: w.producer ?? null, wineName: w.wineName ?? null };
       }
     }
+    // No stored photo for any recipe wine → the newest one's label from the web.
+    if (recipeThumbs.length === 0 && recipeFallback) recipeThumbs.push(recipeFallback);
     const recipeWineCount = recipeWineKeys.size;
     // Only shown when we have at least one paired wine's label to picture it —
     // never a bare brown/count tile.
@@ -255,10 +272,30 @@ function CollageCell({ item, full }: { item: CollageItem; full?: boolean }) {
   if (typeof item === 'string') return <LabelThumb path={item} style={st} radius={full ? 12 : 0} frame={0} />;
   return <View style={[st, { overflow: 'hidden' }]}><WineCardThumb producer={item.producer} wineName={item.wineName} fallbackText={item.wineName ?? item.producer ?? ''} style={st} /></View>;
 }
+function CollageSlot({ item, w, h }: { item: CollageItem; w: number; h: number }) {
+  const st = { width: w, height: h };
+  if (typeof item === 'string') return <LabelThumb path={item} style={st} radius={0} frame={0} />;
+  return <View style={[st, { overflow: 'hidden' }]}><WineCardThumb producer={item.producer} wineName={item.wineName} fallbackText={item.wineName ?? item.producer ?? ''} style={st} /></View>;
+}
 function Collage({ paths }: { paths: CollageItem[] }) {
   const p = paths.slice(0, 4);
   if (p.length === 1) {
     return <View style={styles.collageBox}><CollageCell item={p[0]} full /></View>;
+  }
+  // Two → side by side; three → one tall on the left, two stacked on the right.
+  // (A 2×2 grid left blank squares.)
+  if (p.length === 2 || p.length === 3) {
+    return (
+      <View style={[styles.collageBox, { flexDirection: 'row' }]}>
+        <CollageSlot item={p[0]} w={110} h={165} />
+        {p.length === 2 ? <CollageSlot item={p[1]} w={110} h={165} /> : (
+          <View>
+            <CollageSlot item={p[1]} w={110} h={82.5} />
+            <CollageSlot item={p[2]} w={110} h={82.5} />
+          </View>
+        )}
+      </View>
+    );
   }
   return (
     <View style={styles.collageBox}>
