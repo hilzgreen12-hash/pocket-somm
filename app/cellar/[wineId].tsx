@@ -2672,13 +2672,6 @@ export default function CellarWineDetail() {
             <Text style={styles.exportBtnText}>{sharingIntel ? 'Preparing…' : 'Export Wine Intel'}</Text>
           </TouchableOpacity>
         ) : null}
-        {!isArchived ? (
-          <TouchableOpacity onPress={() => handleRefreshEstimate()} disabled={refreshingValue} activeOpacity={0.7} style={styles.wcRegenWrap}>
-            {refreshingValue
-              ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><ActivityIndicator size="small" color="#FFFFFF" /><Text style={styles.wcRegen}>Regenerating…</Text></View>
-              : <Text style={styles.wcRegen}>Regenerate Wine Card Intel</Text>}
-          </TouchableOpacity>
-        ) : null}
         {isArchived ? (
           <TouchableOpacity style={[styles.exportBtn, styles.archivedDeleteBtn, removing && styles.buttonDisabled]} onPress={() => setRemoveStep('confirm')} disabled={removing}>
             <Text style={styles.exportBtnText}>Delete Wine From Your Records</Text>
@@ -3275,7 +3268,6 @@ const styles = StyleSheet.create({
   wcRarityMeter: { flex: 1, flexDirection: 'row', gap: 4 },
   wcRarityStep: { flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)' },
   wcRarityStepOn: { backgroundColor: colors.gold },
-  wcRegenWrap: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 12 },
   wcRegen: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, textDecorationLine: 'underline', textAlign: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   // Inter — error body
