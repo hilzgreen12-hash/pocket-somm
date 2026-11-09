@@ -44,6 +44,17 @@ const FOOD = new Set([
   'smoked', 'slow', 'cooked', 'rice', 'bread', 'noodles', 'vegetables', 'veg', 'greens', 'gratin', 'dauphinoise',
 ]);
 
+// Grape varieties: a spoken grape stays a grape ("Mate's Chardonnay" must not
+// become "Moët & Chandon") unless the grape is part of that wine's own name.
+const GRAPES = new Set([
+  'chardonnay', 'sauvignon', 'pinot', 'noir', 'gris', 'grigio', 'meunier', 'riesling', 'syrah', 'shiraz', 'merlot',
+  'cabernet', 'franc', 'grenache', 'garnacha', 'mourvedre', 'monastrell', 'tempranillo', 'sangiovese', 'nebbiolo',
+  'barbera', 'dolcetto', 'zinfandel', 'primitivo', 'malbec', 'carmenere', 'viognier', 'marsanne', 'roussanne',
+  'chenin', 'semillon', 'gewurztraminer', 'muscat', 'moscato', 'albarino', 'gruner', 'veltliner', 'gamay',
+  'aligote', 'vermentino', 'fiano', 'aglianico', 'nerello', 'touriga', 'pinotage', 'petit', 'verdot', 'carignan',
+  'cinsault', 'trebbiano', 'verdejo', 'godello', 'furmint', 'assyrtiko', 'xinomavro', 'blaufrankisch', 'zweigelt',
+]);
+
 const COMMON = new Set([
   'mountain', 'mountains', 'friend', 'friends', 'cotton', 'button', 'mutton', 'morning', 'evening', 'night', 'dinner',
   'lunch', 'breakfast', 'money', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -286,7 +297,7 @@ export function correctWineNamesBySound(text: string, names: string[] | SoundNam
       const singleCommon = kept.length === 1 && COMMON.has(kept[0]);
       for (const e of entries) {
         const nameWords = e.folded.split(/[^a-z]+/);
-        if (kept.some((t) => FOOD.has(t) && !nameWords.includes(t))) continue;
+        if (kept.some((t) => (FOOD.has(t) || GRAPES.has(t)) && !nameWords.includes(t))) continue;
         // Never swallow ordinary words around the name: a filler word must belong
         // to the name itself ("les", "clos de") — except a tiny syllable word
         // INSIDE or at the END of a misheard name ("pull IN yee", "moulin A vaughn",
