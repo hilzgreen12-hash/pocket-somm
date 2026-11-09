@@ -62,6 +62,33 @@ function buildVerdictPrompt(b: any): string {
   const identity = [b.producer, b.wineName, b.vintage].filter(Boolean).join(' ') + (b.region ? `, ${b.region}` : '');
   const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 20)
     .map((r: any) => `${r.vintage}: score ${r.score ?? '—'}, price ${r.price != null ? `${Math.round(r.price)} ${b.currency ?? ''}` : '—'}`).join('\n');
+  // No vintage chosen (Home → Search a Wine → Compare Vintages): weigh the whole
+  // range instead of one year.
+  if (!String(b.vintage ?? '').trim()) {
+    return `You are a world-class fine-wine merchant and sommelier writing Vinster's Verdict across the vintages of one wine.
+
+Wine: ${identity}
+This year: ${new Date().getFullYear()}
+Rarity: ${b.rarity ?? 'unknown'}
+Wine-Searcher market price and aggregate critic score by vintage:
+${rows}
+
+Already shown to the user as separate points (DO NOT restate these numbers): best-value vintage ${b.bestValueVintage ?? '?'} (lowest price per critic point).
+
+Write a 3–5 sentence verdict that weighs what the table alone can't show:
+- Where each part of the range sits in its drinking life: older vintages at or near their peak are ready to enjoy, and that drinkability adds real value which price per point doesn't capture; young vintages may need years before they show their worth.
+- Scarcity: fewer bottles of older vintages remain, and rarity adds value the market price may not fully reflect.
+- The character and reputation of the standout and weaker years for this wine.
+- For young vintages, weigh the time and cost of storing them for many years (proper storage, tied-up money, risk) against buying an older vintage that's ready now.
+- A clear recommendation: which vintage to buy to drink soon, which to buy to keep, and which to avoid or which aren't worth their premium.
+
+Also pick, from the vintages IN THE TABLE ONLY, using the table's evidence and your own judgement of how each vintage is drinking:
+- "drinkNow": up to 3 vintages best for drinking now (at or near peak, good quality for the money), with one short sentence why.
+- "layDown": up to 3 vintages best to lay down (structured years that will reward cellaring and look good value for it), with one short sentence why that mentions roughly how long to wait.
+Be specific to this wine. Never invent scores or prices not in the table. Plain prose, no headings, no bullet points.
+
+Return ONLY JSON: {"verdict": "...", "drinkNow": {"vintages": [2010], "reason": "..."}, "layDown": {"vintages": [2019], "reason": "..."}}`;
+  }
   const win = b.window && (b.window.from || b.window.to) ? `${b.window.from ?? '?'}–${b.window.to ?? '?'}${b.window.status ? ` (${b.window.status})` : ''}` : 'unknown';
   return `You are a world-class fine-wine merchant and sommelier writing Vinster's Verdict for one specific vintage.
 

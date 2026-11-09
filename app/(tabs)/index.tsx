@@ -41,6 +41,7 @@ import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import type { WineDetailsComplete } from '../../src/types/wine';
+import { generateVintageVerdict, type VintageVerdictAI } from '../../src/api/wineExtras';
 import { colors, spacing } from '../../src/constants/theme';
 import { withBordeauxInfo } from '../../src/constants/bordeauxClassification';
 import { fonts } from '../../src/constants/fonts';
@@ -120,6 +121,11 @@ export default function ScanLandingScreen() {
   const [compareRows, setCompareRows] = useState<VintageComparisonRow[] | null>(null);
   // Wine-Searcher didn't answer (down / daily limit) — distinct from "no data".
   const [compareDown, setCompareDown] = useState(false);
+  // "Dive Deeper →" under Vinster's verdict: the full market analysis across
+  // the vintages (the same considered verdict the Market tabs give).
+  const [deepVerdict, setDeepVerdict] = useState<VintageVerdictAI | null>(null);
+  const [deepLoading, setDeepLoading] = useState(false);
+  const [deepTried, setDeepTried] = useState(false);
   const [generatingIntel, setGeneratingIntel] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
@@ -287,12 +293,32 @@ export default function ScanLandingScreen() {
     return { id: latest.id, date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }) };
   }
 
+  async function diveDeeper(bestValueVintage: number | null, total: number) {
+    const wine = vintageWine;
+    if (!wine || !compareRows?.length || deepLoading) return;
+    setDeepLoading(true);
+    setDeepTried(true);
+    try {
+      const res = await generateVintageVerdict(
+        { producer: wine.producer, wine_name: wine.wineName, region: wine.region, vintage: null, grape_variety: (wine as any).grape ?? null, style: (wine as any).style ?? null } as any,
+        { rows: compareRows, currency: preferences?.defaultCurrency ?? 'GBP', qualityRank: null, valueRank: null, total, bestValueVintage, window: null, rarity: null },
+      );
+      setDeepVerdict(res);
+    } catch {
+      setDeepVerdict(null);
+    } finally {
+      setDeepLoading(false);
+    }
+  }
+
   async function openCompareVintages() {
     const wine = vintageWine;
     if (!wine) return;
     setCompareOpen(true);
     setCompareRows(null);
     setCompareDown(false);
+    setDeepVerdict(null);
+    setDeepTried(false);
     setCompareLoading(true);
     try {
       const rows = await fetchVintageComparison(wineQueryName(wine.producer, wine.wineName), preferences?.defaultCurrency ?? 'GBP', null, wineQueryAltName(wine.producer, wine.wineName, wine.region));
@@ -646,6 +672,31 @@ export default function ScanLandingScreen() {
                       <Text style={styles.cmpVerdictText}>{verdict.text}</Text>
                     </View>
                   ) : null}
+                  {/* Dive Deeper → the considered market analysis across the range. */}
+                  {deepLoading ? (
+                    <View style={styles.cmpLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.cmpNote}>Vinster is weighing up the vintages…</Text></View>
+                  ) : deepVerdict ? (
+                    <View style={styles.cmpVerdict}>
+                      <Text style={styles.cmpVerdictTitle}>Vinster's market analysis</Text>
+                      {deepVerdict.verdict ? <Text style={styles.cmpVerdictText}>{deepVerdict.verdict}</Text> : null}
+                      {deepVerdict.drinkNow ? (
+                        <View style={{ gap: 2 }}>
+                          <Text style={styles.cmpVerdictText}>Best for Drinking Now: <Text style={{ color: colors.gold, fontFamily: fonts.bodySemibold }}>{deepVerdict.drinkNow.vintages.join(', ')}</Text></Text>
+                          {deepVerdict.drinkNow.reason ? <Text style={styles.cmpNote}>{deepVerdict.drinkNow.reason}</Text> : null}
+                        </View>
+                      ) : null}
+                      {deepVerdict.layDown ? (
+                        <View style={{ gap: 2 }}>
+                          <Text style={styles.cmpVerdictText}>Best to Lay Down: <Text style={{ color: colors.gold, fontFamily: fonts.bodySemibold }}>{deepVerdict.layDown.vintages.join(', ')}</Text></Text>
+                          {deepVerdict.layDown.reason ? <Text style={styles.cmpNote}>{deepVerdict.layDown.reason}</Text> : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : (
+                    <TouchableOpacity onPress={() => void diveDeeper(verdict.bestValueVintage ?? null, verdict.total)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={styles.cmpDeeper}>{deepTried ? "Couldn't load the analysis — try again →" : 'Dive Deeper →'}</Text>
+                    </TouchableOpacity>
+                  )}
                 </ScrollView>
               );
             })() : (
@@ -904,6 +955,7 @@ const styles = StyleSheet.create({
   cmpChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   cmpChip: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.gold, color: colors.gold, fontFamily: fonts.bodyRegular, fontSize: 12.5, overflow: 'hidden' },
   cmpVerdictText: { fontFamily: fonts.bodyRegular, fontSize: 14, lineHeight: 21, color: colors.text },
+  cmpDeeper: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, marginTop: spacing.md },
   vintageBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   vintageBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   vintageNv: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', paddingVertical: spacing.md },
