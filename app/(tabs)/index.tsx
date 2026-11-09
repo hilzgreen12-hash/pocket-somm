@@ -76,7 +76,7 @@ const SCAN_HELP = `Expert training + Wine Searcher Market API result in the most
 Home is your starting point. Scan a label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — or scan a wine list for tailored picks from the menu. No label to hand? Search a Wine from Vinster's catalogue. Below, revisit your Recent Scans, see which cellar bottles are drinking now, and catch up on Community Musings.`;
 
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
-// an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
+// a corner "Upload" button) plus a Search tile, then the Your Lineup Archive
 // carousel. The six-tab bar handles all other navigation, so there's no hamburger.
 // Dot colour for a wine's colour in the search results: red → wine red, white →
 // gold/yellow (as requested), rosé → pink. Unknown → transparent (no dot).
@@ -519,7 +519,7 @@ export default function ScanLandingScreen() {
           {
             key: 'search',
             title: 'Search & Discover',
-            // The three ways in. Scan tiles keep their brown "upload instead" bar.
+            // The three ways in. Scan tiles have a small "Upload" button in the corner.
             content: (
                 <View style={styles.carouselBleed}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sdCarousel}>
