@@ -57,7 +57,8 @@ let welcomeShownThisSession = false;
 // (free licence) — see assets/images/tiles/CREDITS.md.
 const SD_LABEL_IMAGE = NAMED_LABELS.denisMortet;
 const SD_RESTAURANT_IMAGE: number | null = require('../../assets/images/tiles/restaurant-interior.jpg');
-const SD_COLLAGE_IMAGES = [NAMED_LABELS.lynchBages, NAMED_LABELS.piperRare, NAMED_LABELS.donnhoff, NAMED_LABELS.benditoDestino];
+// Light labels only — the Search tile reads best bright (Piper Rare was too dark).
+const SD_COLLAGE_IMAGES = [NAMED_LABELS.lynchBages, NAMED_LABELS.tollotBeaut, NAMED_LABELS.donnhoff, NAMED_LABELS.benditoDestino];
 
 // The Home carousels take no props, so memoised copies don't redraw when only
 // Home's own state changes (e.g. while a section is being dragged).

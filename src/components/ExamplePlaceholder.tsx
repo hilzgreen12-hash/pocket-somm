@@ -22,6 +22,7 @@ export const NAMED_LABELS = {
   benditoDestino: require('../../assets/images/placeholder-labels/label-15.jpg'),   // Bendito Destino La Cabaña
   donnhoff: require('../../assets/images/placeholder-labels/label-16.jpg'),         // Dönnhoff Krötenpfuhl Riesling GG 2019
   rocDeCambes: require('../../assets/images/placeholder-labels/label-17.jpg'),      // Roc de Cambes 2015
+  tollotBeaut: require('../../assets/images/placeholder-labels/label-9.jpg'),       // Domaine Tollot-Beaut Beaune-Grèves 1er Cru
 };
 
 // The new labels are interleaved with the originals so every offset-based
