@@ -165,15 +165,15 @@ export default function CellarTab() {
         </TouchableOpacity>
       </View>
 
-      {/* 18 above (actionRow.marginBottom) + rule + 18 below — matches the Home tab. */}
-      <View style={[styles.divider, styles.voiceDivider]} />
-
       {/* Your Wines At Home — the home-storage carousel, embedded here (replaces
           the old standalone Home Wine Storage page). */}
       <HomeStorageSection requireAuth={requireAuth} />
 
+      {/* Rule between the home-storage carousel and the buttons below it. */}
+      <View style={styles.divider} />
+
       {/* Your Cellar List, Statistics and Archive — below the home-storage carousel. */}
-      <View style={[styles.section, { marginTop: spacing.sm }]}>
+      <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
           <Text style={styles.buttonText}>Your Cellar List</Text>
         </TouchableOpacity>
@@ -275,8 +275,6 @@ const styles = StyleSheet.create({
   // Wrapper for the full-width gold "Add Wines" button (same padding as the
   // sections below, so it lines up exactly with "Your Cellar List").
   actionRow: { paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: 18 },
-  // First divider after the Voice Command row — 18 above/below to match Home.
-  voiceDivider: { marginTop: 0, marginBottom: 18 },
   actionBtn: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   actionBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },

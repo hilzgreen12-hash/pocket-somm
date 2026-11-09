@@ -382,10 +382,6 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
         </ScrollView>
         )
       )}
-      {/* Sits beneath the carousel: adding is via the "+ Add" card at its end. */}
-      {hasStorage && (
-        <Text style={styles.swipeHint}>Swipe Right to view and add locations →</Text>
-      )}
 
       <Modal visible={!!renameLoc} transparent animationType="fade" onRequestClose={() => setRenameLoc(null)}>
         <View style={styles.renameBackdrop}>
@@ -425,9 +421,6 @@ const styles = StyleSheet.create({
   stats: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Full-width faded separators framing the stats bar.
   fadedRule: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
-  // Left-indented italic hint pointing to the carousel's "+ Add" card, sitting
-  // directly above the carousel (matches the FCL filter hint style).
-  swipeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'left', paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs },
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
   error: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   // The swipe hint sits directly above, so no extra top gap here.
