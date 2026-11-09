@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { formatCurrency } from '../constants/currency';
 import { Ionicons } from '@expo/vector-icons';
 import { LabelThumb } from './LabelThumb';
 import { AddPhotoThumb } from './AddPhotoThumb';
@@ -209,15 +210,16 @@ export function ReviewDetailModal({
                   <Text style={styles.stamp}>{fmtDate(e.dateIso) || 'Latest entry'}</Text>
                   {editable ? (
                     <TouchableOpacity onPress={onEditLatest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={styles.editLink}>View Full Review / Edit</Text>
+                      <Text style={styles.editLink}>Edit</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
-                {(e.favourite || e.score != null || drink) ? (
+                {(e.favourite || e.score != null || drink || e.pricePaid != null) ? (
                   <View style={styles.scoreRow}>
                     {e.favourite ? <Text style={styles.star}>★</Text> : null}
                     {e.score != null ? <Text style={styles.score}>{e.score} / 100</Text> : null}
                     {drink ? <Text style={styles.drink}>Drink: {drink}</Text> : null}
+                    {e.pricePaid != null ? <Text style={styles.drink}>Paid {formatCurrency(Number(e.pricePaid), e.priceCurrency ?? 'GBP', { decimals: 0 })}</Text> : null}
                   </View>
                 ) : null}
 

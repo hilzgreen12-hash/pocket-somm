@@ -16,6 +16,9 @@ export interface UnifiedEntry {
   note: string | null; // "Your Review"
   personalNotes: string | null;
   drinkingWindow: string | null;
+  // Price paid for the bottle on that occasion (restaurant / other reviews).
+  pricePaid?: number | null;
+  priceCurrency?: string | null;
 }
 
 // Vinster's own take on the wine, shown collapsed under "View Vinster's Note" on
@@ -70,6 +73,8 @@ export function fromChosenGroup(rows: ChosenWine[]): UnifiedReview {
     note: r.tasting_note,
     personalNotes: r.other_observations,
     drinkingWindow: r.user_drinking_window,
+    pricePaid: r.menu_price ?? null,
+    priceCurrency: r.currency ?? null,
   }));
   return {
     source: head.source === 'other' ? 'other' : 'restaurant',
