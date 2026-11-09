@@ -11,6 +11,16 @@ import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ChefLabelSession } from '../../src/api/chef';
+import { setChefLabelSessionImage } from '../../src/api/chef';
+import * as ImagePicker from 'expo-image-picker';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCellar, useArchive } from '../../src/hooks/useCellar';
+import { useLabels } from '../../src/hooks/useLabels';
+import { sameWineIdentity } from '../../src/utils/wineMatch';
+import { LabelThumb } from '../../src/components/LabelThumb';
+import { WineCardThumb } from '../../src/components/WineCardThumb';
+import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
+import { uploadCookbookPhoto } from '../../src/api/labelPhotos';
 import type { ChefArchiveCollection } from '../../src/api/chefArchiveCollections';
 
 const FILTER_ALL = 'ALL';
@@ -26,6 +36,60 @@ export default function ChefArchiveScreen() {
   const { filter: initialFilter, addFolder } = useLocalSearchParams<{ filter?: string; addFolder?: string }>();
   const { session } = useAuth();
   const { sessions: labelSessions, isLoading: labelLoading, remove: removeLabel } = useChefLabelHistory();
+  // Recipe tile backgrounds: the recipe's chosen image, else the user's own
+  // photo of the wine (cellar, archive or a label scan), else its label online.
+  const qcRecipe = useQueryClient();
+  const { wines: cellarWines } = useCellar();
+  const { wines: archivedWines } = useArchive();
+  const { labels } = useLabels();
+  const photoRows = useMemo(() => [
+    ...[...cellarWines, ...archivedWines].filter((w) => w.label_image_path).map((w) => ({ producer: w.producer, wine_name: w.wine_name, path: w.label_image_path as string })),
+    ...(labels as any[]).filter((l) => l.label_image_path).map((l) => ({ producer: l.producer, wine_name: l.wine_name, path: l.label_image_path as string })),
+  ], [cellarWines, archivedWines, labels]);
+  function winePhotoFor(w: { producer?: string | null; wineName?: string | null }): string | null {
+    const hit = photoRows.find((r) => sameWineIdentity(
+      { producer: r.producer, wine_name: r.wine_name, vintage: null },
+      { producer: w.producer ?? null, wine_name: w.wineName ?? null, vintage: null },
+    ));
+    return hit?.path ?? null;
+  }
+  // "Update image" on a recipe tile.
+  function openRecipeImageMenu(item: UnifiedItem) {
+    const id = item.session.id;
+    const custom = !!(item.session as ChefLabelSession).image_path;
+    showAlert({
+      title: 'Update image',
+      buttons: [
+        { text: 'Take a Photo', onPress: () => setTimeout(() => void pickRecipeImage(id, 'camera'), 350) },
+        { text: 'Upload a Photo', onPress: () => setTimeout(() => void pickRecipeImage(id, 'library'), 350) },
+        { text: 'Find a Photo Online', onPress: () => router.push(`/chef/find-folder-photo?recipeId=${id}&name=${encodeURIComponent(itemRecipeName(item))}` as any) },
+        ...(custom ? [{ text: "Use the Wine's Label", onPress: () => void saveRecipeImage(id, null) }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+  async function pickRecipeImage(id: string, source: 'camera' | 'library') {
+    try {
+      if (!session?.user.id) return;
+      if (!(await ensureMediaPermission(source))) return;
+      const res = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (res.canceled || !res.assets[0]) return;
+      const path = await uploadCookbookPhoto(session.user.id, res.assets[0].uri, `recipe-${id}`);
+      await saveRecipeImage(id, path);
+    } catch (err) {
+      showAlert({ title: 'Could not add that photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+  async function saveRecipeImage(id: string, path: string | null) {
+    try {
+      await setChefLabelSessionImage(id, path);
+      qcRecipe.invalidateQueries({ queryKey: ['chef-label-sessions'] });
+    } catch (err) {
+      showAlert({ title: 'Could not update the image', body: err instanceof Error ? /column|image_path/i.test(err.message) ? 'Recipe images need a quick database update first.' : err.message : 'Please try again.' });
+    }
+  }
   const { collections, membershipMap, create, rename, remove, addItem, removeItem, toggleStar } = useChefArchiveCollections();
 
   // A `filter` param arriving from the Pair-tab Cookbook carousel is either
@@ -328,6 +392,19 @@ export default function ChefArchiveScreen() {
                 onLongPress={() => handleLongPressItem(item)}
                 delayLongPress={400}
               >
+                {/* The recipe's image (or the wine's label) behind a dark fade. */}
+                {(() => {
+                  const w = item.session.wine;
+                  const path = (item.session as ChefLabelSession).image_path || winePhotoFor(w);
+                  return (
+                    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                      {path
+                        ? <LabelThumb path={path} fallbackText="" style={styles.cardBgImage} radius={0} frame={0} />
+                        : <WineCardThumb producer={w.producer} wineName={w.wineName} fallbackText="" style={styles.cardBgImage} />}
+                      <View style={styles.cardBgFade} />
+                    </View>
+                  );
+                })()}
                 <View style={styles.cardTopRow}>
                   <Text style={styles.cardDate}>{formatDate(item.saved_at)}</Text>
                   <TouchableOpacity
@@ -365,6 +442,9 @@ export default function ChefArchiveScreen() {
                     <Text style={styles.assignLink}>+ Add to folder</Text>
                   </TouchableOpacity>
                 </View>
+                <TouchableOpacity onPress={() => openRecipeImageMenu(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ alignSelf: 'flex-start' }}>
+                  <Text style={styles.assignLink}>Update image</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
             );
           })}
@@ -516,7 +596,10 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   // Brown bubble to match the wine + restaurant review cards (colors.surface).
-  card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg, gap: spacing.xs, backgroundColor: colors.surface },
+  card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg, gap: spacing.xs, backgroundColor: colors.surface, overflow: 'hidden' },
+  cardBgImage: { width: '100%', height: '100%' },
+  // Darker fade so the recipe text stays readable over the label.
+  cardBgFade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.72)' },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs },
   typePill: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: 10, borderWidth: 1 },
   typePillRecipe: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },

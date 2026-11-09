@@ -8,6 +8,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { searchFolderImages, type LabelImageCandidate } from '../../src/api/label';
 import { uploadCookbookPhotoFromUrl } from '../../src/api/labelPhotos';
 import { setChefCollectionImage } from '../../src/api/chefArchiveCollections';
+import { setChefLabelSessionImage } from '../../src/api/chef';
 import { FAVOURITES_ID, setFavouritesCover } from '../../src/api/cookbookFavouritesCover';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -18,7 +19,8 @@ import { fonts } from '../../src/constants/fonts';
 type Stage = 'searching' | 'choosing' | 'saving' | 'empty' | 'error';
 
 export default function FindFolderPhotoScreen() {
-  const { folderId, name } = useLocalSearchParams<{ folderId?: string; name?: string }>();
+  // recipeId → the photo becomes that Cookbook recipe's cover instead of a folder's.
+  const { folderId, name, recipeId } = useLocalSearchParams<{ folderId?: string; name?: string; recipeId?: string }>();
   const { session } = useAuth();
   const qc = useQueryClient();
   const [stage, setStage] = useState<Stage>('searching');
@@ -42,15 +44,18 @@ export default function FindFolderPhotoScreen() {
   }, []);
 
   async function choose(c: LabelImageCandidate) {
-    if (!session?.user.id || !folderId || stage === 'saving') return;
+    if (!session?.user.id || !(folderId || recipeId) || stage === 'saving') return;
     setStage('saving');
     try {
-      const path = await uploadCookbookPhotoFromUrl(session.user.id, c.url, folderId);
-      if (folderId === FAVOURITES_ID) {
+      const path = await uploadCookbookPhotoFromUrl(session.user.id, c.url, recipeId ? `recipe-${recipeId}` : folderId!);
+      if (recipeId) {
+        await setChefLabelSessionImage(recipeId, path);
+        qc.invalidateQueries({ queryKey: ['chef-label-sessions'] });
+      } else if (folderId === FAVOURITES_ID) {
         await setFavouritesCover(session.user.id, path);
         qc.invalidateQueries({ queryKey: ['cookbook-favourites-cover'] });
       } else {
-        await setChefCollectionImage(folderId, path);
+        await setChefCollectionImage(folderId!, path);
         qc.invalidateQueries({ queryKey: ['chef-archive-collections'] });
       }
       router.back();
