@@ -533,7 +533,8 @@ export default function ScanLandingScreen() {
                         </View>
                         <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search a Wine</Text></View></View>
                       </TouchableOpacity>
-                      <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Market Intel Powered by Wine Searcher</Text>
+                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Market Intel</Text>
+                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Powered by Wine Searcher</Text>
                     </View>
 
                     {/* Scan a Label → intel */}
@@ -551,7 +552,8 @@ export default function ScanLandingScreen() {
                           <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
                         </TouchableOpacity>
                       </TouchableOpacity>
-                      <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Generate Wine Intel, Review &amp; Cellar</Text>
+                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
+                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Review &amp; Cellar</Text>
                     </View>
 
                     {/* Scan a Wine List → recommendations */}
@@ -575,7 +577,8 @@ export default function ScanLandingScreen() {
                           <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
                         </TouchableOpacity>
                       </TouchableOpacity>
-                      <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Tailored Bottle Picks from a Wine List</Text>
+                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Restaurant Wine Lists</Text>
+                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Tailored bottle picks</Text>
                     </View>
                   </ScrollView>
                 </View>
@@ -922,7 +925,9 @@ const styles = StyleSheet.create({
   // Keeps the title centred in the image area above the "upload instead" bar.
   sdTitleWrapBanner: { bottom: 36 },
   sdTitle: { fontFamily: fonts.headingSemibold, fontSize: 21, color: colors.gold, lineHeight: 26, textAlign: 'center' },
-  sdNote: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+  // White name + gold line beneath, matching the carousels below.
+  sdName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
+  sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
   // footprint). This same yellow-bubble treatment is used app-wide.
