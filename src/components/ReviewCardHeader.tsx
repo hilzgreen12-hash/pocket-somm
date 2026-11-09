@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
+import { DateInput } from './DateInput';
 import { WineIdentityHeader } from './WineIdentityHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -72,6 +73,26 @@ export function ReviewedStamp({ dateIso, location }: { dateIso?: string | null; 
   return <Text style={styles.stamp}>{text}</Text>;
 }
 
+// The line under the wine header on the review input screens: date · city ·
+// venue, each editable in place (replaces "Reviewed <date> · <location>" plus the
+// separate Date and Location fields).
+export function ReviewedLineEditable({ date, onDate, city, onCity, venue, onVenue, currency }: {
+  date: string; onDate: (iso: string) => void;
+  city: string; onCity: (v: string) => void;
+  venue: string; onVenue: (v: string) => void;
+  currency?: string | null;
+}) {
+  return (
+    <View style={styles.editLine}>
+      <DateInput style={[styles.editField, styles.editDate]} valueIso={date} onChangeIso={onDate} currency={currency ?? undefined} placeholderTextColor={colors.textMuted} />
+      <Text style={styles.editDot}>·</Text>
+      <TextInput style={styles.editField} value={city} onChangeText={onCity} placeholder="City" placeholderTextColor={colors.textMuted} />
+      <Text style={styles.editDot}>·</Text>
+      <TextInput style={[styles.editField, styles.editVenue]} value={venue} onChangeText={onVenue} placeholder="Venue" placeholderTextColor={colors.textMuted} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   textCol: { flex: 1 },
@@ -79,4 +100,9 @@ const styles = StyleSheet.create({
   // cellar wine card, so the thumbnail reads as a framed picture, not a cut-out.
   thumbFrame: { backgroundColor: colors.cream, padding: 4, borderRadius: 8 },
   stamp: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.md },
+  editLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 6, rowGap: 4, marginBottom: spacing.md },
+  editField: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, textAlign: 'center', minWidth: 64, paddingVertical: 3, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: 'rgba(224,184,74,0.5)' },
+  editDate: { minWidth: 92 },
+  editVenue: { minWidth: 96 },
+  editDot: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted },
 });

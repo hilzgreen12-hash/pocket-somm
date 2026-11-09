@@ -12,7 +12,7 @@ import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { WineIdentityHeader } from './WineIdentityHeader';
-import { ReviewCardHeader, ReviewedStamp } from './ReviewCardHeader';
+import { ReviewCardHeader, ReviewedLineEditable } from './ReviewCardHeader';
 import { WineReviewFields } from './WineReviewFields';
 import { WineSearchInput } from './WineSearchInput';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -467,7 +467,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                 />
 
                 <View style={styles.divider} />
-                <ReviewedStamp dateIso={reviewDate} location={[locName.trim(), locCity.trim()].filter(Boolean).join(', ')} />
+                <ReviewedLineEditable date={reviewDate} onDate={edited(setReviewDate)} city={locCity} onCity={edited(setLocCity)} venue={locName} onVenue={edited(setLocName)} currency={currency} />
               </>
             ) : (
               <>
@@ -594,13 +594,11 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               onReview={edited(setTastingNote)}
               personalNotes={otherObservations}
               onPersonalNotes={edited(setOtherObservations)}
-              date={reviewDate}
-              onDate={edited((t: string) => setReviewDate(t.replace(/[^0-9-]/g, '').slice(0, 10)))}
               city={locCity}
               onCity={edited(setLocCity)}
               locationName={locName}
               onLocationName={edited(setLocName)}
-              showLocation
+              showLocation={false}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={edited(setDrinkingWindow)}
               saving={saveManual.isPending || update.isPending}

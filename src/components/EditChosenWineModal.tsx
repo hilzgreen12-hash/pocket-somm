@@ -11,7 +11,7 @@ import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { AddPhotoThumb } from './AddPhotoThumb';
-import { ReviewCardHeader, ReviewedStamp } from './ReviewCardHeader';
+import { ReviewCardHeader, ReviewedLineEditable } from './ReviewCardHeader';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { useAttachLabelPhoto } from '../hooks/useAttachLabelPhoto';
 import * as Sharing from 'expo-sharing';
@@ -512,7 +512,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
             />
 
             <View style={styles.divider} />
-            <ReviewedStamp dateIso={reviewDate} location={[locName, locCity].filter(Boolean).join(', ')} />
+            <ReviewedLineEditable date={reviewDate} onDate={setReviewDate} city={locCity} onCity={setLocCity} venue={locName} onVenue={setLocName} currency={currency} />
 
             {/* Vinster's Review intentionally lives on the wine card / intel, NOT
                 in Your Wine Reviews — this screen is the diner's OWN review. */}
@@ -535,9 +535,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
               onCity={setLocCity}
               locationName={locName}
               onLocationName={setLocName}
-              showLocation={true}
-              date={reviewDate}
-              onDate={setReviewDate}
+              showLocation={false}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={setDrinkingWindow}
               wishlistActive={wishlist}

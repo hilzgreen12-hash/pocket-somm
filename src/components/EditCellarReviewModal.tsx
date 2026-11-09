@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
 import { LabelThumb } from './LabelThumb';
-import { ReviewCardHeader, ReviewedStamp } from './ReviewCardHeader';
+import { ReviewCardHeader, ReviewedLineEditable } from './ReviewCardHeader';
 import { WineReviewShareCard } from './WineReviewShareCard';
 import { getCachedLabelUri } from '../api/labelImageCache';
 import { publishCommunityReview } from '../api/community';
@@ -358,7 +358,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
             />
 
             <View style={styles.divider} />
-            <ReviewedStamp dateIso={reviewDate} location={[locName, locCity].filter(Boolean).join(', ')} />
+            <ReviewedLineEditable date={reviewDate} onDate={(t) => { setReviewDate(t.slice(0, 10)); setSaved(false); }} city={locCity} onCity={(v) => { setLocCity(v); setSaved(false); }} venue={locName} onVenue={(v) => { setLocName(v); setSaved(false); }} currency={(wine.purchase_price_currency ?? 'GBP').toUpperCase()} />
 
             <WineReviewFields
               score={parsedScore}
@@ -372,13 +372,11 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
               onReview={(v) => { setReviewNote(v); setSaved(false); }}
               personalNotes={personalNotes}
               onPersonalNotes={(v) => { setPersonalNotes(v); setSaved(false); }}
-              date={reviewDate}
-              onDate={(t) => { setReviewDate(t.replace(/[^0-9-]/g, '').slice(0, 10)); setSaved(false); }}
               city={locCity}
               onCity={(v) => { setLocCity(v); setSaved(false); }}
               locationName={locName}
               onLocationName={(v) => { setLocName(v); setSaved(false); }}
-              showLocation
+              showLocation={false}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={(v) => { setDrinkingWindow(v); setSaved(false); }}
               saving={saving || updateWine.isPending}
