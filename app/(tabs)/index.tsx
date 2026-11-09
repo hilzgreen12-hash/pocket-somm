@@ -504,8 +504,7 @@ export default function ScanLandingScreen() {
                             <Image key={i} source={img} style={styles.sdCollageCell} resizeMode="cover" />
                           ))}
                         </View>
-                        <View style={styles.sdShade} pointerEvents="none" />
-                        <View style={styles.sdTitleWrap} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search a Wine</Text></View>
+                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search a Wine</Text></View></View>
                       </TouchableOpacity>
                       <Text style={styles.sdNote} numberOfLines={2} allowFontScaling={false}>Market Intel Powered by Wine Searcher</Text>
                     </View>
@@ -519,8 +518,7 @@ export default function ScanLandingScreen() {
                         activeOpacity={0.85}
                       >
                         <Image source={SD_LABEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
-                        <View style={styles.sdShade} pointerEvents="none" />
-                        <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Label</Text></View>
+                        <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Label</Text></View></View>
                         <TouchableOpacity style={styles.sdBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
                           <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
                           <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
@@ -544,8 +542,7 @@ export default function ScanLandingScreen() {
                             <Ionicons name="restaurant-outline" size={40} color="rgba(255,255,255,0.55)" allowFontScaling={false} />
                           </View>
                         )}
-                        <View style={styles.sdShade} pointerEvents="none" />
-                        <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Wine List</Text></View>
+                        <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Wine List</Text></View></View>
                         <TouchableOpacity style={styles.sdBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
                           <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
                           <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
@@ -882,11 +879,12 @@ const styles = StyleSheet.create({
   sdCard: { width: 220 },
   sdThumb: { width: 220, height: 165, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite },
   // Faded like the Community Musings cards: image at 55% under a dark scrim.
-  sdImage: { width: '100%', height: '100%', opacity: 0.55 },
+  sdImage: { width: '100%', height: '100%', opacity: 0.85 },
   sdFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
-  sdShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.45)' },
+  // Title sits on its own dark band so the photos around it stay bright.
+  sdTitleBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
-  sdCollageCell: { width: '50%', height: '50%', opacity: 0.55 },
+  sdCollageCell: { width: '50%', height: '50%', opacity: 0.85 },
   // The brown "upload instead" bar across the bottom of a scan tile.
   sdBanner: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)' },
   sdBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.3 },
