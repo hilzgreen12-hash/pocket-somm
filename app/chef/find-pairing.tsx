@@ -208,8 +208,7 @@ export default function FindPairingScreen() {
 
       <View style={styles.divider} />
 
-      {/* What are you cooking — label with the mic + bin to its right,
-          bottom-aligned, the whole phrase centred as one row. */}
+      {/* What are you cooking — left-aligned, with the mic + bin beside it. */}
       <View style={styles.cookingHeaderRow}>
         <Text style={styles.cookingLabel}>What are you cooking?</Text>
         <MicButton value={dish} onChangeText={setDishLocal} onClear={() => setDishLocal('')} domain="food" serverCorrect />
