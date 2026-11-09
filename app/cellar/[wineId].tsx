@@ -2606,6 +2606,15 @@ export default function CellarWineDetail() {
               </View>
             ) : null}
 
+            {/* Long-term storage temperature: the same steady 12–13°C suits every
+                wine (serving temperature, on the Serve tab, is per wine). */}
+            {!isWishlist ? (
+              <View style={styles.wcVsBar}>
+                <Text style={styles.wcLabel}>Recommended Cellar Temperature</Text>
+                <Text style={styles.wcVsValue}>12–13°C <Text style={styles.wcVsDiff}>(54–55°F)</Text></Text>
+              </View>
+            ) : null}
+
             <View style={styles.wcCard}>
               <Text style={styles.wcLabel}>Bottles in My Cellar</Text>
               <Text style={styles.wcValue}>{bottlesInCellar}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
