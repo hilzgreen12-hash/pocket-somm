@@ -57,7 +57,7 @@ function LineupCard({ item }: { item: LineupArchive }) {
 // "Your Lineups" — the Archive-a-Night thumbnail carousel, with an "Add a
 // lineup" tile at the end. Self-contained (loads the user's lineups); pass
 // requireAccount to gate the add action behind sign-in on account-only tabs.
-export function LineupsCarousel({ requireAccount }: { requireAccount?: (action: () => void) => void }) {
+export function LineupsCarousel({ requireAccount, max, showAdd = true }: { requireAccount?: (action: () => void) => void; max?: number; showAdd?: boolean }) {
   const { session } = useAuth();
   const userId = session?.user.id;
   const gate = requireAccount ?? ((a: () => void) => a());
@@ -78,13 +78,15 @@ export function LineupsCarousel({ requireAccount }: { requireAccount?: (action: 
   return (
     <>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-        {lineups.map((l) => <LineupCard key={l.id} item={l} />)}
+        {(max ? lineups.slice(0, max) : lineups).map((l) => <LineupCard key={l.id} item={l} />)}
         {/* Empty state → three faded bottle placeholders (like the scan carousel). */}
         {lineups.length === 0 ? LINEUP_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />) : null}
-        <TouchableOpacity style={styles.addCard} onPress={() => gate(() => setAddOpen(true))} activeOpacity={0.85}>
-          <Text style={styles.addCardIcon} allowFontScaling={false}>＋</Text>
-          <Text style={styles.addCardText} allowFontScaling={false}>Add</Text>
-        </TouchableOpacity>
+        {showAdd ? (
+          <TouchableOpacity style={styles.addCard} onPress={() => gate(() => setAddOpen(true))} activeOpacity={0.85}>
+            <Text style={styles.addCardIcon} allowFontScaling={false}>＋</Text>
+            <Text style={styles.addCardText} allowFontScaling={false}>Add</Text>
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
 
       <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
