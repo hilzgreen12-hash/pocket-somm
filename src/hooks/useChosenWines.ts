@@ -2,7 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
 import { saveChosenWine, saveManualChosenWine, fetchChosenWines, updateChosenWine, deleteChosenWine, patchChosenWine, type SaveChosenWineInput, type ManualSaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
 import { syncReviewToCellar } from '../services/reviewSync';
-import type { ChosenWine } from '../types/wine';
+import type { ChosenWine, CellarWine } from '../types/wine';
+import { fetchAutoLabelUri } from '../api/label';
+import { uploadLabelImage } from '../api/labelPhotos';
+import { sameWineIdentity } from '../utils/wineMatch';
 
 export function useChosenWines() {
   const { session } = useAuth();
@@ -15,6 +18,32 @@ export function useChosenWines() {
     enabled: !!userId,
   });
 
+  // A review saved without a label photo gets one in the background: the user's
+  // own photo of that wine from the cellar/archive when there is one, else the
+  // wine's label found online (same lookup cellar adds use). Never blocks the save.
+  function attachLabelPhoto(row: ChosenWine | null | undefined) {
+    if (!row?.id || row.label_image_path || !userId) return;
+    void (async () => {
+      try {
+        const owned = [
+          ...(qc.getQueryData<CellarWine[]>(['cellar', userId]) ?? []),
+          ...(qc.getQueryData<CellarWine[]>(['cellar-archive', userId]) ?? []),
+        ].find((w) => w.label_image_path && sameWineIdentity(
+          { producer: w.producer, wine_name: w.wine_name, vintage: null },
+          { producer: row.producer, wine_name: row.wine_name, vintage: null },
+        ));
+        let path = owned?.label_image_path ?? null;
+        if (!path) {
+          const uri = await fetchAutoLabelUri(row.producer ?? '', row.wine_name);
+          if (!uri) return;
+          path = await uploadLabelImage(userId, uri, `review-${row.id}`);
+        }
+        await patchChosenWine(row.id, { label_image_path: path });
+        qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+      } catch { /* best-effort: the review stands without a photo */ }
+    })();
+  }
+
   const save = useMutation({
     mutationFn: async (input: SaveChosenWineInput) => {
       const saved = await saveChosenWine(userId!, input);
@@ -26,6 +55,7 @@ export function useChosenWines() {
       );
       // Community sharing is opt-in only — it happens when the user taps
       // "Share to Community" on a review, never automatically on save.
+      attachLabelPhoto(saved);
       return saved; // the created row, so callers can track this session's pick
     },
     onSuccess: () => {
@@ -67,6 +97,7 @@ export function useChosenWines() {
         { setReviewDate: true },
       );
       // Community sharing stays opt-in (see save above).
+      attachLabelPhoto(row);
       return row;
     },
     onSuccess: () => {
