@@ -84,7 +84,9 @@ export function PlaceholderCardView({ card }: { card: PlaceholderCard }) {
           <Image source={{ uri: card.uri }} style={styles.genericImg} resizeMode="cover" />
         )}
         <View style={styles.overlay} pointerEvents="none">
-          <Text style={styles.overlayText} allowFontScaling={false}>{card.overlay}</Text>
+          <View style={styles.overlayBand}>
+            <Text style={styles.overlayText} allowFontScaling={false}>{card.overlay}</Text>
+          </View>
         </View>
       </View>
       <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{card.title}</Text>
@@ -97,14 +99,16 @@ const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   card: { width: 220 },
   thumbWrap: { width: 220, height: 165, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface },
-  fadedImg: { width: 220, height: 165, opacity: 0.45 },
-  genericImg: { width: 220, height: 165, opacity: 0.5 },
+  fadedImg: { width: 220, height: 165, opacity: 0.8 },
+  genericImg: { width: 220, height: 165, opacity: 0.8 },
   collageFull: { width: 220, height: 165 },
   collageGrid: { width: 220, height: 165, flexDirection: 'row', flexWrap: 'wrap' },
   collageCell: { width: 110, height: 82.5 },
   lineupRow: { flexDirection: 'row' },
   lineupCell: { flex: 1, height: 165 },
-  overlay: { ...StyleSheet.absoluteFillObject, borderRadius: 12, backgroundColor: 'rgba(18,11,10,0.42)', alignItems: 'center', justifyContent: 'center', padding: spacing.md },
+  // Placeholder message sits on its own dark band so the label art around it stays bright.
+  overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: spacing.md },
+  overlayBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   overlayText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 18 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
