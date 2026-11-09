@@ -24,6 +24,7 @@ import { captureCity } from '../../src/utils/captureCity';
 import { useCellar, useWishList, useArchive } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
+import { DrinkingWindowSheet } from '../../src/components/winecard/DrinkingWindowSheet';
 import { findSameCellarWine, sameWineIdentity } from '../../src/utils/wineMatch';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
 import { wc } from '../../src/components/winecard/wcStyles';
@@ -298,6 +299,7 @@ export default function LabelResultsScreen() {
   const [vintagesExpanded, setVintagesExpanded] = useState(false);
   const [vintageRows, setVintageRows] = useState<VintageComparisonRow[] | null>(null);
   const [vintagesLoading, setVintagesLoading] = useState(false);
+  const [windowSheetOpen, setWindowSheetOpen] = useState(false);
   // Same fallbacks as the wine card's Market tab: Vinster's written assessment
   // when Wine-Searcher has no per-vintage data, and a clear note when it's down.
   const [intelMarketNote, setIntelMarketNote] = useState<{ vintage?: string; market?: string } | null>(null);
@@ -1986,10 +1988,9 @@ export default function LabelResultsScreen() {
     }
     showAlert({ title: 'Where this value comes from', body });
   }
+  // Window → the drinking-window slider (DrinkingWindowSheet).
   function openWindowInfo() {
-    const status = windowMeta(intel.drinkingWindowStatus).text;
-    const yrs = intel.drinkingWindowFrom && intel.drinkingWindowTo ? `\n\n${intel.drinkingWindowFrom} – ${intel.drinkingWindowTo}` : '';
-    showAlert({ title: 'Drinking Window', body: `Drinking Window: ${status}${yrs}` });
+    setWindowSheetOpen(true);
   }
 
   // Vinster's Vintage & Market Comparison — generate the Wine-Searcher per-vintage
@@ -2657,6 +2658,14 @@ export default function LabelResultsScreen() {
 
       {/* Tap the label photo to view it full-screen with pinch/zoom + pan. */}
       <LabelPhotoViewer visible={zoomOpen} uri={heroUri} onClose={() => setZoomOpen(false)} />
+      <DrinkingWindowSheet
+        visible={windowSheetOpen}
+        onClose={() => setWindowSheetOpen(false)}
+        wineName={[wine?.producer, wine?.wineName && wine.wineName !== wine.producer ? wine.wineName : null, wine?.vintage].filter(Boolean).join(' ')}
+        from={intel.drinkingWindowFrom}
+        to={intel.drinkingWindowTo}
+        fallbackStatus={intel.drinkingWindowStatus}
+      />
 
       {/* "Edit Wine" — manual edit of photo + identity + grape + bottle size,
           then regenerate the intel card. */}

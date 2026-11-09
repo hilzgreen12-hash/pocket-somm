@@ -15,6 +15,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { useCellar, useArchive, useWishList } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
+import { DrinkingWindowSheet } from '../../src/components/winecard/DrinkingWindowSheet';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
@@ -255,6 +256,8 @@ export default function CellarWineDetail() {
   // Cellar tab → Archive history: the per-entry note editor (an archived row's
   // archive_note), opened from "View Note" / "Add Note".
   const [archiveEntryEdit, setArchiveEntryEdit] = useState<{ id: string; label: string; text: string; had: boolean } | null>(null);
+  // Overview stats bar → Window opens the drinking-window slider.
+  const [windowSheetOpen, setWindowSheetOpen] = useState(false);
   const [savingArchiveEntry, setSavingArchiveEntry] = useState(false);
 
   const [removeCount, setRemoveCount] = useState('1');
@@ -2127,6 +2130,25 @@ export default function CellarWineDetail() {
     .sort((a, b) => new Date(b.archived_at!).getTime() - new Date(a.archived_at!).getTime());
 
 
+  // Overview stats bar → Value: where the market value came from.
+  function openCardValueInfo() {
+    if (!wine) return;
+    const cur = wine.estimated_value_currency;
+    const lo = wine.estimated_value_low != null ? Number(wine.estimated_value_low) : null;
+    const hi = wine.estimated_value_high != null ? Number(wine.estimated_value_high) : null;
+    const allVintage = wine.estimated_value_scope === 'all-vintage';
+    let body: string;
+    if (wine.estimated_value_source === 'wine-searcher') {
+      body = lo != null && hi != null && lo !== hi
+        ? `Wine-Searcher values range from ${formatCurrency(lo, cur, { decimals: 0 })}–${formatCurrency(hi, cur, { decimals: 0 })}${allVintage ? ', across all vintages (no price for this exact vintage).' : '.'}`
+        : `Wine-Searcher's market value${allVintage ? ', averaged across all vintages (no price for this exact vintage).' : ' for this wine.'}`;
+    } else {
+      body = "This value is Vinster's own estimate — there's no Wine-Searcher price for this exact wine.";
+    }
+    if (wine.estimated_value_at) body += `\n\nLast updated ${fmtDay(wine.estimated_value_at)}.`;
+    showAlert({ title: 'Where this value comes from', body });
+  }
+
   // Overview → "Your History With This Wine": where the bottles are (home /
   // each external cellar), what's in the archive, and the latest review.
   function historyLines(): { key: string; text: string; link: string; onPress: () => void }[] {
@@ -2223,27 +2245,43 @@ export default function CellarWineDetail() {
         })}
       </View>
 
-      {/* Facts bar — Overview only */}
+      {/* Facts bar — Overview only. Tappable like Wine Intel's: Bottles → Cellar
+          tab; Critic / Value explain where the figure came from; Window opens the
+          drinking-window slider. */}
       {activeTab === 'overview' ? (
+        <>
         <View style={styles.wcFacts}>
           {!isWishlist ? (
-            <View style={styles.wcFact}><Text style={styles.wcFactLabel}>Bottles</Text><Text style={styles.wcFactValue}>{bottlesInCellar}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text></View>
+            <TouchableOpacity style={styles.wcFact} onPress={() => setCardTab('cellar')} activeOpacity={0.7}><Text style={styles.wcFactLabel}>Bottles</Text><Text style={styles.wcFactValue}>{bottlesInCellar}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text></TouchableOpacity>
           ) : null}
-          <View style={styles.wcFact}><Text style={styles.wcFactLabel}>Critic</Text>
-            {wine.critic_score != null ? <Text style={styles.wcFactValue}>{wine.critic_score}</Text>
-              : refreshingValue ? <Text style={[styles.wcFactValue, styles.statValueMuted]}>…</Text>
-              : <TouchableOpacity onPress={() => handleRefreshEstimate()}><Text style={styles.wcFactAction}>+ Generate</Text></TouchableOpacity>}
-          </View>
-          <View style={styles.wcFact}><Text style={styles.wcFactLabel}>Value</Text>
-            {ev != null ? <Text style={[styles.wcFactValue, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}</Text>
-              : refreshingValue ? <Text style={[styles.wcFactValue, styles.statValueMuted]}>…</Text>
-              : <TouchableOpacity onPress={() => handleRefreshEstimate()}><Text style={styles.wcFactAction}>+ Generate</Text></TouchableOpacity>}
-          </View>
-          <View style={[styles.wcFact, styles.wcFactLast]}><Text style={styles.wcFactLabel}>Window</Text>
+          {wine.critic_score != null ? (
+            <TouchableOpacity style={styles.wcFact} onPress={() => showAlert({ title: 'How Vinster scored this', body: wine.critic_score_note?.trim() || "Vinster's score distils critic consensus and Wine-Searcher's aggregate rating for this wine into a single 100-point mark." })} activeOpacity={0.7}>
+              <Text style={styles.wcFactLabel}>Critic</Text><Text style={styles.wcFactValue}>{wine.critic_score}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.wcFact}><Text style={styles.wcFactLabel}>Critic</Text>
+              {refreshingValue ? <Text style={[styles.wcFactValue, styles.statValueMuted]}>…</Text>
+                : <TouchableOpacity onPress={() => handleRefreshEstimate()}><Text style={styles.wcFactAction}>+ Generate</Text></TouchableOpacity>}
+            </View>
+          )}
+          {ev != null ? (
+            <TouchableOpacity style={styles.wcFact} onPress={openCardValueInfo} activeOpacity={0.7}>
+              <Text style={styles.wcFactLabel}>Value</Text><Text style={[styles.wcFactValue, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.wcFact}><Text style={styles.wcFactLabel}>Value</Text>
+              {refreshingValue ? <Text style={[styles.wcFactValue, styles.statValueMuted]}>…</Text>
+                : <TouchableOpacity onPress={() => handleRefreshEstimate()}><Text style={styles.wcFactAction}>+ Generate</Text></TouchableOpacity>}
+            </View>
+          )}
+          <TouchableOpacity style={[styles.wcFact, styles.wcFactLast]} onPress={() => setWindowSheetOpen(true)} disabled={!!wine.is_spirit} activeOpacity={0.7}>
+            <Text style={styles.wcFactLabel}>Window</Text>
             <Text style={[styles.wcFactValue, { color: windowColor }]} numberOfLines={1}>{windowLabel}</Text>
             {!wine.is_spirit && wine.drinking_window_from && wine.drinking_window_to ? <Text style={styles.wcFactSub}>{wine.drinking_window_from}–{wine.drinking_window_to}</Text> : null}
-          </View>
+          </TouchableOpacity>
         </View>
+        <Text style={styles.wcFactsHint}>Tap any stat to see how Vinster worked it out</Text>
+        </>
       ) : null}
 
       <View style={styles.wcBody}>
@@ -2731,6 +2769,14 @@ export default function CellarWineDetail() {
         ) : null}
       </View>
 
+      <DrinkingWindowSheet
+        visible={windowSheetOpen}
+        onClose={() => setWindowSheetOpen(false)}
+        wineName={[wine.producer, wine.wine_name !== wine.producer ? wine.wine_name : null, wine.vintage].filter(Boolean).join(' ')}
+        from={wine.drinking_window_from}
+        to={wine.drinking_window_to}
+        fallbackStatus={wine.drinking_window_status}
+      />
       <LabelPhotoViewer
         visible={photoViewerOpen}
         path={wine.label_image_path}
@@ -3318,6 +3364,7 @@ const styles = StyleSheet.create({
   wcFactValue: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text },
   wcFactSub: { fontFamily: fonts.bodyRegular, fontSize: 10.5, color: 'rgba(255,255,255,0.8)' },
   wcFactAction: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
+  wcFactsHint: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: 'rgba(255,255,255,0.75)', textAlign: 'center', marginTop: 8 },
   wcBody: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.md },
   // "Your History With This Wine" — dark card, gold rule, gold caps title.
   wcHistory: { backgroundColor: '#3E2120', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', paddingHorizontal: spacing.md, paddingTop: spacing.sm },
