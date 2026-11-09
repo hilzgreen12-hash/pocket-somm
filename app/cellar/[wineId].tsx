@@ -2121,26 +2121,6 @@ export default function CellarWineDetail() {
     .filter((a) => a.archived_at)
     .sort((a, b) => new Date(b.archived_at!).getTime() - new Date(a.archived_at!).getTime());
 
-  // Drinking History: when this wine was opened and the occasion — archived
-  // bottles (their note, else the review's location that day) plus reviews with
-  // no archive entry. Rows with a review link through to it.
-  const dayOf = (d: string | null | undefined) => (d ?? '').slice(0, 10);
-  const reviewDays = new Map(reviews.map((r) => [dayOf(r.date ?? r.savedAt), r] as const));
-  const linkedDays = new Set<string>();
-  const drinkingHistory: { key: string; date: string; occasion: string | null; bottles: number | null; hasReview: boolean }[] = [];
-  for (const a of archiveHistory) {
-    const day = dayOf(a.archived_at);
-    const r = reviewDays.get(day);
-    if (r) linkedDays.add(day);
-    drinkingHistory.push({ key: a.id, date: a.archived_at!, occasion: a.archive_note?.trim() || r?.location || null, bottles: a.quantity ?? null, hasReview: !!r });
-  }
-  for (const r of reviews) {
-    const day = dayOf(r.date ?? r.savedAt);
-    if (!day || linkedDays.has(day)) continue;
-    linkedDays.add(day);
-    drinkingHistory.push({ key: `r-${r.id}`, date: day, occasion: r.location || null, bottles: null, hasReview: true });
-  }
-  drinkingHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   // Overview → "Your History With This Wine": where the bottles are (home /
   // each external cellar), what's in the archive, and the latest review.
@@ -2675,9 +2655,12 @@ export default function CellarWineDetail() {
                     const note = a.archive_note?.trim() ?? '';
                     return (
                       <View key={a.id} style={[styles.wcRow, i === archiveHistory.length - 1 && styles.wcRowLast]}>
-                        <Text style={[styles.wcRowText, { flex: 1 }]}>{label}</Text>
+                        <View style={{ flex: 1, gap: 1 }}>
+                          <Text style={styles.wcRowText}>{label}</Text>
+                          {note ? <Text style={styles.wcSmallItalic}>{note}</Text> : null}
+                        </View>
                         <TouchableOpacity onPress={() => setArchiveEntryEdit({ id: a.id, label, text: note, had: !!note })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                          <Text style={styles.wcLink}>{note ? 'View Note' : 'Add Note'}</Text>
+                          <Text style={styles.wcLink}>{note ? 'Edit Note' : 'Add Note'}</Text>
                         </TouchableOpacity>
                       </View>
                     );
@@ -2686,33 +2669,6 @@ export default function CellarWineDetail() {
               ) : null}
             </View>
 
-            {!isWishlist ? (
-              <View style={styles.wcCard}>
-                <Text style={styles.wcLabel}>Drinking History</Text>
-                {drinkingHistory.length === 0 ? (
-                  <Text style={styles.wcSmall}>No bottles opened yet.</Text>
-                ) : (
-                  <View style={styles.wcList}>
-                    {drinkingHistory.map((h, i) => {
-                      const body = (
-                        <>
-                          <View style={{ flex: 1, gap: 1 }}>
-                            <Text style={styles.wcRowText}>{fmtDay(h.date)}{h.bottles ? ` · ${bottleLabel(h.bottles)}` : ''}</Text>
-                            <Text style={h.occasion ? styles.wcSmallItalic : styles.wcSmall} numberOfLines={2}>{h.occasion ?? 'No occasion noted'}</Text>
-                          </View>
-                          {h.hasReview ? <Text style={styles.wcLink}>View review ›</Text> : null}
-                        </>
-                      );
-                      return h.hasReview ? (
-                        <TouchableOpacity key={h.key} style={[styles.wcRow, i === drinkingHistory.length - 1 && styles.wcRowLast]} onPress={() => router.push(reviewOpenHref as any)} activeOpacity={0.7}>{body}</TouchableOpacity>
-                      ) : (
-                        <View key={h.key} style={[styles.wcRow, i === drinkingHistory.length - 1 && styles.wcRowLast]}>{body}</View>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            ) : null}
           </>
         ) : null}
 
