@@ -2083,7 +2083,9 @@ export default function CellarWineDetail() {
   const vsMarket = pp && ev != null && sameCurrency ? { pct: Math.round(((ev - pp) / pp) * 100), diff: ev - pp } : null;
   const verdict = vintageRows ? vintageVerdict(vintageRows, wine.vintage, fmtMoney) : null;
   const cellarEntries = buildCellarEntries();
-  const unplacedHere = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
+  // An archived (or wish-list) row's quantity is bottles drunk / wanted, not
+  // bottles at home — so it never counts as "not yet placed" cellar stock.
+  const unplacedHere = isArchived || isWishlist ? 0 : Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
   const serving = wine.serving_suggestion ?? null;
   const beforePick = pickFromCellar(serving?.aperitif?.style, homeWines, wine.id);
   const afterPick = pickFromCellar(serving?.digestif?.style, homeWines, wine.id);
@@ -2131,9 +2133,9 @@ export default function CellarWineDetail() {
     const toCellarTab = () => setCardTab('cellar');
     const b = (n: number) => `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
     const entries = buildCellarEntries();
-    const homeQty = entries.filter((e) => !e.isExternal).reduce((s, e) => s + (e.quantity ?? 0), 0) + Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
+    const homeQty = entries.filter((e) => !e.isExternal).reduce((s, e) => s + (e.quantity ?? 0), 0) + unplacedHere;
     const homePlaces = Array.from(new Set(entries.filter((e) => !e.isExternal).map((e) => e.label)));
-    const unplaced = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
+    const unplaced = unplacedHere;
     const placeCount = homePlaces.length + (unplaced > 0 && homePlaces.length > 0 ? 1 : 0);
     const your = (name: string) => (/^(your|my|the)\b/i.test(name) ? name : `your ${name}`);
     // First line: how many bottles came into the cellar, and when.
@@ -3284,7 +3286,7 @@ export default function CellarWineDetail() {
                 because it IS actionable: tapping it opens the placement
                 chooser for exactly those loose bottles. */}
             {(() => {
-              const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
+              const unplaced = unplacedHere;
               if (unplaced === 0) return null;
               return (
                 <TouchableOpacity onPress={() => { setCellarViewOpen(false); handleAddToLocation(); }} activeOpacity={0.7}>
