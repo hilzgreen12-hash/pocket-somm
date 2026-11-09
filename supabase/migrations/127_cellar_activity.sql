@@ -74,6 +74,9 @@ begin
     values (p_owner, v_actor, v_name, p_action, p_wine, p_label,
             case when p_action = 'edited' then null else p_count end, p_detail);
   end if;
+exception when others then
+  -- Logging must never block the edit itself.
+  return;
 end;
 $$;
 
