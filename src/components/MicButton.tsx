@@ -21,8 +21,10 @@ interface Props {
   // producer/region/grape names + fuzzy-matches the user's cellar; 'food' nudges
   // dish/ingredient/technique names (e.g. the Find A Wine Pairing dish field).
   // wine = names; query = a question about wine records; note = free-text
-  // tasting note / memory; food = dishes. All but food get wine correction.
-  domain?: 'wine' | 'food' | 'query' | 'note';
+  // tasting note / memory; food = dishes; text = plain answers (mood, occasion,
+  // decant time, budget…) with no wine or food correction at all. Only wine,
+  // query and note get wine-name correction.
+  domain?: 'wine' | 'food' | 'query' | 'note' | 'text';
   // When true, the FINAL transcript is additionally sent to the server-side LLM
   // corrector (correct-voice) — catches the long tail of mangled wine/food names
   // the on-device dictionary misses ("corn-ass" → "Cornas"). Best-effort: the
@@ -73,7 +75,7 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
     // just the ones that happened to wrap it. Correct only the spoken chunk and
     // join onto the untouched base, so anything the user typed is left exactly
     // as written.
-    const spoken = (domain === 'food' ? correctFoodTerms : correctWineTerms)(transcript);
+    const spoken = domain === 'text' ? transcript : (domain === 'food' ? correctFoodTerms : correctWineTerms)(transcript);
     // Interim transcripts are the full hypothesis-so-far for the utterance, so
     // re-join onto the captured base each time rather than appending — this fills
     // the field live instead of only on stop. On the FINAL transcript, also run
@@ -83,7 +85,7 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
       // The fuzzy cellar-producer snap is wine-only; for food, the dictionary pass
       // above is the final correction.
       const base = baseRef.current;
-      const refined = domain === 'food' ? spoken
+      const refined = domain === 'food' || domain === 'text' ? spoken
         : domain === 'note' ? refineRef.current(spoken)
         : soundRef.current(refineRef.current(spoken));
       const joined = joinDictation(base, refined);
@@ -98,7 +100,7 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
       // catalogue and could swap the user's wine for one they don't own
       // ("Rieussec" → "d'Armailhac").
       const ownWineHit = domain !== 'food' && refined !== spoken;
-      if (serverCorrect && !ownWineHit && refined.trim()) {
+      if (serverCorrect && domain !== 'text' && !ownWineHit && refined.trim()) {
         correctVoiceTranscript(refined, domain)
           .then((corrected) => {
             const c = (corrected ?? '').trim();

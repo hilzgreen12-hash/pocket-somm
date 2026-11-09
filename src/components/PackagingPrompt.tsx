@@ -137,7 +137,7 @@ export function PackagingPrompt({ visible, wineId, locationId, count, userId, on
               <Text style={styles.fieldLabel}>Note (optional)</Text>
               <View style={styles.noteRow}>
                 <TextInput style={[styles.input, styles.noteInput]} value={caseNote} onChangeText={setCaseNote} placeholder="e.g. bought en primeur" placeholderTextColor={colors.textMuted} multiline />
-                <MicButton value={caseNote} onChangeText={setCaseNote} onClear={() => setCaseNote('')} />
+                <MicButton value={caseNote} onChangeText={setCaseNote} onClear={() => setCaseNote('')} domain="note" />
               </View>
               <TouchableOpacity style={[styles.saveBtn, saving && styles.optBtnDisabled]} onPress={saveNewCase} disabled={saving} activeOpacity={0.85}>
                 <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save'}</Text>

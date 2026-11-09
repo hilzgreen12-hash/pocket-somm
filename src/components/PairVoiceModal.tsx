@@ -146,7 +146,7 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
       return;
     }
 
-    const budget = await chat.ask(COST_Q, 'ie. Around £20 a bottle');
+    const budget = await chat.ask(COST_Q, 'ie. Around £20 a bottle', 'text');
     const shown: string[] = [];
     const showBuy = async (alt: boolean) => {
       const res = await chat.working(alt ? 'Finding three fresh suggestions…' : 'Finding wines for your dish…', async () => {
@@ -193,11 +193,11 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
     const wineSaid = preset ? presetLabel : await chat.ask('Which wine are we pairing?', 'ie. Domaine Jamet Côte-Rôtie 2015', 'wine', [
       ...(wines.length ? [{ label: 'Or choose from my cellar', onPress: () => setCellarPickerOpen(true) }] : []),
     ]);
-    const mode = await chat.ask('Do you want a full recipe or a list of pairing ingredients to inspire you?', 'ie. Just a list of classic pairing ingredients');
+    const mode = await chat.ask('Do you want a full recipe or a list of pairing ingredients to inspire you?', 'ie. Just a list of classic pairing ingredients', 'text');
     const wantsList = /ingredient|list/i.test(mode) && !/full recipe/i.test(mode);
 
     if (wantsList) {
-      const allergies = await chat.ask('Are there any allergies or strong preferences that I should be aware of?', 'ie. No shellfish');
+      const allergies = await chat.ask('Are there any allergies or strong preferences that I should be aware of?', 'ie. No shellfish', 'food');
       const res = await chat.working('Gathering classic pairing ingredients…', () => pairingIngredients({ wine: wineSaid, allergies }));
       if (!res) { chat.say("I don't know that wine well enough to suggest ingredients for it. Could you tell me the grape or region?"); chat.push(<DoneButton onPress={onClose} />); return; }
       chat.say(res.intro);
@@ -217,7 +217,7 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
 
     const course = await chat.ask('What course are we cooking? Or is it for snacks/canapes?', 'ie. A main course', 'food');
     const food = await chat.ask('What sort of food do you want to cook? Could be Thai, could just be something cozy?', 'ie. A slow Sunday roast for friends', 'food');
-    const allergies = await chat.ask('Are there any allergies or strong preferences to be aware of?', 'ie. No shellfish');
+    const allergies = await chat.ask('Are there any allergies or strong preferences to be aware of?', 'ie. No shellfish', 'food');
     const t = chat.token();
     const { identity, pairings } = await chat.working('Thinking about what to cook…', async () => {
       const id = preset ?? await toIdentity(wineSaid);

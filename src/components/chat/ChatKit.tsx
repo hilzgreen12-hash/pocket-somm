@@ -17,12 +17,12 @@ import { fonts } from '../../constants/fonts';
 // typed and sent with ›; no quick-answer buttons.
 
 const MARK = require('../../../assets/vinster-mark.png');
-type Domain = 'wine' | 'food' | 'query' | 'note';
+type Domain = 'wine' | 'food' | 'query' | 'note' | 'text';
 
 export class ChatCancelled extends Error { constructor() { super('cancelled'); } }
 
 interface Item { key: string; node: ReactNode }
-interface Pending { placeholder: string; domain: Domain; links?: { label: string; onPress: () => void }[]; alt?: { label: string; placeholder: string } }
+interface Pending { placeholder: string; domain: Domain; links?: { label: string; onPress: () => void }[]; alt?: { label: string; placeholder: string; domain?: Domain } }
 
 // Marks an answer given in the question's alternative field (e.g. "Or, Single
 // Prompt Command") so the flow can tell it apart: ask() resolves with this
@@ -255,7 +255,7 @@ function AnswerField({ placeholder, domain, onSend, links, alt, onSendAlt }: { p
       {alt && onSendAlt ? (
         <View style={{ gap: 8, marginTop: 6 }}>
           <Text style={styles.altLabel}>{alt.label}</Text>
-          <InputField placeholder={alt.placeholder} domain="query" onSend={onSendAlt} />
+          <InputField placeholder={alt.placeholder} domain={alt.domain ?? 'query'} onSend={onSendAlt} />
         </View>
       ) : null}
     </View>

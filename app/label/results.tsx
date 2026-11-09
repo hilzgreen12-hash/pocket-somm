@@ -3452,7 +3452,7 @@ export default function LabelResultsScreen() {
                             placeholderTextColor={colors.textSubtle}
                             multiline
                           />
-                          <MicButton value={caseNote} onChangeText={setCaseNote} onClear={() => setCaseNote('')} />
+                          <MicButton value={caseNote} onChangeText={setCaseNote} onClear={() => setCaseNote('')} domain="note" />
                         </View>
                       </>
                     )}

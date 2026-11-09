@@ -106,7 +106,7 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
     }
     chat.say(CTX);
     const first = await chat.ask('What are you eating with it, if anything? Tap the mic and tell me in as much detail as you can', 'ie. Roast chicken with morels and asparagus', 'food', undefined,
-      { label: 'Or, Single Prompt Command', placeholder: "ie. Roast chicken with friends for a birthday, I've got an hour to decant, help with glasses, around £60 a bottle" });
+      { label: 'Or, Single Prompt Command', placeholder: "ie. Roast chicken with friends for a birthday, I've got an hour to decant, help with glasses, around £60 a bottle", domain: 'food' });
     let eating: string, occasion: string, decant: string, serving: boolean, budget: string;
     if (first.startsWith(ALT_ANSWER)) {
       // Everything in one go: skip the rest; the server reads decant time and
@@ -116,10 +116,10 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
       serving = /stem|glass|before|after|serv/i.test(prompt);
     } else {
       eating = first;
-      occasion = await chat.ask("What's the occasion or mood?", "ie. An intimate birthday gathering of good friends so we need something special, and warming as it's cold outside");
-      decant = await chat.ask('Are you opening this now or is there time to decant?', "ie. I've got up to 3 hours to decant");
-      serving = isYes(await chat.ask('Do you need help with your stemwear or what wines to serve before or after?', 'ie. Yes help me with both'));
-      budget = await chat.ask('Lastly, do you have a cost per bottle in mind? I will use Wine Searcher to compare market values', 'ie. Around £60 a bottle');
+      occasion = await chat.ask("What's the occasion or mood?", "ie. An intimate birthday gathering of good friends so we need something special, and warming as it's cold outside", 'text');
+      decant = await chat.ask('Are you opening this now or is there time to decant?', "ie. I've got up to 3 hours to decant", 'text');
+      serving = isYes(await chat.ask('Do you need help with your stemwear or what wines to serve before or after?', 'ie. Yes help me with both', 'text'));
+      budget = await chat.ask('Lastly, do you have a cost per bottle in mind? I will use Wine Searcher to compare market values', 'ie. Around £60 a bottle', 'text');
     }
     const res = await chat.working('Choosing three bottles from your cellar…', () =>
       chooseFromCellar({ eating, occasion, decantText: decant, budgetText: budget, serving, currency, wines }));
@@ -153,7 +153,7 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
       list.push(more);
     }
     const eating = await chat.ask('What are you eating with them, if anything? Tap the mic and tell me in as much detail as you can', 'ie. Steak frites with peppercorn sauce', 'food');
-    const occasion = await chat.ask("What's the occasion or mood?", 'ie. A low-key anniversary dinner at home');
+    const occasion = await chat.ask("What's the occasion or mood?", 'ie. A low-key anniversary dinner at home', 'text');
     const { market, verdict } = await chat.working("Let me do a quick compare of the market to see which is giving you the best value, this won't take a moment", async () => {
       const m = await marketFor(list);
       const v = await decideBetween({ wines: list, eating, occasion, market: m });
@@ -228,7 +228,7 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
 
   const runIntel = () => start(async () => {
     chat.hear('Generate Intelligence');
-    const mode = await chat.ask('Are you looking for intelligence on one wine or would you like to compare multiple wines?', "ie. I'd like to compare 3 wines");
+    const mode = await chat.ask('Are you looking for intelligence on one wine or would you like to compare multiple wines?', "ie. I'd like to compare 3 wines", 'text');
     const n = compareCount(mode);
 
     if (n === null) {
@@ -257,7 +257,7 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
         list.push(more);
       }
     }
-    const measure = await chat.ask('What specifically would you like to compare? Market price, readiness for drinking, something else?', "ie. I'd like to compare overall critic scores");
+    const measure = await chat.ask('What specifically would you like to compare? Market price, readiness for drinking, something else?', "ie. I'd like to compare overall critic scores", 'text');
     const what = /score|critic|rating|rated/i.test(measure) ? 'critic scores'
       : /price|market|value|cost|worth/i.test(measure) ? 'market prices'
       : /ready|readiness|drink|window|mature/i.test(measure) ? 'drinking readiness' : 'them';

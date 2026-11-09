@@ -28,6 +28,22 @@ const END_SYLLABLE = new Set(['an', 'en', 'in']);
 
 // Everyday English words a general wine-name list (e.g. Burgundy climats) must
 // never replace on their own ("mountain" ≠ Montagny, "friends" ≠ Les Frionnes).
+// Food / cooking words: never turned into a wine name, even one the user owns
+// ("chicken" → "Les Chenevottes", "mashed potato" → "M Chapoutier"), unless
+// the word is genuinely part of that wine's name.
+const FOOD = new Set([
+  'chicken', 'chickens', 'roast', 'roasted', 'roasting', 'mash', 'mashed', 'potato', 'potatoes', 'chips', 'fries',
+  'beef', 'steak', 'steaks', 'lamb', 'pork', 'veal', 'venison', 'duck', 'goose', 'turkey', 'pheasant', 'partridge',
+  'grouse', 'rabbit', 'ham', 'bacon', 'sausage', 'sausages', 'fish', 'salmon', 'cod', 'haddock', 'sole', 'turbot',
+  'halibut', 'tuna', 'trout', 'bass', 'prawns', 'prawn', 'shrimp', 'lobster', 'crab', 'oysters', 'oyster', 'mussels',
+  'scallops', 'squid', 'octopus', 'sushi', 'cheese', 'pasta', 'risotto', 'pizza', 'salad', 'soup', 'stew', 'curry',
+  'pie', 'tart', 'cake', 'dessert', 'pudding', 'chocolate', 'sauce', 'gravy', 'butter', 'cream', 'creamy', 'garlic',
+  'onion', 'onions', 'mushroom', 'mushrooms', 'morel', 'morels', 'truffle', 'truffles', 'asparagus', 'peas', 'beans',
+  'carrots', 'cabbage', 'spinach', 'kale', 'leeks', 'leek', 'tomato', 'tomatoes', 'lemon', 'herbs', 'rosemary',
+  'thyme', 'sage', 'mint', 'pepper', 'peppers', 'chilli', 'chili', 'spicy', 'grilled', 'baked', 'fried', 'braised',
+  'smoked', 'slow', 'cooked', 'rice', 'bread', 'noodles', 'vegetables', 'veg', 'greens', 'gratin', 'dauphinoise',
+]);
+
 const COMMON = new Set([
   'mountain', 'mountains', 'friend', 'friends', 'cotton', 'button', 'mutton', 'morning', 'evening', 'night', 'dinner',
   'lunch', 'breakfast', 'money', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -256,6 +272,8 @@ export function correctWineNamesBySound(text: string, names: string[] | SoundNam
     for (let len = 5; len >= 1; len--) {
       if (i + len > tokens.length || used.slice(i, i + len).some(Boolean)) continue;
       const span = tokens.slice(i, i + len).map((t) => t.raw);
+      // Never swallow a number at either end ("reuse sec 2015" keeps its 2015).
+      if (len > 1 && (/\d/.test(span[0]) || /\d/.test(span[span.length - 1]))) continue;
       // Hyphenated names count as their words ("Saint-Aubin" = two words).
       const plain = span.flatMap((t) => fold(t).split(/[^a-z]+/)).filter(Boolean)
         // "Les" is usually heard as "lay" / "lays".
@@ -268,6 +286,7 @@ export function correctWineNamesBySound(text: string, names: string[] | SoundNam
       const singleCommon = kept.length === 1 && COMMON.has(kept[0]);
       for (const e of entries) {
         const nameWords = e.folded.split(/[^a-z]+/);
+        if (kept.some((t) => FOOD.has(t) && !nameWords.includes(t))) continue;
         // Never swallow ordinary words around the name: a filler word must belong
         // to the name itself ("les", "clos de") — except a tiny syllable word
         // INSIDE or at the END of a misheard name ("pull IN yee", "moulin A vaughn",
