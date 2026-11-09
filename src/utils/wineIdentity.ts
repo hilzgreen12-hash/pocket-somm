@@ -10,6 +10,10 @@
 const norm = (s: string | null | undefined) => (s ?? '')
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase()
+  // Same classification written two ways: "Grosses Gewächs" == "GG",
+  // "Premier Cru" == "1er Cru" (a scan reads one, the cellar holds the other).
+  .replace(/\bgro(?:ss|ß)es\s+gewa(?:e)?chs\b/g, ' gg ')
+  .replace(/\bpremier\s+cru\b/g, ' 1er cru ')
   .replace(/\b(?:19|20)\d{2}\b/g, ' ')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();

@@ -2177,9 +2177,23 @@ export default function LabelResultsScreen() {
     const extTotal = Array.from(ext.values()).reduce((s, n) => s + n, 0);
     const home = Math.max(0, total - extTotal);
     const openCellar = () => { if (cellarMatches[0]) router.push(`/cellar/${cellarMatches[0].id}` as any); };
-    if (home > 0) lines.push({ key: 'home', text: `You have ${b(home)} of this in your cellar${matchingExisting ? `, ${existingWhereText()}` : ''}`, link: 'View', onPress: openCellar });
-    for (const [name, n] of ext) lines.push({ key: `ext-${name}`, text: `You have ${b(n)} of this in an external cellar, ${name}`, link: 'View', onPress: openCellar });
+    const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
     const archived = archiveMatches.reduce((s, w) => s + (w.quantity ?? 0), 0);
+    // First line (as on the wine card): every bottle added, and when the wine
+    // first went into the cellar.
+    const everAdded = total + archived;
+    const firstAdded = [...cellarMatches, ...archiveMatches]
+      .map((w) => w.date_received ?? w.created_at)
+      .filter(Boolean)
+      .sort((a, b) => new Date(a as string).getTime() - new Date(b as string).getTime())[0];
+    if (everAdded > 0 && firstAdded) {
+      lines.push({ key: 'added', text: `${everAdded} ${everAdded === 1 ? 'Bottle' : 'Bottles'} added to your cellar on ${fmtIntelDay(firstAdded)}`, link: 'View', onPress: cellarMatches[0] ? openCellar : () => { if (archiveMatches[0]) router.push(`/cellar/${archiveMatches[0].id}` as any); } });
+    }
+    if (home > 0) {
+      const where = matchingExisting ? existingWhereText().replace(/^in (?!your\b)/, 'in your ') : 'in your cellar';
+      lines.push({ key: 'home', text: `${cap(b(home))} ${where}`, link: 'View', onPress: openCellar });
+    }
+    for (const [name, n] of ext) lines.push({ key: `ext-${name}`, text: `${cap(b(n))} in your external cellar, ${name}`, link: 'View', onPress: openCellar });
     if (archived > 0) lines.push({ key: 'archive', text: `You have ${b(archived)} in your archive`, link: 'View', onPress: () => router.push('/cellar/archive' as any) });
     if (latestIntelReview) {
       const more = intelReviews.length - 1;
