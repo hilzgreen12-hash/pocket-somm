@@ -406,7 +406,7 @@ const FIXES: Array<[RegExp, string]> = [
   [/\bdr\.?\s+loo?sen\b/gi, 'Dr. Loosen'],
   [/\bsel[\s-]?ba(?:ch|ck|k)[\s-]?oster\b/gi, 'Selbach-Oster'],
   [/\bmark?us\s+mol[\s-]?ee?[\s-]?tor\b/gi, 'Markus Molitor'],
-  [/\bd(?:ö|o|u)n+[\s-]?hof+\b/gi, 'Dönnhoff'],
+  [/\bd(?:ö|o|u|a)n+[\s-]?hof+\b/gi, 'Dönnhoff'],
   [/\bem[\s-]?rich?[\s-]?sch?(?:ö|o|a)n[\s-]?lee?ber\b/gi, 'Emrich-Schönleber'],
   [/\brobert\s+(?:w|v)(?:eil|hile|ile|yle|ial)\b/gi, 'Robert Weil'],
   [/\b(?:georg|george|gay[\s-]?org)\s+br(?:oy|eu|oi)er\b/gi, 'Georg Breuer'],
@@ -482,6 +482,10 @@ const FIXES: Array<[RegExp, string]> = [
   // Savennières "Roche aux Moines" (Loire) → "aux" collapses to "o", giving
   // "rush omoire" / "roche o moines".
   [/\b(?:rush|rosh|roche)[\s-]*(?:aux?[\s-]*)?o?[\s-]*mo(?:ine|ire|yne|wine)s?\b/gi, 'Roche aux Moines'],
+  // Riesling → "wrestling" / "reasling" / "reisling".
+  [/\b(?:wres+t?l(?:ing|in)|reas+ling|reis+ling|ries+ling)\b/gi, 'Riesling'],
+  // Kabinett right after Riesling → "la cabana" / "cabinet" / "a cabana".
+  [/\b(Riesling)\s+(?:la\s+|a\s+)?[ck]ab(?:in|an)+(?:et+e?|a|e)?\b/gi, '$1 Kabinett'],
 ];
 
 export function correctWineTerms(text: string): string {
