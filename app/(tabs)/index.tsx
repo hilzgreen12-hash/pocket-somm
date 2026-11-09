@@ -546,10 +546,10 @@ export default function ScanLandingScreen() {
                         activeOpacity={0.85}
                       >
                         <Image source={SD_LABEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
-                        <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Label</Text></View></View>
-                        <TouchableOpacity style={styles.sdBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
+                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Label</Text></View></View>
+                        <TouchableOpacity style={styles.sdUpload} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Upload a photo instead" onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
                           <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
-                          <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
+                          <Text style={styles.sdUploadText} allowFontScaling={false}>Upload</Text>
                         </TouchableOpacity>
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
@@ -571,10 +571,10 @@ export default function ScanLandingScreen() {
                             <Ionicons name="restaurant-outline" size={40} color="rgba(255,255,255,0.55)" allowFontScaling={false} />
                           </View>
                         )}
-                        <View style={[styles.sdTitleWrap, styles.sdTitleWrapBanner]} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Wine List</Text></View></View>
-                        <TouchableOpacity style={styles.sdBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
+                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Wine List</Text></View></View>
+                        <TouchableOpacity style={styles.sdUpload} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Upload a photo instead" onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
                           <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
-                          <Text style={styles.sdBannerText} allowFontScaling={false}>upload instead</Text>
+                          <Text style={styles.sdUploadText} allowFontScaling={false}>Upload</Text>
                         </TouchableOpacity>
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Restaurant Wine Lists</Text>
@@ -917,13 +917,12 @@ const styles = StyleSheet.create({
   sdTitleBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap', borderRadius: 8, overflow: 'hidden' },
   sdCollageCell: { width: '50%', height: '50%', opacity: 0.85 },
-  // The brown "upload instead" bar across the bottom of a scan tile.
-  sdBanner: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)' },
-  sdBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.3 },
+  // Small "Upload" button in the tile's bottom-right corner (the old full-width
+  // bar pushed the title up, out of line with Search a Wine).
+  sdUpload: { position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: 'rgba(18,11,10,0.78)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
+  sdUploadText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: '#FFFFFF', letterSpacing: 0.3 },
   // Title overlaid on the tile, centred — gold, like the Community Musings cards.
   sdTitleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  // Keeps the title centred in the image area above the "upload instead" bar.
-  sdTitleWrapBanner: { bottom: 36 },
   sdTitle: { fontFamily: fonts.headingSemibold, fontSize: 21, color: colors.gold, lineHeight: 26, textAlign: 'center' },
   // White name + gold line beneath, matching the carousels below.
   sdName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
