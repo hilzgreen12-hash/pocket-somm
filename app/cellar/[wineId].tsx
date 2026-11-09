@@ -2191,9 +2191,8 @@ export default function CellarWineDetail() {
 
   // Overview → "Your History With This Wine": where the bottles are (home /
   // each external cellar), what's in the archive, and the latest review.
-  function historyLines(): { key: string; text: string; link: string; onPress: () => void }[] {
-    const lines: { key: string; text: string; link: string; onPress: () => void }[] = [];
-    const toCellarTab = () => setCardTab('cellar');
+  function historyLines(): { key: string; text: string; link?: string; onPress?: () => void }[] {
+    const lines: { key: string; text: string; link?: string; onPress?: () => void }[] = [];
     const b = (n: number) => `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
     const entries = buildCellarEntries();
     const homeQty = entries.filter((e) => !e.isExternal).reduce((s, e) => s + (e.quantity ?? 0), 0) + unplacedHere;
@@ -2205,20 +2204,20 @@ export default function CellarWineDetail() {
     const everAdded = bottlesInCellar + bottlesInArchive;
     if (everAdded > 0 && cellaredOn) {
       const n = everAdded;
-      lines.push({ key: 'added', text: `${n} ${n === 1 ? 'Bottle' : 'Bottles'} added to your cellar on ${fmtDay(cellaredOn)}`, link: 'View', onPress: toCellarTab });
+      lines.push({ key: 'added', text: `${n} ${n === 1 ? 'Bottle' : 'Bottles'} added to your cellar on ${fmtDay(cellaredOn)}` });
     }
     if (homeQty > 0) {
       const where = placeCount === 1 && homePlaces.length === 1 ? ` in ${your(homePlaces[0])}`
         : placeCount > 1 ? ` across ${placeCount} home locations`
         : ' at home';
       const t = b(homeQty);
-      lines.push({ key: 'home', text: `${t.charAt(0).toUpperCase()}${t.slice(1)}${where}`, link: 'View', onPress: toCellarTab });
+      lines.push({ key: 'home', text: `${t.charAt(0).toUpperCase()}${t.slice(1)}${where}` });
     }
     for (const e of entries.filter((x) => x.isExternal)) {
       const t = b(e.quantity ?? 0);
-      lines.push({ key: `ext-${e.key}`, text: `${t.charAt(0).toUpperCase()}${t.slice(1)} in your external cellar, ${e.label}`, link: 'View', onPress: toCellarTab });
+      lines.push({ key: `ext-${e.key}`, text: `${t.charAt(0).toUpperCase()}${t.slice(1)} in your external cellar, ${e.label}` });
     }
-    if (bottlesInArchive > 0) lines.push({ key: 'archive', text: `You have ${b(bottlesInArchive)} in your archive`, link: 'View', onPress: toCellarTab });
+    if (bottlesInArchive > 0) lines.push({ key: 'archive', text: `You have ${b(bottlesInArchive)} in your archive` });
     const latest = reviews[0];
     if (latest) {
       const when = fmtDay(latest.date ?? latest.savedAt);
@@ -2335,10 +2334,18 @@ export default function CellarWineDetail() {
                 <View style={styles.wcHistory}>
                   <Text style={styles.wcHistoryTitle}>Your History With This Wine</Text>
                   {lines.map((l, i) => (
-                    <TouchableOpacity key={l.key} style={[styles.wcHistoryRow, i === lines.length - 1 && styles.wcRowLast]} onPress={l.onPress} activeOpacity={0.7}>
-                      <Text style={styles.wcHistoryText}>{l.text}</Text>
-                      <Text style={styles.wcLink}>{l.link} ›</Text>
-                    </TouchableOpacity>
+                    // Bottle / archive lines are plain text here (the Cellar tab holds
+                    // that detail); only the review line links out.
+                    l.onPress ? (
+                      <TouchableOpacity key={l.key} style={[styles.wcHistoryRow, i === lines.length - 1 && styles.wcRowLast]} onPress={l.onPress} activeOpacity={0.7}>
+                        <Text style={styles.wcHistoryText}>{l.text}</Text>
+                        <Text style={styles.wcLink}>{l.link} ›</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View key={l.key} style={[styles.wcHistoryRow, i === lines.length - 1 && styles.wcRowLast]}>
+                        <Text style={styles.wcHistoryText}>{l.text}</Text>
+                      </View>
+                    )
                   ))}
                 </View>
               );
