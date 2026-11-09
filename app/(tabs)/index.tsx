@@ -914,12 +914,12 @@ const styles = StyleSheet.create({
   sdImage: { width: '100%', height: '100%', opacity: 0.85, borderRadius: 8 },
   sdFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   // Title sits on its own dark band so the photos around it stay bright.
-  sdTitleBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
+  sdTitleBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap', borderRadius: 8, overflow: 'hidden' },
   sdCollageCell: { width: '50%', height: '50%', opacity: 0.85 },
   // Small "Upload" button in the tile's bottom-right corner (the old full-width
   // bar pushed the title up, out of line with Search a Wine).
-  sdUpload: { position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: 'rgba(18,11,10,0.78)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
+  sdUpload: { position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: colors.titleBand, borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
   sdUploadText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: '#FFFFFF', letterSpacing: 0.3 },
   // Title overlaid on the tile, centred — gold, like the Community Musings cards.
   sdTitleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },

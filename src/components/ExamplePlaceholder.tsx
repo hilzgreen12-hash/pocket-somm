@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   lineupCell: { flex: 1, height: 165 },
   // Placeholder message sits on its own dark band so the label art around it stays bright.
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: spacing.md },
-  overlayBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  overlayBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   overlayText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 18 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },

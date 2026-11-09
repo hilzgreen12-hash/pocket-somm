@@ -428,7 +428,7 @@ const styles = StyleSheet.create({
   storageCard: { width: TILE_W, height: TILE_H, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
   // Name centred on its own dark band (as on the Home Search & Discover tiles).
   nameWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  nameBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
+  nameBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   // Type · bottle count, white, beneath the tile.
   tileMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   // Last-added wine label filling the tile, under a dark scrim for legibility.

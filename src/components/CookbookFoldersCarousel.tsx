@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   card: { width: 220, height: 165, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
   // Folder name on its own dark band over a bright photo (as on Home's tiles).
   nameWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  nameBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
+  nameBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   // "Cookbook / Your Folder · X Recipes", white, beneath the tile.
   cardMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardName: { fontSize: 21, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 26, textAlign: 'center' },

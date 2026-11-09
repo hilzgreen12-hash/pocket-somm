@@ -6,6 +6,9 @@ export const colors = {
   background: BACKGROUND,
   surface: '#572F2B',
   surfaceElevated: '#4A2522',
+  // Title band laid over carousel tile photos: the app's dark brown (#3E2120),
+  // slightly see-through so the photo still shows at the edges.
+  titleBand: 'rgba(62,33,32,0.85)',
 
   burgundy: '#E8A0A0',   // soft rose — readable against terracotta
   burgundyDim: '#B06060',
