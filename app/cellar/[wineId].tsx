@@ -16,6 +16,7 @@ import { useCellar, useArchive, useWishList } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
 import { DrinkingWindowSheet } from '../../src/components/winecard/DrinkingWindowSheet';
+import { PlaceWinesSheet } from '../../src/components/winecard/PlaceWinesSheet';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
@@ -258,6 +259,8 @@ export default function CellarWineDetail() {
   const [archiveEntryEdit, setArchiveEntryEdit] = useState<{ id: string; label: string; text: string; had: boolean } | null>(null);
   // Overview stats bar → Window opens the drinking-window slider.
   const [windowSheetOpen, setWindowSheetOpen] = useState(false);
+  // Cellar tab → "Your Cellar List (not yet placed)" → Placing Wines sheet.
+  const [placeOpen, setPlaceOpen] = useState(false);
   const [savingArchiveEntry, setSavingArchiveEntry] = useState(false);
 
   const [removeCount, setRemoveCount] = useState('1');
@@ -2682,10 +2685,13 @@ export default function CellarWineDetail() {
                     );
                   })}
                   {unplacedHere > 0 ? (
-                    <View style={[styles.wcRow, styles.wcRowLast]}>
+                    <TouchableOpacity style={[styles.wcRow, styles.wcRowLast]} onPress={() => setPlaceOpen(true)} activeOpacity={0.7} accessibilityLabel="Place these bottles">
                       <Text style={styles.wcRowText}>Your Cellar List (not yet placed)</Text>
-                      <Text style={styles.wcRowScore}>{unplacedHere}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
-                    </View>
+                      <View style={styles.wcRowRight}>
+                        <Text style={styles.wcRowScore}>{unplacedHere}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
+                        <Text style={styles.wcChevron}>›</Text>
+                      </View>
+                    </TouchableOpacity>
                   ) : null}
                 </View>
               ) : null}
@@ -2769,6 +2775,15 @@ export default function CellarWineDetail() {
         ) : null}
       </View>
 
+      <PlaceWinesSheet
+        visible={placeOpen}
+        onClose={() => setPlaceOpen(false)}
+        wine={wine}
+        available={unplacedHere}
+        racks={racks}
+        bins={allBins}
+        locations={storageLocations}
+      />
       <DrinkingWindowSheet
         visible={windowSheetOpen}
         onClose={() => setWindowSheetOpen(false)}
