@@ -194,9 +194,11 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
       ...(wines.length ? [{ label: 'Or choose from my cellar', onPress: () => setCellarPickerOpen(true) }] : []),
     ]);
     // Straight to the dish — no 'full recipe or ingredient list?' question.
-    const course = await chat.ask('What course are we cooking? Or is it for snacks/canapes?', 'ie. A main course', 'food');
-    const food = await chat.ask('What sort of food do you want to cook? Could be Thai, could just be something cozy?', 'ie. A slow Sunday roast for friends', 'food');
-    const allergies = await chat.ask('Are there any allergies or strong preferences to be aware of?', 'ie. No shellfish', 'food');
+    // One question for course + style, one for allergens, then the dishes.
+    const brief = await chat.ask('What course are you cooking and do you have a food style in mind?', 'ie. A main course, something cosy like a Sunday roast', 'food');
+    const course = brief;
+    const food = brief;
+    const allergies = await chat.ask('Any allergens to be aware of?', 'ie. No shellfish', 'food');
     const t = chat.token();
     const { identity, pairings } = await chat.working('Thinking about what to cook…', async () => {
       const id = preset ?? await toIdentity(wineSaid);
@@ -206,7 +208,7 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
         specificConcerns: none ? null : allergies,
         course: courseFilter(course),
       };
-      const p = await generatePairings(id, filters as any, { additionalRequest: `Course: ${course}. Style of food they want: ${food}.${none ? '' : ` Allergies / strong preferences: ${allergies}.`}` });
+      const p = await generatePairings(id, filters as any, { additionalRequest: `Course and style of food they want: ${brief}.${none ? '' : ` Allergies / strong preferences: ${allergies}.`}` });
       if (chat.alive(t)) {
         const ls = useLabelStore.getState();
         ls.setWineDetailsConfirmed(id); ls.setFilters(filters); ls.setPairings(p);
@@ -215,7 +217,7 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
     }, "Matching the wine's weight, spice and savoury edge");
     if (!pairings.length) { chat.say("I couldn't come up with dishes for that just now — please try again."); chat.push(<DoneButton onPress={onClose} />); return; }
     const wineLabel = [identity.producer, identity.wineName, identity.vintage].filter(Boolean).join(' ');
-    chat.say(`Three dishes for ${wineLabel}, ${food.replace(/[.\s]+$/, '')}${/^\s*(no|none|nope|nothing)\b/i.test(allergies) ? '' : `, ${allergies.replace(/[.\s]+$/, '').toLowerCase()}`}`);
+    chat.say(`Three dishes for ${wineLabel}: ${food.replace(/[.\s]+$/, '')}${/^\s*(no|none|nope|nothing)\b/i.test(allergies) ? '' : `, ${allergies.replace(/[.\s]+$/, '').toLowerCase()}`}`);
     chat.push(
       <View>
         {pairings.slice(0, 3).map((p, i) => (
@@ -296,8 +298,10 @@ function courseFilter(said: string): string | null {
   // Values must match the Chef generator's course options exactly.
   if (/snack|canap|nibble|bite|amuse/.test(s)) return 'Amuse Bouche / Canapés';
   if (/starter|appeti|first course|entr[eé]e/.test(s)) return 'Starter';
-  if (/dessert|pudding|sweet/.test(s)) return 'Pudding / Dessert';
-  if (/main/.test(s)) return 'Main';
+  // 'main' before dessert: a combined answer like "a main, something sweet and
+  // sour" is still a main course.
+  if (/\bmain/.test(s)) return 'Main';
+  if (/dessert|pudding/.test(s)) return 'Pudding / Dessert';
   return null;
 }
 
