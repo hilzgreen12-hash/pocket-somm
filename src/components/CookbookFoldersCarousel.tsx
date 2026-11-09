@@ -32,7 +32,6 @@ function FolderBg({ path }: { path?: string | null }) {
   return (
     <>
       <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(18,11,10,0.5)' }]} />
     </>
   );
 }
@@ -165,15 +164,16 @@ export function CookbookFoldersCarousel() {
         onHold={(id) => { const c = collections.find((x) => x.id === id); if (c) openFolderMenu(c); }}
         onReorder={(ids) => void saveOrder(ids)}
         leading={
-          <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
-            <FolderBg path={favCover} />
-            <Text style={styles.cardType}>Cookbook</Text>
-            <View>
-              <Text style={styles.cardName} numberOfLines={2}>★ Favourites</Text>
-              <AddImageLink has={!!favCover} onPress={() => openImageMenu(favouritesTile)} />
-            </View>
-            <Text style={styles.cardCount}>{recipeLabel(favouritesCount)}</Text>
-          </TouchableOpacity>
+          <View style={styles.tileWrap}>
+            <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
+              <FolderBg path={favCover} />
+              <View style={styles.nameWrap} pointerEvents="none">
+                <View style={styles.nameBand}><Text style={styles.cardName} numberOfLines={2}>★ Favourites</Text></View>
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.cardMeta} numberOfLines={1}>Cookbook · {recipeLabel(favouritesCount)}</Text>
+            <AddImageLink has={!!favCover} onPress={() => openImageMenu(favouritesTile)} />
+          </View>
         }
         items={collections.map((c) => ({
           key: c.id,
@@ -181,15 +181,16 @@ export function CookbookFoldersCarousel() {
           // onLongPress no-op: a hold opens the folder menu (ReorderableRow), so
           // the release mustn't also open the folder.
           node: (
-            <TouchableOpacity style={styles.card} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} onLongPress={() => {}} delayLongPress={350} activeOpacity={0.8}>
-              <FolderBg path={c.image_path} />
-              <Text style={styles.cardType}>Your Folder</Text>
-              <View>
-                <Text style={styles.cardName} numberOfLines={2}>{c.name}</Text>
-                <AddImageLink has={!!c.image_path} onPress={() => openImageMenu(c)} />
-              </View>
-              <Text style={styles.cardCount}>{recipeLabel(c.item_count)}</Text>
-            </TouchableOpacity>
+            <View style={styles.tileWrap}>
+              <TouchableOpacity style={styles.card} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} onLongPress={() => {}} delayLongPress={350} activeOpacity={0.8}>
+                <FolderBg path={c.image_path} />
+                <View style={styles.nameWrap} pointerEvents="none">
+                  <View style={styles.nameBand}><Text style={styles.cardName} numberOfLines={2}>{c.name}</Text></View>
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.cardMeta} numberOfLines={1}>Your Folder · {recipeLabel(c.item_count)}</Text>
+              <AddImageLink has={!!c.image_path} onPress={() => openImageMenu(c)} />
+            </View>
           ),
         }))}
         trailing={
@@ -243,10 +244,14 @@ const styles = StyleSheet.create({
   // Box tiles — 220×165 to match the Your Lineups carousel (LineupsCarousel).
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingVertical: spacing.md },
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
-  card: { width: 220, height: 165, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between', overflow: 'hidden' },
-  cardType: { fontSize: 11, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
-  cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
-  cardCount: { fontSize: 13, fontFamily: fonts.headingRegular, color: colors.textMuted },
+  tileWrap: { width: 220 },
+  card: { width: 220, height: 165, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
+  // Folder name on its own dark band over a bright photo (as on Home's tiles).
+  nameWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  nameBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
+  // "Cookbook / Your Folder · X Recipes", white, beneath the tile.
+  cardMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+  cardName: { fontSize: 21, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 26, textAlign: 'center' },
   addImage: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   cardAdd: { width: 220, height: 165, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   cardAddText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },

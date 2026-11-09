@@ -35,8 +35,24 @@ function CardBg({ path }: { path?: string }) {
   return (
     <>
       <LabelThumb path={path} style={styles.cardBg} radius={14} frame={0} />
-      <View style={styles.cardScrim} pointerEvents="none" />
     </>
+  );
+}
+
+// One home-storage tile: the photo bright, the location name on a dark band
+// over it (like the Home Search & Discover tiles), and the type + bottle count
+// in white beneath the tile.
+function StorageTile({ bg, name, meta, onPress, onLongPress }: { bg: React.ReactNode; name: string; meta: string; onPress: () => void; onLongPress?: () => void }) {
+  return (
+    <TouchableOpacity style={styles.tileWrap} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.85}>
+      <View style={styles.storageCard}>
+        {bg}
+        <View style={styles.nameWrap} pointerEvents="none">
+          <View style={styles.nameBand}><Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{name}</Text></View>
+        </View>
+      </View>
+      <Text style={styles.tileMeta} numberOfLines={1} allowFontScaling={false}>{meta}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -51,7 +67,6 @@ function CollageBg({ offset }: { offset: number }) {
           <Image key={i} source={img} style={styles.collageCell} resizeMode="cover" />
         ))}
       </View>
-      <View style={styles.cardScrim} pointerEvents="none" />
     </>
   );
 }
@@ -272,46 +287,31 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
   const { sort: sortStorage, save: saveOrder } = useStorageOrder();
   const orderedTiles: ReorderableTile[] = sortStorage([
     ...racks.map((rack) => ({ key: storageKey('rack', rack.id), label: rack.name, node: (
-                <TouchableOpacity
-                  style={styles.storageCard}
+                <StorageTile
+                  bg={<CardBg path={tileThumbs?.rack[rack.id]} />}
+                  name={rack.name}
+                  meta={`${rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'} · ${bottleLabel(rackCounts[rack.id] ?? 0)}`}
                   onPress={() => router.push(`/cellar/rack/${rack.id}` as any)}
                   onLongPress={() => handleLongPressRack(rack)}
-                  delayLongPress={400}
-                  activeOpacity={0.85}
-                >
-                  <CardBg path={tileThumbs?.rack[rack.id]} />
-                  <Text style={styles.storageCardType} allowFontScaling={false}>{rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
-                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{rack.name}</Text>
-                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(rackCounts[rack.id] ?? 0)}</Text>
-                </TouchableOpacity>
+                />
     ) })),
     ...bins.map((bin) => ({ key: storageKey('bin', bin.id), label: bin.name, node: (
-                <TouchableOpacity
-                  style={styles.storageCard}
+                <StorageTile
+                  bg={<CardBg path={tileThumbs?.bin[bin.id]} />}
+                  name={bin.name}
+                  meta={`Bin · ${bottleLabel(binCounts[bin.id] ?? 0)}`}
                   onPress={() => router.push(`/cellar/bin/${bin.id}` as any)}
                   onLongPress={() => handleLongPressBin(bin)}
-                  delayLongPress={400}
-                  activeOpacity={0.85}
-                >
-                  <CardBg path={tileThumbs?.bin[bin.id]} />
-                  <Text style={styles.storageCardType} allowFontScaling={false}>Bin</Text>
-                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{bin.name}</Text>
-                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(binCounts[bin.id] ?? 0)}</Text>
-                </TouchableOpacity>
+                />
     ) })),
     ...homeLocations.map((loc) => ({ key: storageKey('location', loc.id), label: loc.name, node: (
-                <TouchableOpacity
-                  style={styles.storageCard}
+                <StorageTile
+                  bg={<CardBg path={tileThumbs?.location[loc.id]} />}
+                  name={loc.name}
+                  meta={`Alt Cellar · ${bottleLabel(loc.wineCount ?? 0)}`}
                   onPress={() => router.push(`/cellar/storage-location/${loc.id}` as any)}
                   onLongPress={() => handleLongPressLocation(loc)}
-                  delayLongPress={400}
-                  activeOpacity={0.85}
-                >
-                  <CardBg path={tileThumbs?.location[loc.id]} />
-                  <Text style={styles.storageCardType} allowFontScaling={false}>Alt Cellar</Text>
-                  <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{loc.name}</Text>
-                  <Text style={styles.storageCardCount} allowFontScaling={false}>{bottleLabel(loc.wineCount ?? 0)}</Text>
-                </TouchableOpacity>
+                />
     ) })),
   ], (t) => t.key);
 
@@ -363,17 +363,14 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
           {
             // No storage yet — four setup templates the user can name.
             TEMPLATES.map((t, i) => (
-              <TouchableOpacity
-                key={t.kind}
-                style={styles.storageCard}
-                onPress={() => requireAuth(() => addByKind(t.kind))}
-                activeOpacity={0.85}
-              >
-                <CollageBg offset={i * 2} />
-                <Text style={styles.storageCardType} allowFontScaling={false}>{t.type}</Text>
-                <Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{t.name}</Text>
-                <Text style={styles.storageCardCount} allowFontScaling={false}>Tap to set up</Text>
-              </TouchableOpacity>
+              <View key={t.kind}>
+                <StorageTile
+                  bg={<CollageBg offset={i * 2} />}
+                  name={t.name}
+                  meta={`${t.type} · Tap to set up`}
+                  onPress={() => requireAuth(() => addByKind(t.kind))}
+                />
+              </View>
             ))
           }
           <TouchableOpacity style={styles.addTile} onPress={() => requireAuth(handleAddAnyStorage)} activeOpacity={0.85}>
@@ -427,15 +424,18 @@ const styles = StyleSheet.create({
   carouselScroll: { marginTop: 0 },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
-  storageCard: { width: TILE_W, height: TILE_H, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between', overflow: 'hidden' },
+  tileWrap: { width: TILE_W },
+  storageCard: { width: TILE_W, height: TILE_H, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
+  // Name centred on its own dark band (as on the Home Search & Discover tiles).
+  nameWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  nameBand: { backgroundColor: 'rgba(18,11,10,0.78)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
+  // Type · bottle count, white, beneath the tile.
+  tileMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   // Last-added wine label filling the tile, under a dark scrim for legibility.
   cardBg: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: TILE_W, height: TILE_H },
-  collage: { position: 'absolute', left: 0, top: 0, width: TILE_W, height: TILE_H, flexDirection: 'row', flexWrap: 'wrap', opacity: 0.55 },
+  collage: { position: 'absolute', left: 0, top: 0, width: TILE_W, height: TILE_H, flexDirection: 'row', flexWrap: 'wrap', opacity: 0.85 },
   collageCell: { width: TILE_W / 2, height: TILE_H / 2 },
-  cardScrim: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
-  storageCardType: { fontSize: 11, fontFamily: fontsSpectral.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
-  storageCardName: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
-  storageCardCount: { fontSize: 13, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
+  storageCardName: { fontSize: 21, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 26, textAlign: 'center' },
   addTile: { width: TILE_W, height: TILE_H, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   addTilePlus: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   // Rename-location modal.
