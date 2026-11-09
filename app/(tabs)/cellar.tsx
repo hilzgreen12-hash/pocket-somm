@@ -160,8 +160,8 @@ export default function CellarTab() {
       {/* Add Wines — a full-width gold button (same size as "Your Cellar List"
           below), opening the Full Cellar List's scan/upload/manual chooser. */}
       <View style={styles.actionRow}>
-        <TouchableOpacity onPress={() => requireAuth(() => router.push('/cellar/list?add=1' as any))} activeOpacity={0.85} style={styles.buttonVivino}>
-          <Text style={styles.buttonVivinoText}>Add Wines</Text>
+        <TouchableOpacity onPress={() => requireAuth(() => router.push('/cellar/list?add=1' as any))} activeOpacity={0.85} style={styles.buttonFull}>
+          <Text style={styles.buttonText}>Add Wines</Text>
         </TouchableOpacity>
       </View>
 
