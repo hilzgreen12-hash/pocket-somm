@@ -2378,12 +2378,22 @@ export default function LabelResultsScreen() {
 
         {intelTab === 'market' ? (
           <View style={wc.Body}>
-            <View style={wc.Card}>
-              <Text style={wc.Label}>Estimated Market Value</Text>
-              <Text style={[wc.Value, { color: colors.gold }]}>{intel.estimatedValue != null ? fmt(intel.estimatedValue) : '—'}</Text>
-              {intel.estimatedValueLow != null && intel.estimatedValueHigh != null ? <Text style={wc.Small}>Range {fmt(intel.estimatedValueLow)}–{fmt(intel.estimatedValueHigh)}</Text> : null}
-              {intel.estimatedValue != null ? <Text style={wc.Small}>{intel.valueSource === 'wine-searcher' ? 'Wine-Searcher' : 'Vinster estimate'}</Text> : null}
-              {intel.estimatedValue != null ? <Text style={wc.Small}>{fmtIntelDay(new Date().toISOString())}</Text> : null}
+            {/* No purchase price on Wine Intel, so the market value is one compact
+                bar: label + value, then range · source · date on a single line. */}
+            <View style={[wc.Card, { gap: 2, paddingVertical: 10 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                <Text style={wc.Label}>Estimated Market Value</Text>
+                <Text style={wc.VsValue}>{intel.estimatedValue != null ? fmt(intel.estimatedValue) : '—'}</Text>
+              </View>
+              {intel.estimatedValue != null ? (
+                <Text style={wc.Small} numberOfLines={1}>
+                  {[
+                    intel.estimatedValueLow != null && intel.estimatedValueHigh != null ? `Range ${fmt(intel.estimatedValueLow)}–${fmt(intel.estimatedValueHigh)}` : null,
+                    intel.valueSource === 'wine-searcher' ? 'Wine-Searcher' : 'Vinster estimate',
+                    fmtIntelDay(new Date().toISOString()),
+                  ].filter(Boolean).join(' · ')}
+                </Text>
+              ) : null}
             </View>
 
             <View style={wc.Card}>
