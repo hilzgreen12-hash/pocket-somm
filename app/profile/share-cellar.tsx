@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator 
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchRecentCellarActivity, describeActivity, actorLabel } from '../../src/api/cellarActivity';
 import { showAlert } from '../../src/components/AppAlert';
 import { useAuth } from '../../src/hooks/useAuth';
 import {
@@ -32,6 +33,12 @@ export default function ShareCellarScreen() {
   const { data: members = [], isLoading: membersLoading } = useQuery({
     queryKey: ['cellar-members', userId],
     queryFn: fetchMyCellarMembers,
+    enabled: !!userId,
+  });
+  // Recent changes by the people this cellar is shared with (migration 127).
+  const { data: activity = [] } = useQuery({
+    queryKey: ['cellar-activity', userId],
+    queryFn: () => fetchRecentCellarActivity(30).catch(() => []),
     enabled: !!userId,
   });
   const { data: invites = [], isLoading: invitesLoading } = useQuery({
@@ -197,6 +204,20 @@ export default function ShareCellarScreen() {
                     ))}
                   </>
                 )}
+                {activity.length > 0 ? (
+                  <>
+                    <View style={styles.divider} />
+                    <Text style={styles.blockHeading}>Recent activity</Text>
+                    {activity.map((a) => (
+                      <View key={a.id} style={styles.memberRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.cardBody}><Text style={{ fontFamily: fonts.bodySemibold, color: colors.gold }}>{actorLabel(a)}</Text> {describeActivity(a)}</Text>
+                          <Text style={styles.memberMeta}>{new Date(a.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                ) : null}
               </>
             )}
           </>

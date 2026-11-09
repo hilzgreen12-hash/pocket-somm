@@ -4,6 +4,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
 import { prefetchCookbook } from '../../src/api/cookbookPrefetch';
 import { fetchInvitesForMe } from '../../src/api/cellarMembers';
+import { fetchUnseenCellarActivity, markCellarActivitySeen, describeActivity, actorLabel } from '../../src/api/cellarActivity';
 import { showAlert } from '../../src/components/AppAlert';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../../src/constants/theme';
@@ -40,6 +41,33 @@ export default function TabsLayout() {
       })
       .catch(() => { /* table not there yet, or offline — try next time */ });
     return () => { cancelled = true; };
+  }, [userId]);
+
+  // Shared cellar: tell the owner what the people they share with changed since
+  // they last looked (migration 127), once per app open. Marked seen on show.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetchUnseenCellarActivity()
+        .then((rows) => {
+          if (cancelled || rows.length === 0) return;
+          const shown = rows.slice(0, 6);
+          const lines = shown.map((a) => `• ${actorLabel(a)} ${describeActivity(a)}`);
+          if (rows.length > shown.length) lines.push(`…and ${rows.length - shown.length} more`);
+          showAlert({
+            title: 'Changes to your cellar',
+            body: `Since you last looked:\n\n${lines.join('\n')}`,
+            buttons: [
+              { text: 'View Activity', onPress: () => router.push('/profile/share-cellar' as any) },
+              { text: 'OK', style: 'cancel' },
+            ],
+          });
+          void markCellarActivitySeen(rows.map((r) => r.id)).catch(() => {});
+        })
+        .catch(() => { /* table not there yet, or offline — try next time */ });
+    }, 2500);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [userId]);
 
   // Preload the Pair tab's cookbook (folders, counts, cover images) shortly
