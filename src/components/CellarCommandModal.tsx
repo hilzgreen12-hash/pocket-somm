@@ -25,6 +25,7 @@ const MARK = require('../../assets/vinster-mark.png');
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import { findSameCellarWine } from '../utils/wineMatch';
+import { releaseHomeBottles as releaseHomeBottlesShared } from '../services/moveBottles';
 
 type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'archiveNote' | 'error' | 'find' | 'found' | 'addWhere';
 
@@ -852,19 +853,9 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   // cells and home alt cellars. Offsite/external cellars are never touched by a
   // move or unplace (that stock isn't to hand).
   async function releaseHomeBottles(wineId: string, n: number): Promise<number> {
-    if (n <= 0) return 0;
-    let freed = await removeSlotsForWine(wineId, n);
-    if (freed >= n) return freed;
-    const externalIds = new Set(locations.filter((l) => l.is_external).map((l) => l.id));
-    const rest = (await fetchPlacementsForWine(wineId)).filter((p) =>
-      p.kind === 'bin' || (p.kind === 'location' && !(p.storage_location_id && externalIds.has(p.storage_location_id))));
-    for (const p of rest) {
-      if (freed >= n) break;
-      const take = Math.min(n - freed, p.quantity ?? 0);
-      if (take > 0) { await decrementPlacement(p.id, take); freed += take; }
-    }
-    return freed;
+    return releaseHomeBottlesShared(wineId, n, new Set(locations.filter((l) => l.is_external).map((l) => l.id)));
   }
+
 
   function restate() { setTranscript(''); setSentText(''); setPickIntro(null); setResult(null); setChosenWineId(null); setPhase('speak'); }
 

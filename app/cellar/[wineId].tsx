@@ -34,7 +34,8 @@ import { valueWine, isWineNotFound, fetchVintageComparison, isWineSearcherUnavai
 import { wineQueryName } from '../../src/utils/wineIdentity';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
 import { getBins } from '../../src/api/bins';
-import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation, addLocationPlacement } from '../../src/api/placements';
+import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation, addLocationPlacement, moveBottlesToLocation } from '../../src/api/placements';
+import { releaseHomeBottles } from '../../src/services/moveBottles';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals, stampPurchasePriceDate } from '../../src/api/cellar';
 import { generateServingSuggestion, generateMarketVintage, generateRarity, generateVintageVerdict, type VintageVerdictAI } from '../../src/api/wineExtras';
@@ -278,6 +279,11 @@ export default function CellarWineDetail() {
   const [addToCount, setAddToCount] = useState('1');
   const [addingTo, setAddingTo] = useState(false);
   const [addBottlesCount, setAddBottlesCount] = useState('1');
+  // Cellar tab → "Move Bottles": pick a home destination, then how many.
+  const [movePickerOpen, setMovePickerOpen] = useState(false);
+  const [moveDest, setMoveDest] = useState<{ kind: 'rack' | 'bin' | 'location' | 'list'; id: string | null; name: string } | null>(null);
+  const [moveCount, setMoveCount] = useState('1');
+  const [moving, setMoving] = useState(false);
   const [addingBottles, setAddingBottles] = useState(false);
 
   const [findingPairings, setFindingPairings] = useState(false);
@@ -838,6 +844,62 @@ export default function CellarWineDetail() {
       showAlert({ title: 'Could not add bottles', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setAddingTo(false);
+    }
+  }
+
+  // Move Bottles: bottles kept at home can move (external stock only ever moves
+  // to home via the cellar list's Move to Home Storage, never from here).
+  function movableHomeBottles(): number {
+    if (!wine) return 0;
+    const extIds = new Set(storageLocations.filter((l) => l.is_external).map((l) => l.id));
+    const external = locationPlacements.reduce((n, p) => n + (p.storage_location_id && extIds.has(p.storage_location_id) ? (p.quantity ?? 0) : 0), 0);
+    return Math.max(0, (wine.quantity ?? 0) - external);
+  }
+
+  function openMovePicker() {
+    if (movableHomeBottles() === 0) {
+      showAlert({ title: 'Nothing to move', body: 'All bottles of this wine are in external storage. To bring them home, hold the wine in your cellar list and choose Move to Home Storage.' });
+      return;
+    }
+    setMovePickerOpen(true);
+  }
+
+  function chooseMoveDest(d: { kind: 'rack' | 'bin' | 'location' | 'list'; id: string | null; name: string }) {
+    setMovePickerOpen(false);
+    const max = movableHomeBottles();
+    if (max <= 1) { void confirmMove(d, 1); return; }
+    setMoveCount(String(max));
+    setMoveDest(d);
+  }
+
+  // Same steps as the Cellar Quick Command's move: alt cellar → placement-native
+  // merge-aware move; rack/fridge/bin → free home bottles, flag them awaiting
+  // placement there and open that screen to place them; Cellar List → unplace.
+  async function confirmMove(d: { kind: 'rack' | 'bin' | 'location' | 'list'; id: string | null; name: string }, requested: number) {
+    if (!wine || moving) return;
+    const n = Math.max(1, Math.min(requested, movableHomeBottles()));
+    const extIds = new Set(storageLocations.filter((l) => l.is_external).map((l) => l.id));
+    setMoving(true);
+    try {
+      if (d.kind === 'location' && d.id) {
+        await moveBottlesToLocation(wine, d.id, n);
+      } else if (d.kind === 'list') {
+        await releaseHomeBottles(wine.id, n, extIds);
+        if (n >= (wine.quantity ?? 0)) await updateWine.mutateAsync({ id: wine.id, updates: { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: false, awaiting_placement_unit_id: null } as any });
+      } else if (d.id) {
+        await releaseHomeBottles(wine.id, n, extIds);
+        await updateWine.mutateAsync({ id: wine.id, updates: { awaiting_placement: true, awaiting_placement_unit_id: d.id } as any });
+      }
+      for (const k of ['cellar', 'placements', 'placements-list', 'storage-location-wines', 'storage-locations', 'racks', 'rack-slots', 'slot-assignments', 'bins', 'bin-cells']) qc.invalidateQueries({ queryKey: [k] });
+      setMoveDest(null);
+      if (d.kind === 'rack') router.push(`/cellar/rack/${d.id}?placeWine=${wine.id}&placeLimit=${n}` as any);
+      else if (d.kind === 'bin') router.push(`/cellar/bin/${d.id}?highlight=${wine.id}` as any);
+      else if (d.kind === 'location') router.push(`/cellar/storage-location/${d.id}?highlight=${wine.id}` as any);
+      else showAlert({ title: 'Moved', body: `${n} ${n === 1 ? 'bottle is' : 'bottles are'} now in your Full Cellar List, not yet placed.` });
+    } catch (err) {
+      showAlert({ title: 'Could not move bottles', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setMoving(false);
     }
   }
 
@@ -2580,18 +2642,23 @@ export default function CellarWineDetail() {
                   ) : null}
                 </View>
               ) : null}
+              {/* Rule between the storage locations (white) and the commands (gold). */}
+              {!isArchived ? <View style={styles.cellarCommandRule} /> : null}
               {cellarEntries.length === 0 && !isArchived ? (
-                <TouchableOpacity onPress={handleAddToLocation}><Text style={[styles.statAction, styles.cellarCommand]}>Add to Location</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleAddToLocation}><Text style={[styles.statAction, styles.cellarCommand]}>Add to Location →</Text></TouchableOpacity>
               ) : null}
               {!isArchived && !isWishlist ? (
-                <TouchableOpacity onPress={() => setAddPickerOpen(true)} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Add Bottles</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setAddPickerOpen(true)} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Add Bottles →</Text></TouchableOpacity>
+              ) : null}
+              {bottlesInCellar > 0 && !isArchived && !isWishlist ? (
+                <TouchableOpacity onPress={openMovePicker} disabled={moving} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>{moving ? 'Moving…' : 'Move Bottles →'}</Text></TouchableOpacity>
               ) : null}
               {bottlesInCellar > 0 && !isArchived ? (
-                <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Add to Archive →</Text></TouchableOpacity>
+                <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Archive Bottles →</Text></TouchableOpacity>
               ) : null}
               {!isArchived && !isWishlist ? (
                 // Opens the same "delete from your records" confirmation.
-                <TouchableOpacity onPress={() => setRemoveStep('confirm')} disabled={removing} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Delete Wine</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setRemoveStep('confirm')} disabled={removing} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Delete Wine →</Text></TouchableOpacity>
               ) : null}
             </View>
             {!isArchived && rackRemovalMsg ? <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text> : null}
@@ -2928,6 +2995,67 @@ export default function CellarWineDetail() {
           qc.invalidateQueries({ queryKey: ['cellar'] });
         }}
       />
+
+      {/* Move Bottles — every HOME storage location (external cellars excluded:
+          bottles never move into them), or back to the Full Cellar List. */}
+      <Modal visible={movePickerOpen} transparent animationType="fade" onRequestClose={() => setMovePickerOpen(false)}>
+        <View style={styles.cnOverlay}>
+          <View style={[styles.cnSheet, { maxHeight: '80%' }]}>
+            <Text style={styles.cnTitle}>Move {[wine.producer, wine.wine_name !== wine.producer ? wine.wine_name : null, wine.vintage].filter(Boolean).join(' ')} to…</Text>
+            <ScrollView style={{ marginTop: spacing.sm }}>
+              {racks.map((r) => (
+                <TouchableOpacity key={r.id} style={styles.addDestRow} activeOpacity={0.7} onPress={() => chooseMoveDest({ kind: 'rack', id: r.id, name: r.name })}>
+                  <Text style={styles.addDestName} numberOfLines={1}>{r.name}</Text>
+                  <Text style={styles.addDestType}>{r.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
+                </TouchableOpacity>
+              ))}
+              {allBins.map((b) => (
+                <TouchableOpacity key={b.id} style={styles.addDestRow} activeOpacity={0.7} onPress={() => chooseMoveDest({ kind: 'bin', id: b.id, name: b.name })}>
+                  <Text style={styles.addDestName} numberOfLines={1}>{b.name}</Text>
+                  <Text style={styles.addDestType}>Bin</Text>
+                </TouchableOpacity>
+              ))}
+              {storageLocations.filter((l) => !l.is_external).map((l) => (
+                <TouchableOpacity key={l.id} style={styles.addDestRow} activeOpacity={0.7} onPress={() => chooseMoveDest({ kind: 'location', id: l.id, name: l.name })}>
+                  <Text style={styles.addDestName} numberOfLines={1}>{l.name}</Text>
+                  <Text style={styles.addDestType}>Alt Cellar</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={[styles.addDestRow, { borderBottomWidth: 0 }]} activeOpacity={0.7} onPress={() => chooseMoveDest({ kind: 'list', id: null, name: 'your Full Cellar List' })}>
+                <Text style={[styles.addDestName, { color: colors.gold }]}>Full Cellar List</Text>
+                <Text style={styles.addDestType}>Unplaced</Text>
+              </TouchableOpacity>
+            </ScrollView>
+            <TouchableOpacity style={styles.cnCancel} onPress={() => setMovePickerOpen(false)}>
+              <Text style={styles.cnDeleteText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Move Bottles → how many? */}
+      <Modal visible={!!moveDest} transparent animationType="fade" onRequestClose={() => setMoveDest(null)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.cnOverlay}>
+          <View style={styles.cnSheet}>
+            <Text style={styles.cnTitle}>How many bottles?</Text>
+            <Text style={[styles.cnBody, { marginTop: spacing.xs }]}>How many bottles of {wine.wine_name || wine.producer} to move to {moveDest?.name}? You have {movableHomeBottles()} at home.</Text>
+            <TextInput
+              style={styles.cnInput}
+              value={moveCount}
+              onChangeText={(t) => setMoveCount(t.replace(/[^0-9]/g, '').slice(0, 3))}
+              keyboardType="number-pad"
+              autoFocus
+              selectTextOnFocus
+            />
+            <TouchableOpacity style={styles.cnSaveBtn} onPress={() => moveDest && void confirmMove(moveDest, parseInt(moveCount, 10) || 1)} disabled={moving} activeOpacity={0.85}>
+              <Text style={styles.cnSaveText}>{moving ? 'Moving…' : `Move to ${moveDest?.name ?? ''}`}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cnCancel} onPress={() => setMoveDest(null)}>
+              <Text style={styles.cnDeleteText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Add Bottles — "Add <wine> to Your Cellar": every home storage location
           (external cellars excluded: bottles only ever move OUT of them), a new
@@ -3602,7 +3730,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   // Bottles in My Cellar commands — one point larger than other stat actions.
-  cellarCommand: { fontSize: 13 },
+  // Same size as the storage location names above (wcRowText).
+  cellarCommand: { fontSize: 14.5, marginTop: 6 },
+  cellarCommandRule: { height: 1, backgroundColor: 'rgba(255,255,255,0.18)', marginTop: 6, marginBottom: 2 },
   // Informational (non-tappable) placement note — muted italic.
   statActionMuted: {
     fontSize: 12,
