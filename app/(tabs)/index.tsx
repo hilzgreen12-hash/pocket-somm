@@ -7,6 +7,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 // the page scroll instead of fighting it.
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { router, useFocusEffect } from 'expo-router';
+import { useShareIntentContext } from 'expo-share-intent';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../src/components/AppAlert';
@@ -401,7 +402,12 @@ export default function ScanLandingScreen() {
     if (!(await ensureMediaPermission('library'))) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
+    await scanLabelFromUri(result.assets[0].uri);
+  }
+
+  // Read a label photo and open its Wine Intel — shared by "upload instead" and
+  // images shared into Vinster from Photos / a screenshot (share sheet).
+  async function scanLabelFromUri(uri: string) {
     const backTo = encodeURIComponent('/(tabs)');
     if (!(await ensureConnectionForUpload())) return;
     setScanningLabel(true);
@@ -448,6 +454,22 @@ export default function ScanLandingScreen() {
       router.push(`/label/confirm?context=intel&via=upload&backTo=${backTo}`);
     }
   }
+
+  // A label photo or screenshot shared to Vinster from the phone's share sheet:
+  // generate its Wine Intel straight away (same path as "upload instead").
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  const sharedHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hasShareIntent) return;
+    const file = shareIntent?.files?.find((f) => (f.mimeType ?? '').startsWith('image/')) ?? shareIntent?.files?.[0];
+    const path = file?.path;
+    resetShareIntent();
+    if (!path || sharedHandledRef.current === path) return;
+    sharedHandledRef.current = path;
+    const uri = path.startsWith('file://') || path.startsWith('content://') ? path : `file://${path}`;
+    void scanLabelFromUri(uri);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasShareIntent, shareIntent]);
 
   // User-arranged order of the Home carousels (saved per device).
   const [homeOrder, setHomeOrder] = useState<string[]>(HOME_SECTION_DEFAULT);

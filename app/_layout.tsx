@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { ShareIntentProvider } from 'expo-share-intent';
 import { View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -151,6 +152,9 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
+    // Share sheet → Vinster (a label photo / screenshot): read on Home, which
+    // generates its Wine Intel. Must wrap everything (expo-share-intent).
+    <ShareIntentProvider>
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
       <KeyboardProvider>
@@ -240,5 +244,6 @@ export default function RootLayout() {
       </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+    </ShareIntentProvider>
   );
 }
