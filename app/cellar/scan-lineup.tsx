@@ -475,6 +475,7 @@ export default function ScanLineupScreen() {
           await updateWine.mutateAsync({ id: match.id, updates: { quantity: (match.quantity ?? 0) + addedSoFar + slots.length } });
         } else {
           const saved = await addWine.mutateAsync({
+            priceEstimate: 'market',
             user_id: userId,
             wine_name: b.wineName || b.producer,
             producer: b.producer,
@@ -589,6 +590,7 @@ export default function ScanLineupScreen() {
           }
         }
         const saved = await addWine.mutateAsync({
+          priceEstimate: 'market',
           user_id: userId,
           wine_name: b.wineName || b.producer,
           producer: b.producer,

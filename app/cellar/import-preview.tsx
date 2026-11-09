@@ -53,6 +53,7 @@ export default function ImportPreviewScreen() {
       await Promise.all(
         wines.map((w) =>
           addWine.mutateAsync({
+            priceEstimate: 'market',
             user_id: session.user.id,
             wine_name: w.wine_name,
             producer: w.producer,

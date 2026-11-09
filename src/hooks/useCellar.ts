@@ -4,6 +4,7 @@ import { getCellarWines, getWishListWines, addCellarWine, updateCellarWine, dele
 import { fetchAutoLabelUri } from '../api/label';
 import { uploadLabelImage } from '../api/labelPhotos';
 import type { CellarWine } from '../types/wine';
+import { estimatePurchasePriceOnAdd, type PurchaseEstimateMode } from '../services/purchaseEstimate';
 
 // Review fields that should trigger a community-feed publish when they
 // change. Keeping this list tight so generic edits (purchase price,
@@ -40,8 +41,19 @@ export function useCellar() {
   // background from the Full Cellar List (see services/maturityBackfill) so the
   // maturity filter still works without slowing down the add.
   const addWine = useMutation({
-    mutationFn: async (wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>) => {
+    // `priceEstimate`: how to fill a missing purchase price with the market
+    // value on the day the wine is added (default 'full'; multi-wine adds pass
+    // 'market' so a long list doesn't fire a Vinster estimate per bottle).
+    mutationFn: async (input: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'> & { priceEstimate?: PurchaseEstimateMode }) => {
+      const { priceEstimate = 'full', ...wine } = input;
       const saved = await addCellarWine(wine);
+      if (saved?.id && saved.purchase_price == null && !saved.is_wishlist && !saved.archived_at) {
+        const prefs = qc.getQueryData<{ defaultCurrency?: string | null } | null>(['preferences', userId]);
+        const currency = prefs?.defaultCurrency ?? saved.estimated_value_currency ?? 'GBP';
+        void estimatePurchasePriceOnAdd(saved, currency, priceEstimate)
+          .then((done) => { if (done) qc.invalidateQueries({ queryKey: ['cellar', userId] }); })
+          .catch(() => { /* best-effort: the card can still estimate on demand */ });
+      }
       // Best-effort: give an imageless, non-wishlist wine a web label thumbnail so
       // it never shows as a blank tile. Fire-and-forget — never blocks the add;
       // any failure is silently ignored.

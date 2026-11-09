@@ -1428,6 +1428,8 @@ export default function CellarWineDetail() {
         id: wine!.id,
         updates: {
           purchase_price: parsed,
+          // The user's own figure now, not Vinster's estimate (dated today).
+          purchase_price_estimated: false,
           // Stamp the user's current currency only on first entry; preserve
           // existing currency on subsequent edits so historical prices stay
           // in their original currency.
@@ -1604,8 +1606,8 @@ export default function CellarWineDetail() {
           // hasn't entered one — never clobber a real price they've recorded.
           purchase_price: wine.purchase_price ?? v.estimatedValue ?? null,
           purchase_price_currency: wine.purchase_price != null ? wine.purchase_price_currency : (v.currency ?? null),
-          // A seeded price is Vinster's estimate (dated today), not the user's.
-          ...(wine.purchase_price == null && v.estimatedValue != null ? { purchase_price_estimated: true, purchase_price_at: new Date().toISOString() } : {}),
+          // A seeded price is Vinster's estimate, dated the day the wine was cellared.
+          ...(wine.purchase_price == null && v.estimatedValue != null ? { purchase_price_estimated: true, purchase_price_at: wine.date_received ?? wine.created_at } : {}),
         },
       });
       // Whether intel actually came back — used to decide if the "couldn't
@@ -2370,7 +2372,8 @@ export default function CellarWineDetail() {
                       {wine.purchase_price_estimated && wine.estimated_value_source ? (
                         <Text style={styles.wcSmall}>{wine.estimated_value_source === 'wine-searcher' ? 'Wine-Searcher' : 'Vinster estimate'}</Text>
                       ) : null}
-                      {(wine.purchase_price_at ?? cellaredOn) ? <Text style={styles.wcSmall}>{fmtDay(wine.purchase_price_at ?? cellaredOn)}</Text> : null}
+                      {/* Estimate → the day the wine was cellared; a price the user entered → the day they entered it. */}
+                      {(wine.purchase_price_estimated ? cellaredOn : (wine.purchase_price_at ?? cellaredOn)) ? <Text style={styles.wcSmall}>{fmtDay(wine.purchase_price_estimated ? cellaredOn : (wine.purchase_price_at ?? cellaredOn))}</Text> : null}
                       <Text style={styles.wcLinkSmall}>Edit</Text>
                     </TouchableOpacity>
                   ) : (
