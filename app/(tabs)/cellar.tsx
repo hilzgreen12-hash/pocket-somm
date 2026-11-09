@@ -195,6 +195,10 @@ export default function CellarTab() {
         <TouchableOpacity style={[styles.buttonVivino, { marginTop: spacing.xs }]} onPress={() => requireAuth(openExportMenu)} activeOpacity={0.85}>
           <Text style={styles.buttonVivinoText}>Export Cellar</Text>
         </TouchableOpacity>
+        {/* Share Cellar — invite someone into this cellar (moved here from You). */}
+        <TouchableOpacity style={[styles.buttonVivino, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/profile/share-cellar' as any))} activeOpacity={0.85}>
+          <Text style={styles.buttonVivinoText}>Share Cellar</Text>
+        </TouchableOpacity>
       </View>
 
       {/* "Archive a Lineup" and "Your Lineups" now live on the Scan tab. */}
