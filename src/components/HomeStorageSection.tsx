@@ -19,7 +19,9 @@ import { fonts } from '../constants/fonts';
 import { fontsSpectral } from '../constants/fonts';
 import type { WineRack } from '../types/wine';
 
-const TILE_W = 152; // storageCard width
+// Same 220×165 tile size as the app's other carousels.
+const TILE_W = 220;
+const TILE_H = 165;
 
 function bottleLabel(n: number) {
   return n === 0 ? 'Empty' : `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
@@ -315,10 +317,16 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
 
   return (
     <View>
-      <Text style={styles.sectionHeader}>Your Wines At Home</Text>
-      <Text style={styles.intro}>
-        Replicate your home wine storage in Vinster. Add a Fridge, Rack, Bin or Alternative location (In the shed, under the bed…) and populate it with thumbnails of your wines.
-      </Text>
+      {/* Tap the title for the how-to; the sub-header stays short. */}
+      <TouchableOpacity
+        onPress={() => showAlert({ title: 'Your Wines At Home', body: 'Add a Fridge, Rack, Bin or Alternative location (In the shed, under the bed…) and populate it with thumbnails of your wines.' })}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityHint="Explains Your Wines At Home"
+      >
+        <Text style={styles.sectionHeader}>Your Wines At Home</Text>
+      </TouchableOpacity>
+      <Text style={styles.intro}>Replicate your home wine storage in Vinster.</Text>
 
       {hasStorage && (
         <>
@@ -426,16 +434,16 @@ const styles = StyleSheet.create({
   carouselScroll: { marginTop: 0 },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
-  storageCard: { width: 152, height: 108, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between', overflow: 'hidden' },
+  storageCard: { width: TILE_W, height: TILE_H, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between', overflow: 'hidden' },
   // Last-added wine label filling the tile, under a dark scrim for legibility.
-  cardBg: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: 152, height: 108 },
-  collage: { position: 'absolute', left: 0, top: 0, width: 152, height: 108, flexDirection: 'row', flexWrap: 'wrap', opacity: 0.55 },
-  collageCell: { width: 76, height: 54 },
+  cardBg: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: TILE_W, height: TILE_H },
+  collage: { position: 'absolute', left: 0, top: 0, width: TILE_W, height: TILE_H, flexDirection: 'row', flexWrap: 'wrap', opacity: 0.55 },
+  collageCell: { width: TILE_W / 2, height: TILE_H / 2 },
   cardScrim: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
   storageCardType: { fontSize: 11, fontFamily: fontsSpectral.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
   storageCardName: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
   storageCardCount: { fontSize: 13, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
-  addTile: { width: 152, height: 108, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  addTile: { width: TILE_W, height: TILE_H, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   addTilePlus: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   // Rename-location modal.
   renameBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },

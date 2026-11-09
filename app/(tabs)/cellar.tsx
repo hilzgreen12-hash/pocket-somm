@@ -168,8 +168,12 @@ export default function CellarTab() {
       {/* 18 above (actionRow.marginBottom) + rule + 18 below — matches the Home tab. */}
       <View style={[styles.divider, styles.voiceDivider]} />
 
-      {/* Your Cellar List (the full list) and Your Cellar Statistics. */}
-      <View style={styles.section}>
+      {/* Your Wines At Home — the home-storage carousel, embedded here (replaces
+          the old standalone Home Wine Storage page). */}
+      <HomeStorageSection requireAuth={requireAuth} />
+
+      {/* Your Cellar List, Statistics and Archive — below the home-storage carousel. */}
+      <View style={[styles.section, { marginTop: spacing.sm }]}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
           <Text style={styles.buttonText}>Your Cellar List</Text>
         </TouchableOpacity>
@@ -180,12 +184,6 @@ export default function CellarTab() {
           <Text style={styles.buttonText}>Your Cellar Archive</Text>
         </TouchableOpacity>
       </View>
-
-      <View style={styles.divider} />
-
-      {/* Your Wines At Home — the home-storage carousel, embedded here (replaces
-          the old standalone Home Wine Storage page). */}
-      <HomeStorageSection requireAuth={requireAuth} />
 
       {/* Import / Export the whole cellar — a full-width gold rule beneath the
           carousel's swipe hint, then the two gold buttons. */}
