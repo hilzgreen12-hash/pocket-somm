@@ -72,26 +72,14 @@ export default function ScanTab() {
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Your Wine Reviews</Text>
       </View>
-      <View style={styles.carouselHead}>
-        <Text style={styles.lineupHint}>Latest first · Swipe to view →</Text>
-        <TouchableOpacity onPress={() => requireAccount(() => router.push('/wines/chosen'))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.viewAll}>View All →</Text>
-        </TouchableOpacity>
-      </View>
-      <WineReviewsCarousel />
+      <WineReviewsCarousel onViewAll={() => requireAccount(() => router.push('/wines/chosen'))} />
 
       <View style={styles.divider} />
 
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Your Restaurant Reviews</Text>
       </View>
-      <View style={styles.carouselHead}>
-        <Text style={styles.lineupHint}>Latest first · Swipe to view →</Text>
-        <TouchableOpacity onPress={() => requireAccount(() => router.push('/restaurants/reviews'))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.viewAll}>View All →</Text>
-        </TouchableOpacity>
-      </View>
-      <RestaurantReviewsCarousel />
+      <RestaurantReviewsCarousel onViewAll={() => requireAccount(() => router.push('/restaurants/reviews'))} />
 
       <View style={styles.divider} />
 
@@ -101,13 +89,7 @@ export default function ScanTab() {
           A record of your most epic wine exploits.
         </Text>
       </View>
-      <View style={styles.carouselHead}>
-        <Text style={styles.lineupHint}>Latest first · Swipe to view →</Text>
-        <TouchableOpacity onPress={() => requireAccount(() => router.push('/cellar/lineups'))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.viewAll}>View All →</Text>
-        </TouchableOpacity>
-      </View>
-      <LineupsCarousel requireAccount={requireAccount} max={8} showAdd={false} />
+      <LineupsCarousel requireAccount={requireAccount} max={8} showAdd={false} onViewAll={() => requireAccount(() => router.push('/cellar/lineups'))} />
 
       <SignInPromptModal
         visible={signInPromptVisible}
@@ -129,11 +111,6 @@ const styles = StyleSheet.create({
   // "+ Add" pinned to the top-right of the title row so the title stays centred.
   addTopRight: { position: 'absolute', right: spacing.xl, top: 0, bottom: 0, justifyContent: 'center' },
   addTopRightText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  // Sort/swipe caption — left-indented, above the carousel (beneath the separator).
-  lineupHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'left' },
-  // Caption left, gold "View All →" right, above each carousel.
-  carouselHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
-  viewAll: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },

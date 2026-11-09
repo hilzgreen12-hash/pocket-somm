@@ -32,7 +32,7 @@ function cellarHasReview(w: CellarWine): boolean {
 
 type WineItem = { key: string; producer: string | null; wineName: string | null; vintage: string | null; date: string; score: number | null; photo: string | null; open: () => void };
 
-function useWineReviewItems(): { items: WineItem[]; loading: boolean } {
+function useWineReviewItems(): { items: WineItem[]; loading: boolean; wineCount: number; reviewCount: number } {
   const { chosenWines, isLoading } = useChosenWines();
   const { wines } = useCellar();
   const { wines: archived } = useArchive();
@@ -64,7 +64,14 @@ function useWineReviewItems(): { items: WineItem[]; loading: boolean } {
     });
   }
   items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  return { items: items.slice(0, MAX), loading: isLoading };
+  // Stats bar: one card per wine reviewed; reviews = every dated entry.
+  let reviewCount = reviewed.length;
+  for (const it of items) {
+    if (!it.key.startsWith('w-')) continue;
+    const w = [...wines, ...archived].find((x) => `w-${x.id}` === it.key) as any;
+    reviewCount += Array.isArray(w?.review_entries) && w.review_entries.length ? w.review_entries.length : 1;
+  }
+  return { items: items.slice(0, MAX), loading: isLoading, wineCount: items.length, reviewCount };
 }
 
 const WINE_EXAMPLES: PlaceholderCard[] = [
@@ -75,10 +82,26 @@ const RESTAURANT_EXAMPLES: PlaceholderCard[] = [
   { kind: 'image', uri: RESTAURANT_IMG, title: 'Your Restaurant Review', stamp: '18 Dec 2029 · London', overlay: 'Your restaurant reviews appear here as you use Vinster' },
 ];
 
-export function WineReviewsCarousel() {
-  const { items, loading } = useWineReviewItems();
+// Gold stats bar under each Review-tab carousel title — mirrors Your Cookbook's.
+export function ReviewStatsBar({ text, onViewAll }: { text: string; onViewAll: () => void }) {
+  return (
+    <>
+      <TouchableOpacity style={styles.statsRow} onPress={onViewAll} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+        <Text style={styles.statsText}>{text} · View All →</Text>
+      </TouchableOpacity>
+      <View style={styles.statsSep} />
+    </>
+  );
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+export function WineReviewsCarousel({ onViewAll }: { onViewAll: () => void }) {
+  const { items, loading, wineCount, reviewCount } = useWineReviewItems();
   if (loading) return <View style={styles.loading}><ActivityIndicator color={colors.gold} /></View>;
   return (
+    <>
+    <ReviewStatsBar text={`${plural(wineCount, 'Wine', 'Wines')} · ${plural(reviewCount, 'Review', 'Reviews')}`} onViewAll={onViewAll} />
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {items.map((it) => (
         <TouchableOpacity key={it.key} style={styles.card} onPress={it.open} activeOpacity={0.85}>
@@ -95,18 +118,22 @@ export function WineReviewsCarousel() {
       ))}
       {items.length === 0 ? WINE_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />) : null}
     </ScrollView>
+    </>
   );
 }
 
-export function RestaurantReviewsCarousel() {
+export function RestaurantReviewsCarousel({ onViewAll }: { onViewAll: () => void }) {
   const { archive, archiveLoading } = useScanHistory();
   if (archiveLoading) return <View style={styles.loading}><ActivityIndicator color={colors.gold} /></View>;
   // Same rule as Your Restaurant Reviews: a visit with a named restaurant or a note.
-  const items = archive
+  const all = archive
     .filter((a) => (a.restaurantName && a.restaurantName.trim()) || (a.restaurantNote && a.restaurantNote.trim()))
-    .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime())
-    .slice(0, MAX);
+    .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
+  const items = all.slice(0, MAX);
+  const restaurantCount = new Set(all.map((a) => (a.restaurantName ?? '').trim().toLowerCase()).filter(Boolean)).size;
   return (
+    <>
+    <ReviewStatsBar text={`${plural(restaurantCount, 'Restaurant', 'Restaurants')} · ${plural(all.length, 'Review', 'Reviews')}`} onViewAll={onViewAll} />
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {items.map((a) => (
         <TouchableOpacity key={a.id} style={styles.card} onPress={() => router.push(`/restaurants/reviews?openSession=${a.id}` as any)} activeOpacity={0.85}>
@@ -121,6 +148,7 @@ export function RestaurantReviewsCarousel() {
       ))}
       {items.length === 0 ? RESTAURANT_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />) : null}
     </ScrollView>
+    </>
   );
 }
 
@@ -132,4 +160,8 @@ const styles = StyleSheet.create({
   image: { width: 220, height: 165 },
   name: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, marginTop: 6, letterSpacing: 0.3 },
   stamp: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginTop: 2 },
+  // Same as Your Cookbook's stats bar.
+  statsRow: { marginTop: spacing.xs, paddingVertical: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.xl },
+  statsText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
+  statsSep: { height: 1, backgroundColor: colors.divider, marginTop: spacing.sm, marginBottom: spacing.md },
 });

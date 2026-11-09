@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { listLineupArchives, deleteLineupArchive, type LineupArchive } from '../api/lineups';
 import { showAlert } from './AppAlert';
 import { LineupThumb } from './LineupThumb';
+import { ReviewStatsBar } from './ReviewCarousels';
 import { PlaceholderCardView, type PlaceholderCard, placeholderLabelImages } from './ExamplePlaceholder';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -57,7 +58,7 @@ function LineupCard({ item }: { item: LineupArchive }) {
 // "Your Lineups" — the Archive-a-Night thumbnail carousel, with an "Add a
 // lineup" tile at the end. Self-contained (loads the user's lineups); pass
 // requireAccount to gate the add action behind sign-in on account-only tabs.
-export function LineupsCarousel({ requireAccount, max, showAdd = true }: { requireAccount?: (action: () => void) => void; max?: number; showAdd?: boolean }) {
+export function LineupsCarousel({ requireAccount, max, showAdd = true, onViewAll }: { requireAccount?: (action: () => void) => void; max?: number; showAdd?: boolean; onViewAll?: () => void }) {
   const { session } = useAuth();
   const userId = session?.user.id;
   const gate = requireAccount ?? ((a: () => void) => a());
@@ -75,8 +76,12 @@ export function LineupsCarousel({ requireAccount, max, showAdd = true }: { requi
     router.push(upload ? '/cellar/archive-night?upload=1' : '/cellar/archive-night');
   }
 
+  const bottleCount = lineups.reduce((n, l) => n + (l.bottle_count ?? l.wines?.length ?? 0), 0);
   return (
     <>
+      {onViewAll ? (
+        <ReviewStatsBar text={`${lineups.length} ${lineups.length === 1 ? 'Lineup' : 'Lineups'} · ${bottleCount} ${bottleCount === 1 ? 'Bottle' : 'Bottles'}`} onViewAll={onViewAll} />
+      ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
         {(max ? lineups.slice(0, max) : lineups).map((l) => <LineupCard key={l.id} item={l} />)}
         {/* Empty state → three faded bottle placeholders (like the scan carousel). */}
