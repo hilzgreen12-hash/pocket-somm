@@ -2194,7 +2194,12 @@ export default function LabelResultsScreen() {
       lines.push({ key: 'home', text: `${cap(b(home))} ${where}`, link: 'View', onPress: openCellar });
     }
     for (const [name, n] of ext) lines.push({ key: `ext-${name}`, text: `${cap(b(n))} in your external cellar, ${name}`, link: 'View', onPress: openCellar });
-    if (archived > 0) lines.push({ key: 'archive', text: `You have ${b(archived)} in your archive`, link: 'View', onPress: () => router.push('/cellar/archive' as any) });
+    if (archived > 0) lines.push({ key: 'archive', text: `You have ${b(archived)} in your archive`, link: 'View', onPress: () => {
+      // The most recently archived entry's wine card (its Cellar tab lists the
+      // whole archive history), not the archive search screen.
+      const latest = [...archiveMatches].sort((a, b) => new Date(b.archived_at ?? 0).getTime() - new Date(a.archived_at ?? 0).getTime())[0];
+      if (latest) router.push(`/cellar/${latest.id}` as any);
+    } });
     if (latestIntelReview) {
       const more = intelReviews.length - 1;
       lines.push({ key: 'review', text: `Reviewed on ${fmtIntelDay(latestIntelReview.date)}${reviewPlaceLabel(latestIntelReview.place) ? `, at ${reviewPlaceLabel(latestIntelReview.place)}` : ''}${more > 0 ? ` (and ${more} more ${more === 1 ? 'time' : 'times'})` : ''}`, link: 'View review', onPress: latestIntelReview.open });
