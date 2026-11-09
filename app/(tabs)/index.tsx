@@ -533,7 +533,7 @@ export default function ScanLandingScreen() {
                         </View>
                         <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search a Wine</Text></View></View>
                       </TouchableOpacity>
-                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Market Intel</Text>
+                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
                       <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Powered by Wine Searcher</Text>
                     </View>
 
@@ -553,7 +553,7 @@ export default function ScanLandingScreen() {
                         </TouchableOpacity>
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
-                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Review &amp; Cellar</Text>
+                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Powered by Wine Searcher</Text>
                     </View>
 
                     {/* Scan a Wine List → recommendations */}
