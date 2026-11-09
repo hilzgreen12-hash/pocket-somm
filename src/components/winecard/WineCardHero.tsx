@@ -1,4 +1,4 @@
-import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { useLabelImageState } from '../../hooks/useLabelImageUrl';
 import { colors, spacing } from '../../constants/theme';
 import { fonts } from '../../constants/fonts';
@@ -27,15 +27,21 @@ type Props = {
   busy?: boolean;
 };
 
-const HERO_H = 400;
+// Hero height scales with the screen width so a typical portrait label fills
+// most of the width (labels are taller than wide; a fixed 400pt box left wide
+// empty sides). The photo runs from under the top bar down into the title fade.
+function heroHeight(width: number): number {
+  return Math.round(Math.min(620, Math.max(400, width * 1.4)));
+}
 const DARK = '#3E2120';
 
 export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress, onPhotoLongPress, onTitlePress, badge, uri: uriProp, placeholder, rightAction, busy }: Props) {
   const stored = useLabelImageState(uriProp ? null : path);
   const uri = uriProp ?? stored.uri;
   const pending = uriProp ? false : stored.pending;
+  const { width } = useWindowDimensions();
   return (
-    <View style={styles.hero}>
+    <View style={[styles.hero, { height: heroHeight(width) }]}>
       <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onPhotoPress} onLongPress={onPhotoLongPress} delayLongPress={350} activeOpacity={0.9} accessibilityLabel={path ? 'View label photo' : 'Add a label photo'}>
         {uri ? (
           <>
@@ -81,8 +87,8 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
 }
 
 const styles = StyleSheet.create({
-  hero: { height: HERO_H, backgroundColor: DARK, overflow: 'hidden' },
-  photo: { position: 'absolute', left: 0, right: 0, top: 86, bottom: 70 },
+  hero: { backgroundColor: DARK, overflow: 'hidden' },
+  photo: { position: 'absolute', left: spacing.md, right: spacing.md, top: 76, bottom: 40 },
   busy: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(62,33,32,0.35)' },
   busyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.text },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
