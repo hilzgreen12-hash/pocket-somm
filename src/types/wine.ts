@@ -274,6 +274,8 @@ export interface WineServingSuggestion {
   glasswareReason?: string;
   aperitif?: { style?: string; reason?: string };
   digestif?: { style?: string; reason?: string };
+  // Serve tab → Classic Pairing Ingredients (fetched separately, saved here).
+  pairingIngredients?: { name: string; type: 'protein' | 'herb' | 'vegetable' }[];
 }
 export interface WineMarketVintageNote {
   vintage?: string;

@@ -59,6 +59,25 @@ Return ONLY valid JSON:
 Exactly three styles, best first, giving the user a real choice (different price points or characters). Styles only — do not name individual producers or bottles. Price ranges must be realistic for ${currency} retail today. Raw JSON only. No markdown.`;
 }
 
+// "Classic Pairing Ingredients" (Serve tab): up to six ingredients that pair
+// classically with this wine — a mix of proteins, herbs & spices and vegetables.
+function buildIngredientsPrompt(w: { producer?: string; wineName?: string; region?: string; vintage?: string; grape?: string; style?: string }): string {
+  const identity = [w.producer, w.wineName, w.vintage].filter(Boolean).join(' ')
+    + [w.region ? `, ${w.region}` : '', w.grape ? ` (${w.grape})` : '', w.style ? ` — ${w.style}` : ''].join('');
+  return `You are a world-class sommelier and chef. List the classic pairing ingredients for this specific wine.
+
+Wine: ${identity}
+
+Return ONLY valid JSON:
+{
+  "ingredients": [
+    { "name": "a single ingredient, e.g. 'Lamb', 'Rosemary', 'Porcini mushrooms'", "type": "protein" | "herb" | "vegetable" }
+  ]
+}
+
+Exactly six ingredients, best first: two proteins, two herbs or spices, two vegetables (mushrooms count as vegetables). Single ingredients, not dishes. Tailor them to THIS wine's colour, body, age and style. Raw JSON only. No markdown.`;
+}
+
 Deno.serve(async (req) => {
   try {
     const limited = await checkRateLimit(req, 'wine-serving-suggestion', HOURLY_LIMIT, DAILY_LIMIT);
@@ -68,6 +87,26 @@ Deno.serve(async (req) => {
     const { producer, wineName, region, vintage, grape, style, decantTime } = body;
     if (typeof producer !== 'string' && typeof wineName !== 'string') {
       return new Response(JSON.stringify({ error: 'wine identity required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (body.mode === 'ingredients') {
+      const r = await client.messages.create({
+        system: HOUSE_RULES,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: buildIngredientsPrompt({ producer, wineName, region, vintage, grape, style }) }],
+      });
+      const t = r.content.find((b) => b.type === 'text')?.text ?? '';
+      const m = t.match(/\{[\s\S]*\}/);
+      const parsed = m ? JSON.parse(m[0]) : null;
+      const types = new Set(['protein', 'herb', 'vegetable']);
+      const ingredients = Array.isArray(parsed?.ingredients)
+        ? parsed.ingredients
+            .filter((x: any) => typeof x?.name === 'string' && x.name.trim())
+            .map((x: any) => ({ name: String(x.name).trim().slice(0, 40), type: types.has(x.type) ? x.type : 'vegetable' }))
+            .slice(0, 6)
+        : [];
+      return new Response(JSON.stringify({ ingredients }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (body.mode === 'market') {

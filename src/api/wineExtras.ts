@@ -23,6 +23,15 @@ export async function generateServingSuggestion(w: CellarWine, decantTime?: stri
   return data;
 }
 
+// Serve tab → "Classic Pairing Ingredients": up to six (proteins, herbs &
+// spices, vegetables) that pair classically with this wine.
+export type PairingIngredient = { name: string; type: 'protein' | 'herb' | 'vegetable' };
+export async function generatePairingIngredients(w: CellarWine): Promise<PairingIngredient[]> {
+  const data = await invokeResilient('wine-serving-suggestion', { ...identity(w), mode: 'ingredients' }) as { ingredients?: PairingIngredient[]; error?: string };
+  if (data?.error) throw new Error(data.error);
+  return (data?.ingredients ?? []).slice(0, 6);
+}
+
 // "Wider market" for the Serve tab: three styles to buy for before/after this
 // wine (each with a reason and price range), when the cellar has nothing fit.
 export type MarketStyle = { style: string; reason: string; priceRange: string };

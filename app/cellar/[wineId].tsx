@@ -41,7 +41,8 @@ import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBo
 import { releaseHomeBottles } from '../../src/services/moveBottles';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals, stampPurchasePriceDate } from '../../src/api/cellar';
-import { generateServingSuggestion, generateMarketVintage, generateRarity, generateVintageVerdict, type VintageVerdictAI } from '../../src/api/wineExtras';
+import { generateServingSuggestion, generateMarketVintage, generateRarity, generateVintageVerdict, generatePairingIngredients, type VintageVerdictAI, type PairingIngredient } from '../../src/api/wineExtras';
+import { PairingIngredientsCard } from '../../src/components/winecard/PairingIngredientsCard';
 import { wineNameKey, wineQueryAltName } from '../../src/utils/wineIdentity';
 import { sameWineIdentity } from '../../src/utils/wineMatch';
 import { publishCommunityReview } from '../../src/api/community';
@@ -433,6 +434,10 @@ export default function CellarWineDetail() {
   // Vinster's recognition gate said it doesn't know this wine — honest line, no note.
   const [marketUnknown, setMarketUnknown] = useState(false);
   const [generatingServing, setGeneratingServing] = useState(false);
+  // Serve tab → Classic Pairing Ingredients (saved inside serving_suggestion).
+  const [ingredients, setIngredients] = useState<PairingIngredient[] | null>(null);
+  const [ingredientsLoading, setIngredientsLoading] = useState(false);
+  const ingredientsForRef = useRef<string | null>(null);
   const [generatingMarket, setGeneratingMarket] = useState(false);
   // Wine card tabs. Only Overview is built on open; Market and Serve generate the
   // first time they're opened, are saved on the wine, and reopen instantly after
@@ -981,6 +986,29 @@ export default function CellarWineDetail() {
     setArchiveNoteOpen(true);
   }
 
+  // Serve tab → Classic Pairing Ingredients: fetched once per wine, then saved
+  // into serving_suggestion (when it exists) so it reopens instantly.
+  useEffect(() => {
+    if (!wine || cardTab !== 'somm') return;
+    const saved = wine.serving_suggestion?.pairingIngredients;
+    if (saved?.length) { setIngredients(saved); return; }
+    if (ingredientsForRef.current === wine.id) return;
+    ingredientsForRef.current = wine.id;
+    setIngredientsLoading(true);
+    generatePairingIngredients(wine)
+      .then((list) => {
+        if (!list.length) return;
+        setIngredients(list);
+        const now = latestWineRef.current?.serving_suggestion;
+        if (now && latestWineRef.current?.id === wine.id) {
+          void updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...now, pairingIngredients: list } } }).catch(() => {});
+        }
+      })
+      .catch(() => { ingredientsForRef.current = null; })
+      .finally(() => setIngredientsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardTab, wine?.id, !!wine?.serving_suggestion]);
+
   // On-demand Serving Suggestions — generate once, cache on the wine. Never part
   // of the auto wine-card generation or "update intel", so it doesn't slow those.
   async function handleGenerateServing() {
@@ -988,7 +1016,9 @@ export default function CellarWineDetail() {
     setGeneratingServing(true);
     try {
       const data = await generateServingSuggestion(wine);
-      await updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: data } });
+      // Keep the pairing ingredients already found for this wine.
+      const keep = wine.serving_suggestion?.pairingIngredients ?? ingredients ?? undefined;
+      await updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...data, ...(keep ? { pairingIngredients: keep } : {}) } } });
     } catch {
       showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
     } finally {
@@ -2588,6 +2618,8 @@ export default function CellarWineDetail() {
               </View>
               <Text style={styles.wcChevron}>›</Text>
             </TouchableOpacity>
+
+            <PairingIngredientsCard ingredients={ingredients ?? serving?.pairingIngredients ?? null} loading={ingredientsLoading} />
 
             <Text style={[styles.wcH2, { marginTop: spacing.xs }]}>Serving Suggestions</Text>
             {serving ? (

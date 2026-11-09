@@ -45,7 +45,8 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
-import { generateServingSuggestion, generateRarity, generateVintageVerdict, generateMarketVintage, type VintageVerdictAI } from '../../src/api/wineExtras';
+import { generateServingSuggestion, generateRarity, generateVintageVerdict, generateMarketVintage, generatePairingIngredients, type VintageVerdictAI, type PairingIngredient } from '../../src/api/wineExtras';
+import { PairingIngredientsCard } from '../../src/components/winecard/PairingIngredientsCard';
 import type { WineServingSuggestion } from '../../src/types/wine';
 import { peekIntelCurrency } from '../../src/utils/localCurrency';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
@@ -335,6 +336,8 @@ export default function LabelResultsScreen() {
   const [serving, setServing] = useState<WineServingSuggestion | null>(null);
   const [servingLoading, setServingLoading] = useState(false);
   const servingTriedRef = useRef(false);
+  const [intelIngredients, setIntelIngredients] = useState<PairingIngredient[] | null>(null);
+  const [ingredientsLoading, setIngredientsLoading] = useState(false);
   async function toggleServing() {
     const next = !servingExpanded;
     setServingExpanded(next);
@@ -350,6 +353,9 @@ export default function LabelResultsScreen() {
           grape_variety: wineDetailsConfirmed.grape ?? null,
           style: wineDetailsConfirmed.style ?? null,
         } as unknown as Parameters<typeof generateServingSuggestion>[0];
+        // Classic Pairing Ingredients load alongside the serving advice.
+        setIngredientsLoading(true);
+        void generatePairingIngredients(w).then(setIntelIngredients).catch(() => {}).finally(() => setIngredientsLoading(false));
         setServing(await generateServingSuggestion(w));
       } catch { servingTriedRef.current = false; }
       finally { setServingLoading(false); }
@@ -2501,6 +2507,7 @@ export default function LabelResultsScreen() {
               </View>
               <Text style={wc.Chevron}>›</Text>
             </TouchableOpacity>
+            <PairingIngredientsCard ingredients={intelIngredients} loading={ingredientsLoading} />
             {servingLoading ? (
               <View style={wc.loadingRow}><ActivityIndicator color={colors.gold} /><Text style={wc.Small}>Thinking about how best to serve this…</Text></View>
             ) : serving ? (
