@@ -39,6 +39,7 @@ import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
+import { groupWinesByIdentity } from '../../src/utils/wineMatch';
 
 type SortMode =
   | 'recent'
@@ -384,7 +385,7 @@ export default function FullCellarListScreen() {
         // Only for wines held in an external cellar — bring them home.
         ...(externalPls.length > 0 ? [{ text: 'Move to Home Storage', onPress: () => deliverToHome(w, externalPls) }] : []),
         { text: 'View Location', onPress: () => viewWineLocation(w) },
-        { text: 'Archive Wine', onPress: () => confirmArchiveOne(w) },
+        ...(isArchiveView ? [] : [{ text: 'Archive Wine', onPress: () => confirmArchiveOne(w) }]),
         { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteOne(w) },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -522,7 +523,11 @@ export default function FullCellarListScreen() {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete (permanent)', style: 'destructive', onPress: async () => {
           setBusy(true);
-          try { await clearWineFromRacks(w.id); await deleteCellarWine(w.id); invalidateCellar(); }
+          // In the Cellar Archive one line stands for every archived entry of the wine.
+          try {
+            for (const id of (isArchiveView ? archiveGroupIdsRef.current.get(w.id) : null) ?? [w.id]) { await clearWineFromRacks(id); await deleteCellarWine(id); }
+            invalidateCellar();
+          }
           catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); }
           finally { setBusy(false); }
         } },
@@ -564,10 +569,12 @@ export default function FullCellarListScreen() {
   }
 
   function confirmDeleteSelected() {
-    const ids = [...selectedIds];
+    const ids = isArchiveView
+      ? [...selectedIds].flatMap((id) => archiveGroupIdsRef.current.get(id) ?? [id])
+      : [...selectedIds];
     if (ids.length === 0) return;
     showAlert({
-      title: `Delete ${ids.length} wine${ids.length === 1 ? '' : 's'}?`,
+      title: `Delete ${selectedIds.size} wine${selectedIds.size === 1 ? '' : 's'}?`,
       body: "Permanently remove them from your records. This can't be undone.",
       buttons: [
         { text: 'Cancel', style: 'cancel' },
@@ -701,6 +708,8 @@ export default function FullCellarListScreen() {
   // outside the archive can ever show.
   const { archived, added, add } = useLocalSearchParams<{ archived?: string; added?: string; add?: string }>();
   const isArchiveView = archived === '1';
+  // Archive view: each shown line's id → every archived row it stands for.
+  const archiveGroupIdsRef = useRef(new Map<string, string[]>());
   const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>(isArchiveView ? 'only' : 'hide');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
@@ -847,7 +856,32 @@ export default function FullCellarListScreen() {
 
   // Sort. Default ('recent') is newest-added first; the Price/Score chips
   // override with directional sorts. Nulls sort to the bottom either way.
-  const sorted = [...filtered].sort((a, b) => {
+  // Cellar Archive: one line per wine (same identity + bottle size), not one per
+  // archive event. The line is the most recently archived entry, carrying the
+  // total bottles archived, so it sorts by the wine's LAST trip to the archive;
+  // its wine card holds the full archive history.
+  const shownWines = ((): CellarWine[] => {
+    if (!isArchiveView) return filtered;
+    const byLatest = [...filtered].sort((a, b) =>
+      new Date(b.archived_at ?? b.created_at).getTime() - new Date(a.archived_at ?? a.created_at).getTime());
+    const bySize = new Map<number, CellarWine[]>();
+    for (const w of byLatest) {
+      const ml = w.bottle_size_ml ?? 750;
+      bySize.set(ml, [...(bySize.get(ml) ?? []), w]);
+    }
+    const out: CellarWine[] = [];
+    const ids = new Map<string, string[]>();
+    for (const rows of bySize.values()) {
+      for (const g of groupWinesByIdentity(rows)) {
+        out.push({ ...g.rep, quantity: g.totalQuantity });
+        ids.set(g.rep.id, g.rows.map((r) => r.id));
+      }
+    }
+    archiveGroupIdsRef.current = ids;
+    return out;
+  })();
+
+  const sorted = [...shownWines].sort((a, b) => {
     switch (sortMode) {
       case 'est_desc':   return Number(b.estimated_value ?? -1) - Number(a.estimated_value ?? -1);
       case 'est_asc':    return Number(a.estimated_value ?? Infinity) - Number(b.estimated_value ?? Infinity);
