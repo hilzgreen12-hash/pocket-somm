@@ -2150,7 +2150,8 @@ export default function CellarWineDetail() {
       lines.push({ key: 'home', text: `${t.charAt(0).toUpperCase()}${t.slice(1)}${where}`, link: 'View', onPress: toCellarTab });
     }
     for (const e of entries.filter((x) => x.isExternal)) {
-      lines.push({ key: `ext-${e.key}`, text: `You have ${b(e.quantity ?? 0)} of this in an external cellar, ${e.label}`, link: 'View', onPress: toCellarTab });
+      const t = b(e.quantity ?? 0);
+      lines.push({ key: `ext-${e.key}`, text: `${t.charAt(0).toUpperCase()}${t.slice(1)} in your external cellar, ${e.label}`, link: 'View', onPress: toCellarTab });
     }
     if (bottlesInArchive > 0) lines.push({ key: 'archive', text: `You have ${b(bottlesInArchive)} in your archive`, link: 'View', onPress: toCellarTab });
     const latest = reviews[0];
