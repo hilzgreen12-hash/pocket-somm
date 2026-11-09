@@ -15,6 +15,7 @@ import { CellarSwitcher } from '../../src/components/CellarSwitcher';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HomeStorageSection } from '../../src/components/HomeStorageSection';
 import { CellarCommandModal } from '../../src/components/CellarCommandModal';
+import { ArchivedReviewPrompt } from '../../src/components/ArchivedReviewPrompt';
 
 const CELLAR_HELP = `Your cellar, brought to life. Scan a label — or add a bottle by hand — and Vinster fills in the details for you: critic scores, tasting notes, drinking windows, and what each bottle is worth today.
 
@@ -236,6 +237,8 @@ export default function CellarTab() {
       </Modal>
 
       <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
+      {/* Nudge to review recently archived bottles (like Your Wine Reviews'). */}
+      <ArchivedReviewPrompt />
 
       <SignInPromptModal
         visible={signInPromptVisible}
