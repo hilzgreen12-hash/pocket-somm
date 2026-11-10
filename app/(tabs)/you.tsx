@@ -236,7 +236,8 @@ const styles = StyleSheet.create({
   identityLine: { fontSize: 14, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', marginBottom: spacing.sm },
   // Italic blurb under the page heading — editorial intro, stays Cormorant.
   thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
-  divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
+  // 18pt either side of every separator, app-wide.
+  divider: { height: 1, backgroundColor: colors.divider, marginVertical: 18 },
   // Header separator: 18pt from the identity line (it has 8 of its own) and 18pt below, as on Home.
   headerDivider: { height: 1, backgroundColor: colors.divider, marginTop: 10, marginBottom: 18 },
   goldLine: { height: 1, backgroundColor: colors.gold, opacity: 0.55, marginVertical: spacing.md },

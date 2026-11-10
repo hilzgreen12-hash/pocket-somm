@@ -154,7 +154,8 @@ const styles = StyleSheet.create({
   // the Reviews "Add +"). Absolute so it never shifts the centred title.
   voiceLink: { position: 'absolute', right: spacing.xl, top: -22 },
   voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
-  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  // 18pt either side of every separator, app-wide.
+  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: 18 },
   // Voice Command — centred gold pill, matching the home-storage screens.
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: 18 },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },

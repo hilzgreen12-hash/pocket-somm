@@ -118,7 +118,8 @@ const styles = StyleSheet.create({
   // Big "Community" tab title — header.
   title: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  // 18pt either side of every separator, app-wide.
+  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: 18 },
   // Header separator: 18pt from the header's last line and 18pt below, as on Home.
   headerDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: 14, marginBottom: 18 },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },

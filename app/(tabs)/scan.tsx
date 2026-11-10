@@ -111,10 +111,11 @@ const styles = StyleSheet.create({
   // "+ Add" pinned to the top-right of the title row so the title stays centred.
   addTopRight: { position: 'absolute', right: spacing.xl, top: 0, bottom: 0, justifyContent: 'center' },
   addTopRightText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  // 18pt either side of every separator, app-wide.
+  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: 18 },
   // Header separator: 18pt from the header's last line and 18pt below, as on Home.
   // Under a carousel: 18pt from the last caption line.
-  carouselDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: 18, marginBottom: spacing.lg },
+  carouselDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: 18 },
   headerDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: 14, marginBottom: 18 },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },

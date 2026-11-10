@@ -896,7 +896,7 @@ const styles = StyleSheet.create({
   // Discover carousels — section header, full-width separator, and a bleed
   // wrapper so each carousel scrolls edge-to-edge past the scroll's h-padding.
   // 18pt under the last caption line beneath the tiles (as under the header).
-  sectionSeparator: { height: 1, backgroundColor: colors.divider, marginTop: 18, marginBottom: spacing.lg },
+  sectionSeparator: { height: 1, backgroundColor: colors.divider, marginTop: 18, marginBottom: 18 },
   carouselHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.md },
   // Gold stats line under a carousel header (matches the app-wide stats bars).
   carouselStats: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginTop: -spacing.sm, marginBottom: spacing.md },
