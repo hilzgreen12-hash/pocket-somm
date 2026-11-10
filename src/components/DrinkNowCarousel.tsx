@@ -12,7 +12,7 @@ import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard, NAMED_LABELS } from './ExamplePlaceholder';
 import { wineHeaderLine } from '../utils/wineHeader';
 import type { CellarWine } from '../types/wine';
-import { colors, spacing } from '../constants/theme';
+import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { homeOnlyWines } from '../utils/homeWines';
 import { fonts } from '../constants/fonts';
 
@@ -133,21 +133,21 @@ export function DrinkNowCarousel() {
       {tiles.map(({ wine: w, badge, meta }) => (
         <TouchableOpacity key={`${w.id}-${badge}`} style={styles.card} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.85}>
           <View>
-            <WineCardThumb path={w.label_image_path} producer={w.producer} wineName={w.wine_name} fallbackText={w.wine_name} />
+            <WineCardThumb compact path={w.label_image_path} producer={w.producer} wineName={w.wine_name} fallbackText={w.wine_name} />
             <View style={styles.badge}><Text style={styles.badgeText} allowFontScaling={false}>{badge}</Text></View>
           </View>
           <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
           <Text style={styles.cardMeta} numberOfLines={1} allowFontScaling={false}>{meta}</Text>
         </TouchableOpacity>
       ))}
-      {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />)}
+      {fill.map((c, i) => <PlaceholderCardView compact key={`ph-${i}`} card={c} />)}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
-  card: { width: 220 },
+  card: { width: HOME_TILE.w },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
   // Gold-on-black pill, top-right of the thumbnail — labels which insight this is.

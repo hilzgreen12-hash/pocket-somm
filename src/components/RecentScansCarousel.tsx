@@ -12,7 +12,7 @@ import { useAttachRestaurantPhoto } from '../hooks/useAttachRestaurantPhoto';
 import { useAttachLabelPhoto } from '../hooks/useAttachLabelPhoto';
 import { showAlert } from './AppAlert';
 import { formatWineTitle } from '../utils/wineTitle';
-import { colors, spacing } from '../constants/theme';
+import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // A unified "recent scan" — either a single-bottle label→intel scan or a wine-
@@ -68,6 +68,7 @@ function RecentCard({ item }: { item: Recent }) {
         </TouchableOpacity>
       ) : (
         <WineCardThumb
+          compact
           path={item.path}
           producer={item.kind === 'label' ? item.producer : null}
           wineName={item.kind === 'label' ? item.wineName : null}
@@ -212,22 +213,22 @@ export function RecentScansCarousel() {
       {/* Stable content key (kind + timestamp + title), not the array index —
           otherwise a new scan reorders the list and React mis-associates cards. */}
       {merged.map((item) => <RecentCard key={`${item.kind}-${item.ts}-${item.title}`} item={item} />)}
-      {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />)}
+      {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} compact />)}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
-  card: { width: 220 },
-  thumb: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: spacing.sm },
+  card: { width: HOME_TILE.w },
+  thumb: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   thumbImg: { width: '100%', height: '100%' },
   thumbFallback: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
   // "+ Add Image" tile for a photo-less wine-list card.
-  addImageThumb: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  addImageThumb: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 6 },
   addImageText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
-  emptyCard: { height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', padding: spacing.md },
+  emptyCard: { height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', padding: spacing.md },
   emptyText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textAlign: 'center', lineHeight: 18 },
 });

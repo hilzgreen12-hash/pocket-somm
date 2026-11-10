@@ -43,7 +43,7 @@ import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import type { WineDetailsComplete } from '../../src/types/wine';
 import { generateVintageVerdict, type VintageVerdictAI } from '../../src/api/wineExtras';
-import { colors, spacing } from '../../src/constants/theme';
+import { HOME_TILE, colors, spacing } from '../../src/constants/theme';
 import { withBordeauxInfo } from '../../src/constants/bordeauxClassification';
 import { fonts } from '../../src/constants/fonts';
 
@@ -906,16 +906,15 @@ const styles = StyleSheet.create({
   // Search & Discover carousel — same card shape as the carousels below
   // (220×165 image, title, gold note).
   sdCarousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
-  sdCard: { width: 220 },
-  // Same framing as the tiles in the carousels below: the photo inset 6pt
-  // inside the white-edged tile, with its own rounded corners.
-  sdThumb: { width: 220, height: 165, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: 6 },
+  sdCard: { width: HOME_TILE.w },
+  // Home tile size, photo edge to edge inside a white outline.
+  sdThumb: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite },
   // Faded like the Community Musings cards: image at 55% under a dark scrim.
-  sdImage: { width: '100%', height: '100%', opacity: 0.85, borderRadius: 8 },
+  sdImage: { width: '100%', height: '100%', opacity: 0.85 },
   sdFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   // Title sits on its own dark band so the photos around it stay bright.
   sdTitleBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
-  sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap', borderRadius: 8, overflow: 'hidden' },
+  sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
   sdCollageCell: { width: '50%', height: '50%', opacity: 0.85 },
   // Small "Upload" button in the tile's bottom-right corner (the old full-width
   // bar pushed the title up, out of line with Search a Wine).
@@ -923,7 +922,7 @@ const styles = StyleSheet.create({
   sdUploadText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: '#FFFFFF', letterSpacing: 0.3 },
   // Title overlaid on the tile, centred — gold, like the Community Musings cards.
   sdTitleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  sdTitle: { fontFamily: fonts.headingSemibold, fontSize: 21, color: colors.gold, lineHeight: 26, textAlign: 'center' },
+  sdTitle: { fontFamily: fonts.headingSemibold, fontSize: 19, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   // White name + gold line beneath, matching the carousels below.
   sdName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },

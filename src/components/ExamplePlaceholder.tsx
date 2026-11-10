@@ -1,6 +1,6 @@
 import { View, Text, Image, StyleSheet, type ImageSourcePropType } from 'react-native';
 import { WineCardThumb } from './WineCardThumb';
-import { colors, spacing } from '../constants/theme';
+import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // Generic, faded stock imagery for empty-state tiles that aren't about a single
@@ -52,10 +52,11 @@ export type PlaceholderCard =
 // content" note so it never reads as real data. Carousels render their real cards
 // first, then pad with these — so a real item replaces the FIRST placeholder,
 // leaving the later placeholders intact until the carousel fills up.
-export function PlaceholderCardView({ card }: { card: PlaceholderCard }) {
+export function PlaceholderCardView({ card, compact = false }: { card: PlaceholderCard; compact?: boolean }) {
+  // compact = Home carousels: smaller tile with a white outline.
   return (
-    <View style={styles.card}>
-      <View style={styles.thumbWrap}>
+    <View style={[styles.card, compact && { width: HOME_TILE.w }]}>
+      <View style={[styles.thumbWrap, compact && styles.thumbWrapCompact]}>
         {card.kind === 'label' ? (
           <View style={styles.fadedImg}>
             <WineCardThumb producer={card.producer} wineName={card.wineName} fallbackText={card.title} resizeMode="contain" />
@@ -99,13 +100,14 @@ const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   card: { width: 220 },
   thumbWrap: { width: 220, height: 165, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface },
-  fadedImg: { width: 220, height: 165, opacity: 0.8 },
-  genericImg: { width: 220, height: 165, opacity: 0.8 },
-  collageFull: { width: 220, height: 165 },
-  collageGrid: { width: 220, height: 165, flexDirection: 'row', flexWrap: 'wrap' },
-  collageCell: { width: 110, height: 82.5 },
+  thumbWrapCompact: { width: HOME_TILE.w, height: HOME_TILE.h, borderWidth: 1, borderColor: colors.borderWhite },
+  fadedImg: { width: '100%', height: '100%', opacity: 0.8 },
+  genericImg: { width: '100%', height: '100%', opacity: 0.8 },
+  collageFull: { width: '100%', height: '100%' },
+  collageGrid: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
+  collageCell: { width: '50%', height: '50%' },
   lineupRow: { flexDirection: 'row' },
-  lineupCell: { flex: 1, height: 165 },
+  lineupCell: { flex: 1, height: '100%' },
   // Placeholder message sits on its own dark band so the label art around it stays bright.
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: spacing.md },
   overlayBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },

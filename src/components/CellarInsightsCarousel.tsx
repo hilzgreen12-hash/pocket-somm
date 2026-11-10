@@ -14,7 +14,7 @@ import { LabelThumb } from './LabelThumb';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, placeholderLabelImages } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
-import { colors, spacing } from '../constants/theme';
+import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // Vinster's Insights is NON-cellar: a data-driven, per-user strip of what the
@@ -266,7 +266,7 @@ export function CellarInsightsCarousel() {
           <Text style={styles.cardMeta} numberOfLines={1} allowFontScaling={false}>{t.meta}</Text>
         </TouchableOpacity>
       ))}
-      {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />)}
+      {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} compact />)}
     </ScrollView>
   );
 }
@@ -293,11 +293,11 @@ function Collage({ paths }: { paths: CollageItem[] }) {
     return (
       <View style={styles.collageBox}>
         <View style={[styles.collageInner, { flexDirection: 'row' }]}>
-          <CollageSlot item={p[0]} w={103} h={151} />
-          {p.length === 2 ? <CollageSlot item={p[1]} w={103} h={151} /> : (
+          <CollageSlot item={p[0]} w={(HOME_TILE.w - 2) / 2} h={HOME_TILE.h - 2} />
+          {p.length === 2 ? <CollageSlot item={p[1]} w={(HOME_TILE.w - 2) / 2} h={HOME_TILE.h - 2} /> : (
             <View>
-              <CollageSlot item={p[1]} w={103} h={75.5} />
-              <CollageSlot item={p[2]} w={103} h={75.5} />
+              <CollageSlot item={p[1]} w={(HOME_TILE.w - 2) / 2} h={(HOME_TILE.h - 2) / 2} />
+              <CollageSlot item={p[2]} w={(HOME_TILE.w - 2) / 2} h={(HOME_TILE.h - 2) / 2} />
             </View>
           )}
         </View>
@@ -315,14 +315,13 @@ function Collage({ paths }: { paths: CollageItem[] }) {
 
 const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
-  card: { width: 220 },
+  card: { width: HOME_TILE.w },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  // Same framing as the carousels above: the images inset 6pt inside the
-  // white-edged tile, with their own rounded corners.
-  collageBox: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden', padding: 6 },
-  collageInner: { width: 206, height: 151, borderRadius: 8, overflow: 'hidden' },
-  collageFull: { width: 206, height: 151 },
-  collageGrid: { width: 206, height: 151, flexDirection: 'row', flexWrap: 'wrap' },
-  collageCell: { width: 103, height: 75.5 },
+  // Home tile: images edge to edge inside a white outline (no inset frame).
+  collageBox: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden' },
+  collageInner: { width: HOME_TILE.w - 2, height: HOME_TILE.h - 2, overflow: 'hidden' },
+  collageFull: { width: HOME_TILE.w - 2, height: HOME_TILE.h - 2 },
+  collageGrid: { width: HOME_TILE.w - 2, height: HOME_TILE.h - 2, flexDirection: 'row', flexWrap: 'wrap' },
+  collageCell: { width: (HOME_TILE.w - 2) / 2, height: (HOME_TILE.h - 2) / 2 },
 });

@@ -2,6 +2,9 @@
 // crisp white text and vivid gold pop more.
 const BACKGROUND = '#7F4F4C';
 
+// Home page carousel tiles: smaller, with a plain white outline (no inset frame).
+export const HOME_TILE = { w: 190, h: 134 };
+
 export const colors = {
   background: BACKGROUND,
   surface: '#572F2B',
