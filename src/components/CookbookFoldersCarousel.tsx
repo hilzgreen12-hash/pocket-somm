@@ -216,7 +216,7 @@ export function CookbookFoldersCarousel() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-      <Text style={styles.filterHint}>Hold a folder to rename it or add an image · Hold and drag to reorder →</Text>
+      <Text style={styles.filterHint}>Hold a folder to drag and reorder it</Text>
     </View>
   );
 }
