@@ -902,8 +902,8 @@ const styles = StyleSheet.create({
   carouselBleed: { marginHorizontal: -spacing.xl },
   // Search & Discover carousel — same card shape as the carousels below
   // (220×165 image, title, gold note).
-  // "Powered by Wine Searcher" under the Search & Discover title — orange caps.
-  sdSubheader: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.warning, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginTop: -spacing.xs, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
+  // "Powered by Wine Searcher" under the Search & Discover title — gold caps (the app accent).
+  sdSubheader: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginTop: -spacing.xs, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
   sdCarousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   sdCard: { width: HOME_TILE.w },
   // Home tile size, photo edge to edge inside a white outline.
