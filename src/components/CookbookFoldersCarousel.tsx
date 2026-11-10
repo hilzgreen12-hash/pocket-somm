@@ -169,7 +169,10 @@ export function CookbookFoldersCarousel() {
         leading={
           <View style={styles.tileWrap}>
             <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
-              {favCover ? <FolderBg path={favCover} /> : <Image source={KITCHEN_IMG} style={StyleSheet.absoluteFill} resizeMode="cover" />}
+              {/* Kitchen photo always underneath, so the tile is never blank (a saved
+                  cover that is missing or slow to load just leaves it showing). */}
+              <Image source={KITCHEN_IMG} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              {favCover ? <FolderBg path={favCover} /> : null}
               <View style={styles.nameWrap} pointerEvents="none">
                 <View style={styles.nameBand}><Text style={styles.cardName} numberOfLines={2}>★ Favourite Recipes</Text></View>
               </View>
