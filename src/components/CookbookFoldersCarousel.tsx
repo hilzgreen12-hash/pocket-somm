@@ -38,8 +38,8 @@ function FolderBg({ path }: { path?: string | null }) {
 
 const TILE_W = HOME_TILE.w;
 
-// "+ Add Image" under a tile's name (gold, not capitals) — opens Take / Upload /
-// Find Online. Reads "Change Image" once the tile has one.
+// "+ Add Image" under a tile's name (gold, not capitals) — opens Take / Upload.
+// Reads "Change Image" once the tile has one.
 function AddImageLink({ has, onPress }: { has: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={{ alignSelf: 'flex-start', marginTop: 4 }} accessibilityRole="button">
