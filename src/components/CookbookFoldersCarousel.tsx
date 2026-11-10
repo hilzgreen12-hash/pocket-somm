@@ -21,6 +21,10 @@ import { fonts } from '../constants/fonts';
 // Review carousels) rather than the chips used on the Cookbook page itself.
 // Tapping any box drills into /chef/archive, where the format switches back to
 // that page's own layout.
+// Stand-in cover for Favourite Recipes until the user adds their own image
+// (free Unsplash kitchen photo, bundled with the app).
+const KITCHEN_IMG = require('../../assets/images/kitchen-favourites.jpg');
+
 function recipeLabel(n: number): string {
   return `${n} ${n === 1 ? 'Recipe' : 'Recipes'}`;
 }
@@ -61,7 +65,7 @@ export function CookbookFoldersCarousel() {
     enabled: !!userId,
     queryFn: () => getFavouritesCover(userId),
   });
-  const favouritesTile = { id: FAVOURITES_ID, name: 'Favourites', image_path: favCover } as unknown as ChefArchiveCollection;
+  const favouritesTile = { id: FAVOURITES_ID, name: 'Favourite Recipes', image_path: favCover } as unknown as ChefArchiveCollection;
 
   // Drag to reorder (hold a folder, then drag). Saved to the account.
   async function saveOrder(ids: string[]) {
@@ -165,9 +169,9 @@ export function CookbookFoldersCarousel() {
         leading={
           <View style={styles.tileWrap}>
             <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
-              <FolderBg path={favCover} />
+              {favCover ? <FolderBg path={favCover} /> : <Image source={KITCHEN_IMG} style={StyleSheet.absoluteFill} resizeMode="cover" />}
               <View style={styles.nameWrap} pointerEvents="none">
-                <View style={styles.nameBand}><Text style={styles.cardName} numberOfLines={2}>★ Favourites</Text></View>
+                <View style={styles.nameBand}><Text style={styles.cardName} numberOfLines={2}>★ Favourite Recipes</Text></View>
               </View>
             </TouchableOpacity>
             <Text style={styles.cardMeta} numberOfLines={1}>Cookbook · {recipeLabel(favouritesCount)}</Text>
