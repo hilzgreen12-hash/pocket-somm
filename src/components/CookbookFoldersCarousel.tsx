@@ -241,7 +241,8 @@ const styles = StyleSheet.create({
   summaryRow: { marginTop: spacing.sm, paddingVertical: spacing.xs, alignItems: 'center' },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Separator bar between the stats line and the folders carousel.
-  statsSep: { height: 1, backgroundColor: colors.divider, marginTop: spacing.sm, marginBottom: spacing.xs },
+  // Spacing only — no full-width rule above the carousel.
+  statsSep: { marginTop: spacing.sm, marginBottom: spacing.xs },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
 
   // Same small tile as every carousel in the app (HOME_TILE).

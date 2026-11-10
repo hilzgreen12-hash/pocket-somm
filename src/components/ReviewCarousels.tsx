@@ -163,5 +163,6 @@ const styles = StyleSheet.create({
   // Same as Your Cookbook's stats bar.
   statsRow: { marginTop: spacing.xs, paddingVertical: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.xl },
   statsText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
-  statsSep: { height: 1, backgroundColor: colors.divider, marginTop: spacing.sm, marginBottom: spacing.md },
+  // Spacing only — no full-width rule above the carousel.
+  statsSep: { marginTop: spacing.sm, marginBottom: spacing.md },
 });
