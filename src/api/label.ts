@@ -1,5 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image as RNImage } from 'react-native';
 import { invokeResilient, isNetworkError } from './invokeResilient';
 import { streamPairings } from './pairingsStream';
@@ -293,37 +294,76 @@ export async function searchLabelImages(input: { producer?: string | null; wineN
 // Auto-fetch a web label for a wine that has no photo of its own — the best
 // match, no picker — and download it to a local file, returning its uri (or
 // null on any failure). Best-effort: used to give imageless wines a thumbnail on
-// the Wine Intel card, mirroring the Confirm-Wine-Details auto-fetch. This is a
-// TRANSIENT image for display; it is not persisted.
+// the Wine Intel card, mirroring the Confirm-Wine-Details auto-fetch.
 //
-// Robust on purpose (it used to try only the FIRST result, so one hot-link-
-// blocked or broken URL meant no thumbnail): every candidate is tried in turn —
-// full image, then its search-engine thumbnail, which almost always downloads —
-// and each download must decode as an image. If producer + name finds nothing
-// usable, it retries with the producer alone, then the name alone.
-export async function fetchAutoLabelUri(producer?: string | null, wineName?: string | null): Promise<string | null> {
+// Each image search costs a paid Serper credit, so:
+// - ONE search per wine (producer + name). No producer-only retry.
+// - The image URL it finds is remembered on the device, per wine, so the same
+//   wine never searches again: later calls reuse the saved file, or re-download
+//   the remembered URL if the OS cleared the cache.
+// - A search that finds nothing usable is remembered for 7 days.
+// - A search that FAILS (no credits, offline) is not remembered, so it retries.
+// Every candidate is tried in turn (full image, then its thumbnail) and must
+// decode as an image, since one hot-link-blocked URL shouldn't mean no photo.
+const AUTO_LABEL_PREFIX = 'autolabel:v1:';
+const AUTO_LABEL_MISS_MS = 7 * 24 * 60 * 60 * 1000;
+type AutoLabelMemo = { url: string } | { miss: number };
+const autoLabelInFlight = new Map<string, Promise<string | null>>();
+
+export function fetchAutoLabelUri(producer?: string | null, wineName?: string | null): Promise<string | null> {
   const p = (producer ?? '').trim();
   const w = (wineName ?? '').trim();
-  if (!p && !w) return null;
-  // Producer + name, then the producer alone. Never the name alone: "Brunello
-  // di Montalcino" or "Riesling" by itself finds OTHER producers' labels.
-  const queries: { producer: string; wineName: string }[] = [{ producer: p, wineName: w }];
-  if (p && w && w.toLowerCase() !== p.toLowerCase()) queries.push({ producer: p, wineName: '' });
-  const tried = new Set<string>();
+  if (!p && !w) return Promise.resolve(null);
+  const key = `${p.toLowerCase()}|${w.toLowerCase()}`;
+  // Two screens asking for the same wine at once share one search.
+  const running = autoLabelInFlight.get(key);
+  if (running) return running;
+  const job = autoLabelLookup(key, p, w).finally(() => autoLabelInFlight.delete(key));
+  autoLabelInFlight.set(key, job);
+  return job;
+}
+
+async function autoLabelLookup(key: string, p: string, w: string): Promise<string | null> {
+  const storeKey = AUTO_LABEL_PREFIX + key;
   const base = `autolabel-${p}-${w}`.replace(/[^a-z0-9]+/gi, '-').slice(0, 70);
-  let n = 0;
-  for (const q of queries) {
-    let cands: LabelImageCandidate[] = [];
-    try { cands = await searchLabelImages(q); } catch { continue; }
-    for (const c of cands.slice(0, 4)) {
-      for (const url of [c.url, c.thumbnail]) {
-        if (!url || !url.startsWith('http') || tried.has(url)) continue;
-        tried.add(url);
-        const uri = await downloadImage(url, `${base}-${n++}.img`);
-        if (uri) return uri;
+  const savedName = `${base}-saved.img`;
+
+  let memo: AutoLabelMemo | null = null;
+  try {
+    const raw = await AsyncStorage.getItem(storeKey);
+    memo = raw ? JSON.parse(raw) as AutoLabelMemo : null;
+  } catch { /* no memo */ }
+
+  if (memo && 'url' in memo) {
+    try {
+      const saved = new File(Paths.cache, savedName);
+      if (saved.exists && (saved.size ?? 0) >= 1500) return saved.uri;
+    } catch { /* fall through to re-download */ }
+    const uri = await downloadImage(memo.url, savedName);
+    if (uri) return uri;
+    // The remembered image has gone from the web: search once more below.
+  } else if (memo && 'miss' in memo && Date.now() - memo.miss < AUTO_LABEL_MISS_MS) {
+    return null;
+  }
+
+  // Producer + name. Never the name alone when there's a producer: "Brunello di
+  // Montalcino" or "Riesling" by itself finds OTHER producers' labels.
+  let cands: LabelImageCandidate[];
+  try { cands = await searchLabelImages({ producer: p, wineName: w }); } catch { return null; }
+
+  const tried = new Set<string>();
+  for (const c of cands.slice(0, 4)) {
+    for (const url of [c.url, c.thumbnail]) {
+      if (!url || !url.startsWith('http') || tried.has(url)) continue;
+      tried.add(url);
+      const uri = await downloadImage(url, savedName);
+      if (uri) {
+        try { await AsyncStorage.setItem(storeKey, JSON.stringify({ url } satisfies AutoLabelMemo)); } catch { /* ignore */ }
+        return uri;
       }
     }
   }
+  try { await AsyncStorage.setItem(storeKey, JSON.stringify({ miss: Date.now() } satisfies AutoLabelMemo)); } catch { /* ignore */ }
   return null;
 }
 
