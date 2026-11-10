@@ -52,7 +52,7 @@ export type PlaceholderCard =
 // content" note so it never reads as real data. Carousels render their real cards
 // first, then pad with these — so a real item replaces the FIRST placeholder,
 // leaving the later placeholders intact until the carousel fills up.
-export function PlaceholderCardView({ card, compact = true }: { card: PlaceholderCard; compact?: boolean }) {
+export function PlaceholderCardView({ card, compact = true, stampCaps = false }: { card: PlaceholderCard; compact?: boolean; stampCaps?: boolean }) {
   // compact (default) = the app-wide small tile with a white outline.
   return (
     <View style={[styles.card, compact && { width: HOME_TILE.w }]}>
@@ -91,7 +91,7 @@ export function PlaceholderCardView({ card, compact = true }: { card: Placeholde
         </View>
       </View>
       <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{card.title}</Text>
-      <Text style={styles.cardStamp} numberOfLines={1} allowFontScaling={false}>{card.stamp}</Text>
+      <Text style={[styles.cardStamp, stampCaps && styles.cardStampCaps]} numberOfLines={1} allowFontScaling={false}>{card.stamp}</Text>
     </View>
   );
 }
@@ -114,4 +114,5 @@ const styles = StyleSheet.create({
   overlayText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 18 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
+  cardStampCaps: { textTransform: 'uppercase', letterSpacing: 0.4 },
 });
