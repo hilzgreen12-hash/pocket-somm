@@ -3,8 +3,12 @@ import type { PairingIngredient } from '../../api/wineExtras';
 import { colors, spacing } from '../../constants/theme';
 import { fonts } from '../../constants/fonts';
 
-// Serve tab → "Classic Pairing Ingredients": up to six, grouped as Proteins,
-// Herbs & Spices and Vegetables (wine card and Wine Intel).
+// Serve tab → "Classic Pairing Ingredients": three each of Proteins, Herbs &
+// Spices and Vegetables, in lower case (wine card and Wine Intel). Food only —
+// any drink (e.g. the wine's own grape) is dropped, including from lists saved
+// before the server filtered them.
+const DRINK_RE = /\b(wine|wines|champagne|cava|prosecco|cr[eé]mant|sherry|port|madeira|marsala|vermouth|cognac|brandy|armagnac|calvados|whisk(e)?y|gin|vodka|rum|tequila|liqueur|beer|ale|lager|cider|sake|pinot|noir|chardonnay|riesling|syrah|shiraz|grenache|merlot|cabernet|sauvignon|malbec|tempranillo|sangiovese|nebbiolo|barbera|zinfandel|gamay|viognier|chenin|s[eé]millon|gew[uü]rztraminer|muscat|moscato|gr[uü]ner|albari[nñ]o|mourv[eè]dre|blanc|rouge|ros[eé])\b/i;
+const isDrink = (n: string) => !/vinegar/i.test(n) && DRINK_RE.test(n);
 const GROUPS: { type: PairingIngredient['type']; label: string }[] = [
   { type: 'protein', label: 'Proteins' },
   { type: 'herb', label: 'Herbs & Spices' },
@@ -21,12 +25,12 @@ export function PairingIngredientsCard({ ingredients, loading }: { ingredients: 
       ) : (
         <View style={styles.cols}>
           {GROUPS.map((g) => {
-            const items = (ingredients ?? []).filter((i) => i.type === g.type);
+            const items = (ingredients ?? []).filter((i) => i.type === g.type && !isDrink(i.name)).slice(0, 3);
             if (!items.length) return null;
             return (
               <View key={g.type} style={styles.col}>
                 <Text style={styles.label}>{g.label}</Text>
-                {items.map((i) => <Text key={i.name} style={styles.item}>{i.name}</Text>)}
+                {items.map((i) => <Text key={i.name} style={styles.item}>{i.name.toLowerCase()}</Text>)}
               </View>
             );
           })}

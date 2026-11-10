@@ -992,10 +992,14 @@ export default function CellarWineDetail() {
   useEffect(() => {
     if (!wine || cardTab !== 'somm') return;
     const saved = wine.serving_suggestion?.pairingIngredients;
-    if (saved?.length) { ingredientsRef.current = saved; setIngredients(saved); return; }
+    // v2 = three per group, food only. Older six-item lists show while a fresh
+    // list is fetched once to replace them.
+    const savedCurrent = !!saved?.length && wine.serving_suggestion?.pairingIngredientsV === 2;
+    if (savedCurrent) { ingredientsRef.current = saved!; setIngredients(saved!); return; }
+    if (saved?.length && ingredientsForRef.current !== wine.id) setIngredients(saved);
     // Found earlier this visit but serving advice wasn't saved yet: save them now.
     if (ingredientsRef.current?.length && ingredientsForRef.current === wine.id) {
-      if (wine.serving_suggestion) void updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...wine.serving_suggestion, pairingIngredients: ingredientsRef.current } } }).catch(() => {});
+      if (wine.serving_suggestion) void updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...wine.serving_suggestion, pairingIngredients: ingredientsRef.current, pairingIngredientsV: 2 } } }).catch(() => {});
       return;
     }
     if (ingredientsForRef.current === wine.id) return;
@@ -1008,7 +1012,7 @@ export default function CellarWineDetail() {
         setIngredients(list);
         const now = latestWineRef.current?.serving_suggestion;
         if (now && latestWineRef.current?.id === wine.id) {
-          void updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...now, pairingIngredients: list } } }).catch(() => {});
+          void updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...now, pairingIngredients: list, pairingIngredientsV: 2 } } }).catch(() => {});
         }
       })
       .catch(() => { ingredientsForRef.current = null; })
@@ -1024,8 +1028,10 @@ export default function CellarWineDetail() {
     try {
       const data = await generateServingSuggestion(wine);
       // Keep the pairing ingredients already found for this wine.
-      const keep = latestWineRef.current?.serving_suggestion?.pairingIngredients ?? ingredientsRef.current ?? undefined;
-      await updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...data, ...(keep ? { pairingIngredients: keep } : {}) } } });
+      const prev = latestWineRef.current?.serving_suggestion;
+      const keep = prev?.pairingIngredients ?? ingredientsRef.current ?? undefined;
+      const keepV = prev?.pairingIngredients ? prev.pairingIngredientsV : (ingredientsRef.current ? 2 : undefined);
+      await updateWine.mutateAsync({ id: wine.id, updates: { serving_suggestion: { ...data, ...(keep ? { pairingIngredients: keep, ...(keepV ? { pairingIngredientsV: keepV } : {}) } : {}) } } });
     } catch {
       showAlert({ title: 'Could not generate', body: 'Please try again in a moment.' });
     } finally {

@@ -59,23 +59,33 @@ Return ONLY valid JSON:
 Exactly three styles, best first, giving the user a real choice (different price points or characters). Styles only — do not name individual producers or bottles. Price ranges must be realistic for ${currency} retail today. Raw JSON only. No markdown.`;
 }
 
-// "Classic Pairing Ingredients" (Serve tab): up to six ingredients that pair
-// classically with this wine — a mix of proteins, herbs & spices and vegetables.
+// "Classic Pairing Ingredients" (Serve tab): three proteins, three herbs &
+// spices and three vegetables that pair classically with this wine. FOOD ONLY.
 function buildIngredientsPrompt(w: { producer?: string; wineName?: string; region?: string; vintage?: string; grape?: string; style?: string }): string {
   const identity = [w.producer, w.wineName, w.vintage].filter(Boolean).join(' ')
     + [w.region ? `, ${w.region}` : '', w.grape ? ` (${w.grape})` : '', w.style ? ` — ${w.style}` : ''].join('');
-  return `You are a world-class sommelier and chef. List the classic pairing ingredients for this specific wine.
+  return `You are a world-class sommelier and chef. List the classic FOOD ingredients that pair with this specific wine.
 
 Wine: ${identity}
 
 Return ONLY valid JSON:
 {
   "ingredients": [
-    { "name": "a single ingredient, e.g. 'Lamb', 'Rosemary', 'Porcini mushrooms'", "type": "protein" | "herb" | "vegetable" }
+    { "name": "one food ingredient in lower case, e.g. 'lamb', 'rosemary', 'porcini mushrooms'", "type": "protein" | "herb" | "vegetable" }
   ]
 }
 
-Exactly six ingredients, best first: two proteins, two herbs or spices, two vegetables (mushrooms count as vegetables). Single ingredients, not dishes. Tailor them to THIS wine's colour, body, age and style. Raw JSON only. No markdown.`;
+Exactly nine ingredients: three proteins (meat, poultry, game, fish, shellfish, cheese, eggs, tofu), three herbs or spices, three vegetables (mushrooms count as vegetables), best first within each group. Food only: NEVER a wine, grape, spirit, beer or any other drink, and never this wine itself. Single ingredients, not dishes. All names in lower case. Tailor them to THIS wine's colour, body, age and style. Raw JSON only. No markdown.`;
+}
+
+// Drinks never belong in the ingredients list (the model once returned the
+// wine's own grape as a "protein"). Vinegars are food, so they're allowed.
+const DRINK_RE = /\b(wine|wines|champagne|cava|prosecco|cr[eé]mant|sherry|port|madeira|marsala|vermouth|cognac|brandy|armagnac|calvados|whisk(e)?y|gin|vodka|rum|tequila|liqueur|beer|ale|lager|cider|sake|pinot|noir|chardonnay|riesling|syrah|shiraz|grenache|merlot|cabernet|sauvignon|malbec|tempranillo|sangiovese|nebbiolo|barbera|zinfandel|gamay|viognier|chenin|semillon|s[eé]millon|gew[uü]rztraminer|muscat|moscato|gr[uü]ner|albari[nñ]o|verdejo|mourv[eè]dre|carignan|cinsault|aglianico|primitivo|montepulciano|tannat|carm[eé]n[eè]re|pinotage|furmint|vermentino|marsanne|roussanne|torront[eé]s|blanc|rouge|ros[eé])\b/i;
+function isDrink(name: string, grape?: string): boolean {
+  const n = name.toLowerCase();
+  if (/vinegar/.test(n)) return false;
+  if (grape && grape.trim() && n.includes(grape.trim().toLowerCase())) return true;
+  return DRINK_RE.test(n);
 }
 
 Deno.serve(async (req) => {
@@ -106,10 +116,12 @@ Deno.serve(async (req) => {
               // Normalise the type: 'Herb', 'spice', 'spices' → herb; drop anything unknown.
               const t = String(x.type ?? '').toLowerCase().trim();
               const type = /^(herb|spice)/.test(t) ? 'herb' : /^protein|^meat|^fish/.test(t) ? 'protein' : /^veg|^mushroom/.test(t) ? 'vegetable' : null;
-              return type ? { name: String(x.name).trim().slice(0, 40), type } : null;
+              const name = String(x.name).trim().toLowerCase().slice(0, 40);
+              return type && !isDrink(name, grape) ? { name, type } : null;
             })
             .filter(Boolean)
-            .slice(0, 6)
+            // Three per group at most.
+            .filter((x: any, i: number, all: any[]) => all.slice(0, i).filter((y: any) => y.type === x.type).length < 3)
         : [];
       return new Response(JSON.stringify({ ingredients }), { headers: { 'Content-Type': 'application/json' } });
     }
