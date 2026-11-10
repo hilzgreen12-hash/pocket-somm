@@ -519,9 +519,10 @@ export default function ScanLandingScreen() {
           {
             key: 'search',
             title: 'Search & Discover',
-            // The three ways in. Scan tiles have a small "Upload" button in the corner.
+            // The three ways in; the scan tiles' "Upload Instead" sits under the tile.
             content: (
                 <View style={styles.carouselBleed}>
+                  <Text style={styles.sdSubheader} allowFontScaling={false}>Powered by Wine Searcher</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sdCarousel}>
                     {/* Search a Wine → the typeahead prompt */}
                     <View style={styles.sdCard}>
@@ -531,10 +532,10 @@ export default function ScanLandingScreen() {
                             <Image key={i} source={img} style={styles.sdCollageCell} resizeMode="cover" />
                           ))}
                         </View>
-                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search a Wine</Text></View></View>
+                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search</Text></View></View>
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
-                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Powered by Wine Searcher</Text>
+                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>And vintage comparisons</Text>
                     </View>
 
                     {/* Scan a Label → intel */}
@@ -546,14 +547,12 @@ export default function ScanLandingScreen() {
                         activeOpacity={0.85}
                       >
                         <Image source={SD_LABEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
-                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Label</Text></View></View>
-                        <TouchableOpacity style={styles.sdUpload} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Upload a photo instead" onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
-                          <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
-                          <Text style={styles.sdUploadText} allowFontScaling={false}>Upload</Text>
-                        </TouchableOpacity>
+                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan Label</Text></View></View>
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
-                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Powered by Wine Searcher</Text>
+                      <TouchableOpacity onPress={() => requireAuth(handleUploadLabel)} hitSlop={{ top: 6, bottom: 8, left: 6, right: 6 }} activeOpacity={0.7} accessibilityRole="button">
+                        <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Upload Instead</Text>
+                      </TouchableOpacity>
                     </View>
 
                     {/* Scan a Wine List → recommendations */}
@@ -571,14 +570,12 @@ export default function ScanLandingScreen() {
                             <Ionicons name="restaurant-outline" size={40} color="rgba(255,255,255,0.55)" allowFontScaling={false} />
                           </View>
                         )}
-                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan a Wine List</Text></View></View>
-                        <TouchableOpacity style={styles.sdUpload} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Upload a photo instead" onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
-                          <Feather name="upload" size={12} color="#FFFFFF" allowFontScaling={false} />
-                          <Text style={styles.sdUploadText} allowFontScaling={false}>Upload</Text>
-                        </TouchableOpacity>
+                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan List</Text></View></View>
                       </TouchableOpacity>
-                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Restaurant Wine Lists</Text>
-                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Tailored bottle picks</Text>
+                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Restaurant Bottle Picks</Text>
+                      <TouchableOpacity onPress={() => router.push('/scan/wine-list?upload=1')} hitSlop={{ top: 6, bottom: 8, left: 6, right: 6 }} activeOpacity={0.7} accessibilityRole="button">
+                        <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Upload Instead</Text>
+                      </TouchableOpacity>
                     </View>
                   </ScrollView>
                 </View>
@@ -905,6 +902,8 @@ const styles = StyleSheet.create({
   carouselBleed: { marginHorizontal: -spacing.xl },
   // Search & Discover carousel — same card shape as the carousels below
   // (220×165 image, title, gold note).
+  // "Powered by Wine Searcher" under the Search & Discover title.
+  sdSubheader: { fontFamily: fonts.headingRegular, fontSize: 17, color: colors.textMuted, textAlign: 'center', marginTop: -spacing.xs, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
   sdCarousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   sdCard: { width: HOME_TILE.w },
   // Home tile size, photo edge to edge inside a white outline.
@@ -916,10 +915,6 @@ const styles = StyleSheet.create({
   sdTitleBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
   sdCollageCell: { width: '50%', height: '50%', opacity: 0.85 },
-  // Small "Upload" button in the tile's bottom-right corner (the old full-width
-  // bar pushed the title up, out of line with Search a Wine).
-  sdUpload: { position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: colors.titleBand, borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
-  sdUploadText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: '#FFFFFF', letterSpacing: 0.3 },
   // Title overlaid on the tile, centred — gold, like the Community Musings cards.
   sdTitleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   sdTitle: { fontFamily: fonts.headingSemibold, fontSize: 19, color: colors.gold, lineHeight: 24, textAlign: 'center' },
