@@ -171,7 +171,7 @@ export function CookbookFoldersCarousel() {
             <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
               {/* Kitchen photo always underneath, so the tile is never blank (a saved
                   cover that is missing or slow to load just leaves it showing). */}
-              <Image source={KITCHEN_IMG} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <Image source={KITCHEN_IMG} style={styles.kitchenImg} resizeMode="cover" />
               {favCover ? <FolderBg path={favCover} /> : null}
               <View style={styles.nameWrap} pointerEvents="none">
                 <View style={styles.nameBand}><Text style={styles.cardName} numberOfLines={2}>★ Favourite Recipes</Text></View>
@@ -257,6 +257,9 @@ const styles = StyleSheet.create({
   nameWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   nameBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   // "Cookbook / Your Folder · X Recipes", white, beneath the tile.
+  // Explicit size: a bundled image with absoluteFill alone can draw at its own
+  // pixel size on Android, showing just a corner of the photo.
+  kitchenImg: { position: 'absolute', left: 0, top: 0, width: HOME_TILE.w, height: HOME_TILE.h },
   cardMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   addImage: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
