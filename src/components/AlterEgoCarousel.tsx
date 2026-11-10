@@ -124,16 +124,16 @@ const styles = StyleSheet.create({
   // 152×108), with bigger type, as these alter-ego cards are the hero here.
   // Sage-green cards with a black outline (match the Cookbook / storage cards);
   // black title, dark-green date.
-  card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface },
+  card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 12, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface },
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted, textAlign: 'center' },
   // Brown "your alter-ego is coming" placeholder.
   // Match the themed sketch cards (and the other tab carousels): brown surface,
   // gold title, muted-white sub — not the old off-theme brown/cream.
-  mysteryCard: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: colors.surface },
+  mysteryCard: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 12, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: colors.surface },
   mysteryTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.gold, lineHeight: 23 },
   mysterySub: { fontSize: 14, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 18 },
   // Dashed gold "future" tiles — same look as the "+ Add" carousel tiles.
-  futureCard: { width: 190, height: 134, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
+  futureCard: { width: 190, height: 134, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
   futureText: { fontSize: 15, fontFamily: fonts.headingRegular, color: colors.gold, textAlign: 'center', lineHeight: 19 },
 });

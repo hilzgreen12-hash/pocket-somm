@@ -14,14 +14,14 @@ import { deleteLocationAndWines, trimOrDeleteWineOnUnitDelete, fetchLatestLocati
 import { LabelThumb } from './LabelThumb';
 import { placeholderLabelImages } from './ExamplePlaceholder';
 import { showAlert } from './AppAlert';
-import { colors, spacing } from '../constants/theme';
+import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import { fontsSpectral } from '../constants/fonts';
 import type { WineRack } from '../types/wine';
 
-// Same 220×165 tile size as the app's other carousels.
-const TILE_W = 220;
-const TILE_H = 165;
+// Same small tile as every carousel in the app (HOME_TILE).
+const TILE_W = HOME_TILE.w;
+const TILE_H = HOME_TILE.h;
 
 function bottleLabel(n: number) {
   return n === 0 ? 'Empty' : `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
@@ -34,7 +34,7 @@ function CardBg({ path }: { path?: string }) {
   if (!path) return null;
   return (
     <>
-      <LabelThumb path={path} style={styles.cardBg} radius={14} frame={0} />
+      <LabelThumb path={path} style={styles.cardBg} radius={12} frame={0} />
     </>
   );
 }
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
   tileWrap: { width: TILE_W },
-  storageCard: { width: TILE_W, height: TILE_H, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
+  storageCard: { width: TILE_W, height: TILE_H, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
   // Name centred on its own dark band (as on the Home Search & Discover tiles).
   nameWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   nameBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
@@ -435,8 +435,8 @@ const styles = StyleSheet.create({
   cardBg: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: TILE_W, height: TILE_H },
   collage: { position: 'absolute', left: 0, top: 0, width: TILE_W, height: TILE_H, flexDirection: 'row', flexWrap: 'wrap', opacity: 0.85 },
   collageCell: { width: TILE_W / 2, height: TILE_H / 2 },
-  storageCardName: { fontSize: 21, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 26, textAlign: 'center' },
-  addTile: { width: TILE_W, height: TILE_H, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  storageCardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
+  addTile: { width: TILE_W, height: TILE_H, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   addTilePlus: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   // Rename-location modal.
   renameBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },

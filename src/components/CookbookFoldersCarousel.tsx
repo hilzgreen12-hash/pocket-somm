@@ -13,7 +13,7 @@ import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { uploadCookbookPhoto } from '../api/labelPhotos';
 import { setChefCollectionImage, reorderChefCollections, type ChefArchiveCollection } from '../api/chefArchiveCollections';
 import { useChefLabelHistory } from '../hooks/useChefHistory';
-import { colors, spacing } from '../constants/theme';
+import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // Your Cookbook, surfaced on the Pair tab: the archive page's header + stats bar
@@ -36,7 +36,7 @@ function FolderBg({ path }: { path?: string | null }) {
   );
 }
 
-const TILE_W = 220;
+const TILE_W = HOME_TILE.w;
 
 // "+ Add Image" under a tile's name (gold, not capitals) — opens Take / Upload /
 // Find Online. Reads "Change Image" once the tile has one.
@@ -241,19 +241,19 @@ const styles = StyleSheet.create({
   statsSep: { height: 1, backgroundColor: colors.divider, marginTop: spacing.sm, marginBottom: spacing.xs },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
 
-  // Box tiles — 220×165 to match the Your Lineups carousel (LineupsCarousel).
+  // Same small tile as every carousel in the app (HOME_TILE).
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingVertical: spacing.md },
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
-  tileWrap: { width: 220 },
-  card: { width: 220, height: 165, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
+  tileWrap: { width: HOME_TILE.w },
+  card: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
   // Folder name on its own dark band over a bright photo (as on Home's tiles).
   nameWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   nameBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   // "Cookbook / Your Folder · X Recipes", white, beneath the tile.
   cardMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
-  cardName: { fontSize: 21, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 26, textAlign: 'center' },
+  cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   addImage: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
-  cardAdd: { width: 220, height: 165, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  cardAdd: { width: HOME_TILE.w, height: HOME_TILE.h, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   cardAddText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   renameOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   renameSheet: { width: '100%', maxWidth: 400, borderRadius: 16, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg, gap: spacing.md },

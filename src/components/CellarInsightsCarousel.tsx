@@ -261,8 +261,13 @@ export function CellarInsightsCarousel() {
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {shown.map((t) => (
         <TouchableOpacity key={t.key} style={styles.card} onPress={t.onTap} activeOpacity={t.onTap ? 0.85 : 1}>
-          <Collage paths={t.collage} />
-          <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{t.title}</Text>
+          <View>
+            <Collage paths={t.collage} />
+            {/* Title on the tile, on a brown band — as on the Search & Discover tiles. */}
+            <View style={styles.titleWrap} pointerEvents="none">
+              <View style={styles.titleBand}><Text style={styles.title} numberOfLines={2} allowFontScaling={false}>{t.title}</Text></View>
+            </View>
+          </View>
           <Text style={styles.cardMeta} numberOfLines={1} allowFontScaling={false}>{t.meta}</Text>
         </TouchableOpacity>
       ))}
@@ -271,7 +276,7 @@ export function CellarInsightsCarousel() {
   );
 }
 
-// 2×2 thumbnail collage (up to 4) filling the 220×165 tile footprint.
+// 2×2 thumbnail collage (up to 4) filling the tile.
 function CollageCell({ item, full }: { item: CollageItem; full?: boolean }) {
   const st = full ? styles.collageFull : styles.collageCell;
   if (typeof item === 'string') return <LabelThumb path={item} style={st} radius={full ? 12 : 0} frame={0} />;
@@ -316,8 +321,11 @@ function Collage({ paths }: { paths: CollageItem[] }) {
 const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   card: { width: HOME_TILE.w },
-  cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
-  cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
+  // Same overlay as the Search & Discover tiles: gold title on a brown band.
+  titleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  titleBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
+  title: { fontFamily: fonts.headingSemibold, fontSize: 19, color: colors.gold, lineHeight: 24, textAlign: 'center' },
+  cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.text, marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   // Home tile: images edge to edge inside a white outline (no inset frame).
   collageBox: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden' },
   collageInner: { width: HOME_TILE.w - 2, height: HOME_TILE.h - 2, overflow: 'hidden' },

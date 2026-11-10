@@ -8,7 +8,7 @@ import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard, placeholderLabelImages, RESTAURANT_IMG } from './ExamplePlaceholder';
 import { wineNameKey } from '../utils/wineIdentity';
 import type { ChosenWine, CellarWine } from '../types/wine';
-import { colors, spacing } from '../constants/theme';
+import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // Review tab carousels: the latest Wine Reviews and Restaurant Reviews (up to 8
@@ -155,11 +155,11 @@ export function RestaurantReviewsCarousel({ onViewAll }: { onViewAll: () => void
 const styles = StyleSheet.create({
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
-  card: { width: 220 },
-  imageWrap: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden' },
-  image: { width: 220, height: 165 },
-  name: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, marginTop: 6, letterSpacing: 0.3 },
-  stamp: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginTop: 2 },
+  card: { width: HOME_TILE.w },
+  imageWrap: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden' },
+  image: { width: HOME_TILE.w, height: HOME_TILE.h },
+  name: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
+  stamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
   // Same as Your Cookbook's stats bar.
   statsRow: { marginTop: spacing.xs, paddingVertical: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.xl },
   statsText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },

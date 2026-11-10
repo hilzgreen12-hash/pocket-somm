@@ -52,8 +52,8 @@ export type PlaceholderCard =
 // content" note so it never reads as real data. Carousels render their real cards
 // first, then pad with these — so a real item replaces the FIRST placeholder,
 // leaving the later placeholders intact until the carousel fills up.
-export function PlaceholderCardView({ card, compact = false }: { card: PlaceholderCard; compact?: boolean }) {
-  // compact = Home carousels: smaller tile with a white outline.
+export function PlaceholderCardView({ card, compact = true }: { card: PlaceholderCard; compact?: boolean }) {
+  // compact (default) = the app-wide small tile with a white outline.
   return (
     <View style={[styles.card, compact && { width: HOME_TILE.w }]}>
       <View style={[styles.thumbWrap, compact && styles.thumbWrapCompact]}>

@@ -9,7 +9,7 @@ import { fonts } from '../constants/fonts';
 // label. Only a card with no image AND no wine identity (e.g. a restaurant with
 // no photo) falls back to a name tile.
 export function WineCardThumb({
-  path, localUri, producer, wineName, fallbackText, style, resizeMode = 'cover', compact = false,
+  path, localUri, producer, wineName, fallbackText, style, resizeMode = 'cover', compact = true,
 }: {
   path?: string | null;
   localUri?: string | null;
@@ -18,7 +18,7 @@ export function WineCardThumb({
   fallbackText?: string | null;
   style?: StyleProp<ViewStyle>;
   resizeMode?: 'cover' | 'contain';
-  // Home carousels: smaller tile, photo edge to edge inside a white outline.
+  // Default: the app-wide small tile, photo edge to edge inside a white outline.
   compact?: boolean;
 }) {
   const { uri: resolved, pending } = useLabelImageState(path ?? null);

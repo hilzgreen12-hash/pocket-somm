@@ -68,7 +68,7 @@ export function JournalCarousel() {
 const styles = StyleSheet.create({
   hint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
-  card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 12, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface, overflow: 'hidden' },
   // The post's own image, faded under a dark scrim so the title stays legible.
   cardBg: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, opacity: 0.55 },
   cardScrim: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(18,11,10,0.45)' },
@@ -76,9 +76,9 @@ const styles = StyleSheet.create({
   cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted, textAlign: 'center' },
   // On-brand brown (matches a populated Vinster's Review of You entry) rather
   // than the old near-black placeholder.
-  comingCard: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: colors.surface },
+  comingCard: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 12, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: colors.surface },
   comingTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.gold, lineHeight: 23 },
   comingSub: { fontSize: 14, fontFamily: fonts.headingItalic, color: '#FFFFFF', lineHeight: 18 },
-  futureCard: { width: 190, height: 134, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
+  futureCard: { width: 190, height: 134, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
   futureText: { fontSize: 15, fontFamily: fonts.headingRegular, color: colors.gold, textAlign: 'center', lineHeight: 19 },
 });
