@@ -535,7 +535,7 @@ export default function ScanLandingScreen() {
                         <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search</Text></View></View>
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
-                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>And vintage comparisons</Text>
+                      <Text style={[styles.sdName, styles.sdNameCont]} numberOfLines={1} allowFontScaling={false}>& Vintage Comparisons</Text>
                     </View>
 
                     {/* Scan a Label → intel */}
@@ -921,6 +921,8 @@ const styles = StyleSheet.create({
   // White name + gold line beneath, matching the carousels below.
   sdName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
+  // Second line of a two-line white caption (reads as one sentence).
+  sdNameCont: { marginTop: 1 },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
   // footprint). This same yellow-bubble treatment is used app-wide.
