@@ -11,7 +11,7 @@ import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ChefLabelSession } from '../../src/api/chef';
-import { setChefLabelSessionImage } from '../../src/api/chef';
+import { setChefLabelSessionImage, renameChefLabelSession } from '../../src/api/chef';
 import * as ImagePicker from 'expo-image-picker';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
@@ -125,6 +125,21 @@ export default function ChefArchiveScreen() {
   const creatingFolderRef = useRef(false);
   const [manageFolder, setManageFolder] = useState<ChefArchiveCollection | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  // Edit Recipe → Rename.
+  const [renamingRecipe, setRenamingRecipe] = useState<UnifiedItem | null>(null);
+  const [recipeNameDraft, setRecipeNameDraft] = useState('');
+  async function saveRecipeName() {
+    const item = renamingRecipe;
+    const name = recipeNameDraft.trim();
+    if (!item || !name) return;
+    try {
+      await renameChefLabelSession(item.session.id, item.session.pairings, name);
+      qcRecipe.invalidateQueries({ queryKey: ['chef-label-sessions'] });
+      setRenamingRecipe(null);
+    } catch (err) {
+      showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
   const [assigning, setAssigning] = useState<UnifiedItem | null>(null);
 
   // Recipe-only feed sorted newest-first. Wine pairings (find-a-pairing
@@ -254,10 +269,9 @@ export default function ChefArchiveScreen() {
 
   function handleLongPressItem(item: UnifiedItem) {
     showAlert({
-      title: 'Move Recipe',
+      title: 'Edit Recipe',
       body: itemRecipeName(item),
       buttons: [
-        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove from Folder',
           onPress: () => handleRemoveFromAllFolders(item),
@@ -271,6 +285,10 @@ export default function ChefArchiveScreen() {
             });
           },
         },
+        { text: 'Rename', onPress: () => { setRenamingRecipe(item); setRecipeNameDraft(itemRecipeName(item)); } },
+        // AppAlert fires as it dismisses; open the next menu after it closes.
+        { text: 'Update Image', onPress: () => setTimeout(() => openRecipeImageMenu(item), 350) },
+        { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
@@ -500,6 +518,34 @@ export default function ChefArchiveScreen() {
               style={styles.modalCancel}
               onPress={() => { setNewFolderOpen(false); setPendingAssignAfterCreate(null); }}
             >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Rename recipe */}
+      <Modal visible={!!renamingRecipe} transparent animationType="fade" onRequestClose={() => setRenamingRecipe(null)}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRenamingRecipe(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Rename Recipe</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={recipeNameDraft}
+              onChangeText={setRecipeNameDraft}
+              placeholder="Recipe name"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              maxLength={80}
+              returnKeyType="done"
+              onSubmitEditing={() => void saveRecipeName()}
+            />
+            <TouchableOpacity style={[styles.modalConfirm, !recipeNameDraft.trim() && { opacity: 0.5 }]} onPress={() => void saveRecipeName()} disabled={!recipeNameDraft.trim()}>
+              <Text style={styles.modalConfirmText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setRenamingRecipe(null)}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>

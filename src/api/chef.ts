@@ -53,6 +53,13 @@ export async function setChefLabelSessionImage(id: string, imagePath: string | n
   if (error) throw error;
 }
 
+// Cookbook → Edit Recipe → Rename: the recipe name is the first pairing's dish name.
+export async function renameChefLabelSession(id: string, pairings: Pairing[], name: string): Promise<void> {
+  const next = pairings.length ? [{ ...pairings[0], dishName: name }, ...pairings.slice(1)] : pairings;
+  const { error } = await supabase.from('chef_label_sessions').update({ pairings: next }).eq('id', id);
+  if (error) throw error;
+}
+
 export async function updateChefLabelSessionNotes(id: string, userNotes: string | null): Promise<void> {
   const { error } = await supabase
     .from('chef_label_sessions')
