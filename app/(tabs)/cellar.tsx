@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.xs },
   // Wrapper for the full-width gold "Add Wines" button (same padding as the
   // sections below, so it lines up exactly with "Your Cellar List").
-  actionRow: { paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: 18 },
+  actionRow: { paddingHorizontal: spacing.xl, marginTop: spacing.sm },
   actionBtn: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   actionBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
@@ -290,7 +290,8 @@ const styles = StyleSheet.create({
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
   // ("blurbs below the headers on the tab screens").
   subtitle: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 26, paddingHorizontal: spacing.xl, marginBottom: 0 },
-  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  // 18pt either side — matches the Home header separator and keeps the tab compact.
+  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: 18 },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Body description text under section CTAs — Inter for readability.
   sectionDesc: { fontSize: 17, fontFamily: fonts.bodyRegular, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },

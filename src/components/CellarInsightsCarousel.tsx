@@ -314,7 +314,8 @@ function Collage({ paths }: { paths: CollageItem[] }) {
 }
 
 const styles = StyleSheet.create({
-  carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
+  // No bottom padding: the separator below sits 18pt under the last caption line.
+  carousel: { paddingHorizontal: spacing.xl, gap: spacing.md },
   card: { width: HOME_TILE.w },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },

@@ -117,7 +117,8 @@ export function LineupsCarousel({ requireAccount, max, showAdd = true, onViewAll
 
 const styles = StyleSheet.create({
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
-  carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
+  // No bottom padding: the separator below sits 18pt under the last caption line.
+  carousel: { paddingHorizontal: spacing.xl, gap: spacing.md },
   card: { width: HOME_TILE.w },
   cardImageWrap: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   cardImage: { width: HOME_TILE.w, height: HOME_TILE.h },

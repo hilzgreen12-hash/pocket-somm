@@ -159,7 +159,8 @@ const styles = StyleSheet.create({
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: 18 },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   // First divider after the Voice Command button — 18 above/below to match Home.
-  voiceDivider: { marginTop: 0, marginBottom: 18 },
+  // Header separator: 18pt from the blurb's last line (it has 4 of its own) and 18pt below, as on Home.
+  voiceDivider: { marginTop: 14, marginBottom: 18 },
   // "Your Cookbook" header — matches Cellar / Review section headers.
   sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },

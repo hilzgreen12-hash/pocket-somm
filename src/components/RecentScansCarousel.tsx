@@ -219,7 +219,8 @@ export function RecentScansCarousel() {
 }
 
 const styles = StyleSheet.create({
-  carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
+  // No bottom padding: the separator below sits 18pt under the last caption line.
+  carousel: { paddingHorizontal: spacing.xl, gap: spacing.md },
   card: { width: HOME_TILE.w },
   thumb: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   thumbImg: { width: '100%', height: '100%' },

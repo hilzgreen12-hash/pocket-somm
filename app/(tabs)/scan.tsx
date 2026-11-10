@@ -65,7 +65,7 @@ export default function ScanTab() {
         </Text>
       </View>
 
-      <View style={styles.divider} />
+      <View style={styles.headerDivider} />
 
       {/* Three carousels — Wine Reviews, Restaurant Reviews, Lineups — each with
           up to 8 of the latest and a View All link to its full page. */}
@@ -74,14 +74,14 @@ export default function ScanTab() {
       </View>
       <WineReviewsCarousel onViewAll={() => requireAccount(() => router.push('/wines/chosen'))} />
 
-      <View style={styles.divider} />
+      <View style={styles.carouselDivider} />
 
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Your Restaurant Reviews</Text>
       </View>
       <RestaurantReviewsCarousel onViewAll={() => requireAccount(() => router.push('/restaurants/reviews'))} />
 
-      <View style={styles.divider} />
+      <View style={styles.carouselDivider} />
 
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Your Lineups</Text>
@@ -112,6 +112,10 @@ const styles = StyleSheet.create({
   addTopRight: { position: 'absolute', right: spacing.xl, top: 0, bottom: 0, justifyContent: 'center' },
   addTopRightText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  // Header separator: 18pt from the header's last line and 18pt below, as on Home.
+  // Under a carousel: 18pt from the last caption line.
+  carouselDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: 18, marginBottom: spacing.lg },
+  headerDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: 14, marginBottom: 18 },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
   // "Vinster's Review of You" section header + the "Your Personality Sketch"

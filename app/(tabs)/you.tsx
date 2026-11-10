@@ -123,7 +123,7 @@ export default function YouScreen() {
           Review of You"; Restaurant & Wine Reviews are there too, and the
           Lineup Library is on the Cellar tab. About You starts with your
           preferences, then account settings. */}
-      <View style={styles.divider} />
+      <View style={styles.headerDivider} />
 
       <View style={styles.block}>
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/wine')} activeOpacity={0.7}>
@@ -237,6 +237,8 @@ const styles = StyleSheet.create({
   // Italic blurb under the page heading — editorial intro, stays Cormorant.
   thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
+  // Header separator: 18pt from the identity line (it has 8 of its own) and 18pt below, as on Home.
+  headerDivider: { height: 1, backgroundColor: colors.divider, marginTop: 10, marginBottom: 18 },
   goldLine: { height: 1, backgroundColor: colors.gold, opacity: 0.55, marginVertical: spacing.md },
   block: { gap: 4 },
   // Section header label.

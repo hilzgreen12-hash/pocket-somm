@@ -439,7 +439,8 @@ const styles = StyleSheet.create({
   error: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   // The swipe hint sits directly above, so no extra top gap here.
   carouselScroll: { marginTop: 0 },
-  carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
+  // No bottom padding: the separator below sits 18pt under the last caption line.
+  carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
   tileWrap: { width: TILE_W },
   storageCard: { width: TILE_W, height: TILE_H, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },

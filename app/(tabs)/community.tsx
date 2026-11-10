@@ -70,7 +70,7 @@ export default function CommunityTab() {
         <Text style={styles.sectionDesc}>Be a part of the Vinster community, share and discover wine and restaurant reviews while connecting with friends, old and new.</Text>
       </View>
 
-      <View style={styles.divider} />
+      <View style={styles.headerDivider} />
 
       {/* Other Features Arriving Soon — the community-sharing features, shown
           faded as unbuilt (Wine / Restaurant community feeds, Connections). */}
@@ -119,6 +119,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  // Header separator: 18pt from the header's last line and 18pt below, as on Home.
+  headerDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: 14, marginBottom: 18 },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Italic blurb below the tab title — kept Cormorant per spec.
   sectionDesc: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs },

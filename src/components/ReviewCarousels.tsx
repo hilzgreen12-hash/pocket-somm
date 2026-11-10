@@ -154,7 +154,8 @@ export function RestaurantReviewsCarousel({ onViewAll }: { onViewAll: () => void
 
 const styles = StyleSheet.create({
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
-  carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
+  // No bottom padding: the separator below sits 18pt under the last caption line.
+  carousel: { paddingHorizontal: spacing.xl, gap: spacing.md },
   card: { width: HOME_TILE.w },
   imageWrap: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden' },
   image: { width: HOME_TILE.w, height: HOME_TILE.h },
