@@ -92,7 +92,6 @@ export function CookbookFoldersCarousel() {
         // AppAlert fires as it dismisses; the picker can't open mid-dismiss on iOS.
         { text: 'Take a Photo', onPress: () => setTimeout(() => void pickImage(c, 'camera'), 350) },
         { text: 'Upload a Photo', onPress: () => setTimeout(() => void pickImage(c, 'library'), 350) },
-        { text: 'Find a Photo Online', onPress: () => router.push(`/chef/find-folder-photo?folderId=${c.id}&name=${encodeURIComponent(c.name)}` as any) },
         ...(c.image_path ? [{ text: 'Remove Image', style: 'destructive' as const, onPress: () => void setImage(c, null) }] : []),
         { text: 'Cancel', style: 'cancel' as const },
       ],
