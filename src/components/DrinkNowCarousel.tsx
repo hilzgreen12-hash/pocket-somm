@@ -134,7 +134,10 @@ export function DrinkNowCarousel() {
         <TouchableOpacity key={`${w.id}-${badge}`} style={styles.card} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.85}>
           <View>
             <WineCardThumb compact path={w.label_image_path} producer={w.producer} wineName={w.wine_name} fallbackText={w.wine_name} />
-            <View style={styles.badge}><Text style={styles.badgeText} allowFontScaling={false}>{badge}</Text></View>
+            {/* Insight name on the tile, on a brown band — as on the Search & Discover tiles. */}
+            <View style={styles.titleWrap} pointerEvents="none">
+              <View style={styles.titleBand}><Text style={styles.title} numberOfLines={2} allowFontScaling={false}>{badge}</Text></View>
+            </View>
           </View>
           <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
           <Text style={styles.cardMeta} numberOfLines={1} allowFontScaling={false}>{meta}</Text>
@@ -150,7 +153,8 @@ const styles = StyleSheet.create({
   card: { width: HOME_TILE.w },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  // Gold-on-black pill, top-right of the thumbnail — labels which insight this is.
-  badge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(18,11,10,0.82)', borderRadius: 8, borderWidth: 1, borderColor: colors.gold, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, letterSpacing: 0.3 },
+  // Same overlay as the Search & Discover tiles: gold title on a brown band.
+  titleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  titleBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
+  title: { fontFamily: fonts.headingSemibold, fontSize: 19, color: colors.gold, lineHeight: 24, textAlign: 'center' },
 });
