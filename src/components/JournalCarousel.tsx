@@ -70,8 +70,9 @@ const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface, overflow: 'hidden' },
   // The post's own image, faded under a dark scrim so the title stays legible.
-  cardBg: { position: 'absolute', left: 0, top: 0, width: 190, height: 134, opacity: 0.55 },
-  cardScrim: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(18,11,10,0.45)' },
+  // Framed like the carousels above: the image inset 6pt with rounded corners.
+  cardBg: { position: 'absolute', left: 6, top: 6, right: 6, bottom: 6, borderRadius: 8, opacity: 0.55 },
+  cardScrim: { position: 'absolute', left: 6, top: 6, right: 6, bottom: 6, borderRadius: 8, backgroundColor: 'rgba(18,11,10,0.45)' },
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted, textAlign: 'center' },
   // On-brand brown (matches a populated Vinster's Review of You entry) rather

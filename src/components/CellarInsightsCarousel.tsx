@@ -285,26 +285,28 @@ function CollageSlot({ item, w, h }: { item: CollageItem; w: number; h: number }
 function Collage({ paths }: { paths: CollageItem[] }) {
   const p = paths.slice(0, 4);
   if (p.length === 1) {
-    return <View style={styles.collageBox}><CollageCell item={p[0]} full /></View>;
+    return <View style={styles.collageBox}><View style={styles.collageInner}><CollageCell item={p[0]} full /></View></View>;
   }
   // Two → side by side; three → one tall on the left, two stacked on the right.
   // (A 2×2 grid left blank squares.)
   if (p.length === 2 || p.length === 3) {
     return (
-      <View style={[styles.collageBox, { flexDirection: 'row' }]}>
-        <CollageSlot item={p[0]} w={110} h={165} />
-        {p.length === 2 ? <CollageSlot item={p[1]} w={110} h={165} /> : (
-          <View>
-            <CollageSlot item={p[1]} w={110} h={82.5} />
-            <CollageSlot item={p[2]} w={110} h={82.5} />
-          </View>
-        )}
+      <View style={styles.collageBox}>
+        <View style={[styles.collageInner, { flexDirection: 'row' }]}>
+          <CollageSlot item={p[0]} w={103} h={151} />
+          {p.length === 2 ? <CollageSlot item={p[1]} w={103} h={151} /> : (
+            <View>
+              <CollageSlot item={p[1]} w={103} h={75.5} />
+              <CollageSlot item={p[2]} w={103} h={75.5} />
+            </View>
+          )}
+        </View>
       </View>
     );
   }
   return (
     <View style={styles.collageBox}>
-      <View style={styles.collageGrid}>
+      <View style={[styles.collageInner, styles.collageGrid]}>
         {p.map((pp, i) => <CollageCell key={i} item={pp} />)}
       </View>
     </View>
@@ -316,8 +318,11 @@ const styles = StyleSheet.create({
   card: { width: 220 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  collageBox: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden' },
-  collageFull: { width: 220, height: 165 },
-  collageGrid: { width: 220, height: 165, flexDirection: 'row', flexWrap: 'wrap' },
-  collageCell: { width: 110, height: 82.5 },
+  // Same framing as the carousels above: the images inset 6pt inside the
+  // white-edged tile, with their own rounded corners.
+  collageBox: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden', padding: 6 },
+  collageInner: { width: 206, height: 151, borderRadius: 8, overflow: 'hidden' },
+  collageFull: { width: 206, height: 151 },
+  collageGrid: { width: 206, height: 151, flexDirection: 'row', flexWrap: 'wrap' },
+  collageCell: { width: 103, height: 75.5 },
 });
