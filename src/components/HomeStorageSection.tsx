@@ -39,18 +39,16 @@ function CardBg({ path }: { path?: string }) {
   );
 }
 
-// One home-storage tile: the photo bright, the location name on a dark band
-// over it (like the Home Search & Discover tiles), and the type + bottle count
-// in white beneath the tile.
+// One home-storage tile: the photo bright, then the location name (white) and
+// type · bottle count (gold) beneath the tile.
 function StorageTile({ bg, name, meta, onPress, onLongPress }: { bg: React.ReactNode; name: string; meta: string; onPress: () => void; onLongPress?: () => void }) {
   return (
     <TouchableOpacity style={styles.tileWrap} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.85}>
       <View style={styles.storageCard}>
         {bg}
-        <View style={styles.nameWrap} pointerEvents="none">
-          <View style={styles.nameBand}><Text style={styles.storageCardName} numberOfLines={2} allowFontScaling={false}>{name}</Text></View>
-        </View>
       </View>
+      {/* Name in white, then type · count in gold, beneath the tile. */}
+      <Text style={styles.storageCardName} numberOfLines={1} allowFontScaling={false}>{name}</Text>
       <Text style={styles.tileMeta} numberOfLines={1} allowFontScaling={false}>{meta}</Text>
     </TouchableOpacity>
   );
@@ -426,16 +424,13 @@ const styles = StyleSheet.create({
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
   tileWrap: { width: TILE_W },
   storageCard: { width: TILE_W, height: TILE_H, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
-  // Name centred on its own dark band (as on the Home Search & Discover tiles).
-  nameWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  nameBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   // Type · bottle count, white, beneath the tile.
-  tileMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+  tileMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3 },
   // Last-added wine label filling the tile, under a dark scrim for legibility.
   cardBg: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: TILE_W, height: TILE_H },
   collage: { position: 'absolute', left: 0, top: 0, width: TILE_W, height: TILE_H, flexDirection: 'row', flexWrap: 'wrap', opacity: 0.85 },
   collageCell: { width: TILE_W / 2, height: TILE_H / 2 },
-  storageCardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
+  storageCardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   addTile: { width: TILE_W, height: TILE_H, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   addTilePlus: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   // Rename-location modal.

@@ -166,6 +166,9 @@ export default function CellarTab() {
         </TouchableOpacity>
       </View>
 
+      {/* Rule beneath Add Wines. */}
+      <View style={styles.divider} />
+
       {/* Your Wines At Home — the home-storage carousel, embedded here (replaces
           the old standalone Home Wine Storage page). */}
       <HomeStorageSection requireAuth={requireAuth} />
