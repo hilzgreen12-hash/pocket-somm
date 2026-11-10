@@ -10,7 +10,8 @@ import { useRackStore } from '../stores/rackStore';
 import { getRackBottleCounts, getSlotAssignments } from '../api/racks';
 import { getBins, getBinBottleCounts, deleteBin, getBinCells } from '../api/bins';
 import { fetchStorageLocations, deleteStorageLocation, renameStorageLocation } from '../api/storageLocations';
-import { deleteLocationAndWines, trimOrDeleteWineOnUnitDelete, fetchLatestLocationThumbs } from '../api/placements';
+import { deleteLocationAndWines, trimOrDeleteWineOnUnitDelete, fetchLatestLocationThumbs, type LocationCollageItem } from '../api/placements';
+import { WineCardThumb } from './WineCardThumb';
 import { LabelThumb } from './LabelThumb';
 import { placeholderLabelImages } from './ExamplePlaceholder';
 import { showAlert } from './AppAlert';
@@ -27,15 +28,33 @@ function bottleLabel(n: number) {
   return n === 0 ? 'Empty' : `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
 }
 
-// The last-added wine's label as a storage tile's backdrop, with a dark scrim so
-// the eyebrow / name / count stay legible. Renders nothing when the location has
-// no thumbnail yet (the tile keeps its plain surface).
-function CardBg({ path }: { path?: string }) {
-  if (!path) return null;
+// A storage tile's backdrop: a collage of up to four wines held there (label
+// photo, or a web-found label for a wine without one). An empty location shows
+// the bundled example labels until bottles are added.
+function CollageItemView({ item, w, h }: { item: LocationCollageItem; w: number; h: number }) {
+  const st = { width: w, height: h };
+  if (typeof item === 'string') return <LabelThumb path={item} style={st} radius={0} frame={0} />;
+  return <View style={[st, { overflow: 'hidden' }]}><WineCardThumb producer={item.producer} wineName={item.wineName} fallbackText={item.wineName ?? item.producer ?? ''} style={st} /></View>;
+}
+function WinesCollage({ items, offset }: { items?: LocationCollageItem[]; offset: number }) {
+  const p = (items ?? []).slice(0, 4);
+  if (!p.length) return <CollageBg offset={offset} />;
+  const W = TILE_W - 2, H = TILE_H - 2;
   return (
-    <>
-      <LabelThumb path={path} style={styles.cardBg} radius={12} frame={0} />
-    </>
+    <View style={styles.collageWrap} pointerEvents="none">
+      {p.length === 1 ? <CollageItemView item={p[0]} w={W} h={H} />
+        : p.length === 2 ? <><CollageItemView item={p[0]} w={W / 2} h={H} /><CollageItemView item={p[1]} w={W / 2} h={H} /></>
+        : p.length === 3 ? (
+          <>
+            <CollageItemView item={p[0]} w={W / 2} h={H} />
+            <View><CollageItemView item={p[1]} w={W / 2} h={H / 2} /><CollageItemView item={p[2]} w={W / 2} h={H / 2} /></View>
+          </>
+        ) : (
+          <View style={{ width: W, height: H, flexDirection: 'row', flexWrap: 'wrap' }}>
+            {p.map((it, i) => <CollageItemView key={i} item={it} w={W / 2} h={H / 2} />)}
+          </View>
+        )}
+    </View>
   );
 }
 
@@ -148,8 +167,8 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
   const locationBottles = homeLocations.reduce((sum, l) => sum + (l.wineCount ?? 0), 0);
   const totalBottles = rackBottles + binBottles + locationBottles;
 
-  // Last-wine-added thumbnail per location, for the tile backgrounds. Keyed on the
-  // bottle total so it refreshes whenever wines are added/moved/removed.
+  // Up to four wines per location for the tile collages. Keyed on the bottle
+  // total so it refreshes whenever wines are added/moved/removed.
   const { data: tileThumbs } = useQuery({
     queryKey: ['home-storage-thumbs', userId, totalBottles],
     queryFn: () => fetchLatestLocationThumbs(userId!),
@@ -286,7 +305,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
   const orderedTiles: ReorderableTile[] = sortStorage([
     ...racks.map((rack) => ({ key: storageKey('rack', rack.id), label: rack.name, node: (
                 <StorageTile
-                  bg={<CardBg path={tileThumbs?.rack[rack.id]} />}
+                  bg={<WinesCollage items={tileThumbs?.rack[rack.id]} offset={0} />}
                   name={rack.name}
                   meta={`${rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'} · ${bottleLabel(rackCounts[rack.id] ?? 0)}`}
                   onPress={() => router.push(`/cellar/rack/${rack.id}` as any)}
@@ -295,7 +314,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     ) })),
     ...bins.map((bin) => ({ key: storageKey('bin', bin.id), label: bin.name, node: (
                 <StorageTile
-                  bg={<CardBg path={tileThumbs?.bin[bin.id]} />}
+                  bg={<WinesCollage items={tileThumbs?.bin[bin.id]} offset={4} />}
                   name={bin.name}
                   meta={`Bin · ${bottleLabel(binCounts[bin.id] ?? 0)}`}
                   onPress={() => router.push(`/cellar/bin/${bin.id}` as any)}
@@ -304,7 +323,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     ) })),
     ...homeLocations.map((loc) => ({ key: storageKey('location', loc.id), label: loc.name, node: (
                 <StorageTile
-                  bg={<CardBg path={tileThumbs?.location[loc.id]} />}
+                  bg={<WinesCollage items={tileThumbs?.location[loc.id]} offset={8} />}
                   name={loc.name}
                   meta={`Alt Cellar · ${bottleLabel(loc.wineCount ?? 0)}`}
                   onPress={() => router.push(`/cellar/storage-location/${loc.id}` as any)}
@@ -424,11 +443,10 @@ const styles = StyleSheet.create({
   // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
   tileWrap: { width: TILE_W },
   storageCard: { width: TILE_W, height: TILE_H, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden' },
-  // Type · bottle count, white, beneath the tile.
+  // Type · bottle count, gold, beneath the tile name.
   tileMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3 },
-  // Last-added wine label filling the tile, under a dark scrim for legibility.
-  cardBg: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, width: TILE_W, height: TILE_H },
   collage: { position: 'absolute', left: 0, top: 0, width: TILE_W, height: TILE_H, flexDirection: 'row', flexWrap: 'wrap', opacity: 0.85 },
+  collageWrap: { position: 'absolute', left: 0, top: 0, width: TILE_W - 2, height: TILE_H - 2, flexDirection: 'row', overflow: 'hidden' },
   collageCell: { width: TILE_W / 2, height: TILE_H / 2 },
   storageCardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   addTile: { width: TILE_W, height: TILE_H, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

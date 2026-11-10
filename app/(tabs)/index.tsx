@@ -551,7 +551,7 @@ export default function ScanLandingScreen() {
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
                       <TouchableOpacity onPress={() => requireAuth(handleUploadLabel)} hitSlop={{ top: 6, bottom: 8, left: 6, right: 6 }} activeOpacity={0.7} accessibilityRole="button">
-                        <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Upload Instead</Text>
+                        <Text style={[styles.sdStamp, styles.sdUpload]} numberOfLines={1} allowFontScaling={false}>Upload Instead</Text>
                       </TouchableOpacity>
                     </View>
 
@@ -574,7 +574,7 @@ export default function ScanLandingScreen() {
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Restaurant Bottle Picks</Text>
                       <TouchableOpacity onPress={() => router.push('/scan/wine-list?upload=1')} hitSlop={{ top: 6, bottom: 8, left: 6, right: 6 }} activeOpacity={0.7} accessibilityRole="button">
-                        <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Upload Instead</Text>
+                        <Text style={[styles.sdStamp, styles.sdUpload]} numberOfLines={1} allowFontScaling={false}>Upload Instead</Text>
                       </TouchableOpacity>
                     </View>
                   </ScrollView>
@@ -923,6 +923,8 @@ const styles = StyleSheet.create({
   sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
   // Second line of a two-line white caption (reads as one sentence).
   sdNameCont: { marginTop: 1 },
+  // "Upload Instead" — gold caps, matching Home Cellar Insights' lines.
+  sdUpload: { textTransform: 'uppercase', letterSpacing: 0.4 },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
   // footprint). This same yellow-bubble treatment is used app-wide.

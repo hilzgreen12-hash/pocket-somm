@@ -136,10 +136,26 @@ export async function addBinPlacement(wineId: string, cellId: string, quantity: 
 // storage_location_id) — so the Cellar carousel tiles can show the last wine
 // added there (and refresh as new wines land). Newest placement first; first
 // non-empty thumbnail per location wins. RLS scopes rows to the user.
+// A storage tile's collage item: the wine's own label photo, or (no photo) its
+// identity so the tile can show a web-found label.
+export type LocationCollageItem = string | { producer: string | null; wineName: string | null };
+type CollageMap = Record<string, LocationCollageItem[]>;
+
+// Up to four different wines per home-storage location (newest first), for the
+// Cellar tab's collage tiles.
 export async function fetchLatestLocationThumbs(userId: string): Promise<{
-  rack: Record<string, string>; bin: Record<string, string>; location: Record<string, string>;
+  rack: CollageMap; bin: CollageMap; location: CollageMap;
 }> {
-  const result = { rack: {} as Record<string, string>, bin: {} as Record<string, string>, location: {} as Record<string, string> };
+  const result = { rack: {} as CollageMap, bin: {} as CollageMap, location: {} as CollageMap };
+  const seen = new Set<string>();
+  const add = (map: CollageMap, unitId: string, w: any) => {
+    const k = `${unitId}:${w.id}`;
+    if (seen.has(k)) return;
+    const list = (map[unitId] ??= []);
+    if (list.length >= 4) return;
+    seen.add(k);
+    list.push(w.label_image_path ? w.label_image_path : { producer: w.producer ?? null, wineName: w.wine_name ?? null });
+  };
   // bin cell → bin id (so a bin placement can resolve to its unit).
   const { data: binRows } = await supabase.from('wine_racks').select('id').eq('user_id', cellarOwner(userId)).eq('storage_type', 'bin');
   const binIds = (binRows ?? []).map((b) => b.id);
@@ -158,16 +174,17 @@ export async function fetchLatestLocationThumbs(userId: string): Promise<{
   const data = await selectAllPages<any>((from, to) =>
     supabase
       .from('cellar_placements')
-      .select('kind, rack_id, bin_cell_id, storage_location_id, created_at, wine:cellar_wines!inner(label_image_path, archived_at, is_wishlist)')
+      .select('kind, rack_id, bin_cell_id, storage_location_id, created_at, wine:cellar_wines!inner(id, producer, wine_name, label_image_path, archived_at, is_wishlist)')
       .order('created_at', { ascending: false })
       .order('id', { ascending: true })
       .range(from, to) as any);
   for (const p of data) {
     const w = p.wine;
-    if (!w || w.archived_at || w.is_wishlist || !w.label_image_path) continue;
-    if (p.kind === 'rack' && p.rack_id) { if (!result.rack[p.rack_id]) result.rack[p.rack_id] = w.label_image_path; }
-    else if (p.kind === 'bin' && p.bin_cell_id) { const b = cellToBin[p.bin_cell_id]; if (b && !result.bin[b]) result.bin[b] = w.label_image_path; }
-    else if (p.kind === 'location' && p.storage_location_id) { if (!result.location[p.storage_location_id]) result.location[p.storage_location_id] = w.label_image_path; }
+    if (!w || w.archived_at || w.is_wishlist) continue;
+    if (!w.label_image_path && !w.producer && !w.wine_name) continue;
+    if (p.kind === 'rack' && p.rack_id) add(result.rack, p.rack_id, w);
+    else if (p.kind === 'bin' && p.bin_cell_id) { const b = cellToBin[p.bin_cell_id]; if (b) add(result.bin, b, w); }
+    else if (p.kind === 'location' && p.storage_location_id) add(result.location, p.storage_location_id, w);
   }
   return result;
 }

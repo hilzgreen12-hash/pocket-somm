@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   titleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   titleBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   title: { fontFamily: fonts.headingSemibold, fontSize: 19, color: colors.gold, lineHeight: 24, textAlign: 'center' },
-  cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.text, marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+  cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   // Home tile: images edge to edge inside a white outline (no inset frame).
   collageBox: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, overflow: 'hidden' },
   collageInner: { width: HOME_TILE.w - 2, height: HOME_TILE.h - 2, overflow: 'hidden' },
