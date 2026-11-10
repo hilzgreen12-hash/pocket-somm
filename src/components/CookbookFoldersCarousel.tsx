@@ -22,7 +22,7 @@ import { fonts } from '../constants/fonts';
 // Tapping any box drills into /chef/archive, where the format switches back to
 // that page's own layout.
 // Stand-in cover for Favourite Recipes until the user adds their own image
-// (free Unsplash kitchen photo, bundled with the app).
+// (a photo of cookbook spines, bundled with the app).
 const KITCHEN_IMG = require('../../assets/images/kitchen-favourites.jpg');
 
 function recipeLabel(n: number): string {
