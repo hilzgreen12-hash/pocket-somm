@@ -19,19 +19,21 @@ Wine: ${identity}
 ${w.decantTime ? `\nTime available before serving (the user's words): "${w.decantTime}". Your decanting advice must fit within it; if the wine would ideally need longer, say so and give the best option within their time.\n` : ''}
 Return ONLY valid JSON with this structure:
 {
-  "temperature": "ideal serving temperature, e.g. '16-18°C, slightly cool'",
+  "temperature": "ideal serving temperature as a short range only, e.g. '16–18°C'",
   "temperatureReason": "1 short sentence why that temperature suits THIS wine",
-  "decant": "whether to decant and for how long, e.g. 'Decant 45-60 min' or 'No need to decant'",
+  "decant": "a short headline, max 4 words, e.g. 'Decant 45 min' or 'No decant'",
   "decantReason": "1 short sentence why",
-  "glassware": "the glass to use, e.g. 'Large Burgundy bowl' or 'Standard white-wine glass'",
+  "glassware": "the glass, max 3 words, e.g. 'Burgundy bowl' or 'White-wine glass'",
   "glasswareReason": "1 short sentence why that glass suits it",
   "aperitif": {
     "style": "a lighter wine STYLE to serve BEFORE this wine, e.g. 'Crémant de Loire'",
-    "reason": "1 short sentence why — a palate-friendly opener, nothing too heavy"
+    "reason": "1 short sentence why — a palate-friendly opener, nothing too heavy",
+    "description": "1–2 sentences describing the KIND of wine to drink before this one (body, freshness, sweetness, bubbles, character) and why it leads into it. Do NOT name any wine, style, region, appellation, grape or producer."
   },
   "digestif": {
     "style": "a wine STYLE to serve AFTER this wine, e.g. 'LBV Port'",
-    "reason": "1 short sentence why it follows this wine well"
+    "reason": "1 short sentence why it follows this wine well",
+    "description": "1–2 sentences describing the KIND of wine to drink after this one (body, richness, sweetness, character) and why it follows it well. Do NOT name any wine, style, region, appellation, grape or producer."
   }
 }
 

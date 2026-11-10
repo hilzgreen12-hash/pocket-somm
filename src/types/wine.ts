@@ -272,8 +272,10 @@ export interface WineServingSuggestion {
   decantReason?: string;
   glassware?: string;
   glasswareReason?: string;
-  aperitif?: { style?: string; reason?: string };
-  digestif?: { style?: string; reason?: string };
+  // style = a named style (used to match a cellar pick, not shown);
+  // description = the kind of wine, described without naming one.
+  aperitif?: { style?: string; reason?: string; description?: string };
+  digestif?: { style?: string; reason?: string; description?: string };
   // Serve tab → Classic Pairing Ingredients (fetched separately, saved here).
   pairingIngredients?: { name: string; type: 'protein' | 'herb' | 'vegetable' }[];
   // 2 = three per group, food only (older lists are refreshed once).

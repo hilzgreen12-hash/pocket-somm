@@ -43,6 +43,7 @@ import { effectiveMaturity } from '../../src/utils/maturity';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals, stampPurchasePriceDate } from '../../src/api/cellar';
 import { generateServingSuggestion, generateMarketVintage, generateRarity, generateVintageVerdict, generatePairingIngredients, type VintageVerdictAI, type PairingIngredient } from '../../src/api/wineExtras';
 import { PairingIngredientsCard } from '../../src/components/winecard/PairingIngredientsCard';
+import { GenerateRecipesCard, ServingGlance, ComplementaryPairings, CellarPickRow } from '../../src/components/winecard/ServeSections';
 import { wineNameKey, wineQueryAltName } from '../../src/utils/wineIdentity';
 import { sameWineIdentity } from '../../src/utils/wineMatch';
 import { publishCommunityReview } from '../../src/api/community';
@@ -2233,25 +2234,12 @@ export default function CellarWineDetail() {
   }
 
   function pickRow(found: CellarPick | null, slot: 'before' | 'after', suggested: string) {
-    if (!found) {
-      // Nothing suitable at all → offer three styles from the wider market.
-      return (
-        <TouchableOpacity onPress={() => router.push({ pathname: '/cellar/serve-market', params: { wineId: wine!.id, slot, suggested } } as any)} activeOpacity={0.7}>
-          <Text style={styles.wcPickNone}>Nothing in this style is available in your cellar yet, would you like some specific suggestions from the wider market?</Text>
-          <Text style={[styles.wcLink, { marginTop: 4 }]}>View suggestions ›</Text>
-        </TouchableOpacity>
-      );
-    }
-    const pick = found.wine;
     return (
-      <TouchableOpacity style={styles.wcPick} onPress={() => router.push(`/cellar/${pick.id}` as any)} activeOpacity={0.7}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.wcLabel}>{found.exact ? 'Top pick from your cellar' : 'The closest match in your cellar is:'}</Text>
-          <Text style={styles.wcPickName} numberOfLines={2}>{[pick.producer, pick.wine_name, pick.vintage].filter(Boolean).join(' ')}</Text>
-          <Text style={styles.wcSmall}>{[pick.region, `${pick.quantity ?? 1} ${(pick.quantity ?? 1) === 1 ? 'bottle' : 'bottles'}`].filter(Boolean).join(' · ')}</Text>
-        </View>
-        <Text style={styles.wcChevron}>›</Text>
-      </TouchableOpacity>
+      <CellarPickRow
+        found={found}
+        onOpen={(id) => router.push(`/cellar/${id}` as any)}
+        onMarket={() => router.push({ pathname: '/cellar/serve-market', params: { wineId: wine!.id, slot, suggested } } as any)}
+      />
     );
   }
 
@@ -2631,50 +2619,28 @@ export default function CellarWineDetail() {
         {/* ================= SOMM ================= */}
         {activeTab === 'somm' ? (
           <>
-            <TouchableOpacity style={styles.wcPairings} onPress={handleFindPairings} activeOpacity={0.7}>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.wcH2}>Chef Inspired Recipe Pairings</Text>
-                <Text style={styles.wcPairingsSub}>Let Vinster generate 3 chef-inspired recipes to cook at home, save recipes to your cookbook and share them</Text>
-              </View>
-              <Text style={styles.wcChevron}>›</Text>
-            </TouchableOpacity>
+            <GenerateRecipesCard onPress={handleFindPairings} />
 
-            <PairingIngredientsCard ingredients={ingredients ?? serving?.pairingIngredients ?? null} loading={ingredientsLoading} />
-
-            <Text style={[styles.wcH2, { marginTop: spacing.xs }]}>Serving Suggestions</Text>
             {serving ? (
               <>
-                <View style={styles.wcTwoUp}>
-                  {serving.temperature ? <View style={[styles.wcCard, styles.wcHalf]}><Text style={styles.wcLabel}>Temperature</Text><Text style={styles.wcGoldValue}>{serving.temperature}</Text>{serving.temperatureReason ? <Text style={styles.wcSmall}>{serving.temperatureReason}</Text> : null}</View> : null}
-                  {serving.decant ? <View style={[styles.wcCard, styles.wcHalf]}><Text style={styles.wcLabel}>Decanting</Text><Text style={styles.wcGoldValue}>{serving.decant}</Text>{serving.decantReason ? <Text style={styles.wcSmall}>{serving.decantReason}</Text> : null}</View> : null}
-                </View>
-                {serving.glassware ? <View style={styles.wcCard}><Text style={styles.wcLabel}>Glassware</Text><Text style={styles.wcGoldValue}>{serving.glassware}</Text>{serving.glasswareReason ? <Text style={styles.wcBodyText}>{serving.glasswareReason}</Text> : null}</View> : null}
-                {serving.aperitif?.style ? (
-                  <View style={styles.wcCard}>
-                    <Text style={styles.wcLabel}>Drink Before</Text>
-                    <Text style={styles.wcGoldTitle}>{serving.aperitif.style}</Text>
-                    {serving.aperitif.reason ? <Text style={styles.wcBodyText}>{serving.aperitif.reason}</Text> : null}
-                    {pickRow(beforePick, 'before', serving.aperitif.style)}
-                  </View>
-                ) : null}
-                {serving.digestif?.style ? (
-                  <View style={styles.wcCard}>
-                    <Text style={styles.wcLabel}>Drink After</Text>
-                    <Text style={styles.wcGoldTitle}>{serving.digestif.style}</Text>
-                    {serving.digestif.reason ? <Text style={styles.wcBodyText}>{serving.digestif.reason}</Text> : null}
-                    {pickRow(afterPick, 'after', serving.digestif.style)}
-                  </View>
-                ) : null}
+                <ServingGlance serving={serving} />
+                <PairingIngredientsCard ingredients={ingredients ?? serving?.pairingIngredients ?? null} loading={ingredientsLoading} />
+                <ComplementaryPairings serving={serving} renderPick={(slot) => pickRow(slot === 'before' ? beforePick : afterPick, slot, (slot === 'before' ? serving.aperitif?.style : serving.digestif?.style) ?? '')} />
                 <TouchableOpacity onPress={handleGenerateServing} disabled={generatingServing} activeOpacity={0.7}>
                   <Text style={styles.wcRegen}>{generatingServing ? 'Regenerating…' : 'Regenerate serving suggestions'}</Text>
                 </TouchableOpacity>
               </>
-            ) : generatingServing ? (
-              <View style={styles.vintageLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.wcSmall}>Generating serving suggestions…</Text></View>
             ) : (
-              <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateServing} activeOpacity={0.7}>
-                <Text style={styles.generateNoteBtnText}>Generate</Text>
-              </TouchableOpacity>
+              <>
+                {generatingServing ? (
+                  <View style={styles.vintageLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.wcSmall}>Generating serving suggestions…</Text></View>
+                ) : (
+                  <TouchableOpacity style={styles.generateNoteBtn} onPress={handleGenerateServing} activeOpacity={0.7}>
+                    <Text style={styles.generateNoteBtnText}>Generate Serving Suggestions</Text>
+                  </TouchableOpacity>
+                )}
+                <PairingIngredientsCard ingredients={ingredients ?? null} loading={ingredientsLoading} />
+              </>
             )}
           </>
         ) : null}

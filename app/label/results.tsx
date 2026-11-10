@@ -47,6 +47,7 @@ import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } fro
 import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
 import { generateServingSuggestion, generateRarity, generateVintageVerdict, generateMarketVintage, generatePairingIngredients, type VintageVerdictAI, type PairingIngredient } from '../../src/api/wineExtras';
 import { PairingIngredientsCard } from '../../src/components/winecard/PairingIngredientsCard';
+import { GenerateRecipesCard, ServingGlance, ComplementaryPairings, CellarPickRow } from '../../src/components/winecard/ServeSections';
 import type { WineServingSuggestion } from '../../src/types/wine';
 import { peekIntelCurrency } from '../../src/utils/localCurrency';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
@@ -2232,30 +2233,18 @@ export default function LabelResultsScreen() {
 
 
   function intelPickRow(found: CellarPick | null, slot: 'before' | 'after', suggested: string) {
-    if (!found) {
-      const qs = new URLSearchParams({ slot, suggested });
-      if (wine.producer) qs.set('sp', wine.producer);
-      if (wine.wineName) qs.set('sw', wine.wineName);
-      if (wine.region) qs.set('sr', wine.region);
-      if (wine.vintage) qs.set('sv', wine.vintage);
-      if (wine.grape) qs.set('sg', wine.grape);
-      return (
-        <TouchableOpacity onPress={() => router.push(`/cellar/serve-market?${qs.toString()}` as any)} activeOpacity={0.7}>
-          <Text style={wc.PickNone}>Nothing in this style is available in your cellar yet, would you like some specific suggestions from the wider market?</Text>
-          <Text style={[wc.Link, { marginTop: 4 }]}>View suggestions ›</Text>
-        </TouchableOpacity>
-      );
-    }
-    const pick = found.wine;
+    const qs = new URLSearchParams({ slot, suggested });
+    if (wine.producer) qs.set('sp', wine.producer);
+    if (wine.wineName) qs.set('sw', wine.wineName);
+    if (wine.region) qs.set('sr', wine.region);
+    if (wine.vintage) qs.set('sv', wine.vintage);
+    if (wine.grape) qs.set('sg', wine.grape);
     return (
-      <TouchableOpacity style={wc.Pick} onPress={() => router.push(`/cellar/${pick.id}` as any)} activeOpacity={0.7}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={wc.Label}>{found.exact ? 'Top pick from your cellar' : 'The closest match in your cellar is:'}</Text>
-          <Text style={wc.PickName} numberOfLines={2}>{[pick.producer, pick.wine_name, pick.vintage].filter(Boolean).join(' ')}</Text>
-          <Text style={wc.Small}>{[pick.region, `${pick.quantity ?? 1} ${(pick.quantity ?? 1) === 1 ? 'bottle' : 'bottles'}`].filter(Boolean).join(' · ')}</Text>
-        </View>
-        <Text style={wc.Chevron}>›</Text>
-      </TouchableOpacity>
+      <CellarPickRow
+        found={found}
+        onOpen={(id) => router.push(`/cellar/${id}` as any)}
+        onMarket={() => router.push(`/cellar/serve-market?${qs.toString()}` as any)}
+      />
     );
   }
 
@@ -2519,45 +2508,21 @@ export default function LabelResultsScreen() {
 
         {intelTab === 'serve' ? (
           <View style={wc.Body}>
-            <TouchableOpacity style={wc.Pairings} onPress={handleChefPairing} activeOpacity={0.8}>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={wc.H2}>Chef Inspired Recipe Pairings</Text>
-                <Text style={wc.PairingsSub}>Let Vinster generate 3 chef-inspired recipes to cook at home, save recipes to your cookbook and share them</Text>
-              </View>
-              <Text style={wc.Chevron}>›</Text>
-            </TouchableOpacity>
-            <PairingIngredientsCard ingredients={intelIngredients} loading={ingredientsLoading} />
+            <GenerateRecipesCard onPress={handleChefPairing} />
             {servingLoading ? (
               <View style={wc.loadingRow}><ActivityIndicator color={colors.gold} /><Text style={wc.Small}>Thinking about how best to serve this…</Text></View>
             ) : serving ? (
               <>
-                <View style={wc.TwoUp}>
-                  {serving.temperature ? <View style={[wc.Card, wc.Half]}><Text style={wc.Label}>Temperature</Text><Text style={wc.GoldValue}>{serving.temperature}</Text>{serving.temperatureReason ? <Text style={wc.Small}>{serving.temperatureReason}</Text> : null}</View> : null}
-                  {serving.decant ? <View style={[wc.Card, wc.Half]}><Text style={wc.Label}>Decanting</Text><Text style={wc.GoldValue}>{serving.decant}</Text>{serving.decantReason ? <Text style={wc.Small}>{serving.decantReason}</Text> : null}</View> : null}
-                </View>
-                {serving.glassware ? <View style={wc.Card}><Text style={wc.Label}>Glassware</Text><Text style={wc.GoldValue}>{serving.glassware}</Text>{serving.glasswareReason ? <Text style={wc.BodyText}>{serving.glasswareReason}</Text> : null}</View> : null}
-                {serving.aperitif?.style ? (
-                  <View style={wc.Card}>
-                    <Text style={wc.Label}>Drink Before</Text>
-                    <Text style={wc.GoldTitle}>{serving.aperitif.style}</Text>
-                    {serving.aperitif.reason ? <Text style={wc.BodyText}>{serving.aperitif.reason}</Text> : null}
-                    {intelPickRow(pickFromCellar(serving.aperitif.style, homeWines), 'before', serving.aperitif.style)}
-                  </View>
-                ) : null}
-                {serving.digestif?.style ? (
-                  <View style={wc.Card}>
-                    <Text style={wc.Label}>Drink After</Text>
-                    <Text style={wc.GoldTitle}>{serving.digestif.style}</Text>
-                    {serving.digestif.reason ? <Text style={wc.BodyText}>{serving.digestif.reason}</Text> : null}
-                    {intelPickRow(pickFromCellar(serving.digestif.style, homeWines), 'after', serving.digestif.style)}
-                  </View>
-                ) : null}
+                <ServingGlance serving={serving} />
+                <PairingIngredientsCard ingredients={intelIngredients} loading={ingredientsLoading} />
+                <ComplementaryPairings serving={serving} renderPick={(slot, style) => intelPickRow(pickFromCellar(style, homeWines), slot, style)} />
               </>
             ) : (
               <TouchableOpacity onPress={() => { setServingExpanded(false); void toggleServing(); }} activeOpacity={0.7}>
                 <Text style={wc.Small}>Couldn't load serving suggestions — tap to try again.</Text>
               </TouchableOpacity>
             )}
+            {!serving ? <PairingIngredientsCard ingredients={intelIngredients} loading={ingredientsLoading} /> : null}
           </View>
         ) : null}
       </>
