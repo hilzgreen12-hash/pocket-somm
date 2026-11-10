@@ -19,7 +19,7 @@ import { fonts } from '../constants/fonts';
 // Example cards shown when the cellar has nothing to surface yet.
 const CELLAR_EXAMPLES: PlaceholderCard[] = [
   { kind: 'labelCollage', images: [NAMED_LABELS.gruaudLarose], title: 'Château Gruaud-Larose 1979', stamp: 'Last Call · final year', overlay: 'Cellar Insights appear here as you use Vinster' },
-  { kind: 'labelCollage', images: [NAMED_LABELS.piperRare], title: 'Piper-Heidsieck Rare 2012', stamp: 'Running Low · 1 left', overlay: 'Cellar Insights appear here as you use Vinster' },
+  { kind: 'labelCollage', images: [NAMED_LABELS.tollotBeaut], title: 'Tollot-Beaut Beaune-Grèves 2020', stamp: 'Running Low · 1 left', overlay: 'Cellar Insights appear here as you use Vinster' },
   { kind: 'labelCollage', images: [NAMED_LABELS.munjebel], title: 'Cornelissen Munjebel CS 2016', stamp: 'Top Rated · by you', overlay: 'Cellar Insights appear here as you use Vinster' },
 ];
 
