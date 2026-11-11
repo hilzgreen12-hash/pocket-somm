@@ -13,6 +13,7 @@ import {
 import type { CellarRecommendation, GeneralRecommendation } from '../stores/foodPairingStore';
 import type { Pairing, WineDetailsComplete } from '../types/wine';
 import { normaliseCity } from '../utils/city';
+import { noteHappyMoment } from '../services/ratingPrompt';
 
 // Best-effort city resolution from GPS. Returns null if permission isn't
 // granted or anything fails — saves should never block on location.
@@ -57,7 +58,10 @@ export function useChefLabelHistory() {
       const city = await captureCity();
       return insertChefLabelSession({ userId, ...input, city });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['chef-label-sessions', userId] }),
+    onSuccess: () => {
+      noteHappyMoment('cookbook-save');
+      return qc.invalidateQueries({ queryKey: ['chef-label-sessions', userId] });
+    },
   });
 
   const remove = useMutation({

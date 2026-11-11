@@ -5,6 +5,7 @@ import { fetchAutoLabelUri } from '../api/label';
 import { uploadLabelImage } from '../api/labelPhotos';
 import type { CellarWine } from '../types/wine';
 import { estimatePurchasePriceOnAdd, type PurchaseEstimateMode } from '../services/purchaseEstimate';
+import { noteHappyMoment } from '../services/ratingPrompt';
 
 // Review fields that should trigger a community-feed publish when they
 // change. Keeping this list tight so generic edits (purchase price,
@@ -70,7 +71,10 @@ export function useCellar() {
       }
       return saved;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar', userId] }),
+    onSuccess: (saved) => {
+      if (saved && !saved.is_wishlist && !saved.archived_at) noteHappyMoment('cellar-add');
+      return qc.invalidateQueries({ queryKey: ['cellar', userId] });
+    },
   });
 
   const updateWine = useMutation({

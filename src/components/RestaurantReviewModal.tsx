@@ -35,6 +35,7 @@ import { MicButton } from './MicButton';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import { isoToYmd, ymdToIso } from '../utils/reviewDate';
+import { noteHappyMoment } from '../services/ratingPrompt';
 
 interface WineLine {
   producer: string | null;
@@ -540,6 +541,7 @@ export function RestaurantReviewModal({
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       qc.invalidateQueries({ queryKey: ['my-community-uploads'] });
       onSaved({ name: restaurantName.trim() || null, city: cityValue.trim() || null });
+      noteHappyMoment('restaurant-review');
     } catch {
       // Deliberately do NOT call onSaved here — that closes the modal. Keeping
       // it open preserves what the user typed and leaves the form dirty, so

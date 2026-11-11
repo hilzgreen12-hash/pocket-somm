@@ -13,6 +13,7 @@ import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { detectLocalCurrency, askUseLocalCurrency } from '../../src/utils/localCurrency';
+import { noteHappyMoment } from '../../src/services/ratingPrompt';
 
 type Stage = 'reading' | 'recommending' | 'error';
 
@@ -114,6 +115,7 @@ export default function ExtractingScreen() {
       // BackHandler can't intercept — pops to a stale/erroring transient screen.
       router.dismissTo('/scan/wine-list');
       router.push('/scan/results');
+      noteHappyMoment('wine-list-scan');
     } catch (err) {
       if (!token.active) return;
       if (err instanceof Error && err.message === 'cancelled') return;
