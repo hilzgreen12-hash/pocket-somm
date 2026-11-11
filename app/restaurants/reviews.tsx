@@ -754,11 +754,18 @@ export default function RestaurantReviewsScreen() {
             sorted.map((item) => {
               const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null || item.ratingAtmosphere != null || item.ratingGlassware != null || item.ratingValue != null;
               return (
-                <View key={item.id} style={styles.cardCompact}>
-                  {/* Photo of the night on the left, then the restaurant header
-                      (tap to edit the review; wines are managed in the edit
-                      modal). Tap the photo to view it full-screen (zoomable);
-                      long-press to change or remove it. */}
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.cardCompact}
+                  onPress={() => { setEditing(item); setEditingFromLink(false); }}
+                  onLongPress={() => handleLongPressRestaurant(item)}
+                  delayLongPress={400}
+                  activeOpacity={0.7}
+                >
+                  {/* The whole tile opens the review on tap and offers Remove on
+                      long-press. The photo on the left keeps its own actions:
+                      tap to view it full-screen, long-press to change or
+                      remove it. */}
                   <View style={styles.headerWithThumb}>
                     {item.restaurantPhotoPath ? (
                       <TouchableOpacity
@@ -776,13 +783,7 @@ export default function RestaurantReviewsScreen() {
                         onPress={() => attachRestaurantPhoto.present({ sessionId: item.id, restaurant: item.restaurantName, city: item.city })}
                       />
                     )}
-                  <TouchableOpacity
-                    style={styles.headerTextCol}
-                    onPress={() => { setEditing(item); setEditingFromLink(false); }}
-                    onLongPress={() => handleLongPressRestaurant(item)}
-                    delayLongPress={400}
-                    activeOpacity={0.7}
-                  >
+                  <View style={styles.headerTextCol}>
                     <View style={styles.cardCompactRow}>
                       <Text style={styles.restaurantName} numberOfLines={1}>
                         {item.restaurantName || 'Unnamed restaurant'}
@@ -810,9 +811,9 @@ export default function RestaurantReviewsScreen() {
                     {item.restaurantNote?.trim() ? (
                       <Text style={styles.reviewSnippet} numberOfLines={1} ellipsizeMode="tail">{item.restaurantNote.trim()}</Text>
                     ) : null}
-                  </TouchableOpacity>
                   </View>
-                </View>
+                  </View>
+                </TouchableOpacity>
               );
             })
           )}
