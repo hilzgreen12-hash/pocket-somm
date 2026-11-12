@@ -192,7 +192,7 @@ export default function LineupDetailScreen() {
   function confirmFromCellar(index: number) {
     showAlert({
       title: 'This was from my cellar',
-      body: 'Link this bottle to a wine in your cellar so its review, intel and archiving all resolve correctly.',
+      body: 'Choose the wine in your cellar. Vinster links this bottle to it and moves the bottle from your cellar to your archive, dated to this night.',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Choose from my cellar', onPress: () => setCellarPickerFor(index) },
@@ -206,11 +206,24 @@ export default function LineupDetailScreen() {
     const current: LineupWine[] = lineup.wines ?? [];
     const idx = cellarPickerFor;
     setCellarPickerFor(null);
-    persistWines(current.map((w, i) => (
+    const prev = current[idx];
+    // Confirmed from the cellar → the bottle(s) were drunk that night, so they
+    // leave the cellar for the archive (counted like any other archive). Only
+    // once: a bottle already archived for this lineup isn't archived again.
+    const archiveNow = !!prev && !prev.archived && (cw.quantity ?? 0) > 0;
+    const linked = current.map((w, i) => (
       i === idx
-        ? { ...w, cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, confirmed: true }
+        ? { ...w, cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, confirmed: true, archived: w.archived || archiveNow }
         : w
-    )));
+    ));
+    void (async () => {
+      try {
+        if (archiveNow) await archiveCellarBottles([{ ...prev, cellar_wine_id: cw.id }]);
+        await persistWines(linked);
+      } catch (err) {
+        showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+      }
+    })();
   }
 
   // Tap the "Your Cellar" badge on a matched wine → archive it from the cellar,
