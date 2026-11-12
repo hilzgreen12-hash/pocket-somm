@@ -20,7 +20,6 @@ import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
 import { PreferredCountryInput } from '../../src/components/preferences/PreferredCountryInput';
 import { useAuth } from '../../src/hooks/useAuth';
-import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -193,27 +192,6 @@ export default function WineListScreen() {
     go();
   }
 
-  // Revisit the last restaurant-list recommendation — the yellow link beneath
-  // the scan/upload buttons.
-  async function handleViewLastResult() {
-    try {
-      const raw = await AsyncStorage.getItem(scanHistoryKey(session?.user.id));
-      const items = raw ? JSON.parse(raw) : [];
-      if (!items.length) { showAlert({ title: 'No previous search', body: 'Once you scan a wine list, you can come back here to revisit it.' }); return; }
-      const last = items[0];
-      setExtractedWines(last.extractedWines);
-      setRecommendation(last.recommendation);
-      const params = new URLSearchParams({ fromHistory: 'true' });
-      if (last.savedAt) params.set('date', last.savedAt);
-      if (last.restaurantName) params.set('restaurant', last.restaurantName);
-      if (last.city) params.set('city', last.city);
-      if (last.sessionId) params.set('sessionId', last.sessionId);
-      router.push(`/scan/results?${params.toString()}`);
-    } catch {
-      showAlert({ title: 'No previous search', body: 'Once you scan a wine list, you can come back here to revisit it.' });
-    }
-  }
-
   async function handleScreenshot() {
     if (isUploading) return;
     const go = async () => {
@@ -255,17 +233,15 @@ export default function WineListScreen() {
     router.push('/scan/extracting');
   }
 
-  // Arriving via "Upload Wine List" on the Scan landing (?upload=1) auto-opens
-  // the photo picker once, using the restored/default preferences — a quick
-  // upload path. "Scan a Wine List" (no param) shows the full form instead.
-  const autoUploadedRef = useRef(false);
-  useEffect(() => {
-    if (uploadParam === '1' && !autoUploadedRef.current) {
-      autoUploadedRef.current = true;
-      void handleScreenshot();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uploadParam]);
+  // How the list will arrive, from Home's "Read A Wine List" pop-up: the camera
+  // (default), the photo library (?upload=1) or a list found online. The user
+  // sets preferences first; Find My Picks then starts that route.
+  const mode: 'scan' | 'upload' | 'online' = readingOnline ? 'online' : uploadParam === '1' ? 'upload' : 'scan';
+  function handleFindMyPicks() {
+    if (mode === 'online') handleReadOnline();
+    else if (mode === 'upload') void handleScreenshot();
+    else handleScan();
+  }
 
   return (
     <View style={styles.container}>
@@ -285,9 +261,9 @@ export default function WineListScreen() {
 
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.appName}>Scan a List</Text>
+          <Text style={styles.appName}>Bottle Picks</Text>
         </View>
-        <Text style={styles.subtitle}>Input a wine list to generate Vinster's top three picks based on overall quality and value. Input your preferences to tailor its recommendations further.</Text>
+        <Text style={styles.subtitle}>Set your preferences and Vinster will tailor its top three picks accounting for overall quality and value.</Text>
         <HelpButton label="More About Scan" title="How Scan works" body={LIST_HELP} />
       </View>
 
@@ -347,32 +323,19 @@ export default function WineListScreen() {
         </View>
 
         {readingOnline ? (
-          <>
-            <View style={styles.onlineCard}>
-              <Text style={styles.onlineLabel}>Wine list found online</Text>
-              <Text style={styles.onlineTitle} numberOfLines={2}>{onlineSource!.title || onlineSource!.restaurant || 'Wine list'}</Text>
-              {onlineSource!.domain ? <Text style={styles.onlineDomain} numberOfLines={1}>{onlineSource!.domain}</Text> : null}
-              <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                <Text style={styles.lastResultLink}>Choose a different list</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={styles.buttonFullOnline} onPress={handleReadOnline} activeOpacity={0.85}>
-              <Text style={styles.buttonHalfText}>Find My Picks</Text>
+          <View style={styles.onlineCard}>
+            <Text style={styles.onlineLabel}>Wine list found online</Text>
+            <Text style={styles.onlineTitle} numberOfLines={2}>{onlineSource!.title || onlineSource!.restaurant || 'Wine list'}</Text>
+            {onlineSource!.domain ? <Text style={styles.onlineDomain} numberOfLines={1}>{onlineSource!.domain}</Text> : null}
+            <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text style={styles.lastResultLink}>Choose a different list</Text>
             </TouchableOpacity>
-          </>
-        ) : (
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={handleScan}>
-            <Text style={styles.buttonHalfText}>Scan Wine List</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.buttonHalf, isUploading && { opacity: 0.5 }]} onPress={handleScreenshot} disabled={isUploading}>
-            <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Wine List'}</Text>
-          </TouchableOpacity>
-        </View>
-        )}
-
-        <TouchableOpacity onPress={handleViewLastResult} activeOpacity={0.7}>
-          <Text style={styles.lastResultLink}>View Last Result</Text>
+          </View>
+        ) : null}
+        {/* One button: opens the camera, the photo library, or reads the online
+            list — whichever way the user chose on Home. */}
+        <TouchableOpacity style={[styles.buttonFullOnline, isUploading && { opacity: 0.5 }]} onPress={handleFindMyPicks} disabled={isUploading} activeOpacity={0.85}>
+          <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Find My Picks'}</Text>
         </TouchableOpacity>
 
       </View>
@@ -526,7 +489,7 @@ const styles = StyleSheet.create({
   onlineTitle: { fontFamily: fonts.headingSemibold, fontSize: 17, color: '#FFFFFF', textAlign: 'center', marginTop: 4 },
   onlineDomain: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2 },
   buttonFullOnline: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center' },
-  // "View Last Result" — yellow link beneath the scan/upload buttons.
+  // Gold underlined link ("Choose a different list").
   lastResultLink: {
     fontFamily: fonts.bodyRegular,
     fontSize: 13,
