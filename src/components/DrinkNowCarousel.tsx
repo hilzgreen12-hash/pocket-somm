@@ -23,12 +23,13 @@ const CELLAR_EXAMPLES: PlaceholderCard[] = [
   { kind: 'labelCollage', images: [NAMED_LABELS.munjebel], title: 'Cornelissen Munjebel CS 2016', stamp: 'Top Rated · by you', overlay: 'Cellar Insights appear here as you use Vinster' },
 ];
 
-// Last Call now = drinkable now AND the window closes within the next 3 years
-// (or has already closed) — the bottles to open soonest.
-const LAST_CALL_HORIZON = 3;
+// Last Call = drinkable now AND no more than 2 years left in the drinking
+// window (or it has already closed) — the bottles to open soonest. A wine with
+// more than two years left is never Last Call.
+const LAST_CALL_HORIZON = 2;
 const RUNNING_LOW_MAX = 2;
 
-function isLastCall(w: CellarWine, nowYear: number): boolean {
+export function isLastCall(w: CellarWine, nowYear: number = new Date().getFullYear()): boolean {
   // Spirits don't mature — never surface them as Last Call / peak-now.
   if (w.is_spirit) return false;
   const to = w.drinking_window_to;
@@ -47,7 +48,6 @@ type InsightTile = { wine: CellarWine; badge: string; meta: string };
 const rlKey = (w: CellarWine) => `${wineNameKey(w.producer, w.wine_name)}|${(w.vintage ?? '').toString().trim()}`;
 
 function buildCellarInsights(wines: CellarWine[], archivedKeys?: Set<string> | null): InsightTile[] {
-  const nowYear = new Date().getFullYear();
   const owned = wines.filter((w) => (w.quantity ?? 0) > 0);
   const tiles: InsightTile[] = [];
   const used = new Set<string>();
@@ -55,13 +55,8 @@ function buildCellarInsights(wines: CellarWine[], archivedKeys?: Set<string> | n
     if (w && !used.has(w.id)) { used.add(w.id); tiles.push({ wine: w, badge, meta }); }
   };
 
-  // Last Call — most urgent (soonest close) first.
-  owned.filter((w) => isLastCall(w, nowYear))
-    .sort((a, b) => (a.drinking_window_to ?? 9999) - (b.drinking_window_to ?? 9999))
-    .forEach((w) => {
-      const to = w.drinking_window_to as number;
-      add(w, 'Last Call', to < nowYear ? `Drink now · past ${to}` : to === nowYear ? 'Drink now · final year' : `Drink by ${to}`);
-    });
+  // Last Call wines are grouped into ONE tile (see DrinkNowCarousel), not one
+  // tile each.
 
   // Running Low — fewest bottles first. Only for wines that were once better
   // stocked: require at least one bottle of that wine in the archive (i.e. it's
@@ -93,12 +88,12 @@ export function useDrinkNowCounts(): { total: number; lastCall: number } {
   const { wines } = useCellar();
   const nowYear = new Date().getFullYear();
   const lc = wines.filter((w) => (w.quantity ?? 0) > 0 && isLastCall(w, nowYear)).length;
-  return { total: buildCellarInsights(wines).length, lastCall: lc };
+  return { total: buildCellarInsights(wines).length + (lc > 0 ? 1 : 0), lastCall: lc };
 }
 
-// "Your Cellar Insights" — Last Call / Running Low / Top Rated / Most Collected /
-// Oldest Vintage, each a badged wine tile. Tap → the wine card.
-export function DrinkNowCarousel() {
+// The cellar wines Home Cellar Insights looks at: everything except wines kept
+// only in an external/offsite cellar (this carousel is about stock at home).
+function useHomeInsightWines(): { homeWines: CellarWine[]; archivedKeys: Set<string> } {
   const { session } = useAuth();
   const userId = session?.user.id;
   const { wines } = useCellar();
@@ -124,23 +119,61 @@ export function DrinkNowCarousel() {
     enabled: !!userId,
   });
   const archivedKeys = new Set(archived.map(rlKey));
+  return { homeWines, archivedKeys };
+}
+
+// Last Call wines in the home cellar, most urgent (soonest window close) first.
+// Shared by the Last Call tile and its list screen so the count always matches.
+export function useLastCallWines(): CellarWine[] {
+  return lastCallFrom(useHomeInsightWines().homeWines);
+}
+function lastCallFrom(homeWines: CellarWine[]): CellarWine[] {
+  const nowYear = new Date().getFullYear();
+  return homeWines
+    .filter((w) => (w.quantity ?? 0) > 0 && isLastCall(w, nowYear))
+    .sort((a, b) => (a.drinking_window_to ?? 9999) - (b.drinking_window_to ?? 9999));
+}
+
+// "Your Cellar Insights" — one Last Call, Drink Now tile (opens the list), then
+// Running Low / Top Rated / Most Collected / Oldest Vintage wine tiles.
+// Tap a wine tile → the wine card.
+export function DrinkNowCarousel() {
+  const { homeWines, archivedKeys } = useHomeInsightWines();
+  const lastCall = lastCallFrom(homeWines);
   const tiles = buildCellarInsights(homeWines, archivedKeys);
   // Examples only before there's anything real to show — never beside real tiles.
-  const fill = tiles.length === 0 ? CELLAR_EXAMPLES : [];
+  const fill = tiles.length === 0 && lastCall.length === 0 ? CELLAR_EXAMPLES : [];
+  // Last Call tile picture: the most urgent labels — one full, or two/four split.
+  const collage = lastCall.slice(0, lastCall.length >= 4 ? 4 : Math.min(2, lastCall.length));
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+      {lastCall.length > 0 ? (
+        <TouchableOpacity style={styles.card} onPress={() => router.push('/cellar/last-call' as any)} activeOpacity={0.85}>
+          <View style={styles.collage}>
+            {collage.map((w) => (
+              <WineCardThumb
+                key={w.id}
+                compact
+                path={w.label_image_path}
+                producer={w.producer}
+                wineName={w.wine_name}
+                fallbackText={w.wine_name}
+                style={collage.length === 1 ? styles.cellFull : collage.length === 2 ? styles.cellHalf : styles.cellQuarter}
+              />
+            ))}
+          </View>
+          <Text style={styles.cardName} numberOfLines={1} allowFontScaling={false}>Last Call, Drink Now</Text>
+          <Text style={styles.cardCount} numberOfLines={1} allowFontScaling={false}>{lastCall.length} {lastCall.length === 1 ? 'Wine' : 'Wines'}</Text>
+        </TouchableOpacity>
+      ) : null}
       {tiles.map(({ wine: w, badge, meta }) => (
         <TouchableOpacity key={`${w.id}-${badge}`} style={styles.card} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.85}>
-          <View>
-            <WineCardThumb compact path={w.label_image_path} producer={w.producer} wineName={w.wine_name} fallbackText={w.wine_name} />
-            {/* Insight name on the tile, on a brown band — as on the Search & Discover tiles. */}
-            <View style={styles.titleWrap} pointerEvents="none">
-              <View style={styles.titleBand}><Text style={styles.title} numberOfLines={2} allowFontScaling={false}>{badge}</Text></View>
-            </View>
-          </View>
+          <WineCardThumb compact path={w.label_image_path} producer={w.producer} wineName={w.wine_name} fallbackText={w.wine_name} />
           <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
-          <Text style={styles.cardMeta} numberOfLines={1} allowFontScaling={false}>{meta}</Text>
+          {/* The insight (Running Low, Top Rated…) now leads the gold line —
+              the title overlay on the picture is gone. */}
+          <Text style={styles.cardMeta} numberOfLines={1} allowFontScaling={false}>{badge} · {meta}</Text>
         </TouchableOpacity>
       ))}
       {fill.map((c, i) => <PlaceholderCardView compact key={`ph-${i}`} card={c} />)}
@@ -154,8 +187,11 @@ const styles = StyleSheet.create({
   card: { width: HOME_TILE.w },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  // Same overlay as the Search & Discover tiles: gold title on a brown band.
-  titleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  titleBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
-  title: { fontFamily: fonts.headingSemibold, fontSize: 19, color: colors.gold, lineHeight: 24, textAlign: 'center' },
+  // Last Call tile: gold count line, not in capitals.
+  cardCount: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2 },
+  // Last Call picture: up to four labels inside one white-outlined tile.
+  collage: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden', flexDirection: 'row', flexWrap: 'wrap', backgroundColor: colors.surface },
+  cellFull: { width: '100%', height: '100%', borderWidth: 0, borderRadius: 0 },
+  cellHalf: { width: '50%', height: '100%', borderWidth: 0, borderRadius: 0 },
+  cellQuarter: { width: '50%', height: '50%', borderWidth: 0, borderRadius: 0 },
 });
