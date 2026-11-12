@@ -123,7 +123,8 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
               <Text style={styles.close}>✕</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.title}>Vinster needs the details, input up to 4 wines</Text>
+          <Text style={styles.title}>Comparing Wines</Text>
+          <Text style={styles.subtitle}>Compare different wines or the same wine in different vintages</Text>
 
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {rows.map((r, i) => (
@@ -230,7 +231,8 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.lg },
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg, maxHeight: '88%' },
   closeRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.xs },
-  title: { fontFamily: fonts.headingBold, fontSize: 21, lineHeight: 26, color: colors.text, marginBottom: spacing.md },
+  title: { fontFamily: fonts.headingBold, fontSize: 22, lineHeight: 27, color: colors.text },
+  subtitle: { fontFamily: fonts.bodyRegular, fontSize: 14, lineHeight: 20, color: colors.textMuted, marginTop: 2, marginBottom: spacing.md },
   close: { fontSize: 20, color: colors.text },
   row: { marginBottom: spacing.md },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
