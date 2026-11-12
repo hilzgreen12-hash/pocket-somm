@@ -7,7 +7,7 @@ import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, rem
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { RenameModal } from '../../../src/components/RenameModal';
 import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
-import { updateCellarWine, archiveCellarWine, deleteCellarWine, addCellarWineRemoval } from '../../../src/api/cellar';
+import { updateCellarWine, archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWine, getCellarWineById } from '../../../src/api/cellar';
 import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, fetchPlacementsForWines, placedCount } from '../../../src/api/placements';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { useCellar } from '../../../src/hooks/useCellar';
@@ -305,7 +305,20 @@ export default function BinDetailScreen() {
       await addCellarWineRemoval({ cellarWineId: w.id, removedAt, count: cellQty, note: 'Archived from a wine bin' });
       await releaseFromBinCell(w.id, cellId, cellQty);
       if (cellQty >= total) await updateCellarWine(w.id, { quantity: cellQty, archived_at: removedAt });
-      else await updateCellarWine(w.id, { quantity: total - cellQty });
+      else {
+        // Some of the wine's bottles leave: lower the live row AND add an
+        // archive row for them, like every other archive flow — otherwise these
+        // bottles never reach the Cellar Archive or the wine's bottle history.
+        await updateCellarWine(w.id, { quantity: total - cellQty });
+        // Clone from the stored row (the list entry carries per-cell display fields).
+        const real = await getCellarWineById(w.id);
+        if (real) {
+          const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = real;
+          await addCellarWine({ ...rest, quantity: cellQty, archived_at: removedAt, is_wishlist: false });
+        }
+      }
+      qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+      qc.invalidateQueries({ queryKey: ['archived-wines'] });
       invalidate();
       qc.invalidateQueries({ queryKey: ['cellar'] });
     } catch (err) {
