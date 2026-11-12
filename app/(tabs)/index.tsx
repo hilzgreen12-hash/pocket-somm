@@ -486,6 +486,19 @@ export default function ScanLandingScreen() {
     });
   }
 
+  // Read A Wine List tile → choose how Vinster gets the list.
+  function openWineListChoice() {
+    const after = (fn: () => void) => () => { setTimeout(fn, 350); };
+    showAlert({
+      title: 'How should Vinster read the list?',
+      showCloseX: true,
+      buttons: [
+        { text: 'Scan a List', onPress: after(() => router.push('/scan/wine-list')) },
+        { text: 'Upload a List', onPress: after(() => router.push('/scan/wine-list?upload=1')) },
+      ],
+    });
+  }
+
   // User-arranged order of the Home carousels (saved per device).
   const [homeOrder, setHomeOrder] = useState<string[]>(HOME_SECTION_DEFAULT);
   const [scrollLocked, setScrollLocked] = useState(false);
@@ -534,7 +547,7 @@ export default function ScanLandingScreen() {
           {
             key: 'search',
             title: 'Search & Discover',
-            // Two ways in: Generate Wine Intel (search, scan or upload) and Scan List.
+            // Two ways in: Generate Wine Intel and Read A Wine List, each with a choice pop-up.
             content: (
                 <View style={styles.carouselBleed}>
                   <Text style={styles.sdSubheader} allowFontScaling={false}>Powered by Wine Searcher</Text>
@@ -559,11 +572,12 @@ export default function ScanLandingScreen() {
                       <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Overview, Market & Serving</Text>
                     </View>
 
-                    {/* Scan a Wine List → recommendations */}
+                    {/* Read A Wine List → a pop-up offers Scan a List or Upload a
+                        List. Long-press reopens the last list result. */}
                     <View style={styles.sdCard}>
                       <TouchableOpacity
                         style={styles.sdThumb}
-                        onPress={() => router.push('/scan/wine-list')}
+                        onPress={openWineListChoice}
                         onLongPress={() => requireAccount(handleViewLastListResult)}
                         activeOpacity={0.85}
                       >
@@ -574,12 +588,9 @@ export default function ScanLandingScreen() {
                             <Ionicons name="restaurant-outline" size={40} color="rgba(255,255,255,0.55)" allowFontScaling={false} />
                           </View>
                         )}
-                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan List</Text></View></View>
                       </TouchableOpacity>
-                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Restaurant Bottle Picks</Text>
-                      <TouchableOpacity onPress={() => router.push('/scan/wine-list?upload=1')} hitSlop={{ top: 6, bottom: 8, left: 6, right: 6 }} activeOpacity={0.7} accessibilityRole="button">
-                        <Text style={[styles.sdStamp, styles.sdUpload]} numberOfLines={1} allowFontScaling={false}>Upload Instead</Text>
-                      </TouchableOpacity>
+                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Read A Wine List</Text>
+                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Restaurant Bottle Picks</Text>
                     </View>
                   </ScrollView>
                 </View>
@@ -916,20 +927,11 @@ const styles = StyleSheet.create({
   // Faded like the Community Musings cards: image at 55% under a dark scrim.
   sdImage: { width: '100%', height: '100%', opacity: 0.85 },
   sdFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
-  // Title sits on its own dark band so the photos around it stay bright.
-  sdTitleBand: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6 },
   sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
   sdCollageCell: { width: '50%', height: '50%', opacity: 0.85 },
-  // Title overlaid on the tile, centred — gold, like the Community Musings cards.
-  sdTitleWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  sdTitle: { fontFamily: fonts.headingSemibold, fontSize: 19, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   // White name + gold line beneath, matching the carousels below.
   sdName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
-  // Second line of a two-line white caption (reads as one sentence).
-  sdNameCont: { marginTop: 1 },
-  // "Upload Instead" — gold caps, matching Home Cellar Insights' lines.
-  sdUpload: { textTransform: 'uppercase', letterSpacing: 0.4 },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
   // footprint). This same yellow-bubble treatment is used app-wide.
