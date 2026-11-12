@@ -22,18 +22,21 @@ import { fonts } from '../constants/fonts';
 const MAX_TILES = 6;
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
+// Restaurant interior photo (bundled; also the Read A Wine List tile) — for the
+// Restaurants Visited tile when none of the visits has a photo.
+const RESTAURANT_TILE_IMG = require('../../assets/images/tiles/restaurant-interior.jpg');
 // Cookbook spines photo — Your Cookbook's artwork on the Pair tab.
 const KITCHEN_IMG = require('../../assets/images/kitchen-favourites.jpg');
 
 const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
 // Order mirrors the real tiles so a populated tile replaces its own placeholder.
-// Wine tiles are label collages; Dined Out stays a restaurant photo.
+// Wine tiles are label collages; Restaurants Visited stays a restaurant photo.
 // Each example is keyed to the real tile it stands in for, so an example only
 // ever shows when THAT tile has no data (never beside its own real tile).
 const INSIGHT_EXAMPLES: { key: string; card: PlaceholderCard }[] = [
   { key: 'personality', card: { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY } },
   { key: 'archived', card: { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Drank Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY } },
-  { key: 'restaurants', card: { kind: 'image', uri: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY } },
+  { key: 'restaurants', card: { kind: 'image', uri: RESTAURANT_IMG, title: 'Restaurants Visited Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY } },
   { key: 'cookbook', card: { kind: 'labelCollage', images: [KITCHEN_IMG], title: 'Recipes in Your Cookbook', stamp: '12 Recipes', overlay: INSIGHT_OVERLAY } },
   { key: 'labels-month', card: { kind: 'labelCollage', images: placeholderLabelImages(6, 4), title: 'Labels Scanned Last Month', stamp: '12 wine labels', overlay: INSIGHT_OVERLAY } },
 ];
@@ -166,20 +169,21 @@ export function CellarInsightsCarousel() {
     });
   }
 
-  // 3) Restaurants dined at last month — the venue photos the user saved (newest
-  // first). Only shown when at least one photo exists; otherwise the empty-state
-  // placeholder (a faded restaurant image) covers it.
+  // 3) Restaurants visited last month — the venue photos the user saved (newest
+  // first), or the bundled restaurant photo when none of them has one. Opens
+  // Your Restaurant Reviews.
   const distinctRestos = new Map<string, string | null>();
   for (const r of restosLM as any[]) {
     const k = (r.restaurant_name ?? '').trim().toLowerCase();
     if (k && !distinctRestos.has(k)) distinctRestos.set(k, r.restaurant_photo_path ?? null);
   }
   const restoPhotos = [...distinctRestos.values()].filter(Boolean) as string[];
-  if (distinctRestos.size > 0 && restoPhotos.length > 0) {
+  if (distinctRestos.size > 0) {
     tiles.push({
       key: 'restaurants',
-      title: 'Dined Out Last Month', meta: `${distinctRestos.size} restaurant${distinctRestos.size === 1 ? '' : 's'}`,
+      title: 'Restaurants Visited Last Month', meta: `${distinctRestos.size} restaurant${distinctRestos.size === 1 ? '' : 's'}`,
       collage: restoPhotos,
+      image: restoPhotos.length ? undefined : RESTAURANT_TILE_IMG,
       onTap: () => router.push('/restaurants/reviews' as any),
     });
   }
