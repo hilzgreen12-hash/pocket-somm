@@ -22,7 +22,6 @@ import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
 import { DrinkNowCarousel } from '../../src/components/DrinkNowCarousel';
 import { CellarInsightsCarousel } from '../../src/components/CellarInsightsCarousel';
 import { ReorderableSections, mergeSectionOrder, useAutoScrollHost } from '../../src/components/ReorderableSections';
-import { HomeVoiceModal } from '../../src/components/HomeVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -125,7 +124,6 @@ export default function ScanLandingScreen() {
   const pendingActionRef = useRef<(() => void) | null>(null);
   // The "Search a Wine" tile opens the predictive typeahead in a prompt.
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [voiceOpen, setVoiceOpen] = useState(false);
 
   // The Scan tab always shows its normal compact header. On the first landing
   // after opening the app, a welcome overlay (logo · "Real Wine Experience, AI Delivered" ·
@@ -473,11 +471,8 @@ export default function ScanLandingScreen() {
       <View style={styles.headerBleed}><VinsterHeader /></View>
       <View style={styles.titleRow}>
         <HelpTitle label="Home" title="How Home works" body={SCAN_HELP} textStyle={styles.appName} />
-        {/* Voice Command — top-right text link (matches the Reviews "Add +").
-            Discovery only (recommend / consult / wine intel). */}
-        <TouchableOpacity style={styles.voiceLink} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.voiceLinkText}>Ask Vinster</Text>
-        </TouchableOpacity>
+        {/* "Ask Vinster" (Home voice command) is archived: voice command now lives
+            only on Pair and Cellar. HomeVoiceModal stays (Cellar still uses it). */}
       </View>
 
       <Text style={styles.homeSubtitle}>The launchpad into your Vinous endeavours</Text>
@@ -744,7 +739,6 @@ export default function ScanLandingScreen() {
         onContinue={continueWithoutAccount}
       />
 
-      <HomeVoiceModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
 
     </GHScrollView>
     </TabSwipeView>
@@ -776,10 +770,6 @@ const styles = StyleSheet.create({
   // VinsterHeader, big centred title, blurb beneath).
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
-  // Voice Command — top-right text link, vertically centred on the title (matches
-  // the Reviews "Add +"). Absolute so it never shifts the centred title.
-  voiceLink: { position: 'absolute', right: 0, top: -22 },
-  voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Rule beneath the title row, above Search & Discover.
   // Short line under the Home title — same look as the Cellar tab's subtitle.
   homeSubtitle: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 26 },
@@ -811,13 +801,6 @@ const styles = StyleSheet.create({
   sdName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
-  // "Voice Command" gold bubble beneath the search bar (matches the search bar
-  // footprint). This same yellow-bubble treatment is used app-wide.
-  // Full-width to match the "Manually Search a Wine" bar (no alignSelf: stretches
-  // across the padded content). marginBottom pairs with blurbSeparator to centre
-  // the rule beneath it.
-  voiceBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm, marginBottom: 18 },
-  voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
 
   // Search-a-Wine prompt (opened from the Search tile).
   searchModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.xl },
