@@ -243,18 +243,6 @@ export default function WineListScreen() {
     else handleScan();
   }
 
-  // Upload a List: the photo picker opens straight away, over Bottle Picks
-  // (once per visit). Cancelling it leaves the form, where Find My Picks
-  // opens the picker again after the preferences are set.
-  const autoUploadedRef = useRef(false);
-  useEffect(() => {
-    if (uploadParam === '1' && !autoUploadedRef.current) {
-      autoUploadedRef.current = true;
-      void handleScreenshot();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uploadParam]);
-
   return (
     <View style={styles.container}>
     <ScrollView
