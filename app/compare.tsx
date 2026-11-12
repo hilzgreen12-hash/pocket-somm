@@ -14,6 +14,7 @@ import { tidyWineRegion } from '../src/utils/regionFormat';
 import { formatCurrency, currencySymbol } from '../src/constants/currency';
 import { colors, spacing } from '../src/constants/theme';
 import { fonts } from '../src/constants/fonts';
+import { showAlert } from '../src/components/AppAlert';
 
 // Compare Wines or Vintages — results. The wines come from Home's Compare
 // Wines pop-up (compareStore). Shows the Vintage & Market Comparison table,
@@ -97,6 +98,20 @@ export default function CompareScreen() {
   const bestPpt = pptVals.length > 1 ? Math.min(...pptVals) : null;
   const anyEstimate = wines.some((_, i) => data.market[i]?.price == null && data.wines[i]?.estimatedValue != null);
   const label = (n: number | undefined) => (n ? shortName(wines[n - 1]) : '');
+  // Price tap → the Wine-Searcher range behind the average (or why there isn't one).
+  function showPriceRange(i: number) {
+    const m = data!.market[i];
+    const w = wines[i];
+    const fmt = (n: number) => formatCurrency(n, data!.currency, { decimals: 0 });
+    const body = m?.price != null
+      ? [
+          `Average market price: ${fmt(m.price)}`,
+          m.min != null && m.max != null ? `Range: ${fmt(m.min)} – ${fmt(m.max)}` : 'Wine-Searcher gave no price range for this vintage.',
+          'Source: Wine-Searcher listings for this exact vintage.',
+        ].join('\n')
+      : "Wine-Searcher had no listing for this vintage, so the price shown is Vinster's estimate.";
+    showAlert({ title: wineHeaderLine(w.producer, w.wineName, w.vintage), body });
+  }
 
   return (
     <View style={styles.container}>
@@ -134,14 +149,17 @@ export default function CompareScreen() {
                 <View key={i} style={styles.tr}>
                   <Text style={[styles.td, styles.tdWine]} numberOfLines={3}>{shortName(w)}</Text>
                   <Text style={[styles.td, s != null && s === topScore && styles.gold]}>{s ?? '—'}</Text>
-                  <Text style={styles.td}>{p != null ? `${formatCurrency(p, data.currency, { decimals: 0 })}${data.market[i]?.price == null ? '*' : ''}` : '—'}</Text>
+                  {/* Tap the price for the Wine-Searcher range. */}
+                  <TouchableOpacity style={{ flex: 1 }} onPress={() => showPriceRange(i)} disabled={p == null} activeOpacity={0.6} hitSlop={{ top: 8, bottom: 8 }}>
+                    <Text style={[styles.td, p != null && styles.priceLink]}>{p != null ? `${formatCurrency(p, data.currency, { decimals: 0 })}${data.market[i]?.price == null ? '*' : ''}` : '—'}</Text>
+                  </TouchableOpacity>
                   <Text style={[styles.td, v != null && v === bestPpt && styles.gold]}>{v != null ? `${sym}${v.toFixed(2)}` : '—'}</Text>
                   <Text style={[styles.td, styles.tdWindow]}>{r?.drinkingWindowFrom && r?.drinkingWindowTo ? `${r.drinkingWindowFrom}–${r.drinkingWindowTo}` : '—'}{r?.drinkingWindowStatus ? `\n${STATUS[r.drinkingWindowStatus] ?? ''}` : ''}</Text>
                 </View>
               );
             })}
           </View>
-          <Text style={styles.note}>Score: Vinster's consensus critic score. Price: Wine-Searcher average market price{anyEstimate ? '; * marks Vinster’s estimate where Wine-Searcher had no price' : ''}.</Text>
+          <Text style={styles.note}>Score: Vinster's consensus critic score. Price: Wine-Searcher average market price{anyEstimate ? '; * marks Vinster’s estimate where Wine-Searcher had no price' : ''}. Tap a price to see its Wine-Searcher range.</Text>
 
           {/* The calls */}
           <View style={styles.box}>
@@ -266,6 +284,8 @@ const styles = StyleSheet.create({
   tdWindow: { flex: 2, fontSize: 12.5 },
   th: { fontFamily: fonts.bodySemibold, fontSize: 10.5, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' },
   gold: { color: colors.gold, fontFamily: fonts.bodySemibold },
+  // Tappable price — underlined to show it opens the Wine-Searcher range.
+  priceLink: { textDecorationLine: 'underline' },
   note: { fontFamily: fonts.bodyItalic, fontSize: 12.5, lineHeight: 18, color: colors.textMuted, marginTop: spacing.sm },
   box: { marginTop: spacing.lg, padding: spacing.md, borderRadius: 12, backgroundColor: 'rgba(224,184,74,0.08)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)' },
   boxTitle: { fontFamily: fonts.bodySemibold, fontSize: 12.5, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.gold, marginBottom: 4 },
