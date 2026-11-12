@@ -148,8 +148,8 @@ function lastCallFrom(cellarWines: CellarWine[]): CellarWine[] {
     .sort((a, b) => (a.drinking_window_to ?? 9999) - (b.drinking_window_to ?? 9999));
 }
 
-// Cellar Insights — group tiles (Last Call, Running Low, Most Collected region,
-// Cellar Stats), then the Top Rated and Oldest Vintage wine tiles (tap → card).
+// Cellar Insights — group tiles (Last Call, Running Low, Most Collected region →
+// filtered Full Cellar List, Cellar Stats and Bottle Count → Cellar Statistics), then the Top Rated and Oldest Vintage wine tiles (tap → card).
 export function DrinkNowCarousel() {
   const { cellarWines, archived } = useInsightWines();
   const lastCall = lastCallFrom(cellarWines);
@@ -176,6 +176,8 @@ export function DrinkNowCarousel() {
   const valueText = Object.entries(valueByCurrency).map(([code, amt]) => formatCurrency(amt, code, { decimals: 2 })).join(' · ');
   const valuable = [...owned].filter((w) => w.estimated_value != null).sort((a, b) => Number(b.estimated_value) - Number(a.estimated_value));
   const statsPicture = valuable.length ? valuable : owned;
+  // Bottle Count picture: the best-stocked wines.
+  const byBottles = [...owned].sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0));
 
   // Examples only before there's anything real to show — never beside real tiles.
   const fill = owned.length === 0 ? CELLAR_EXAMPLES : [];
@@ -193,15 +195,23 @@ export function DrinkNowCarousel() {
           title={`Most Collected · ${topRegion}`}
           sub={`${regionBottles} ${regionBottles === 1 ? 'Bottle' : 'Bottles'}`}
           wines={regionWines}
-          onPress={() => router.push('/cellar/regions-map' as any)}
+          onPress={() => router.push(`/cellar/list?region=${encodeURIComponent(topRegion)}` as any)}
         />
       ) : null}
       {owned.length > 0 ? (
-        // Not tappable — a summary only.
         <GroupTile
           title="Cellar Stats"
           sub={`${totalBottles} ${totalBottles === 1 ? 'Bottle' : 'Bottles'}${valueText ? ` · ${valueText}` : ''}`}
           wines={statsPicture}
+          onPress={() => router.push('/cellar/stats' as any)}
+        />
+      ) : null}
+      {owned.length > 0 ? (
+        <GroupTile
+          title="Bottle Count"
+          sub={`${owned.length} ${owned.length === 1 ? 'Wine' : 'Wines'} · ${totalBottles} ${totalBottles === 1 ? 'Bottle' : 'Bottles'}`}
+          wines={byBottles}
+          onPress={() => router.push('/cellar/stats' as any)}
         />
       ) : null}
       {tiles.map(({ wine: w, badge, meta }) => (

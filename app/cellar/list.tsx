@@ -34,6 +34,7 @@ import { inferWineStyle } from '../../src/utils/wineStyle';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { backfillMissingMaturities } from '../../src/services/maturityBackfill';
 import { inferCountry } from '../../src/utils/wineCountry';
+import { baseRegionGroup } from '../../src/utils/wineRegionGroup';
 import { formatCurrency } from '../../src/constants/currency';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
@@ -706,7 +707,10 @@ export default function FullCellarListScreen() {
   // "View Your Archive" reuses this screen via ?archived=1 — it locks the list
   // to archived wines only and hides the Archived filter chip so nothing
   // outside the archive can ever show.
-  const { archived, added, add } = useLocalSearchParams<{ archived?: string; added?: string; add?: string }>();
+  // region: opened from Cellar Insights' Most Collected tile — pre-filters the
+  // list to that region group (Burgundy, Tuscany…). Shown as a removable chip.
+  const { archived, added, add, region: regionParam } = useLocalSearchParams<{ archived?: string; added?: string; add?: string; region?: string }>();
+  const [regionFilter, setRegionFilter] = useState<string | null>(regionParam ? String(regionParam) : null);
   const isArchiveView = archived === '1';
   // Archive view: each shown line's id → every archived row it stands for.
   const archiveGroupIdsRef = useRef(new Map<string, string[]>());
@@ -843,6 +847,7 @@ export default function FullCellarListScreen() {
       }
     }
     if (countryFilter !== 'All' && inferCountry(w.region) !== countryFilter) return false;
+    if (regionFilter && baseRegionGroup(w.region) !== regionFilter) return false;
     if (colourFilter !== 'All' && wineStyle(w) !== colourFilter) return false;
     if (maturityFilter !== 'All' && effectiveMaturity(w) !== maturityFilter) return false;
     if (q) {
@@ -967,7 +972,7 @@ export default function FullCellarListScreen() {
       return next.size === prev.size ? prev : next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locationFilter, countryFilter, colourFilter, maturityFilter, archivedFilter, search, selectMode]);
+  }, [locationFilter, countryFilter, regionFilter, colourFilter, maturityFilter, archivedFilter, search, selectMode]);
 
   // Location dropdown: All · each rack/fridge · each custom location · Not in a
   // rack · "+ Add Location" (an action, handled specially in onSelect).
@@ -1178,7 +1183,17 @@ export default function FullCellarListScreen() {
       >
         {/* Order: Location · Maturity · Score · Price · Favourites · Country ·
             Colour · Archive. Location/Maturity/Archive are Full-Cellar-List-only
-            (hidden in the Archive view). */}
+            (hidden in the Archive view). A Region chip leads when the list was
+            opened from Most Collected — tap it to clear the region. */}
+        {regionFilter ? (
+          <TouchableOpacity style={[styles.filterChip, styles.sortChip]} onPress={() => setRegionFilter(null)} accessibilityLabel={`Clear the ${regionFilter} filter`}>
+            <View style={styles.filterChipHeadingRow}>
+              <Text style={[styles.filterChipLabel, styles.filterChipTextOn]}>Region</Text>
+              <Text style={styles.filterChipChevron}>✕</Text>
+            </View>
+            <Text style={[styles.filterChipValue, { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{regionFilter}</Text>
+          </TouchableOpacity>
+        ) : null}
         {!isArchiveView && (
           <TouchableOpacity style={[styles.filterChip, locationFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('location')}>
             <View style={styles.filterChipHeadingRow}>
