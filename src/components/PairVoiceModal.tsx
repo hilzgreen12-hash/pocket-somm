@@ -2,10 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useCellar } from '../hooks/useCellar';
-import { useAuth } from '../hooks/useAuth';
-import { fetchStorageLocations } from '../api/storageLocations';
-import { fetchPlacementsForWines } from '../api/placements';
-import { homeOnlyWines } from '../utils/homeWines';
 import { useChefLabelHistory } from '../hooks/useChefHistory';
 import { usePreferences } from '../hooks/usePreferences';
 import { classifyDiscoverVoice } from '../api/discoverVoice';
@@ -27,7 +23,8 @@ import { fonts } from '../constants/fonts';
 
 // "Ask Vinster" on the Pair tab — a guided chat (design: the Voice Command Pair
 // canvas, locked 2026-11-04). Three conversations:
-//   A wine for my dish  → dish → cellar or something new → (buying) cost → picks
+//   Find a wine for my dish → dish → the style it needs + up to three from the cellar
+//                              (empty cellar → cost → bottles to buy)
 //   A dish for my wine  → wine → full recipe or ingredients → …
 //   Cookbook reference  → which recipe → matches
 
@@ -67,7 +64,6 @@ function cookbookMatches(sessions: ChefLabelSession[], said: string): ChefLabelS
 export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { visible: boolean; onClose: () => void; startWith?: 'dishForWine' | 'wineForDish'; presetWine?: WineDetailsComplete | null }) {
   const { wines } = useCellar();
   const { sessions } = useChefLabelHistory();
-  const { session } = useAuth();
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const chat = useChat();
@@ -89,44 +85,24 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
     });
   }
 
-  // ---- A wine for my dish ----------------------------------------------
+  // ---- Find a wine for my dish -----------------------------------------
+  // Quick: the dish, then the style of wine it wants and up to three bottles
+  // from the whole cellar (home and external). Only an empty cellar falls back
+  // to bottles to buy.
   const runWineForDish = () => start(async () => {
-    chat.hear('A wine for my dish');
-    const dish = await chat.ask("Tell me what's cooking in as much detail as you can.", 'ie. Pan-fried sea bass with brown butter and capers', 'food');
-    // Tap-to-choose commands instead of a typed answer.
-    chat.say('Should I pull some bottles from your cellar, or are you trying something new?');
-    const choice = await new Promise<'home' | 'all' | 'new'>((resolve) => {
-      let done = false;
-      const pickIt = (c: 'home' | 'all' | 'new', label: string) => { if (done) return; done = true; chat.hear(label); resolve(c); };
-      chat.push(
-        <Starters>
-          <Starter first label="Pull from my home cellar" onPress={() => pickIt('home', 'Pull from my home cellar')} />
-          <Starter label="Pull from my home or external cellars" onPress={() => pickIt('all', 'Pull from my home or external cellars')} />
-          <Starter label="Suggest something new" onPress={() => pickIt('new', 'Suggest something new')} />
-        </Starters>,
-      );
-    });
-    let fromCellar = choice !== 'new';
-    // "Home cellar" = only bottles NOT held in an external cellar (a wine split
-    // between home and an external cellar still counts if any are at home).
-    let pool: CellarWine[] = wines;
-    if (fromCellar && choice === 'home' && wines.length && session?.user.id) {
-      pool = await chat.working('Checking what you have at home…', async () => {
-        const locs = await fetchStorageLocations(session.user.id);
-        if (!locs.some((l) => l.is_external)) return wines; // no external cellars — everything is home
-        const pls = await fetchPlacementsForWines(wines.map((w) => w.id));
-        return homeOnlyWines(wines, pls, new Set(locs.filter((l) => l.is_external).map((l) => l.id)));
-      });
-    }
-    if (fromCellar && !pool.length) {
-      chat.say(choice === 'home' && wines.length ? "Everything you have is in an external cellar, so I'll suggest something to buy instead." : "Your cellar is empty, so I'll find something to buy instead.");
+    chat.hear('Find a wine for my dish');
+    const dish = await chat.ask("Describe the dish and I'll find a wine from your cellar", 'ie. Roast chicken with morels and a creamy sauce', 'food');
+    const pool: CellarWine[] = wines;
+    let fromCellar = true;
+    if (!pool.length) {
+      chat.say("Your cellar is empty, so I'll find something to buy instead.");
       fromCellar = false;
     }
     if (fromCellar) {
       const shown: string[] = [];
       const showCellar = async (alt: boolean) => {
         const res = await chat.working(alt ? 'Finding three fresh suggestions…' : 'Finding wines for your dish…', () =>
-          chooseFromCellar({ eating: dish, occasion: '', currency, wines: pool, excludeIds: alt ? shown : [] }));
+          chooseFromCellar({ eating: dish, occasion: '', currency, wines: pool, excludeIds: alt ? shown : [], styleBrief: true }));
         const picks = res.picks.map((p) => ({ p, w: pool.find((x) => x.id === p.id) })).filter((x) => x.w) as { p: typeof res.picks[0]; w: CellarWine }[];
         if (!picks.length) { chat.say("I couldn't find a good match in your cellar for that."); chat.push(<DoneButton onPress={onClose} />); return; }
         picks.forEach(({ w }) => shown.push(w.id));
@@ -273,7 +249,7 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
     <>
       <Greeting>Tell me what I can help you with, then we'll talk it through</Greeting>
       <Starters>
-        <Starter first label="A wine for my dish" sub="Tell me what's cooking, I'll find the wine" onPress={runWineForDish} />
+        <Starter first label="Find a wine for my dish" sub="Tell me what's cooking, I'll find the wine" onPress={runWineForDish} />
         <Starter label="A dish for my wine" sub="Name the bottle, I'll suggest what to cook" onPress={runDishForWine} />
         <Starter label="I need a reference from my Cookbook" sub="“Find me what dish I paired with Krug 2002”" onPress={runCookbook} />
       </Starters>

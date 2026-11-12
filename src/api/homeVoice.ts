@@ -15,6 +15,9 @@ export async function chooseFromCellar(input: {
   budgetText?: string;
   // True when Serving Suggestions are offered: they carry the only decant time.
   serving?: boolean;
+  // Lead with the style of wine the dish needs ("For roast chicken with morels
+  // you need a wine that is…, such as … From your cellar I recommend:").
+  styleBrief?: boolean;
   excludeIds?: string[];
   currency: string;
   wines: CellarWine[];
@@ -26,6 +29,7 @@ export async function chooseFromCellar(input: {
     decantText: input.decantText ?? '',
     budgetText: input.budgetText ?? '',
     serving: input.serving === true,
+    styleBrief: input.styleBrief === true,
     excludeIds: input.excludeIds ?? [],
     currency: input.currency,
     wines: input.wines.map((w) => ({

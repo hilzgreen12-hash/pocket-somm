@@ -40,7 +40,7 @@ export default function FindPairingScreen() {
   const [budget, setBudget] = useState<number | null>(savedPreferences?.defaultBudget ?? null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [loading, setLoading] = useState(false);
-  // Ask Vinster — the "A wine for my dish" conversation instead of the form.
+  // Quick Command — the "Find a wine for my dish" conversation instead of the form.
   const [askOpen, setAskOpen] = useState(false);
 
   // "View Last Result" — reopen the current in-memory pairing if there is one,
@@ -202,7 +202,7 @@ export default function FindPairingScreen() {
       </View>
 
       <TouchableOpacity style={styles.askBtn} onPress={() => setAskOpen(true)} activeOpacity={0.8} accessibilityRole="button">
-        <Text style={styles.askBtnText}>Ask Vinster</Text>
+        <Text style={styles.askBtnText}>Quick Command</Text>
       </TouchableOpacity>
       <PairVoiceModal visible={askOpen} onClose={() => setAskOpen(false)} startWith="wineForDish" />
 

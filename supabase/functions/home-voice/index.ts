@@ -83,7 +83,9 @@ RULES
 - why: ONE sentence tying the wine to the food and mood.
 ${noDecant || !decantAsked ? '- decant: null.' : timeToDecant ? '- decant: the optimal decanting time for THIS bottle within the time they have, e.g. "Decant for about 1 hour". Base it on the wine\'s age, structure and style.' : '- decant: null.'}
 ${exclude.length ? `- ALTERNATIVE SELECTION: they asked for different suggestions. Avoid these ids: ${exclude.join(', ')}. Only repeat one if you feel strongly it is still the best choice, and then say why in its "why".` : ''}
-- brief: one line in EXACTLY this shape, filled in from what they said: "Three wines chosen from your cellar for <dish, short>${b.occasion ? ', <occasion, short>' : ''}, <decanting, short> and <budget, short>". Leave out any part they didn't give. If they gave no dish, describe the mood instead.
+${b.styleBrief === true
+  ? `- brief: lead with the STYLE of wine the dish needs, in EXACTLY this shape: "For <dish, short, lower case> you need a wine that is <2–4 qualities, e.g. silky, earthy and medium-bodied with bright acidity>, such as <a classic example style, e.g. a Central Otago Pinot Noir> or <a second, different example, e.g. a bright, youthful Rioja>. From your cellar I recommend:". The two examples are STYLES/regions to illustrate, not bottles from the cellar. If fewer than three cellar wines suit, end with "From your cellar, the closest matches are:" instead.`
+  : `- brief: one line in EXACTLY this shape, filled in from what they said: "Three wines chosen from your cellar for <dish, short>${b.occasion ? ', <occasion, short>' : ''}, <decanting, short> and <budget, short>". Leave out any part they didn't give. If they gave no dish, describe the mood instead.`}
 - If the cellar has fewer than three suitable wines, return as many as fit.
 
 CELLAR
