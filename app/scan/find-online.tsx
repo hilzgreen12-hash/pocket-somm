@@ -9,8 +9,8 @@ import { fonts } from '../../src/constants/fonts';
 
 // Find Online: search the web for a restaurant's wine list, let the user pick
 // the right result, then read it through the same pipeline as a photographed
-// list (extracting → results). Reached from Home's "Read A Wine List" pop-up
-// via the Scan a List form, which sets the scan preferences first.
+// list (extracting → results). Reached from Home's "Read A Wine List" pop-up;
+// picking a list opens the Scan a List form to set preferences before reading.
 export default function FindOnlineScreen() {
   const setOnlineSource = useScanStore((s) => s.setOnlineSource);
   const [restaurant, setRestaurant] = useState('');
@@ -45,10 +45,14 @@ export default function FindOnlineScreen() {
     }
   }
 
-  function read(url: string, titleFallback: string) {
-    const name = isLink ? (titleFallback || '') : restaurant.trim();
-    setOnlineSource({ url, restaurant: name, city: city.trim() || null });
-    router.push('/scan/extracting');
+  // The chosen list is held in the scan store; the user then sets their
+  // preferences on the Scan a List form, which reads it with "Find My Picks".
+  function read(url: string, titleFallback: string, domain?: string) {
+    const name = isLink ? '' : restaurant.trim();
+    let site = domain;
+    if (!site) { try { site = new URL(url).hostname.replace(/^www\./, ''); } catch { site = undefined; } }
+    setOnlineSource({ url, restaurant: name, city: city.trim() || null, title: titleFallback || site, domain: site });
+    router.push('/scan/wine-list?online=1');
   }
 
   return (
@@ -115,7 +119,7 @@ export default function FindOnlineScreen() {
             <>
               <Text style={styles.resultsHint}>Tap the right restaurant's wine list</Text>
               {results.map((r) => (
-                <TouchableOpacity key={r.url} style={styles.result} onPress={() => read(r.url, r.title)} activeOpacity={0.8}>
+                <TouchableOpacity key={r.url} style={styles.result} onPress={() => read(r.url, r.title, r.domain)} activeOpacity={0.8}>
                   <Text style={styles.resultTitle} numberOfLines={2}>{r.title}</Text>
                   <Text style={styles.resultDomain} numberOfLines={1}>{r.isPdf ? `${r.domain} · PDF` : r.domain}</Text>
                   {r.snippet ? <Text style={styles.resultSnippet} numberOfLines={2}>{r.snippet}</Text> : null}

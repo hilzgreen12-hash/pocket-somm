@@ -246,23 +246,14 @@ export default function WineListScreen() {
     await go();
   }
 
-  // Arriving via Home's "Find Online" (?online=1) goes straight on to the
-  // search, using the restored/default preferences — same as the upload path.
-  const autoOnlineRef = useRef(false);
-  useEffect(() => {
-    // Wait for the saved preferences (budget, favourite/disliked regions) so
-    // they travel with the online read.
-    if (onlineParam === '1' && !autoOnlineRef.current && !prefsLoading) {
-      autoOnlineRef.current = true;
-      const go = () => {
-        setPreferences({ ...buildPreferences(), budget: budget ?? savedPreferences?.defaultBudget ?? null });
-        router.push('/scan/find-online');
-      };
-      if (maybeShowSignInPrompt(go)) return;
-      go();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlineParam, prefsLoading]);
+  // Find Online: the user has picked a restaurant's list (find-online) and lands
+  // here to set preferences; "Find My Picks" then reads that list.
+  const onlineSource = useScanStore((st) => st.onlineSource);
+  const readingOnline = onlineParam === '1' && !!onlineSource;
+  function handleReadOnline() {
+    setPreferences(buildPreferences());
+    router.push('/scan/extracting');
+  }
 
   // Arriving via "Upload Wine List" on the Scan landing (?upload=1) auto-opens
   // the photo picker once, using the restored/default preferences — a quick
@@ -355,6 +346,21 @@ export default function WineListScreen() {
           </View>
         </View>
 
+        {readingOnline ? (
+          <>
+            <View style={styles.onlineCard}>
+              <Text style={styles.onlineLabel}>Wine list found online</Text>
+              <Text style={styles.onlineTitle} numberOfLines={2}>{onlineSource!.title || onlineSource!.restaurant || 'Wine list'}</Text>
+              {onlineSource!.domain ? <Text style={styles.onlineDomain} numberOfLines={1}>{onlineSource!.domain}</Text> : null}
+              <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Text style={styles.lastResultLink}>Choose a different list</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.buttonFullOnline} onPress={handleReadOnline} activeOpacity={0.85}>
+              <Text style={styles.buttonHalfText}>Find My Picks</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.buttonHalf} onPress={handleScan}>
             <Text style={styles.buttonHalfText}>Scan Wine List</Text>
@@ -363,6 +369,7 @@ export default function WineListScreen() {
             <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Wine List'}</Text>
           </TouchableOpacity>
         </View>
+        )}
 
         <TouchableOpacity onPress={handleViewLastResult} activeOpacity={0.7}>
           <Text style={styles.lastResultLink}>View Last Result</Text>
@@ -513,6 +520,12 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.sm,
   },
+  // Find Online: the chosen list, shown above "Find My Picks".
+  onlineCard: { borderWidth: 1, borderColor: 'rgba(224,184,74,0.45)', borderRadius: 14, padding: spacing.md, marginBottom: spacing.md, alignItems: 'center' },
+  onlineLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  onlineTitle: { fontFamily: fonts.headingSemibold, fontSize: 17, color: '#FFFFFF', textAlign: 'center', marginTop: 4 },
+  onlineDomain: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2 },
+  buttonFullOnline: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center' },
   // "View Last Result" — yellow link beneath the scan/upload buttons.
   lastResultLink: {
     fontFamily: fonts.bodyRegular,

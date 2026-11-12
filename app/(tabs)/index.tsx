@@ -440,7 +440,7 @@ export default function ScanLandingScreen() {
       title: 'How should Vinster read the list?',
       showCloseX: true,
       buttons: [
-        { text: 'Find Online', onPress: after(() => router.push('/scan/wine-list?online=1')) },
+        { text: 'Find Online', onPress: after(() => requireAuth(() => router.push('/scan/find-online'))) },
         { text: 'Scan a List', onPress: after(() => router.push('/scan/wine-list')) },
         { text: 'Upload a List', onPress: after(() => router.push('/scan/wine-list?upload=1')) },
       ],

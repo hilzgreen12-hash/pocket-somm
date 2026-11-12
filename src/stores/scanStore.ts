@@ -30,7 +30,7 @@ interface ScanState {
   imageSource: 'camera' | 'upload';
   // Find Online: the restaurant's list on the web instead of a photo. The
   // restaurant and town the user searched carry through to the results page.
-  onlineSource: { url: string; restaurant: string; city: string | null } | null;
+  onlineSource: { url: string; restaurant: string; city: string | null; title?: string; domain?: string } | null;
   extractedWines: ExtractedWine[] | null;
   recommendation: RecommendationResponse | null;
   error: string | null;
@@ -39,7 +39,7 @@ interface ScanState {
 
   setImage: (uri: string, source?: 'camera' | 'upload') => void;
   setImageUris: (uris: string[], source?: 'camera' | 'upload') => void;
-  setOnlineSource: (src: { url: string; restaurant: string; city: string | null }) => void;
+  setOnlineSource: (src: { url: string; restaurant: string; city: string | null; title?: string; domain?: string }) => void;
   setExtractedWines: (wines: ExtractedWine[]) => void;
   setRecommendation: (rec: RecommendationResponse) => void;
   setError: (message: string) => void;
