@@ -12,6 +12,8 @@ import { wineHeaderLine } from '../utils/wineHeader';
 import type { CellarWine } from '../types/wine';
 import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+import { mostRepresentedRegions, baseRegionGroup } from '../utils/wineRegionGroup';
+import { formatCurrency } from '../constants/currency';
 
 // Example cards shown when the cellar has nothing to surface yet.
 const CELLAR_EXAMPLES: PlaceholderCard[] = [
@@ -67,9 +69,7 @@ function buildCellarInsights(wines: CellarWine[]): InsightTile[] {
     .sort((a, b) => (b.critic_score ?? 0) - (a.critic_score ?? 0))[0];
   if (topRated) add(topRated, 'Top Rated', `${topRated.critic_score} pts`);
 
-  // Most-collected wine (only meaningful at 2+ bottles).
-  const mostCollected = [...owned].sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))[0];
-  if (mostCollected && (mostCollected.quantity ?? 0) >= 2) add(mostCollected, 'Most Collected', `${mostCollected.quantity} bottles`);
+  // Most Collected is now a REGION tile (see DrinkNowCarousel).
 
   // Oldest vintage.
   const oldest = owned.filter((w) => w.vintage && /^\d{4}$/.test(String(w.vintage)))
@@ -148,16 +148,37 @@ function lastCallFrom(cellarWines: CellarWine[]): CellarWine[] {
     .sort((a, b) => (a.drinking_window_to ?? 9999) - (b.drinking_window_to ?? 9999));
 }
 
-// "Your Cellar Insights" — one Last Call, Drink Now tile (opens the list), then
-// Running Low / Top Rated / Most Collected / Oldest Vintage wine tiles.
-// Tap a wine tile → the wine card.
+// Cellar Insights — group tiles (Last Call, Running Low, Most Collected region,
+// Cellar Stats), then the Top Rated and Oldest Vintage wine tiles (tap → card).
 export function DrinkNowCarousel() {
   const { cellarWines, archived } = useInsightWines();
   const lastCall = lastCallFrom(cellarWines);
   const runningLow = runningLowFrom(cellarWines, archived);
   const tiles = buildCellarInsights(cellarWines);
+  const owned = cellarWines.filter((w) => (w.quantity ?? 0) > 0);
+
+  // Most Collected: the region (Burgundy, Tuscany… as in Cellar Statistics)
+  // with the most bottles, and that region's best-stocked wines as the picture.
+  const [topRegion, regionBottles] = mostRepresentedRegions(owned, 1)[0] ?? [null, 0];
+  const regionWines = topRegion
+    ? owned.filter((w) => baseRegionGroup(w.region) === topRegion).sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))
+    : [];
+
+  // Cellar Stats: total bottles and estimated value (same sums as Cellar
+  // Statistics; one total per currency), the most valuable labels as the picture.
+  const totalBottles = owned.reduce((n, w) => n + (w.quantity ?? 0), 0);
+  const valueByCurrency: Record<string, number> = {};
+  for (const w of owned) {
+    if (w.estimated_value == null) continue;
+    const code = (w.estimated_value_currency ?? 'GBP').toUpperCase();
+    valueByCurrency[code] = (valueByCurrency[code] ?? 0) + Number(w.estimated_value) * (w.quantity ?? 0);
+  }
+  const valueText = Object.entries(valueByCurrency).map(([code, amt]) => formatCurrency(amt, code, { decimals: 2 })).join(' · ');
+  const valuable = [...owned].filter((w) => w.estimated_value != null).sort((a, b) => Number(b.estimated_value) - Number(a.estimated_value));
+  const statsPicture = valuable.length ? valuable : owned;
+
   // Examples only before there's anything real to show — never beside real tiles.
-  const fill = tiles.length === 0 && lastCall.length === 0 && runningLow.length === 0 ? CELLAR_EXAMPLES : [];
+  const fill = owned.length === 0 ? CELLAR_EXAMPLES : [];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
@@ -166,6 +187,22 @@ export function DrinkNowCarousel() {
       ) : null}
       {runningLow.length > 0 ? (
         <GroupTile title="Running Low" wines={runningLow.map((r) => r.wine)} onPress={() => router.push('/cellar/running-low' as any)} />
+      ) : null}
+      {topRegion && regionBottles > 0 ? (
+        <GroupTile
+          title={`Most Collected · ${topRegion}`}
+          sub={`${regionBottles} ${regionBottles === 1 ? 'Bottle' : 'Bottles'}`}
+          wines={regionWines}
+          onPress={() => router.push('/cellar/regions-map' as any)}
+        />
+      ) : null}
+      {owned.length > 0 ? (
+        // Not tappable — a summary only.
+        <GroupTile
+          title="Cellar Stats"
+          sub={`${totalBottles} ${totalBottles === 1 ? 'Bottle' : 'Bottles'}${valueText ? ` · ${valueText}` : ''}`}
+          wines={statsPicture}
+        />
       ) : null}
       {tiles.map(({ wine: w, badge, meta }) => (
         <TouchableOpacity key={`${w.id}-${badge}`} style={styles.card} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.85}>
@@ -181,12 +218,14 @@ export function DrinkNowCarousel() {
   );
 }
 
-// One tile standing for a group of wines (Last Call, Running Low): up to four
-// labels as the picture, the title in white, then "X Wines · View All" in gold.
-function GroupTile({ title, wines, onPress }: { title: string; wines: CellarWine[]; onPress: () => void }) {
+// One tile standing for a group of wines (Last Call, Running Low, Most
+// Collected, Cellar Stats): up to four labels as the picture, the title in
+// white, then a gold line — "X Wines · View All" unless `sub` is given. Without
+// onPress the tile isn't tappable.
+function GroupTile({ title, sub, wines, onPress }: { title: string; sub?: string; wines: CellarWine[]; onPress?: () => void }) {
   const collage = wines.slice(0, wines.length >= 4 ? 4 : Math.min(2, wines.length));
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={styles.card} onPress={onPress} disabled={!onPress} activeOpacity={0.85}>
       <View style={styles.collage}>
         {collage.map((w) => (
           <WineCardThumb
@@ -201,7 +240,7 @@ function GroupTile({ title, wines, onPress }: { title: string; wines: CellarWine
         ))}
       </View>
       <Text style={styles.cardName} numberOfLines={1} allowFontScaling={false}>{title}</Text>
-      <Text style={styles.cardCount} numberOfLines={1} allowFontScaling={false}>{wines.length} {wines.length === 1 ? 'Wine' : 'Wines'} · View All</Text>
+      <Text style={styles.cardCount} numberOfLines={1} allowFontScaling={false}>{sub ?? `${wines.length} ${wines.length === 1 ? 'Wine' : 'Wines'} · View All`}</Text>
     </TouchableOpacity>
   );
 }
