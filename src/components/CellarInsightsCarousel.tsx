@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
@@ -6,8 +6,7 @@ import { supabase } from '../api/supabase';
 import { cellarOwner } from '../api/cellarContext';
 import { useChefPairingHistory, useChefLabelHistory } from '../hooks/useChefHistory';
 import { useScanHistory } from '../hooks/useScanHistory';
-import { useCellar, useArchive } from '../hooks/useCellar';
-import { sameWineIdentity } from '../utils/wineMatch';
+import { useCellar } from '../hooks/useCellar';
 import { useLabels } from '../hooks/useLabels';
 import { wineNameKey } from '../utils/wineIdentity';
 import { LabelThumb } from './LabelThumb';
@@ -23,6 +22,9 @@ import { fonts } from '../constants/fonts';
 const MAX_TILES = 6;
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
+// Cookbook spines photo — Your Cookbook's artwork on the Pair tab.
+const KITCHEN_IMG = require('../../assets/images/kitchen-favourites.jpg');
+
 const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
 // Order mirrors the real tiles so a populated tile replaces its own placeholder.
 // Wine tiles are label collages; Dined Out stays a restaurant photo.
@@ -30,9 +32,9 @@ const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
 // ever shows when THAT tile has no data (never beside its own real tile).
 const INSIGHT_EXAMPLES: { key: string; card: PlaceholderCard }[] = [
   { key: 'personality', card: { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY } },
-  { key: 'archived', card: { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY } },
+  { key: 'archived', card: { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Drank Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY } },
   { key: 'restaurants', card: { kind: 'image', uri: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY } },
-  { key: 'recipes-generated', card: { kind: 'labelCollage', images: placeholderLabelImages(2, 4), title: 'Recipes Generated', stamp: '4 of your wines', overlay: INSIGHT_OVERLAY } },
+  { key: 'cookbook', card: { kind: 'labelCollage', images: [KITCHEN_IMG], title: 'Recipes in Your Cookbook', stamp: '12 Recipes', overlay: INSIGHT_OVERLAY } },
   { key: 'labels-month', card: { kind: 'labelCollage', images: placeholderLabelImages(6, 4), title: 'Labels Scanned Last Month', stamp: '12 wine labels', overlay: INSIGHT_OVERLAY } },
 ];
 
@@ -46,6 +48,8 @@ type Tile = {
   // Up to four thumbnails: a stored photo path, or a wine identity whose label
   // is looked up (used when the user has no photo of that wine).
   collage: CollageItem[];
+  // A bundled picture instead of a collage (the cookbook spines).
+  image?: number;
   onTap?: () => void;
 };
 
@@ -56,7 +60,6 @@ export function CellarInsightsCarousel() {
   const { sessions: recipeSessions } = useChefLabelHistory();
   const { archive } = useScanHistory();
   const { wines } = useCellar();
-  const { wines: archivedWines } = useArchive();
   const { labels } = useLabels();
   // Cellar wine thumbnails by id — for the pairings collage.
   const thumbById = new Map(wines.filter((w) => w.label_image_path).map((w) => [w.id, w.label_image_path as string]));
@@ -157,7 +160,7 @@ export function CellarInsightsCarousel() {
   if (archivedBottles > 0 && archivedThumbs.length > 0) {
     tiles.push({
       key: 'archived',
-      title: 'Archived Last Month', meta: `${archivedBottles} bottle${archivedBottles === 1 ? '' : 's'}`,
+      title: 'Drank Last Month', meta: `${archivedBottles} bottle${archivedBottles === 1 ? '' : 's'}`,
       collage: archivedThumbs,
       onTap: () => router.push('/cellar/archive' as any),
     });
@@ -181,63 +184,20 @@ export function CellarInsightsCarousel() {
     });
   }
 
-  // 4) Recipes Generated — how many of the user's OWN wines have a recipe, shown
-  // with the label thumbnail of the LAST wine paired. (A recipe in Pair is
-  // generated for a specific wine, stored as details — matched by identity.)
-  {
-    // Up to FOUR of the most recently paired wines' labels (newest first, deduped
-    // by identity) — a collage, like the other Insights tiles.
-    const recipeWineKeys = new Set<string>();
-    const recipeThumbs: CollageItem[] = [];
-    let recipeFallback: CollageItem | null = null;
-    const photoRows = [...wines, ...archivedWines].filter((x) => x.label_image_path);
-    const photoByKey = new Map<string, string>();
-    for (const x of photoRows) { const k = wineNameKey(x.producer, x.wine_name); if (k && !photoByKey.has(k)) photoByKey.set(k, x.label_image_path as string); }
-    const recipePhotoFor = (rw: { producer?: string | null; wineName?: string | null; vintage?: string | null }): string | null => {
-      // Exact name first (cheap); the fuzzy identity match only on a miss.
-      const exact = photoByKey.get(wineNameKey(rw.producer ?? null, rw.wineName ?? null));
-      if (exact) return exact;
-      const hit = photoRows.find((x) => sameWineIdentity(
-        { producer: x.producer, wine_name: x.wine_name, vintage: null } as any,
-        { producer: rw.producer ?? null, wine_name: rw.wineName ?? null, vintage: null } as any,
-      ));
-      return (hit?.label_image_path as string | undefined) ?? null;
-    };
-    const seenThumbKeys = new Set<string>();
-    for (const s of recipeSessions as any[]) {
-      const w = s.wine;
-      if (!w) continue;
-      const key = wineNameKey(w.producer, w.wineName);
-      recipeWineKeys.add(key);
-      if (!seenThumbKeys.has(key) && recipeThumbs.length < 4) {
-        seenThumbKeys.add(key);
-        // The user's own photo of that wine — cellar, archive or a label scan,
-        // matched by identity (not exact spelling) so archived and slightly
-        // differently named bottles still find their picture. Wines with no
-        // stored photo are left out rather than showing a name-only square.
-        const photo = thumbByKey.get(key) ?? recipePhotoFor(w);
-        if (photo) recipeThumbs.push(photo);
-        else if (!recipeFallback) recipeFallback = { producer: w.producer ?? null, wineName: w.wineName ?? null };
-      }
-    }
-    // No stored photo for any recipe wine → the newest one's label from the web.
-    if (recipeThumbs.length === 0 && recipeFallback) recipeThumbs.push(recipeFallback);
-    const recipeWineCount = recipeWineKeys.size;
-    // Only shown when we have at least one paired wine's label to picture it —
-    // never a bare brown/count tile.
-    if (recipeWineCount > 0 && recipeThumbs.length > 0) {
-      tiles.push({
-        key: 'recipes-generated',
-        title: 'Recipes Generated', meta: `${recipeWineCount} of your wine${recipeWineCount === 1 ? '' : 's'}`,
-        collage: recipeThumbs,
-        onTap: () => router.push('/chef/archive' as any),
-      });
-    }
+  // 4) Recipes in Your Cookbook — how many recipes are saved, pictured with the
+  // cookbook-spines photo (the same artwork as Your Cookbook on the Pair tab).
+  if (recipeSessions.length > 0) {
+    tiles.push({
+      key: 'cookbook',
+      title: 'Recipes in Your Cookbook',
+      meta: `${recipeSessions.length} ${recipeSessions.length === 1 ? 'Recipe' : 'Recipes'}`,
+      collage: [],
+      image: KITCHEN_IMG,
+      onTap: () => router.push('/chef/archive' as any),
+    });
   }
 
-  // (The "Recipes in Your Cookbook" tile is retired for now — no artwork for it.)
-
-  // 4) Labels scanned last month — a collage of those label thumbnails. Only
+  // 5) Labels scanned last month  // 4) Labels scanned last month — a collage of those label thumbnails. Only
   // shown when we have at least one label image.
   {
     const since = Date.now() - MONTH_MS;
@@ -253,7 +213,7 @@ export function CellarInsightsCarousel() {
   }
 
   // Only tiles with a real image (collage) ever render — no brown/icon tiles.
-  const shown = tiles.filter((t) => t.collage.length > 0).slice(0, MAX_TILES);
+  const shown = tiles.filter((t) => t.collage.length > 0 || t.image != null).slice(0, MAX_TILES);
   // Examples only before there's anything real to show — never beside real tiles.
   const fill = shown.length === 0 ? INSIGHT_EXAMPLES.map((e) => e.card) : [];
 
@@ -261,7 +221,9 @@ export function CellarInsightsCarousel() {
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {shown.map((t) => (
         <TouchableOpacity key={t.key} style={styles.card} onPress={t.onTap} activeOpacity={t.onTap ? 0.85 : 1}>
-          <Collage paths={t.collage} />
+          {t.image != null ? (
+            <View style={styles.collageBox}><Image source={t.image} style={styles.collageFull} resizeMode="cover" /></View>
+          ) : <Collage paths={t.collage} />}
           <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{t.title}</Text>
           <Text style={styles.cardMeta} numberOfLines={1} allowFontScaling={false}>{t.meta}</Text>
         </TouchableOpacity>
