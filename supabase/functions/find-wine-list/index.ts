@@ -25,10 +25,10 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 const SERPER_API_KEY = Deno.env.get('SERPER_API_KEY') ?? '';
 
 const MAX_BYTES = 15 * 1024 * 1024;   // largest PDF/page we'll download
-const PAGES_PER_CHUNK = 3;            // PDF pages per parallel read
-const MAX_PAGES = 48;                 // ignore anything past this (16 parallel reads)
-const TEXT_CHUNK = 12000;             // characters of page text per parallel read
-const MAX_TEXT_CHUNKS = 10;
+const PAGES_PER_CHUNK = 1;            // PDF pages per parallel read (small = fast)
+const MAX_PAGES = 40;                 // ignore anything past this (40 parallel reads)
+const TEXT_CHUNK = 5000;              // characters of page text per parallel read
+const MAX_TEXT_CHUNKS = 24;
 const MAX_HOPS = 6;                   // pages fetched while hunting for the list
 const FIND_BUDGET_MS = 30_000;         // stop hunting for the list after this
 const READ_BUDGET_MS = 70_000;         // the parallel reads must finish inside this
