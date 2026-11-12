@@ -260,8 +260,10 @@ const styles = StyleSheet.create({
   tr: { flexDirection: 'row', alignItems: 'center', minHeight: 46, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)', gap: 4 },
   trHead: { minHeight: 30, borderBottomColor: 'rgba(255,255,255,0.15)' },
   td: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 13.5, color: colors.text },
-  tdWine: { flex: 1.6, fontFamily: fonts.bodySemibold },
-  tdWindow: { flex: 1.3 },
+  tdWine: { flex: 1.4, fontFamily: fonts.bodySemibold },
+  // Widest column, slightly smaller text, so "2023–2042" and "Approaching" each
+  // fit on one line.
+  tdWindow: { flex: 2, fontSize: 12.5 },
   th: { fontFamily: fonts.bodySemibold, fontSize: 10.5, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' },
   gold: { color: colors.gold, fontFamily: fonts.bodySemibold },
   note: { fontFamily: fonts.bodyItalic, fontSize: 12.5, lineHeight: 18, color: colors.textMuted, marginTop: spacing.sm },
