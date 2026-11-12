@@ -117,12 +117,13 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.sheet}>
-          <View style={styles.headRow}>
-            <Text style={styles.title}>Vinster needs the details, input up to 4 wines</Text>
+          {/* ✕ on its own row at the top right, the title beneath it. */}
+          <View style={styles.closeRow}>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
               <Text style={styles.close}>✕</Text>
             </TouchableOpacity>
           </View>
+          <Text style={styles.title}>Vinster needs the details, input up to 4 wines</Text>
 
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {rows.map((r, i) => (
@@ -228,8 +229,8 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.lg },
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg, maxHeight: '88%' },
-  headRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.md },
-  title: { flex: 1, fontFamily: fonts.headingBold, fontSize: 21, lineHeight: 26, color: colors.text },
+  closeRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.xs },
+  title: { fontFamily: fonts.headingBold, fontSize: 21, lineHeight: 26, color: colors.text, marginBottom: spacing.md },
   close: { fontSize: 20, color: colors.text },
   row: { marginBottom: spacing.md },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
