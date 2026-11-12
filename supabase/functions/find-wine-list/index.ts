@@ -32,7 +32,7 @@ const MAX_TEXT_CHUNKS = 10;
 const MAX_HOPS = 6;                   // pages fetched while hunting for the list
 
 // Sites that never hold a readable list (reviews, bookings, social).
-const SKIP_DOMAINS = /(^|\.)(tripadvisor\.[a-z.]+|opentable\.[a-z.]+|thefork\.[a-z.]+|yelp\.[a-z.]+|facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|google\.[a-z.]+|youtube\.com|squaremeal\.co\.uk|timeout\.com|resy\.com|sevenrooms\.com|designmynight\.com|michelin\.com|guide\.michelin\.com|ubereats\.com|deliveroo\.[a-z.]+|just-eat\.[a-z.]+)$/i;
+const SKIP_DOMAINS = /(^|\.)(tripadvisor\.[a-z.]+|opentable\.[a-z.]+|thefork\.[a-z.]+|yelp\.[a-z.]+|facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|google\.[a-z.]+|youtube\.com|squaremeal\.co\.uk|timeout\.com|resy\.com|sevenrooms\.com|designmynight\.com|michelin\.com|guide\.michelin\.com|ubereats\.com|deliveroo\.[a-z.]+|just-eat\.[a-z.]+|reddit\.com|podcasts\.apple\.com|spotify\.com|ft\.com|nytimes\.com|theguardian\.com|telegraph\.co\.uk|standard\.co\.uk|thetimes\.co\.uk|bbc\.co\.uk|eater\.com|hot-dinners\.com|wine-pages\.com|decanter\.com|jancisrobinson\.com|wikipedia\.org|linkedin\.com)$/i;
 
 const WINE_FIELDS = `For each wine return a JSON object with these fields:
 - name: the wine name (string)
@@ -359,6 +359,7 @@ async function search(restaurant: string, city: string) {
     ...(pdfs.status === 'fulfilled' ? pdfs.value : []),
     ...(general.status === 'fulfilled' ? general.value : []),
   ];
+  const cityLc = city.trim().toLowerCase();
   const nameWords = restaurant.toLowerCase().split(/\s+/).filter((w) => w.length > 2 && !['the', 'and', 'restaurant', 'bar'].includes(w));
   const seen = new Set<string>();
   const results = items
@@ -374,13 +375,22 @@ async function search(restaurant: string, city: string) {
       const hay = `${title} ${snippet} ${domain} ${u.pathname}`.toLowerCase();
       let score = 0;
       if (nameWords.some((w) => hay.includes(w))) score += 5;
+      // Every word of the name ("Drapers" AND "Arms"), not a namesake.
+      if (nameWords.length > 1 && nameWords.every((w) => hay.includes(w))) score += 4;
       if (nameWords.some((w) => domain.includes(w))) score += 4;
+      // The town the user gave, so the Islington pub beats the Canterbury one.
+      if (cityLc && hay.includes(cityLc)) score += 3;
       if (/wine/.test(hay)) score += 3;
       if (isPdf) score += 2;
+      // A food or set menu is not the wine list.
+      if (/food|lunch menu|set menu|dinner menu|dessert|allergen/.test(hay) && !/wine/.test(hay)) score -= 5;
       if (nameWords.length && !nameWords.some((w) => hay.includes(w))) score -= 6;
+      // A web page on someone else's site is usually an article ABOUT the
+      // restaurant, not its list (PDFs on other hosts are often the real list).
+      if (!isPdf && nameWords.length && !nameWords.some((w) => domain.includes(w))) score -= 4;
       return { title: title.replace(/^\[pdf\]\s*/i, ''), url: u.toString(), domain, snippet, isPdf, score };
     })
-    .filter((r): r is NonNullable<typeof r> => !!r && r.score > 0)
+    .filter((r): r is NonNullable<typeof r> => !!r && r.score >= 5)
     .sort((a, b) => b.score - a.score)
     .filter((r) => (seen.has(r.url) ? false : (seen.add(r.url), true)))
     .slice(0, 6)
