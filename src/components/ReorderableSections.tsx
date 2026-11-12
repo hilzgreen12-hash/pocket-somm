@@ -125,7 +125,7 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
     d.next = next;
     const newTops = topsFor(next);
     for (const k of others) {
-      Animated.timing(offsetOf(k), { toValue: newTops[k] - oldTops[k], duration: 150, useNativeDriver: true }).start();
+      Animated.timing(offsetOf(k), { toValue: newTops[k] - oldTops[k], duration: 150, useNativeDriver: false }).start();
     }
     void Haptics.selectionAsync().catch(() => {});
   }
@@ -135,29 +135,43 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
     if (!d || d.key !== key) return;
     drag.current = null;
     if (raf.current != null) { cancelAnimationFrame(raf.current); raf.current = null; }
+    settling.current = true;
     const oldTops = topsFor(d.start);
     const newTops = topsFor(d.next);
-    Animated.timing(offsetOf(key), { toValue: newTops[key] - oldTops[key], duration: 120, useNativeDriver: true }).start(() => {
+    // JS-driven throughout (not the native driver): the drag itself moves these
+    // values from JS, and mixing in native animations let a neighbour's slide
+    // finish AFTER the reset below, leaving it stuck over another carousel
+    // until the screen was reopened.
+    Animated.timing(offsetOf(key), { toValue: newTops[key] - oldTops[key], duration: 120, useNativeDriver: false }).start(() => {
       setActiveKey(null);
       onDragActive?.(false);
       if (d.next.join('|') !== d.start.join('|')) {
         // Apply the new order FIRST; the offsets are cleared in the same frame
         // the list redraws (layout effect below) — clearing them before the
         // redraw flashed the section back at its old slot.
-        resetOnRedraw.current = d.start;
+        resetOnRedraw.current = true;
         onReorder(d.next);
+        // Belt and braces: if the redraw never comes, still clear everything.
+        setTimeout(() => { if (resetOnRedraw.current) clearOffsets(); }, 250);
       } else {
-        for (const k of d.start) offsetOf(k).setValue(0);
+        clearOffsets();
       }
     });
   }
 
+  // Stop every running slide and put every section back to zero offset.
+  function clearOffsets() {
+    for (const v of Object.values(offsets.current)) { v.stopAnimation(); v.setValue(0); }
+    resetOnRedraw.current = false;
+    settling.current = false;
+  }
+
   // Clear the drag offsets in the same frame the reordered list is drawn.
-  const resetOnRedraw = useRef<string[] | null>(null);
+  const resetOnRedraw = useRef(false);
+  // True from release until the new order is drawn; a new drag waits for it.
+  const settling = useRef(false);
   useLayoutEffect(() => {
-    if (!resetOnRedraw.current) return;
-    for (const k of resetOnRedraw.current) offsetOf(k).setValue(0);
-    resetOnRedraw.current = null;
+    if (resetOnRedraw.current) clearOffsets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys.join('|')]);
 
@@ -171,6 +185,8 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
         .runOnJS(true)
         .activateAfterLongPress(150)
         .onStart(() => {
+          // Ignore a new grab while the last drop is still settling.
+          if (settling.current || drag.current) return;
           drag.current = { key, start: [...keysRef.current], next: [...keysRef.current], translation: 0, absY: 0, scrolled: 0, startY: live.current.autoScroll?.y.current ?? 0 };
           setActiveKey(key);
           onDragActive?.(true);

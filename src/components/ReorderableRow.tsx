@@ -68,7 +68,7 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, lea
     d.next = next;
     for (const k of others) {
       const shift = (next.indexOf(k) - d.start.indexOf(k)) * st;
-      Animated.timing(offsetOf(k), { toValue: shift, duration: 140, useNativeDriver: true }).start();
+      Animated.timing(offsetOf(k), { toValue: shift, duration: 140, useNativeDriver: false }).start();
     }
     void Haptics.selectionAsync().catch(() => {});
   }
@@ -98,25 +98,32 @@ export function ReorderableRow({ items, itemWidth, gap, onReorder, trailing, lea
     if (raf.current != null) { cancelAnimationFrame(raf.current); raf.current = null; }
     const st = live.current.step;
     const target = (d.next.indexOf(key) - d.start.indexOf(key)) * st;
-    Animated.timing(offsetOf(key), { toValue: target, duration: 120, useNativeDriver: true }).start(() => {
+    // JS-driven (not the native driver) so a neighbour's slide can't finish
+    // after the reset below and leave a tile stuck out of place.
+    Animated.timing(offsetOf(key), { toValue: target, duration: 120, useNativeDriver: false }).start(() => {
       setActiveKey(null);
       setScrollLocked(false);
       if (d.next.join('|') !== d.start.join('|')) {
-        resetOnRedraw.current = d.start; // cleared in the redraw frame (below)
+        resetOnRedraw.current = true; // cleared in the redraw frame (below)
         live.current.onReorder(d.next);
+        setTimeout(() => { if (resetOnRedraw.current) clearOffsets(); }, 250);
       } else {
-        for (const k of d.start) offsetOf(k).setValue(0);
+        clearOffsets();
       }
     });
   }
 
+  // Stop every running slide and put every tile back to zero offset.
+  function clearOffsets() {
+    for (const v of Object.values(offsets.current)) { v.stopAnimation(); v.setValue(0); }
+    resetOnRedraw.current = false;
+  }
+
   // Clear the drag offsets in the same frame the reordered row is drawn — no
   // flash back to the old slot.
-  const resetOnRedraw = useRef<string[] | null>(null);
+  const resetOnRedraw = useRef(false);
   useLayoutEffect(() => {
-    if (!resetOnRedraw.current) return;
-    for (const k of resetOnRedraw.current) offsetOf(k).setValue(0);
-    resetOnRedraw.current = null;
+    if (resetOnRedraw.current) clearOffsets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys.join('|')]);
 
