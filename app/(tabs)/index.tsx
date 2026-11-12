@@ -56,7 +56,6 @@ let welcomeShownThisSession = false;
 // the other tabs' tappable titles.
 // Search & Discover tile images (bundled). The restaurant photo is from Unsplash
 // (free licence) — see assets/images/tiles/CREDITS.md.
-const SD_LABEL_IMAGE = NAMED_LABELS.denisMortet;
 const SD_RESTAURANT_IMAGE: number | null = require('../../assets/images/tiles/restaurant-interior.jpg');
 // Light labels only — the Search tile reads best bright (Piper Rare was too dark).
 const SD_COLLAGE_IMAGES = [NAMED_LABELS.lynchBages, NAMED_LABELS.tollotBeaut, NAMED_LABELS.donnhoff, NAMED_LABELS.benditoDestino];
@@ -471,6 +470,22 @@ export default function ScanLandingScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasShareIntent, shareIntent]);
 
+  // Generate Wine Intel tile → choose how to find the wine. Each action waits
+  // for the pop-up to finish closing; opening a picker or another pop-up while
+  // it is still dismissing gets swallowed on iOS.
+  function openWineIntelChoice() {
+    const after = (fn: () => void) => () => { setTimeout(fn, 350); };
+    showAlert({
+      title: 'How would you like to search your wine?',
+      showCloseX: true,
+      buttons: [
+        { text: 'Manual Input', onPress: after(() => setSearchModalOpen(true)) },
+        { text: 'Scan a Label', onPress: after(() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))) },
+        { text: 'Upload a Label', onPress: after(() => requireAuth(handleUploadLabel)) },
+      ],
+    });
+  }
+
   // User-arranged order of the Home carousels (saved per device).
   const [homeOrder, setHomeOrder] = useState<string[]>(HOME_SECTION_DEFAULT);
   const [scrollLocked, setScrollLocked] = useState(false);
@@ -519,40 +534,29 @@ export default function ScanLandingScreen() {
           {
             key: 'search',
             title: 'Search & Discover',
-            // The three ways in; the scan tiles' "Upload Instead" sits under the tile.
+            // Two ways in: Generate Wine Intel (search, scan or upload) and Scan List.
             content: (
                 <View style={styles.carouselBleed}>
                   <Text style={styles.sdSubheader} allowFontScaling={false}>Powered by Wine Searcher</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sdCarousel}>
-                    {/* Search a Wine → the typeahead prompt */}
+                    {/* Generate Wine Intel — one tile for every way in: a pop-up
+                        offers Manual Input, Scan a Label or Upload a Label.
+                        Long-press reopens the last intel. */}
                     <View style={styles.sdCard}>
-                      <TouchableOpacity style={styles.sdThumb} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
+                      <TouchableOpacity
+                        style={styles.sdThumb}
+                        onPress={openWineIntelChoice}
+                        onLongPress={() => requireAccount(handleViewLastIntel)}
+                        activeOpacity={0.85}
+                      >
                         <View style={styles.sdCollage}>
                           {SD_COLLAGE_IMAGES.map((img, i) => (
                             <Image key={i} source={img} style={styles.sdCollageCell} resizeMode="cover" />
                           ))}
                         </View>
-                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Search</Text></View></View>
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
-                      <Text style={[styles.sdName, styles.sdNameCont]} numberOfLines={1} allowFontScaling={false}>& Vintage Comparisons</Text>
-                    </View>
-
-                    {/* Scan a Label → intel */}
-                    <View style={styles.sdCard}>
-                      <TouchableOpacity
-                        style={styles.sdThumb}
-                        onPress={() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))}
-                        onLongPress={() => requireAccount(handleViewLastIntel)}
-                        activeOpacity={0.85}
-                      >
-                        <Image source={SD_LABEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
-                        <View style={styles.sdTitleWrap} pointerEvents="none"><View style={styles.sdTitleBand}><Text style={styles.sdTitle} numberOfLines={2} allowFontScaling={false}>Scan Label</Text></View></View>
-                      </TouchableOpacity>
-                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
-                      <TouchableOpacity onPress={() => requireAuth(handleUploadLabel)} hitSlop={{ top: 6, bottom: 8, left: 6, right: 6 }} activeOpacity={0.7} accessibilityRole="button">
-                        <Text style={[styles.sdStamp, styles.sdUpload]} numberOfLines={1} allowFontScaling={false}>Upload Instead</Text>
-                      </TouchableOpacity>
+                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Overview, Market & Serving</Text>
                     </View>
 
                     {/* Scan a Wine List → recommendations */}
