@@ -261,8 +261,8 @@ const styles = StyleSheet.create({
   card: { width: HOME_TILE.w },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  // Last Call tile: gold count line, not in capitals.
-  cardCount: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2 },
+  // Group tiles: gold count line in capitals, matching Vinster's Insights.
+  cardCount: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
   // Last Call picture: up to four labels inside one white-outlined tile.
   collage: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, overflow: 'hidden', flexDirection: 'row', flexWrap: 'wrap', backgroundColor: colors.surface },
   cellFull: { width: '100%', height: '100%', borderWidth: 0, borderRadius: 0 },
