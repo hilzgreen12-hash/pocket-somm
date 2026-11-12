@@ -14,12 +14,30 @@ import { tidyWineRegion } from '../src/utils/regionFormat';
 import { formatCurrency, currencySymbol } from '../src/constants/currency';
 import { colors, spacing } from '../src/constants/theme';
 import { fonts } from '../src/constants/fonts';
+import { bordeauxInfoFor } from '../src/constants/bordeauxClassification';
 import { showAlert } from '../src/components/AppAlert';
 
 // Compare Wines or Vintages — results. The wines come from Home's Compare
 // Wines pop-up (compareStore). Shows the Vintage & Market Comparison table,
 // drink now / lay down / best value, the market (and, for different wines,
 // region & grape) comparison, the Inside Line, then a detailed card per wine.
+
+// "Château Lafite Rothschild, Pauillac, 1er Cru Classé 2010 & 2020": the full
+// wine name (producer, cuvée, appellation, classification where known) and the
+// vintages being compared.
+function vintageHeading(wines: CompareWineInput[]): string {
+  const w = wines[0];
+  const bdx = bordeauxInfoFor(w.producer);
+  const name = (w.wineName ?? '').trim();
+  const cuvee = name && name.toLowerCase() !== (w.producer ?? '').trim().toLowerCase() ? name : null;
+  const region = (tidyWineRegion(w.region || bdx?.appellation || null) ?? '').split(',')[0].trim() || null;
+  const already = `${cuvee ?? ''} ${region ?? ''}`.toLowerCase();
+  const cru = bdx?.classification && !already.includes(bdx.classification.toLowerCase()) ? bdx.classification : null;
+  const title = [w.producer, cuvee, region, cru].filter(Boolean).join(', ');
+  const years = [...new Set(wines.map((x) => x.vintage))].sort();
+  const yearText = years.length > 1 ? `${years.slice(0, -1).join(', ')} & ${years[years.length - 1]}` : years[0] ?? '';
+  return `${title} ${yearText}`.trim();
+}
 
 const STATUS: Record<string, string> = { too_young: 'Too Young', approaching: 'Approaching', peak: 'Peak Now', declining: 'Declining' };
 
@@ -125,7 +143,12 @@ export default function CompareScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>{mode === 'vintages' ? 'Compare Vintages' : 'Compare Wines'}</Text>
           {mode === 'vintages' ? (
-            <Text style={styles.subtitle}>{wineHeaderLine(wines[0].producer, wines[0].wineName, null)}</Text>
+            <>
+              <Text style={styles.subtitle}>{vintageHeading(wines)}</Text>
+              {(wines[0].grape || data.market.find((m) => m.grape)?.grape) ? (
+                <Text style={styles.grapeLine}>{wines[0].grape || data.market.find((m) => m.grape)?.grape}</Text>
+              ) : null}
+            </>
           ) : null}
         </View>
 
@@ -272,6 +295,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignItems: 'center' },
   title: { fontFamily: fonts.headingSemibold, fontSize: 38, color: '#FFFFFF', textAlign: 'center' },
   subtitle: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.gold, textAlign: 'center', marginTop: spacing.xs },
+  grapeLine: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
   body: { paddingHorizontal: spacing.xl },
   section: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, marginTop: spacing.lg, marginBottom: spacing.sm, textAlign: 'center' },
   table: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)' },

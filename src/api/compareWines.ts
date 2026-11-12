@@ -35,7 +35,8 @@ export interface Comparison {
   currency: string;
   // Wine-Searcher market data, one per input wine (null when not found).
   // min/max: Wine-Searcher's lowest and highest listed price (exact vintage).
-  market: { score: number | null; price: number | null; min: number | null; max: number | null }[];
+  // grape: Wine-Searcher's grape for the wine (fills in when the pick had none).
+  market: { score: number | null; price: number | null; min: number | null; max: number | null; grape: string | null }[];
   wines: CompareWineResult[];
   drinkNow: ComparePick | null;
   layDown: ComparePick | null;
@@ -71,9 +72,10 @@ export async function runComparison(wines: CompareWineInput[], currency: string)
         price: exact ? pricing.averageMarketPrice ?? null : null,
         min: exact ? pricing.minPrice ?? null : null,
         max: exact ? pricing.maxPrice ?? null : null,
+        grape: ok ? pricing.grape ?? null : null,
       };
     } catch {
-      return { score: null, price: null, min: null, max: null };
+      return { score: null, price: null, min: null, max: null, grape: null };
     }
   }));
   const data = await invokeResilient('compare-wines', {
