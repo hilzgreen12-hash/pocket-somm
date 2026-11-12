@@ -7,11 +7,12 @@ import { cellarOwner } from '../api/cellarContext';
 import { useChefPairingHistory, useChefLabelHistory } from '../hooks/useChefHistory';
 import { useScanHistory } from '../hooks/useScanHistory';
 import { useCellar } from '../hooks/useCellar';
+import { useChosenWines } from '../hooks/useChosenWines';
 import { useLabels } from '../hooks/useLabels';
 import { wineNameKey } from '../utils/wineIdentity';
 import { LabelThumb } from './LabelThumb';
 import { WineCardThumb } from './WineCardThumb';
-import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, placeholderLabelImages } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, placeholderLabelImages, NAMED_LABELS } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
 import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -63,6 +64,7 @@ export function CellarInsightsCarousel() {
   const { sessions: recipeSessions } = useChefLabelHistory();
   const { archive } = useScanHistory();
   const { wines } = useCellar();
+  const { chosenWines } = useChosenWines();
   const { labels } = useLabels();
   // Cellar wine thumbnails by id — for the pairings collage.
   const thumbById = new Map(wines.filter((w) => w.label_image_path).map((w) => [w.id, w.label_image_path as string]));
@@ -186,6 +188,40 @@ export function CellarInsightsCarousel() {
       collage: restoPhotos,
       image: restoPhotos.length ? undefined : RESTAURANT_TILE_IMG,
       onTap: () => router.push('/restaurants/reviews' as any),
+    });
+  }
+
+  // 3b) Wines Reviewed Last Month — wine reviews written in the last 30 days
+  // (bottle picks and cellar reviews), pictured with those wines' labels.
+  // Always shown for a signed-in user, "0 reviews" included. Opens Your Wine
+  // Reviews.
+  if (userId) {
+    const since = Date.now() - MONTH_MS;
+    const recent = (iso: string | null | undefined) => !!iso && new Date(iso).getTime() >= since;
+    const pics: CollageItem[] = [];
+    const addPic = (path: string | null | undefined, producer: string | null, wineName: string | null) => {
+      if (pics.length >= 4) return;
+      pics.push(path ? path : { producer, wineName });
+    };
+    let reviewCount = 0;
+    for (const c of chosenWines) {
+      if (c.wishlist) continue;
+      const hasReview = !!((c.tasting_note && c.tasting_note.trim()) || (c.other_observations && c.other_observations.trim()) || c.user_score != null);
+      if (hasReview && recent(c.reviewed_at ?? c.chosen_at)) { reviewCount++; addPic(c.label_image_path, c.producer, c.wine_name); }
+    }
+    for (const w of wines as any[]) {
+      const entries: { date?: string | null; savedAt?: string | null }[] = Array.isArray(w.review_entries) ? w.review_entries : [];
+      const n = entries.length
+        ? entries.filter((e) => recent(e.date ?? e.savedAt)).length
+        : (recent(w.review_date) && (w.review_score != null || (w.review_note ?? '').trim()) ? 1 : 0);
+      if (n > 0) { reviewCount += n; addPic(w.label_image_path, w.producer, w.wine_name); }
+    }
+    tiles.push({
+      key: 'wine-reviews',
+      title: 'Wines Reviewed Last Month', meta: `${reviewCount} review${reviewCount === 1 ? '' : 's'}`,
+      collage: pics,
+      image: pics.length ? undefined : NAMED_LABELS.tollotBeaut,
+      onTap: () => router.push('/wines/chosen' as any),
     });
   }
 
