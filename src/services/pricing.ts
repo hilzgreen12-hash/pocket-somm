@@ -79,7 +79,7 @@ export async function fetchPricing(
 
 // Plain name first; on a clean miss, the appellation fallback (see
 // wineQueryAltName). Returns the pricing and the name that matched.
-async function fetchPricingWithAlt(queryName: string, altName: string | null, vintage: number | null, currency: string): Promise<{ pricing: PricingData; name: string }> {
+export async function fetchPricingWithAlt(queryName: string, altName: string | null, vintage: number | null, currency: string): Promise<{ pricing: PricingData; name: string }> {
   const first = await fetchPricing(queryName, vintage, currency);
   const matched = first.source === 'wine-searcher' && first.matched !== false;
   if (matched || !altName || (first as PricingData & { down?: boolean }).down) return { pricing: first, name: queryName };
