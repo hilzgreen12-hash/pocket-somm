@@ -65,7 +65,7 @@ interface ProfileFilters {
   favouriteRegions?: string[]; favouriteGrapes?: string[];
 }
 function preFilterWines(wines: ExtractedWine[], prefs: ProfileFilters | null | undefined): ExtractedWine[] {
-  if (!prefs) return wines.slice(0, 80);
+  if (!prefs) return spread(wines, 80);
   let filtered = wines;
   if (prefs.dislikedRegions?.length) {
     filtered = filtered.filter((w) => !prefs.dislikedRegions!.some((r) =>
@@ -86,7 +86,17 @@ function preFilterWines(wines: ExtractedWine[], prefs: ProfileFilters | null | u
     prefs.favouriteGrapes?.some((g) => (w.grape ?? '').toLowerCase().includes(g.toLowerCase()));
   const favourited = filtered.filter(isFavourite);
   const others = filtered.filter((w) => !isFavourite(w));
-  return [...favourited, ...others].slice(0, 80);
+  return [...favourited.slice(0, 80), ...spread(others, Math.max(0, 80 - favourited.length))];
+}
+
+// Up to n wines taken evenly across the whole list (keeping list order), so a
+// long list is sampled from every section rather than cut after the first pages.
+function spread<T>(list: T[], n: number): T[] {
+  if (list.length <= n) return list;
+  if (n <= 0) return [];
+  const out: T[] = [];
+  for (let i = 0; i < n; i++) out.push(list[Math.floor((i * list.length) / n)]);
+  return out;
 }
 
 interface ScanPrefs {
@@ -148,12 +158,15 @@ Deno.serve(async (req) => {
     // Accept `images` (array, multi-screenshot) or a single `imageBase64`.
     const images: string[] = Array.isArray(body.images) ? body.images
       : body.imageBase64 ? [body.imageBase64] : [];
+    // Find Online: a web link to the restaurant's list instead of photos. The
+    // find-wine-list function locates and reads it; everything after is shared.
+    const sourceUrl: string | null = typeof body.sourceUrl === 'string' && /^https?:\/\//i.test(body.sourceUrl) ? body.sourceUrl : null;
     const params = body.params ?? {};
     const scanPreferences: ScanPrefs = params.scanPreferences ?? {};
     const profile: ProfileFilters = params.profile ?? null;
     const currency: string = (params.currency ?? 'GBP').toString();
 
-    if (!images.length) {
+    if (!images.length && !sourceUrl) {
       return new Response(JSON.stringify({ error: 'images required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -173,7 +186,10 @@ Deno.serve(async (req) => {
         await patch({ status: 'reading' });
         // OCR every image in parallel (allSettled — one bad shot doesn't sink
         // the batch), then merge + dedup by name+producer. Mirrors the old client.
-        const results = await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader)));
+        // Find Online reads the web page/PDF instead (one call, chunked inside).
+        const results = sourceUrl
+          ? await Promise.allSettled([callFn('find-wine-list', { action: 'read', url: sourceUrl, currency }, authHeader)])
+          : await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader)));
         const merged: ExtractedWine[] = [];
         const failures: string[] = [];
         for (const r of results) {
@@ -206,7 +222,9 @@ Deno.serve(async (req) => {
           return;
         }
 
-        const winesForRecommend = applyScanFilters(preFilterWines(wines, profile), scanPreferences, currency);
+        // Preference filters (colour, budget) BEFORE the 80-wine cap, so a long
+        // list isn't cut to its first 80 (often all sparkling/white) first.
+        const winesForRecommend = preFilterWines(applyScanFilters(wines, scanPreferences, currency), profile);
 
         const rec = await callFn('recommend', {
           wines: winesForRecommend,
@@ -239,7 +257,7 @@ Deno.serve(async (req) => {
         console.error('[scan-start] job failed:', jobId, message);
         await patch({
           status: 'error',
-          error: /minute|rate limit|too many|no wines|detected|matched your preferences|no .* wines on this list/i.test(message)
+          error: /minute|rate limit|too many|no wines|detected|matched your preferences|no .* wines on this list|couldn.t (find|read|open)/i.test(message)
             ? message
             : 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.',
         });

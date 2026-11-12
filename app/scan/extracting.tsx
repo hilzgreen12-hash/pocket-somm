@@ -19,13 +19,13 @@ type Stage = 'reading' | 'recommending' | 'error';
 
 export default function ExtractingScreen() {
   useKeepAwake();
-  const { imageUri, imageUris, imageSource, preferences, setExtractedWines, setRecommendation, setError } = useScanStore();
+  const { imageUri, imageUris, imageSource, onlineSource, preferences, setExtractedWines, setRecommendation, setError } = useScanStore();
   const { preferences: userProfile } = usePreferences();
   const [stage, setStage] = useState<Stage>('reading');
   const [errorDetail, setErrorDetail] = useState('');
 
   useEffect(() => {
-    if (!imageUri && !imageUris) {
+    if (!imageUri && !imageUris && !onlineSource) {
       router.dismissTo('/scan/wine-list');
       return;
     }
@@ -42,14 +42,14 @@ export default function ExtractingScreen() {
       // Step 1: prepare the image(s) locally (resize/compress to base64). Only
       // the prep is client-side now; the OCR itself runs server-side in the job.
       setStage('reading');
-      const uris = imageUris ?? (imageUri ? [imageUri] : []);
+      const uris = onlineSource ? [] : (imageUris ?? (imageUri ? [imageUri] : []));
       const images: string[] = [];
       for (const u of uris) {
         try { images.push(await prepareScanImageBase64(u, imageSource)); }
         catch { /* skip an unreadable image; the batch continues */ }
       }
       if (!token.active) return;
-      if (!images.length) {
+      if (!images.length && !onlineSource) {
         setErrorDetail('Could not read the photo. Please try a clearer, well-lit shot with the full list in frame.');
         setStage('error');
         return;
@@ -79,17 +79,18 @@ export default function ExtractingScreen() {
         favouriteGrapes: userProfile.favouriteGrapes,
       } : null;
 
-      const jobId = await startScanJob(images, { scanPreferences: preferences, profile, currency: scanCurrency });
+      const jobId = await startScanJob(images, { scanPreferences: preferences, profile, currency: scanCurrency }, onlineSource?.url);
       if (!token.active) return;
 
       const outcome = await pollScanJob(jobId, {
         isCancelled: () => !token.active,
+        timeoutMs: onlineSource ? 300000 : undefined,
         onStatus: (s) => { if (s === 'recommending') setStage('recommending'); },
       });
       if (!token.active) return;
 
       if (outcome.status === 'error' || !outcome.recommendation) {
-        setErrorDetail(outcome.error ?? 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.');
+        setErrorDetail(outcome.error ?? (onlineSource ? "Vinster couldn't read that wine list. Try another result, or use Scan a List or Upload a List instead." : 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.'));
         setStage('error');
         return;
       }
@@ -137,7 +138,7 @@ export default function ExtractingScreen() {
       <ScrollView contentContainerStyle={styles.errorContainer}>
         <Text style={styles.errorTitle}>Please try again!</Text>
         <Text style={styles.errorBody}>{errorDetail}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => router.dismissTo('/scan/wine-list')}>
+        <TouchableOpacity style={styles.retryButton} onPress={() => router.dismissTo(onlineSource ? '/scan/find-online' : '/scan/wine-list')}>
           <Text style={styles.retryText}>Try Again</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -146,10 +147,10 @@ export default function ExtractingScreen() {
 
   return (
     <SearchProgress
-      title={stage === 'reading' ? 'Reading your wine list…' : 'Finding your perfect match…'}
-      subtitle="Vinster needs up to a minute for your result"
+      title={stage === 'reading' ? (onlineSource ? 'Reading the wine list online…' : 'Reading your wine list…') : 'Finding your perfect match…'}
+      subtitle={onlineSource ? 'Vinster needs up to two minutes for your result' : 'Vinster needs up to a minute for your result'}
       body="Vinster is assessing the wine list for its 3 top picks based on critic scores, value for money, and vintage quality/drinkability, all set against your preferences"
-      durationMs={70000}
+      durationMs={onlineSource ? 120000 : 70000}
     />
   );
 }

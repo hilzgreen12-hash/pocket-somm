@@ -100,7 +100,7 @@ function joinPlace(appellation?: string | null, region?: string | null): string 
 export default function ResultsScreen() {
   const { fromHistory, sessionId, restaurant: historyRestaurant, city: historyCity, date: historyDate } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; restaurant?: string; city?: string; date?: string }>();
   const isFromHistory = fromHistory === 'true';
-  const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
+  const { recommendation, extractedWines, preferences, setRecommendation, reset, onlineSource } = useScanStore();
 
   // The header "back" button. The transient camera/preview/extracting screens
   // are dismissed at extracting→results time, so the Wine List form sits
@@ -167,14 +167,15 @@ export default function ResultsScreen() {
   const [pendingWine, setPendingWine] = useState<{ wine: WineRecommendation; i: number } | null>(null);
   const [promptRestaurant, setPromptRestaurant] = useState('');
   const [promptCity, setPromptCity] = useState('');
-  const [restaurantName, setRestaurantName] = useState('');
+  // Find Online: pre-fill the restaurant the user searched for.
+  const [restaurantName, setRestaurantName] = useState(() => (!isFromHistory && onlineSource?.restaurant) || '');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
   const [renderedAt] = useState(() => new Date().toISOString());
   // Live GPS-derived city. The autoSave mutation also reads location at
   // save time and persists it on the row, but that doesn't land until the
   // server round-trip completes. Surfacing the city in the stamp on mount
   // gives the user immediate feedback that Vinster knows where they are.
-  const [liveCity, setLiveCity] = useState<string | null>(null);
+  const [liveCity, setLiveCity] = useState<string | null>(() => (!isFromHistory && onlineSource?.city) || null);
   // Set after editing the restaurant review so the results card reflects the
   // new city immediately (autoSave.data isn't refetched on a review save).
   const [cityOverride, setCityOverride] = useState<string | null>(null);
@@ -217,7 +218,8 @@ export default function ResultsScreen() {
   // `getForegroundPermissionsAsync` only read existing state, so on a
   // fresh install the prompt never fired and the stamp stayed blank.
   useEffect(() => {
-    if (isFromHistory) return;
+    // A list found online isn't where the phone is — keep the typed town.
+    if (isFromHistory || onlineSource) return;
     let cancelled = false;
     (async () => {
       try {
@@ -385,7 +387,7 @@ export default function ResultsScreen() {
     if (inFlightSaveRef.current) return inFlightSaveRef.current;
     if (!recommendation || !extractedWines) return null;
     const promise = autoSave
-      .mutateAsync({ extractedWines, recommendation })
+      .mutateAsync({ extractedWines, recommendation, ...(onlineSource ? { cityOverride: onlineSource.city } : {}) })
       .then((result: any) => {
         const id = (result?.[0]?.sessionId ?? null) as string | null;
         if (id) savedSessionIdRef.current = id;

@@ -32,7 +32,7 @@ Record and/or review the bottle you ordered, as well as the restaurant you enjoy
 
 export default function WineListScreen() {
   const { session } = useAuth();
-  const { upload: uploadParam } = useLocalSearchParams<{ upload?: string }>();
+  const { upload: uploadParam, online: onlineParam } = useLocalSearchParams<{ upload?: string; online?: string }>();
   const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
   const { preferences: savedPreferences, prefsLoading } = usePreferences();
 
@@ -241,6 +241,19 @@ export default function WineListScreen() {
     if (maybeShowSignInPrompt(go)) return;
     await go();
   }
+
+  // Arriving via Home's "Find Online" (?online=1) goes straight on to the
+  // search, using the restored/default preferences — same as the upload path.
+  const autoOnlineRef = useRef(false);
+  useEffect(() => {
+    if (onlineParam === '1' && !autoOnlineRef.current) {
+      autoOnlineRef.current = true;
+      const go = () => { setPreferences(buildPreferences()); router.push('/scan/find-online'); };
+      if (maybeShowSignInPrompt(go)) return;
+      go();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onlineParam]);
 
   // Arriving via "Upload Wine List" on the Scan landing (?upload=1) auto-opens
   // the photo picker once, using the restored/default preferences — a quick

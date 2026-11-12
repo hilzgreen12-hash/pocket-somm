@@ -156,7 +156,10 @@ export function useScanHistory() {
   });
 
   const autoSave = useMutation({
-    mutationFn: async ({ extractedWines, recommendation, restaurantNameOverride }: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse; restaurantNameOverride?: string | null }) => {
+    // cityOverride (Find Online): the list came from the web, so the phone's
+    // location says nothing about the restaurant — use the town the user typed
+    // (or none) and skip GPS entirely.
+    mutationFn: async ({ extractedWines, recommendation, restaurantNameOverride, cityOverride }: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse; restaurantNameOverride?: string | null; cityOverride?: string | null }) => {
       // Surface a clear failure when the auth token hasn't hydrated yet —
       // previously this branch silently skipped the Supabase insert, so the
       // user saw "Saved ✓" but the archive query found nothing.
@@ -169,7 +172,8 @@ export function useScanHistory() {
       let restaurantName: string | null = null;
       let latitude: number | null = null;
       let longitude: number | null = null;
-      try {
+      if (cityOverride !== undefined) city = cityOverride ? normaliseCity(cityOverride) : null;
+      else try {
         let { status } = await Location.getForegroundPermissionsAsync();
         if (status !== 'granted') {
           const req = await Location.requestForegroundPermissionsAsync();

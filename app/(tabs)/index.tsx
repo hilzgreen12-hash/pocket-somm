@@ -486,13 +486,15 @@ export default function ScanLandingScreen() {
     });
   }
 
-  // Read A Wine List tile → choose how Vinster gets the list.
+  // Read A Wine List tile → choose how Vinster gets the list (Find Online
+  // searches the web for the restaurant's list).
   function openWineListChoice() {
     const after = (fn: () => void) => () => { setTimeout(fn, 350); };
     showAlert({
       title: 'How should Vinster read the list?',
       showCloseX: true,
       buttons: [
+        { text: 'Find Online', onPress: after(() => router.push('/scan/wine-list?online=1')) },
         { text: 'Scan a List', onPress: after(() => router.push('/scan/wine-list')) },
         { text: 'Upload a List', onPress: after(() => router.push('/scan/wine-list?upload=1')) },
       ],

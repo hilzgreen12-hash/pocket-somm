@@ -28,8 +28,9 @@ const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 180000; // 3 min hard ceiling — well past a normal scan
 
 // Kick off the background job. Returns the jobId immediately (sub-second).
-export async function startScanJob(images: string[], params: ScanJobParams): Promise<string> {
-  const data = await invokeResilient('scan-start', { images, params }, { timeoutMs: 30000, retries: 2 }) as { jobId?: string };
+// Pass `sourceUrl` (Find Online) instead of images to read a list from the web.
+export async function startScanJob(images: string[], params: ScanJobParams, sourceUrl?: string): Promise<string> {
+  const data = await invokeResilient('scan-start', sourceUrl ? { sourceUrl, params } : { images, params }, { timeoutMs: 30000, retries: 2 }) as { jobId?: string };
   if (!data?.jobId) throw new Error('Could not start the scan. Please try again.');
   return data.jobId;
 }
@@ -39,7 +40,8 @@ export async function startScanJob(images: string[], params: ScanJobParams): Pro
 // caller decides how to present a 'done' vs 'error'.
 export async function pollScanJob(
   jobId: string,
-  opts?: { onStatus?: (status: string) => void; isCancelled?: () => boolean },
+  // timeoutMs: Find Online reads a whole web list, so it gets longer than a photo.
+  opts?: { onStatus?: (status: string) => void; isCancelled?: () => boolean; timeoutMs?: number },
 ): Promise<ScanJobResult> {
   const started = Date.now();
   let lastStatus = '';
@@ -62,7 +64,7 @@ export async function pollScanJob(
       }
     }
 
-    if (Date.now() - started > POLL_TIMEOUT_MS) {
+    if (Date.now() - started > (opts?.timeoutMs ?? POLL_TIMEOUT_MS)) {
       throw new Error('This scan is taking longer than expected. Please try again.');
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
