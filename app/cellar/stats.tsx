@@ -369,7 +369,7 @@ export default function CellarStatsScreen() {
           )}
 
           {/* Top summary — the app's consistent gold stat bar: wines · bottles,
-              then the top three regions by share, then a link into the map. */}
+              then the top three regions by share. */}
           <View style={styles.summaryBar}>
             <Text style={styles.summaryLine}>
               {totalWines} {totalWines === 1 ? 'Wine' : 'Wines'} · {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'}
@@ -387,9 +387,6 @@ export default function CellarStatsScreen() {
                 ) : null}
               </>
             ) : null}
-            <TouchableOpacity onPress={() => router.push('/cellar/regions-map')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-              <Text style={styles.viewMapsLink}>View In Maps</Text>
-            </TouchableOpacity>
           </View>
 
           {/* "Wines missing intel" lives on the Full Cellar List only — not here. */}
@@ -644,7 +641,6 @@ const styles = StyleSheet.create({
   summarySub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
   summaryNote: { fontFamily: fonts.bodyRegular, fontSize: 11, color: colors.textMuted, letterSpacing: 0.2, textAlign: 'center', marginTop: 3 },
   summaryDivider: { alignSelf: 'stretch', height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: 2 },
-  viewMapsLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', marginTop: 2 },
   section: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Cormorant — section header
   sectionTitle: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md },
