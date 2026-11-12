@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Keyboard, Linking } from 'react-native';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useScanStore } from '../../src/stores/scanStore';
 import { searchWineListsOnline, type OnlineListResult } from '../../src/api/findWineList';
 import { isNetworkError } from '../../src/api/invokeResilient';
@@ -117,13 +118,23 @@ export default function FindOnlineScreen() {
 
           {results && results.length > 0 && (
             <>
-              <Text style={styles.resultsHint}>Tap the right restaurant's wine list</Text>
+              <Text style={styles.resultsHint}>Choose the restaurant's wine list</Text>
               {results.map((r) => (
-                <TouchableOpacity key={r.url} style={styles.result} onPress={() => read(r.url, r.title, r.domain)} activeOpacity={0.8}>
+                <View key={r.url} style={styles.result}>
                   <Text style={styles.resultTitle} numberOfLines={2}>{r.title}</Text>
                   <Text style={styles.resultDomain} numberOfLines={1}>{r.isPdf ? `${r.domain} · PDF` : r.domain}</Text>
                   {r.snippet ? <Text style={styles.resultSnippet} numberOfLines={2}>{r.snippet}</Text> : null}
-                </TouchableOpacity>
+                  {/* View List opens the page in the in-app browser to check it;
+                      Use List picks it and moves on to the preferences. */}
+                  <View style={styles.resultBtns}>
+                    <TouchableOpacity style={styles.resultBtn} onPress={() => { WebBrowser.openBrowserAsync(r.url).catch(() => Linking.openURL(r.url).catch(() => {})); }} activeOpacity={0.8}>
+                      <Text style={styles.resultBtnText}>View List</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.resultBtn, styles.resultBtnGold]} onPress={() => read(r.url, r.title, r.domain)} activeOpacity={0.8}>
+                      <Text style={[styles.resultBtnText, { color: colors.gold }]}>Use List</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               ))}
               <Text style={styles.note}>Online lists can be out of date, so check the vintages and prices at the table.</Text>
             </>
@@ -151,6 +162,10 @@ const styles = StyleSheet.create({
   result: { borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, backgroundColor: colors.surface },
   resultTitle: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
   resultDomain: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
+  resultBtns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  resultBtn: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  resultBtnGold: { borderColor: colors.gold },
+  resultBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF' },
   resultSnippet: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, marginTop: 4, lineHeight: 18 },
   note: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
 });
