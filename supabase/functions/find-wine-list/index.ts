@@ -460,8 +460,15 @@ async function search(restaurant: string, city: string) {
     })
     .filter((r): r is NonNullable<typeof r> => !!r && r.score >= 5);
   const bestHits = Math.max(0, ...scored.map((r) => r.hits));
+  // A namesake in another town (the Canterbury Drapers Arms, Noble Rot in New
+  // Zealand): when some site's results mention the user's town, drop sites
+  // whose results never do. If none mention it, keep everything.
+  const cityDomains = new Set(
+    cityLc ? scored.filter((r) => `${r.title} ${r.snippet} ${r.url}`.toLowerCase().includes(cityLc)).map((r) => r.domain) : [],
+  );
   const results = scored
     .filter((r) => r.hits === bestHits)
+    .filter((r) => cityDomains.size === 0 || cityDomains.has(r.domain))
     .sort((a, b) => b.score - a.score)
     .filter((r) => (seen.has(r.url) ? false : (seen.add(r.url), true)))
     .slice(0, 6)
