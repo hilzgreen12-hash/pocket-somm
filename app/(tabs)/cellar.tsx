@@ -147,22 +147,20 @@ export default function CellarTab() {
 
       <View style={styles.titleRow}>
         <HelpTitle label="Cellar" title="How Cellar works" body={CELLAR_HELP} textStyle={styles.title} />
-        {/* Voice Command — top-right text link (matches the Reviews "Add +").
-            Import + Export now live as buttons at the bottom of the tab. */}
-        <TouchableOpacity style={styles.voiceLink} onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.voiceLinkText}>Quick Command</Text>
-        </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
 
       {/* Shared cellars — switch between My Cellar and any cellar shared with you. */}
       <CellarSwitcher />
 
-      {/* Add Wines — a full-width gold button (same size as "Your Cellar List"
-          below), opening the Full Cellar List's scan/upload/manual chooser. */}
-      <View style={styles.actionRow}>
-        <TouchableOpacity onPress={() => requireAuth(() => router.push('/cellar/list?add=1' as any))} activeOpacity={0.85} style={styles.buttonFull}>
+      {/* Add Wines (white outline, opens the scan/upload/manual chooser) and
+          Quick Command (gold outline, the cellar voice command) side by side. */}
+      <View style={[styles.actionRow, styles.buttonRow, { gap: spacing.sm }]}>
+        <TouchableOpacity onPress={() => requireAuth(() => router.push('/cellar/list?add=1' as any))} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1 }]}>
           <Text style={styles.buttonText}>Add Wines</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1, borderColor: colors.gold }]}>
+          <Text style={[styles.buttonText, { color: colors.gold }]}>Quick Command</Text>
         </TouchableOpacity>
       </View>
 
@@ -260,10 +258,6 @@ const styles = StyleSheet.create({
   // Big "Cellar" tab title.
   title: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
-  // Voice Command — top-right text link, vertically centred on the title (matches
-  // the Reviews "Add +"). Absolute so it never shifts the centred title.
-  voiceLink: { position: 'absolute', right: spacing.xl, top: -22 },
-  voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Export-by-location picker.
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   pickerSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
