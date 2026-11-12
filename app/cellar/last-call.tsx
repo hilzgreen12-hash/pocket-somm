@@ -7,9 +7,9 @@ import { tidyWineRegion } from '../../src/utils/regionFormat';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
-// Last Call, Drink Now — every home-cellar wine with no more than two years
+// Last Call, Drink Now — every cellar wine (home and external storage) with no more than two years
 // left in its drinking window (or already past it), most urgent first. Opened
-// from the Last Call tile in Home Cellar Insights.
+// from the Last Call tile in Cellar Insights.
 export default function LastCallScreen() {
   const wines = useLastCallWines();
   const nowYear = new Date().getFullYear();
@@ -28,7 +28,7 @@ export default function LastCallScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Last Call, Drink Now</Text>
           <Text style={styles.count}>{wines.length} {wines.length === 1 ? 'Wine' : 'Wines'}</Text>
-          <Text style={styles.subtitle}>Wines in your home cellar with two years or less left in their drinking window, most urgent first.</Text>
+          <Text style={styles.subtitle}>Wines in your cellar with two years or less left in their drinking window, most urgent first.</Text>
         </View>
 
         <View style={styles.body}>

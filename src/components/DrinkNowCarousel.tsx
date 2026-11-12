@@ -3,8 +3,6 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
-import { fetchStorageLocations } from '../api/storageLocations';
-import { fetchPlacementsForWines } from '../api/placements';
 import { getArchivedWines } from '../api/cellar';
 import { wineNameKey } from '../utils/wineIdentity';
 import { effectiveMaturity } from '../utils/maturity';
@@ -13,7 +11,6 @@ import { PlaceholderCardView, type PlaceholderCard, NAMED_LABELS } from './Examp
 import { wineHeaderLine } from '../utils/wineHeader';
 import type { CellarWine } from '../types/wine';
 import { HOME_TILE, colors, spacing } from '../constants/theme';
-import { homeOnlyWines } from '../utils/homeWines';
 import { fonts } from '../constants/fonts';
 
 // Example cards shown when the cellar has nothing to surface yet.
@@ -27,7 +24,12 @@ const CELLAR_EXAMPLES: PlaceholderCard[] = [
 // window (or it has already closed) — the bottles to open soonest. A wine with
 // more than two years left is never Last Call.
 const LAST_CALL_HORIZON = 2;
-const RUNNING_LOW_MAX = 2;
+// Running Low: a wine bought 6+ bottles deep is flagged at 2 or fewer left;
+// one bought 5 or fewer deep is flagged at its last bottle. Either way it must
+// have been drunk down (a bottle in the archive) — a one-off single bottle
+// isn't "running low".
+const RUNNING_LOW_BIG_START = 6;
+const RUNNING_LOW_BIG_LEFT = 2;
 
 export function isLastCall(w: CellarWine, nowYear: number = new Date().getFullYear()): boolean {
   // Spirits don't mature — never surface them as Last Call / peak-now.
@@ -47,7 +49,7 @@ type InsightTile = { wine: CellarWine; badge: string; meta: string };
 // Identity key for the archive cross-reference (producer+name + vintage).
 const rlKey = (w: CellarWine) => `${wineNameKey(w.producer, w.wine_name)}|${(w.vintage ?? '').toString().trim()}`;
 
-function buildCellarInsights(wines: CellarWine[], archivedKeys?: Set<string> | null): InsightTile[] {
+function buildCellarInsights(wines: CellarWine[]): InsightTile[] {
   const owned = wines.filter((w) => (w.quantity ?? 0) > 0);
   const tiles: InsightTile[] = [];
   const used = new Set<string>();
@@ -58,13 +60,7 @@ function buildCellarInsights(wines: CellarWine[], archivedKeys?: Set<string> | n
   // Last Call wines are grouped into ONE tile (see DrinkNowCarousel), not one
   // tile each.
 
-  // Running Low — fewest bottles first. Only for wines that were once better
-  // stocked: require at least one bottle of that wine in the archive (i.e. it's
-  // genuinely been drunk DOWN), so a wine you only ever owned one of isn't tagged
-  // "running low". When archivedKeys is absent (back-compat count) the gate is off.
-  owned.filter((w) => (w.quantity ?? 0) <= RUNNING_LOW_MAX && (!archivedKeys || archivedKeys.has(rlKey(w))))
-    .sort((a, b) => (a.quantity ?? 0) - (b.quantity ?? 0))
-    .forEach((w) => add(w, 'Running Low', `${w.quantity} bottle${w.quantity === 1 ? '' : 's'} left`));
+  // Running Low wines are grouped into ONE tile too (see DrinkNowCarousel).
 
   // Highest-scored wine.
   const topRated = owned.filter((w) => w.critic_score != null)
@@ -91,45 +87,63 @@ export function useDrinkNowCounts(): { total: number; lastCall: number } {
   return { total: buildCellarInsights(wines).length + (lc > 0 ? 1 : 0), lastCall: lc };
 }
 
-// The cellar wines Home Cellar Insights looks at: everything except wines kept
-// only in an external/offsite cellar (this carousel is about stock at home).
-function useHomeInsightWines(): { homeWines: CellarWine[]; archivedKeys: Set<string> } {
+// The cellar wines Cellar Insights looks at: the whole cellar, including wines
+// kept in external storage.
+function useInsightWines(): { cellarWines: CellarWine[]; archived: CellarWine[] } {
   const { session } = useAuth();
   const userId = session?.user.id;
-  const { wines } = useCellar();
-  // Home Cellar Insights: exclude wines that live ONLY in an external/offsite
-  // cellar — this carousel is about the stock you keep at home.
-  const { data: locations = [] } = useQuery({
-    queryKey: ['cellar-locations-ext', userId],
-    queryFn: () => fetchStorageLocations(userId!),
-    enabled: !!userId,
-  });
-  const externalIds = new Set(locations.filter((l) => l.is_external).map((l) => l.id));
-  const wineIds = wines.map((w) => w.id);
-  const { data: placements = [] } = useQuery({
-    queryKey: ['home-insights-placements', userId, wineIds.length],
-    queryFn: () => fetchPlacementsForWines(wineIds),
-    enabled: !!userId && wineIds.length > 0 && externalIds.size > 0,
-  });
-  const homeWines = homeOnlyWines(wines, placements, externalIds);
-  // Archive identities, so "Running Low" only tags wines actually drunk down.
+  const { wines: cellarWines } = useCellar();
+  // Archived bottles (each removal is saved as an archived row), so Running Low
+  // knows how many bottles of a wine there were to begin with.
   const { data: archived = [] } = useQuery({
     queryKey: ['archived-wines', userId],
     queryFn: () => getArchivedWines(userId!),
     enabled: !!userId,
   });
-  const archivedKeys = new Set(archived.map(rlKey));
-  return { homeWines, archivedKeys };
+  return { cellarWines, archived };
 }
 
-// Last Call wines in the home cellar, most urgent (soonest window close) first.
+export type RunningLowWine = { wine: CellarWine; left: number; started: number };
+
+// Running Low wines in the cellar, fewest bottles left first. Bottles are
+// counted per wine + vintage across cellar rows; "started" = bottles now plus
+// bottles archived (drunk or removed).
+function runningLowFrom(cellarWines: CellarWine[], archived: CellarWine[]): RunningLowWine[] {
+  const archivedQty = new Map<string, number>();
+  for (const a of archived) archivedQty.set(rlKey(a), (archivedQty.get(rlKey(a)) ?? 0) + Math.max(0, a.quantity ?? 0));
+  const groups = new Map<string, { wine: CellarWine; left: number }>();
+  for (const w of cellarWines) {
+    const q = w.quantity ?? 0;
+    if (q <= 0 || w.is_spirit) continue;
+    const k = rlKey(w);
+    const g = groups.get(k);
+    if (!g) groups.set(k, { wine: w, left: q });
+    else { g.left += q; if (q > (g.wine.quantity ?? 0)) g.wine = w; }
+  }
+  const out: RunningLowWine[] = [];
+  for (const [k, g] of groups) {
+    const drunk = archivedQty.get(k) ?? 0;
+    if (drunk === 0) continue;
+    const started = g.left + drunk;
+    const low = started >= RUNNING_LOW_BIG_START ? g.left <= RUNNING_LOW_BIG_LEFT : g.left === 1;
+    if (low) out.push({ wine: g.wine, left: g.left, started });
+  }
+  return out.sort((a, b) => a.left - b.left || b.started - a.started);
+}
+
+export function useRunningLowWines(): RunningLowWine[] {
+  const { cellarWines, archived } = useInsightWines();
+  return runningLowFrom(cellarWines, archived);
+}
+
+// Last Call wines in the cellar, most urgent (soonest window close) first.
 // Shared by the Last Call tile and its list screen so the count always matches.
 export function useLastCallWines(): CellarWine[] {
-  return lastCallFrom(useHomeInsightWines().homeWines);
+  return lastCallFrom(useInsightWines().cellarWines);
 }
-function lastCallFrom(homeWines: CellarWine[]): CellarWine[] {
+function lastCallFrom(cellarWines: CellarWine[]): CellarWine[] {
   const nowYear = new Date().getFullYear();
-  return homeWines
+  return cellarWines
     .filter((w) => (w.quantity ?? 0) > 0 && isLastCall(w, nowYear))
     .sort((a, b) => (a.drinking_window_to ?? 9999) - (b.drinking_window_to ?? 9999));
 }
@@ -138,34 +152,20 @@ function lastCallFrom(homeWines: CellarWine[]): CellarWine[] {
 // Running Low / Top Rated / Most Collected / Oldest Vintage wine tiles.
 // Tap a wine tile → the wine card.
 export function DrinkNowCarousel() {
-  const { homeWines, archivedKeys } = useHomeInsightWines();
-  const lastCall = lastCallFrom(homeWines);
-  const tiles = buildCellarInsights(homeWines, archivedKeys);
+  const { cellarWines, archived } = useInsightWines();
+  const lastCall = lastCallFrom(cellarWines);
+  const runningLow = runningLowFrom(cellarWines, archived);
+  const tiles = buildCellarInsights(cellarWines);
   // Examples only before there's anything real to show — never beside real tiles.
-  const fill = tiles.length === 0 && lastCall.length === 0 ? CELLAR_EXAMPLES : [];
-  // Last Call tile picture: the most urgent labels — one full, or two/four split.
-  const collage = lastCall.slice(0, lastCall.length >= 4 ? 4 : Math.min(2, lastCall.length));
+  const fill = tiles.length === 0 && lastCall.length === 0 && runningLow.length === 0 ? CELLAR_EXAMPLES : [];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {lastCall.length > 0 ? (
-        <TouchableOpacity style={styles.card} onPress={() => router.push('/cellar/last-call' as any)} activeOpacity={0.85}>
-          <View style={styles.collage}>
-            {collage.map((w) => (
-              <WineCardThumb
-                key={w.id}
-                compact
-                path={w.label_image_path}
-                producer={w.producer}
-                wineName={w.wine_name}
-                fallbackText={w.wine_name}
-                style={collage.length === 1 ? styles.cellFull : collage.length === 2 ? styles.cellHalf : styles.cellQuarter}
-              />
-            ))}
-          </View>
-          <Text style={styles.cardName} numberOfLines={1} allowFontScaling={false}>Last Call, Drink Now</Text>
-          <Text style={styles.cardCount} numberOfLines={1} allowFontScaling={false}>{lastCall.length} {lastCall.length === 1 ? 'Wine' : 'Wines'}</Text>
-        </TouchableOpacity>
+        <GroupTile title="Last Call, Drink Now" wines={lastCall} onPress={() => router.push('/cellar/last-call' as any)} />
+      ) : null}
+      {runningLow.length > 0 ? (
+        <GroupTile title="Running Low" wines={runningLow.map((r) => r.wine)} onPress={() => router.push('/cellar/running-low' as any)} />
       ) : null}
       {tiles.map(({ wine: w, badge, meta }) => (
         <TouchableOpacity key={`${w.id}-${badge}`} style={styles.card} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.85}>
@@ -178,6 +178,31 @@ export function DrinkNowCarousel() {
       ))}
       {fill.map((c, i) => <PlaceholderCardView compact key={`ph-${i}`} card={c} />)}
     </ScrollView>
+  );
+}
+
+// One tile standing for a group of wines (Last Call, Running Low): up to four
+// labels as the picture, the title in white, then "X Wines · View All" in gold.
+function GroupTile({ title, wines, onPress }: { title: string; wines: CellarWine[]; onPress: () => void }) {
+  const collage = wines.slice(0, wines.length >= 4 ? 4 : Math.min(2, wines.length));
+  return (
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.collage}>
+        {collage.map((w) => (
+          <WineCardThumb
+            key={w.id}
+            compact
+            path={w.label_image_path}
+            producer={w.producer}
+            wineName={w.wine_name}
+            fallbackText={w.wine_name}
+            style={collage.length === 1 ? styles.cellFull : collage.length === 2 ? styles.cellHalf : styles.cellQuarter}
+          />
+        ))}
+      </View>
+      <Text style={styles.cardName} numberOfLines={1} allowFontScaling={false}>{title}</Text>
+      <Text style={styles.cardCount} numberOfLines={1} allowFontScaling={false}>{wines.length} {wines.length === 1 ? 'Wine' : 'Wines'} · View All</Text>
+    </TouchableOpacity>
   );
 }
 
