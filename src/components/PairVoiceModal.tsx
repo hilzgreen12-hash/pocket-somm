@@ -193,22 +193,20 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
     const wineSaid = preset ? presetLabel : await chat.ask('Which wine are we pairing?', 'ie. Domaine Jamet Côte-Rôtie 2015', 'wine', [
       ...(wines.length ? [{ label: 'Or choose from my cellar', onPress: () => setCellarPickerOpen(true) }] : []),
     ]);
-    // Straight to the dish — no 'full recipe or ingredient list?' question.
-    // One question for course + style, one for allergens, then the dishes.
-    const brief = await chat.ask('What course are you cooking and do you have a food style in mind?', 'ie. A main course, something cosy like a Sunday roast', 'food');
-    const course = brief;
-    const food = brief;
-    const allergies = await chat.ask('Any allergens to be aware of?', 'ie. No shellfish', 'food');
+    // ONE open question for everything about the dish (course, style,
+    // ingredients, allergies), then straight to the dishes.
+    const brief = await chat.ask('Tell me in as much detail as you like any guidelines for the dish', 'ie. A cosy main course, no shellfish, ready in an hour', 'food');
     const t = chat.token();
     const { identity, pairings } = await chat.working('Thinking about what to cook…', async () => {
       const id = preset ?? await toIdentity(wineSaid);
-      const none = /^\s*(no|none|nope|nothing|no allergies)\b/i.test(allergies);
+      const none = /^\s*(no|none|nope|nothing|anything|surprise me)\b/i.test(brief);
       const filters: Record<string, unknown> = {
-        dietary: null, allergens: [], customAllergen: none ? '' : allergies,
-        specificConcerns: none ? null : allergies,
-        course: courseFilter(course),
+        dietary: null, allergens: [], customAllergen: '',
+        // Any allergies or dislikes in the brief are honoured through here.
+        specificConcerns: none ? null : brief,
+        course: courseFilter(brief),
       };
-      const p = await generatePairings(id, filters as any, { additionalRequest: `Course and style of food they want: ${brief}.${none ? '' : ` Allergies / strong preferences: ${allergies}.`}` });
+      const p = await generatePairings(id, filters as any, { additionalRequest: none ? undefined : `The diner's guidelines for the dish (course, style, ingredients, allergies — follow all of them): ${brief}.` });
       if (chat.alive(t)) {
         const ls = useLabelStore.getState();
         ls.setWineDetailsConfirmed(id); ls.setFilters(filters); ls.setPairings(p);
@@ -217,7 +215,7 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
     }, "Matching the wine's weight, spice and savoury edge");
     if (!pairings.length) { chat.say("I couldn't come up with dishes for that just now — please try again."); chat.push(<DoneButton onPress={onClose} />); return; }
     const wineLabel = [identity.producer, identity.wineName, identity.vintage].filter(Boolean).join(' ');
-    chat.say(`Three dishes for ${wineLabel}: ${food.replace(/[.\s]+$/, '')}${/^\s*(no|none|nope|nothing)\b/i.test(allergies) ? '' : `, ${allergies.replace(/[.\s]+$/, '').toLowerCase()}`}`);
+    chat.say(`Three dishes for ${wineLabel}`);
     chat.push(
       <View>
         {pairings.slice(0, 3).map((p, i) => (
