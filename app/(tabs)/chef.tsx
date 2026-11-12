@@ -5,7 +5,6 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { CookbookFoldersCarousel } from '../../src/components/CookbookFoldersCarousel';
-import { PairVoiceModal } from '../../src/components/PairVoiceModal';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
@@ -30,7 +29,6 @@ export default function ChefTab() {
   const { sessions: labelSessions } = useChefLabelHistory();
   const { sessions: pairingSessions } = useChefPairingHistory();
   const [message, setMessage] = useState<AppMessage | null>(null);
-  const [voiceOpen, setVoiceOpen] = useState(false);
 
   function handleViewLastPairing() {
     if (generalResult || cellarResult) {
@@ -86,10 +84,8 @@ export default function ChefTab() {
 
       <View style={styles.titleRow}>
         <HelpTitle label="Pair" title="How Pair works" body={CHEF_HELP} textStyle={styles.appName} />
-        {/* Voice Command — top-right text link (matches the Reviews "Add +"). */}
-        <TouchableOpacity style={styles.voiceLink} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.voiceLinkText}>Ask Vinster</Text>
-        </TouchableOpacity>
+        {/* "Ask Vinster" removed from the tab header; the Quick Command inside
+            Find a Pairing and the recipe requirements screen stays. */}
       </View>
 
       <View style={styles.section}>
@@ -127,7 +123,6 @@ export default function ChefTab() {
           folders rendered as boxes (see CookbookFoldersCarousel). */}
       <CookbookFoldersCarousel />
 
-      <PairVoiceModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
 
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMessage(null)}>
@@ -150,10 +145,6 @@ const styles = StyleSheet.create({
   // Big "Chef" tab title — header, Cormorant.
   appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  // Voice Command — top-right text link, vertically centred on the title (matches
-  // the Reviews "Add +"). Absolute so it never shifts the centred title.
-  voiceLink: { position: 'absolute', right: spacing.xl, top: -22 },
-  voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   // 18pt either side of every separator, app-wide.
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: 18 },
   // Voice Command — centred gold pill, matching the home-storage screens.
