@@ -225,7 +225,7 @@ export default function WineListScreen() {
   }
 
   // Find Online: the user has picked a restaurant's list (find-online) and lands
-  // here to set preferences; "Find My Picks" then reads that list.
+  // here to set preferences; "Read Wine List" then reads that list.
   const onlineSource = useScanStore((st) => st.onlineSource);
   const readingOnline = onlineParam === '1' && !!onlineSource;
   function handleReadOnline() {
@@ -235,7 +235,7 @@ export default function WineListScreen() {
 
   // How the list will arrive, from Home's "Read A Wine List" pop-up: the camera
   // (default), the photo library (?upload=1) or a list found online. The user
-  // sets preferences first; Find My Picks then starts that route.
+  // sets preferences first; Read Wine List then starts that route.
   const mode: 'scan' | 'upload' | 'online' = readingOnline ? 'online' : uploadParam === '1' ? 'upload' : 'scan';
   function handleFindMyPicks() {
     if (mode === 'online') handleReadOnline();
@@ -261,9 +261,9 @@ export default function WineListScreen() {
 
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.appName}>Bottle Picks</Text>
+          <Text style={styles.appName}>Wine List Preferences</Text>
         </View>
-        <Text style={styles.subtitle}>Set your preferences and Vinster will tailor its top three picks accounting for overall quality and value.</Text>
+        <Text style={styles.subtitle}>Set your preferences and Vinster will tailor its top three picks accounting for overall quality and value. Then input the wine list for Vinster to read.</Text>
         <HelpButton label="More About Scan" title="How Scan works" body={LIST_HELP} />
       </View>
 
@@ -335,7 +335,7 @@ export default function WineListScreen() {
         {/* One button: opens the camera, the photo library, or reads the online
             list — whichever way the user chose on Home. */}
         <TouchableOpacity style={[styles.buttonFullOnline, isUploading && { opacity: 0.5 }]} onPress={handleFindMyPicks} disabled={isUploading} activeOpacity={0.85}>
-          <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Find My Picks'}</Text>
+          <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Read Wine List'}</Text>
         </TouchableOpacity>
 
       </View>
@@ -401,11 +401,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   // The big "Scan" title — header.
+  // "Wine List Preferences" runs to two lines: let it wrap, centred.
   appName: {
     fontFamily: fonts.headingSemibold,
     fontSize: 42,
+    lineHeight: 46,
     color: '#FFFFFF',
     letterSpacing: 1.5,
+    textAlign: 'center',
+    flexShrink: 1,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // Italic blurb directly under the title — kept Cormorant per spec.
@@ -483,7 +487,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.sm,
   },
-  // Find Online: the chosen list, shown above "Find My Picks".
+  // Find Online: the chosen list, shown above "Read Wine List".
   onlineCard: { borderWidth: 1, borderColor: 'rgba(224,184,74,0.45)', borderRadius: 14, padding: spacing.md, marginBottom: spacing.md, alignItems: 'center' },
   onlineLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   onlineTitle: { fontFamily: fonts.headingSemibold, fontSize: 17, color: '#FFFFFF', textAlign: 'center', marginTop: 4 },

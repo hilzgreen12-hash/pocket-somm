@@ -46,7 +46,7 @@ export default function FindOnlineScreen() {
   }
 
   // The chosen list is held in the scan store; the user then sets their
-  // preferences on the Scan a List form, which reads it with "Find My Picks".
+  // preferences on the Wine List Preferences form, which reads it with "Read Wine List".
   function read(url: string, titleFallback: string, domain?: string) {
     const name = isLink ? '' : restaurant.trim();
     let site = domain;
