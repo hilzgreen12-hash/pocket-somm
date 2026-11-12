@@ -16,6 +16,10 @@ import { colors, spacing } from '../src/constants/theme';
 import { fonts } from '../src/constants/fonts';
 import { bordeauxInfoFor } from '../src/constants/bordeauxClassification';
 import { showAlert } from '../src/components/AppAlert';
+import { DrinkingWindowSheet } from '../src/components/winecard/DrinkingWindowSheet';
+import { useLabelStore } from '../src/stores/labelStore';
+import { fetchAutoLabelUri } from '../src/api/label';
+import { withBordeauxInfo } from '../src/constants/bordeauxClassification';
 
 // Compare Wines or Vintages — results. The wines come from Home's Compare
 // Wines pop-up (compareStore). Shows the Vintage & Market Comparison table,
@@ -51,6 +55,8 @@ export default function CompareScreen() {
   const [data, setData] = useState<Comparison | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // Which wine's Drinking Window slider is open (index), if any.
+  const [windowFor, setWindowFor] = useState<number | null>(null);
 
   useEffect(() => {
     if (wines.length < 2) { router.back(); return; }
@@ -116,6 +122,23 @@ export default function CompareScreen() {
   const bestPpt = pptVals.length > 1 ? Math.min(...pptVals) : null;
   const anyEstimate = wines.some((_, i) => data.market[i]?.price == null && data.wines[i]?.estimatedValue != null);
   const label = (n: number | undefined) => (n ? shortName(wines[n - 1]) : '');
+  // Market Price (wine card) → where the value comes from, as on the intel card.
+  function openValueInfo(i: number) {
+    const m = data!.market[i];
+    const fmt = (n: number) => formatCurrency(n, data!.currency, { decimals: 0 });
+    let body: string;
+    if (m?.price != null) {
+      body = m.min != null && m.max != null && m.min !== m.max
+        ? `Wine-Searcher values range from ${fmt(m.min)}–${fmt(m.max)}.`
+        : "Wine-Searcher's live market value for this wine.";
+    } else if (data!.wines[i]?.estimatedValue != null) {
+      body = "This value is Vinster's own estimate — there's no Wine-Searcher price for this exact wine.";
+    } else {
+      body = "There's no Wine-Searcher price for this wine.";
+    }
+    showAlert({ title: 'Where this value comes from', body });
+  }
+
   // Price tap → the Wine-Searcher range behind the average (or why there isn't one).
   function showPriceRange(i: number) {
     const m = data!.market[i];
@@ -223,10 +246,14 @@ export default function CompareScreen() {
                   <Text style={[styles.text, { marginTop: spacing.sm }]}>Vinster couldn't confidently identify this wine, so it has left it out of the comparison rather than guess.</Text>
                 ) : (
                   <>
+                    {/* Tappable, as on the wine intel card: Critic Score and Market
+                        Price explain themselves, Drinking Window opens the slider. */}
                     <View style={styles.stats}>
-                      <Stat label="Critic Score" value={score(i) != null ? String(score(i)) : '—'} />
-                      <Stat label="Drinking Window" value={r.drinkingWindowFrom && r.drinkingWindowTo ? `${r.drinkingWindowFrom}–${r.drinkingWindowTo}` : '—'} sub={r.drinkingWindowStatus ? STATUS[r.drinkingWindowStatus] : undefined} />
-                      <Stat label="Market Price" value={price(i) != null ? formatCurrency(price(i)!, data.currency, { decimals: 0 }) : '—'} sub={data.market[i]?.price == null && price(i) != null ? 'Vinster estimate' : undefined} />
+                      <Stat label="Critic Score" value={score(i) != null ? String(score(i)) : '—'} onPress={score(i) != null ? openScoreInfo : undefined} />
+                      <Stat label="Drinking Window" value={r.drinkingWindowFrom && r.drinkingWindowTo ? `${r.drinkingWindowFrom}–${r.drinkingWindowTo}` : '—'} sub={r.drinkingWindowStatus ? STATUS[r.drinkingWindowStatus] : undefined}
+                        onPress={r.drinkingWindowFrom || r.drinkingWindowStatus ? () => setWindowFor(i) : undefined} />
+                      <Stat label="Market Price" value={price(i) != null ? formatCurrency(price(i)!, data.currency, { decimals: 0 }) : '—'} sub={data.market[i]?.price == null && price(i) != null ? 'Vinster estimate' : undefined}
+                        onPress={() => openValueInfo(i)} />
                     </View>
                     {r.reviews ? <Para title="Reviews" text={r.reviews} /> : null}
                     {r.vintageReport ? <Para title={`The ${w.vintage} Vintage`} text={r.vintageReport} /> : null}
@@ -235,6 +262,11 @@ export default function CompareScreen() {
                     {r.grapeNote ? <Para title="Grape" text={r.grapeNote} /> : null}
                   </>
                 )}
+                {r?.identified ? (
+                  <TouchableOpacity onPress={() => openFullIntel(w)} activeOpacity={0.7} style={{ marginTop: spacing.md }}>
+                    <Text style={styles.fullIntel}>Generate Full Wine Intel ›</Text>
+                  </TouchableOpacity>
+                ) : null}
                 {mine ? (
                   <TouchableOpacity onPress={() => router.push(`/wines/chosen?openReview=${mine.id}` as any)} activeOpacity={0.7}>
                     <Text style={styles.mine}>
@@ -254,6 +286,16 @@ export default function CompareScreen() {
           ) : null}
         </View>
       </ScrollView>
+      {windowFor != null ? (
+        <DrinkingWindowSheet
+          visible
+          onClose={() => setWindowFor(null)}
+          wineName={wineHeaderLine(wines[windowFor].producer, wines[windowFor].wineName, wines[windowFor].vintage)}
+          from={data.wines[windowFor]?.drinkingWindowFrom ?? null}
+          to={data.wines[windowFor]?.drinkingWindowTo ?? null}
+          fallbackStatus={data.wines[windowFor]?.drinkingWindowStatus ?? undefined}
+        />
+      ) : null}
     </View>
   );
 }
@@ -268,14 +310,39 @@ function Pick({ title, name, reason }: { title: string; name: string; reason: st
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Stat({ label, value, sub, onPress }: { label: string; value: string; sub?: string; onPress?: () => void }) {
   return (
-    <View style={styles.stat}>
+    <TouchableOpacity style={styles.stat} onPress={onPress} disabled={!onPress} activeOpacity={0.7}>
       <Text style={styles.statLabel}>{label}</Text>
       <Text style={styles.statValue}>{value}</Text>
       {sub ? <Text style={styles.statSub}>{sub}</Text> : null}
-    </View>
+    </TouchableOpacity>
   );
+}
+
+// The wine intel card's own explanations (app/label/results.tsx).
+function openScoreInfo() {
+  showAlert({ title: 'How Vinster scored this', body: "Vinster's score distils critic consensus and Wine-Searcher's aggregate rating for this wine into a single 100-point mark." });
+}
+
+// Full Wine Intel for one wine in the comparison — the same hand-off other
+// screens use: known wine, built on the results screen; Back returns here.
+function openFullIntel(w: CompareWineInput) {
+  const ls = useLabelStore.getState();
+  ls.reset();
+  ls.setWineDetailsConfirmed(withBordeauxInfo({
+    producer: w.producer, region: w.region ?? '', wineName: w.wineName, vintage: w.vintage || 'NV',
+    style: null, grape: w.grape, bottleSizeMl: null, quantity: 1,
+  }));
+  ls.setIntelligence(null);
+  ls.setImageUri(null);
+  void (async () => {
+    try {
+      const img = await fetchAutoLabelUri(w.producer, w.wineName);
+      if (img) useLabelStore.getState().setImageUri(img);
+    } catch { /* title only */ }
+  })();
+  router.push('/label/results?context=intel&confirmed=1&gen=1&noRecent=1' as any);
 }
 
 function Para({ title, text }: { title: string; text: string }) {
@@ -324,6 +391,7 @@ const styles = StyleSheet.create({
   statValue: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, marginTop: 2 },
   statSub: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, marginTop: 1 },
   paraTitle: { fontFamily: fonts.bodySemibold, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: colors.gold, marginBottom: 3 },
+  fullIntel: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.gold },
   mine: { fontFamily: fonts.bodyItalic, fontSize: 13.5, color: colors.text, marginTop: spacing.md },
   link: { fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline' },
   errorTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
