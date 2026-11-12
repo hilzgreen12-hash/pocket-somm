@@ -443,6 +443,7 @@ export default function ScanLandingScreen() {
         { text: 'Find Online', onPress: after(() => requireAuth(() => router.push('/scan/find-online'))) },
         { text: 'Scan a List', onPress: after(() => router.push('/scan/wine-list')) },
         { text: 'Upload a List', onPress: after(() => router.push('/scan/wine-list?upload=1')) },
+        { text: 'View Last Result', style: 'link', onPress: after(() => requireAccount(handleViewLastListResult)) },
       ],
     });
   }

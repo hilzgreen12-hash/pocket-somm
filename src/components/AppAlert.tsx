@@ -3,7 +3,8 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-export type AppAlertButtonStyle = 'default' | 'cancel' | 'destructive' | 'gold';
+// 'link' = a white underlined text link beneath the buttons (e.g. View Last Result).
+export type AppAlertButtonStyle = 'default' | 'cancel' | 'destructive' | 'gold' | 'link';
 
 export type AppAlertButton = {
   text: string;
@@ -88,7 +89,8 @@ export function AppAlertHost() {
   const dismissable = opts?.dismissable !== false;
   const rawButtons = opts?.buttons ?? [{ text: 'OK' }];
   // Render primary actions first, cancel as text link at the bottom
-  const primary = rawButtons.filter((b) => !isCancelStyle(b.style));
+  const primary = rawButtons.filter((b) => !isCancelStyle(b.style) && b.style !== 'link');
+  const links = rawButtons.filter((b) => b.style === 'link');
   const cancels = rawButtons.filter((b) => isCancelStyle(b.style));
 
   return (
@@ -122,6 +124,12 @@ export function AppAlertHost() {
               );
             })}
           </View>
+
+          {links.map((btn, i) => (
+            <TouchableOpacity key={`link-${i}`} onPress={() => handlePress(btn)} style={styles.cancelBtn}>
+              <Text style={styles.linkBtnText}>{btn.text}</Text>
+            </TouchableOpacity>
+          ))}
 
           {cancels.map((btn, i) => (
             <TouchableOpacity key={i} onPress={() => handlePress(btn)} style={styles.cancelBtn}>
@@ -206,6 +214,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: spacing.md,
     paddingBottom: 4,
+  },
+  linkBtnText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 14,
+    color: '#FFFFFF',
+    textDecorationLine: 'underline',
   },
   cancelBtnText: {
     // Cancel link in modal — Inter
