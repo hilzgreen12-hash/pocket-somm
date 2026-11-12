@@ -407,15 +407,36 @@ async function search(restaurant: string, city: string) {
     ...(general.status === 'fulfilled' ? general.value : []),
   ];
   const cityLc = city.trim().toLowerCase();
-  const nameWords = restaurant.toLowerCase().split(/\s+/).filter((w) => w.length > 2 && !['the', 'and', 'restaurant', 'bar'].includes(w));
+  const fold = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  // Words that identify THIS restaurant — generic words ("wine", "bar",
+  // "kitchen"…) would let wine magazines and guides through.
+  const GENERIC = new Set(['the', 'and', 'restaurant', 'restaurants', 'bar', 'wine', 'wines', 'kitchen', 'cafe', 'bistro', 'brasserie', 'pub', 'house', 'club', 'hotel', 'room', 'dining', 'grill', 'cellar', 'london', 'paris']);
+  const allWords = fold(restaurant).split(/[^a-z0-9]+/).filter((w) => w.length > 2 && w !== 'the' && w !== 'and');
+  const specific = allWords.filter((w) => !GENERIC.has(w));
+  // A name made only of generic words ("The Wine Bar") keeps them.
+  const nameWords = specific.length ? specific : allWords;
+  // The restaurant's own site: its domain carries the name ("thedrapersarms.com",
+  // "noblerot.co.uk", "bratrestaurant.co.uk"). Only those results are offered —
+  // never guides, magazines or list aggregators. (A list PDF the restaurant
+  // links to on another host is still found when its page is read.)
+  // How many of the name's words the domain carries ("drapersarms" = 2 of 2,
+  // "thedrapers" = 1 of 2). Results must match as many as the best one does,
+  // so a namesake (Drapers' Hall) drops out when the real site is found.
+  const nameHits = (domain: string) => {
+    const squashed = fold(domain).replace(/[^a-z0-9]/g, '');
+    return nameWords.filter((w) => squashed.includes(w)).length;
+  };
+  const ownSite = (domain: string) => nameWords.length > 0 && nameHits(domain) > 0
+    && !/^(shop|store|boutique|giftcards?|vouchers?)\./.test(domain);
   const seen = new Set<string>();
-  const results = items
+  const scored = items
     .map((it) => {
       const url = typeof it.link === 'string' ? it.link : '';
       const u = safeUrl(url);
       if (!u) return null;
       const domain = u.hostname.replace(/^www\./, '');
       if (SKIP_DOMAINS.test(domain)) return null;
+      if (!ownSite(domain)) return null;
       const title = String(it.title ?? domain);
       const snippet = String(it.snippet ?? '');
       const isPdf = /\.pdf($|\?)/i.test(u.pathname + u.search) || /\[pdf\]/i.test(title);
@@ -426,7 +447,7 @@ async function search(restaurant: string, city: string) {
       if (nameWords.length > 1 && nameWords.every((w) => hay.includes(w))) score += 4;
       if (nameWords.some((w) => domain.includes(w))) score += 4;
       // The town the user gave, so the Islington pub beats the Canterbury one.
-      if (cityLc && hay.includes(cityLc)) score += 3;
+      if (cityLc && hay.includes(cityLc)) score += 6;
       if (/wine/.test(hay)) score += 3;
       if (isPdf) score += 2;
       // A food or set menu is not the wine list.
@@ -435,13 +456,16 @@ async function search(restaurant: string, city: string) {
       // A web page on someone else's site is usually an article ABOUT the
       // restaurant, not its list (PDFs on other hosts are often the real list).
       if (!isPdf && nameWords.length && !nameWords.some((w) => domain.includes(w))) score -= 4;
-      return { title: title.replace(/^\[pdf\]\s*/i, ''), url: u.toString(), domain, snippet, isPdf, score };
+      return { title: title.replace(/^\[pdf\]\s*/i, ''), url: u.toString(), domain, snippet, isPdf, score, hits: nameHits(domain) };
     })
-    .filter((r): r is NonNullable<typeof r> => !!r && r.score >= 5)
+    .filter((r): r is NonNullable<typeof r> => !!r && r.score >= 5);
+  const bestHits = Math.max(0, ...scored.map((r) => r.hits));
+  const results = scored
+    .filter((r) => r.hits === bestHits)
     .sort((a, b) => b.score - a.score)
     .filter((r) => (seen.has(r.url) ? false : (seen.add(r.url), true)))
     .slice(0, 6)
-    .map(({ score: _s, ...r }) => r);
+    .map(({ score: _s, hits: _h, ...r }) => r);
   return results;
 }
 
