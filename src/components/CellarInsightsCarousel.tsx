@@ -178,7 +178,8 @@ export function CellarInsightsCarousel() {
     if (k && !distinctRestos.has(k)) distinctRestos.set(k, r.restaurant_photo_path ?? null);
   }
   const restoPhotos = [...distinctRestos.values()].filter(Boolean) as string[];
-  if (distinctRestos.size > 0) {
+  // Always shown for a signed-in user — "0 restaurants" included.
+  if (userId) {
     tiles.push({
       key: 'restaurants',
       title: 'Dined Out Last Month', meta: `${distinctRestos.size} restaurant${distinctRestos.size === 1 ? '' : 's'}`,
