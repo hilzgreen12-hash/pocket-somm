@@ -210,8 +210,8 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
             ))}
 
             {rows.length < MAX_WINES ? (
-              <TouchableOpacity style={styles.add} onPress={() => setRows((rs) => [...rs, emptyRow()])} accessibilityLabel="Add another wine" activeOpacity={0.7}>
-                <Feather name="plus" size={22} color={colors.gold} />
+              <TouchableOpacity style={styles.add} onPress={() => setRows((rs) => [...rs, emptyRow()])} accessibilityLabel="Add another wine" activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.addText}>+ Add Wine</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -252,7 +252,9 @@ const styles = StyleSheet.create({
   vintageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
   vintageLabel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
   vintageInput: { width: 130, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: 6, paddingHorizontal: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlign: 'center' },
-  add: { alignSelf: 'center', width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
+  // "+ Add Wine": gold underlined text at the left indent, like the Wine 1 / Wine 2 labels.
+  add: { alignSelf: 'flex-start', marginBottom: spacing.md },
+  addText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textDecorationLine: 'underline' },
   confirm: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center' },
   confirmText: { fontFamily: fonts.headingSemibold, color: '#FFFFFF', fontSize: 16 },
   hint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm },
