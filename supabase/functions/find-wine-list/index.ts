@@ -30,6 +30,8 @@ const MAX_PAGES = 48;                 // ignore anything past this (16 parallel 
 const TEXT_CHUNK = 12000;             // characters of page text per parallel read
 const MAX_TEXT_CHUNKS = 10;
 const MAX_HOPS = 6;                   // pages fetched while hunting for the list
+const FIND_BUDGET_MS = 30_000;         // stop hunting for the list after this
+const READ_BUDGET_MS = 70_000;         // the parallel reads must finish inside this
 
 // Sites that never hold a readable list (reviews, bookings, social).
 const SKIP_DOMAINS = /(^|\.)(tripadvisor\.[a-z.]+|opentable\.[a-z.]+|thefork\.[a-z.]+|yelp\.[a-z.]+|facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|google\.[a-z.]+|youtube\.com|squaremeal\.co\.uk|timeout\.com|resy\.com|sevenrooms\.com|designmynight\.com|michelin\.com|guide\.michelin\.com|ubereats\.com|deliveroo\.[a-z.]+|just-eat\.[a-z.]+|reddit\.com|podcasts\.apple\.com|spotify\.com|ft\.com|nytimes\.com|theguardian\.com|telegraph\.co\.uk|standard\.co\.uk|thetimes\.co\.uk|bbc\.co\.uk|eater\.com|hot-dinners\.com|wine-pages\.com|decanter\.com|jancisrobinson\.com|wikipedia\.org|linkedin\.com)$/i;
@@ -82,6 +84,32 @@ function safeUrl(raw: string): URL | null {
   return u;
 }
 
+// Private, loopback, link-local and other non-public address ranges.
+function privateAddress(ip: string): boolean {
+  const v4 = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
+  }
+  const v6 = ip.toLowerCase();
+  return v6 === '::' || v6 === '::1' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe80') || v6.startsWith('::ffff:');
+}
+
+// The hostname must resolve only to public addresses (so a pasted link can't
+// point the server at an internal one). If DNS lookup isn't available in this
+// runtime, the hostname checks in safeUrl still apply.
+async function resolvesPublic(host: string): Promise<boolean> {
+  const resolve = (Deno as any).resolveDns as undefined | ((h: string, t: string) => Promise<string[]>);
+  if (typeof resolve !== 'function') return true;
+  const all: string[] = [];
+  for (const t of ['A', 'AAAA']) {
+    try { all.push(...await resolve(host, t)); } catch { /* no records of this type */ }
+  }
+  if (!all.length) return false;
+  return all.every((ip) => !privateAddress(ip));
+}
+
 type Fetched = { url: string; kind: 'pdf'; bytes: Uint8Array } | { url: string; kind: 'html'; html: string };
 
 async function fetchPage(raw: string): Promise<Fetched | null> {
@@ -90,13 +118,14 @@ async function fetchPage(raw: string): Promise<Fetched | null> {
   for (let i = 0; i < 5; i++) {
     const u = safeUrl(current);
     if (!u) return null;
+    if (!(await resolvesPublic(u.hostname))) return null;
     const res = await fetch(u.toString(), {
       redirect: 'manual',
       headers: {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
         Accept: 'text/html,application/pdf,application/xhtml+xml;q=0.9,*/*;q=0.8',
       },
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(12_000),
     }).catch(() => null);
     if (!res) return null;
     if (res.status >= 300 && res.status < 400) {
@@ -212,7 +241,8 @@ async function locateList(startUrl: string): Promise<Source | null> {
   const visited = new Set<string>();
   let fallbackText: { url: string; text: string } | null = null;
   let hops = 0;
-  while (queue.length && hops < MAX_HOPS) {
+  const started = Date.now();
+  while (queue.length && hops < MAX_HOPS && Date.now() - started < FIND_BUDGET_MS) {
     const next = queue.shift()!;
     if (visited.has(next)) continue;
     visited.add(next);
@@ -233,10 +263,10 @@ async function locateList(startUrl: string): Promise<Source | null> {
     // Remember a page with SOME wine on it in case nothing better turns up.
     if (!fallbackText && /\b(19[5-9]\d|20[0-3]\d)\b/.test(text) && /wine/i.test(text)) fallbackText = { url: page.url, text };
     // Best wine-ish links first; a wine PDF jumps the queue.
-    for (const l of links.reverse()) {
-      if (l.pdf && l.score >= 6) queue.unshift(l.url);
-      else queue.push(l.url);
-    }
+    // Pages join the back in best-first order; wine PDFs jump to the front
+    // (best one first).
+    for (const l of links) if (!(l.pdf && l.score >= 6)) queue.push(l.url);
+    for (const l of links.filter((x) => x.pdf && x.score >= 6).reverse()) queue.unshift(l.url);
   }
   return fallbackText ? { url: fallbackText.url, kind: 'text', text: fallbackText.text } : null;
 }
@@ -284,13 +314,15 @@ function textChunks(text: string): string[] {
   return chunks.slice(0, MAX_TEXT_CHUNKS);
 }
 
-async function extract(content: Anthropic.MessageParam['content'], currency: string): Promise<any[]> {
+async function extract(content: Anthropic.MessageParam['content'], currency: string, deadline: number): Promise<any[]> {
   for (let attempt = 1; attempt <= 2; attempt++) {
+    // A retry only when there's clearly time left for it.
+    if (attempt === 2 && Date.now() > deadline - 45_000) throw new Error('out of time');
     try {
       const response = await client.messages.create({
         // Same model as the photo read (ocr) — the recommend step assumes it.
         model: 'claude-sonnet-5-5',
-        max_tokens: 16384,
+        max_tokens: 12000,
         system: systemFor(currency),
         messages: [{ role: 'user', content }],
       });
@@ -308,14 +340,29 @@ async function extract(content: Anthropic.MessageParam['content'], currency: str
 }
 
 async function readSource(src: Source, currency: string): Promise<any[]> {
+  const deadline = Date.now() + READ_BUDGET_MS;
   const instruction = 'Extract all wines from this part of the wine list. Use the bottle price. Return only JSON.';
   const jobs: Promise<any[]>[] = src.kind === 'pdf'
     ? (await pdfChunks(src.bytes)).map((b64) => extract([
         { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
         { type: 'text', text: instruction },
-      ] as any, currency))
-    : textChunks(src.text).map((t) => extract([{ type: 'text', text: `${instruction}\n\n---\n${t}` }], currency));
-  const settled = await Promise.allSettled(jobs);
+      ] as any, currency, deadline))
+    : textChunks(src.text).map((t) => extract([{ type: 'text', text: `${instruction}\n\n---\n${t}` }], currency, deadline));
+  // Whatever has been read by the deadline is used; a straggler can't hold the
+  // whole scan past the server's time limit. Each read records its own outcome as it lands; at the deadline, reads
+  // still running count as failed.
+  const outcomes: (PromiseSettledResult<any[]> | undefined)[] = jobs.map(() => undefined);
+  const tracked = jobs.map((j, i) => j.then(
+    (value) => { outcomes[i] = { status: 'fulfilled', value }; },
+    (reason) => { outcomes[i] = { status: 'rejected', reason }; },
+  ));
+  let timer: number | undefined;
+  await Promise.race([
+    Promise.all(tracked),
+    new Promise<void>((r) => { timer = setTimeout(r, Math.max(5_000, deadline - Date.now())); }),
+  ]);
+  clearTimeout(timer);
+  const settled: PromiseSettledResult<any[]>[] = outcomes.map((o) => o ?? { status: 'rejected', reason: new Error('out of time') });
   const wines: any[] = [];
   for (const r of settled) if (r.status === 'fulfilled') wines.push(...r.value);
   if (!wines.length && settled.every((r) => r.status === 'rejected')) {

@@ -210,16 +210,15 @@ export default function LineupDetailScreen() {
     // Confirmed from the cellar → the bottle(s) were drunk that night, so they
     // leave the cellar for the archive (counted like any other archive). Only
     // once: a bottle already archived for this lineup isn't archived again.
-    const archiveNow = !!prev && !prev.archived && (cw.quantity ?? 0) > 0;
     const linked = current.map((w, i) => (
       i === idx
-        ? { ...w, cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, confirmed: true, archived: w.archived || archiveNow }
+        ? { ...w, cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, confirmed: true }
         : w
     ));
     void (async () => {
       try {
-        if (archiveNow) await archiveCellarBottles([{ ...prev, cellar_wine_id: cw.id }]);
-        await persistWines(linked);
+        // Saves the link and marks the bottle archived in one write.
+        await archiveCellarBottles(prev ? [{ ...prev, cellar_wine_id: cw.id }] : [], linked);
       } catch (err) {
         showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
       }
@@ -516,7 +515,7 @@ export default function LineupDetailScreen() {
       // These were drunk that night — offer to archive the ones still live in
       // the cellar so they don't linger as "in cellar".
       const drunk = kept.filter((w) => w.cellar_wine_id && cellarWines.some((c) => c.id === w.cellar_wine_id));
-      if (drunk.length) promptArchiveDrunk(drunk);
+      if (drunk.length) promptArchiveDrunk(drunk, kept);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -526,12 +525,24 @@ export default function LineupDetailScreen() {
 
   // Archive the cellar bottle(s) behind a lineup wine — moves them from the live
   // cellar into the archive, dated to the night (mirrors Archive a Night).
-  async function archiveCellarBottles(list: LineupWine[]): Promise<void> {
+  // Each lineup wine is archived at most ONCE: archived ones are skipped, and
+  // the ones archived here are marked archived on the lineup (`base` = the
+  // lineup's wines to mark, when the caller has a newer list than the cache).
+  async function archiveCellarBottles(list: LineupWine[], base?: LineupWine[]): Promise<void> {
     if (!lineup) return;
     const day = (lineup.archived_at ?? '').split('T')[0] || new Date().toISOString().split('T')[0];
+    const done = new Set<string>();
     for (const w of list) {
+      if (w.archived || !w.cellar_wine_id) continue;
       const cw = cellarWines.find((c) => c.id === w.cellar_wine_id);
-      if (cw) await archiveBottles(cw, Math.min(w.count ?? 1, cw.quantity ?? 1), day);
+      if (cw && (cw.quantity ?? 0) > 0) {
+        await archiveBottles(cw, Math.min(w.count ?? 1, cw.quantity ?? 1), day);
+        done.add(cw.id);
+      }
+    }
+    const wines = base ?? lineup.wines ?? [];
+    if (done.size || base) {
+      await persistWines(wines.map((w) => (w.cellar_wine_id && done.has(w.cellar_wine_id) ? { ...w, archived: true } : w)));
     }
     qc.invalidateQueries({ queryKey: ['cellar', session?.user.id] });
     qc.invalidateQueries({ queryKey: ['cellar-archive', session?.user.id] });
@@ -540,14 +551,14 @@ export default function LineupDetailScreen() {
   }
 
   // Prompt (after Identify) to archive the cellar bottles that were drunk.
-  function promptArchiveDrunk(list: LineupWine[]) {
+  function promptArchiveDrunk(list: LineupWine[], base?: LineupWine[]) {
     const n = list.reduce((s, w) => s + (w.count ?? 1), 0);
     showAlert({
       title: 'You drank these — archive them?',
       body: `${n} ${n === 1 ? 'bottle is' : 'bottles are'} from your cellar. Move ${n === 1 ? 'it' : 'them'} into your archive now?`,
       buttons: [
         { text: 'Not now', style: 'cancel' },
-        { text: 'Archive', onPress: () => { archiveCellarBottles(list).catch((err) => showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' })); } },
+        { text: 'Archive', onPress: () => { archiveCellarBottles(list, base).catch((err) => showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' })); } },
       ],
     });
   }

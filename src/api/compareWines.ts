@@ -74,7 +74,7 @@ export async function runComparison(wines: CompareWineInput[], currency: string)
     mode,
     currency,
     wines: wines.map((w, i) => ({ ...w, wsScore: market[i].score, wsPrice: market[i].price })),
-  }, { timeoutMs: 120000, retries: 1 }) as Omit<Comparison, 'currency' | 'market'> & { error?: string; message?: string };
+  }, { timeoutMs: 150000, retries: 0 }) as Omit<Comparison, 'currency' | 'market'> & { error?: string; message?: string };
   if (!data || !Array.isArray(data.wines)) throw new Error(data?.message ?? "Vinster couldn't compare these wines just now. Please try again.");
   return { ...data, currency, market };
 }

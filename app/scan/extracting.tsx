@@ -61,7 +61,8 @@ export default function ExtractingScreen() {
       // uninterrupted.
       const profileCurrency = (userProfile?.defaultCurrency ?? 'GBP').toUpperCase();
       let scanCurrency = profileCurrency;
-      const detected = await detectLocalCurrency();
+      // A list found online isn't where the phone is — no local-currency prompt.
+      const detected = onlineSource ? null : await detectLocalCurrency();
       if (!token.active) return;
       if (detected && detected.currency !== profileCurrency) {
         scanCurrency = await askUseLocalCurrency(detected.currency, profileCurrency, detected.country);

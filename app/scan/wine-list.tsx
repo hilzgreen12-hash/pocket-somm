@@ -90,7 +90,11 @@ export default function WineListScreen() {
   const pendingActionRef = useRef<(() => void) | null>(null);
   const lastSyncedBudgetRef = useRef<number | null | undefined>(undefined);
 
+  // Arriving straight through to Upload / Find Online: skip the intro on that
+  // first visit so it can't pop up over the next screen.
+  const skipFirstIntroRef = useRef(uploadParam === '1' || onlineParam === '1');
   useFocusEffect(useCallback(() => {
+    if (skipFirstIntroRef.current) { skipFirstIntroRef.current = false; return; }
     // Show the welcome popup every time the page gains focus, until the
     // user explicitly opts out via "Don't show this again". A simple
     // dismiss closes for the visit only — the popup reappears on the
@@ -246,14 +250,19 @@ export default function WineListScreen() {
   // search, using the restored/default preferences — same as the upload path.
   const autoOnlineRef = useRef(false);
   useEffect(() => {
-    if (onlineParam === '1' && !autoOnlineRef.current) {
+    // Wait for the saved preferences (budget, favourite/disliked regions) so
+    // they travel with the online read.
+    if (onlineParam === '1' && !autoOnlineRef.current && !prefsLoading) {
       autoOnlineRef.current = true;
-      const go = () => { setPreferences(buildPreferences()); router.push('/scan/find-online'); };
+      const go = () => {
+        setPreferences({ ...buildPreferences(), budget: budget ?? savedPreferences?.defaultBudget ?? null });
+        router.push('/scan/find-online');
+      };
       if (maybeShowSignInPrompt(go)) return;
       go();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlineParam]);
+  }, [onlineParam, prefsLoading]);
 
   // Arriving via "Upload Wine List" on the Scan landing (?upload=1) auto-opens
   // the photo picker once, using the restored/default preferences — a quick

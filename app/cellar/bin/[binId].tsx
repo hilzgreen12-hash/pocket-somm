@@ -309,13 +309,15 @@ export default function BinDetailScreen() {
         // Some of the wine's bottles leave: lower the live row AND add an
         // archive row for them, like every other archive flow — otherwise these
         // bottles never reach the Cellar Archive or the wine's bottle history.
-        await updateCellarWine(w.id, { quantity: total - cellQty });
-        // Clone from the stored row (the list entry carries per-cell display fields).
+        // Archive row FIRST (cloned from the stored row — the list entry carries
+        // per-cell display fields), then lower the live row: if the clone
+        // fails, no bottles have gone missing.
         const real = await getCellarWineById(w.id);
         if (real) {
           const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = real;
           await addCellarWine({ ...rest, quantity: cellQty, archived_at: removedAt, is_wishlist: false });
         }
+        await updateCellarWine(w.id, { quantity: total - cellQty });
       }
       qc.invalidateQueries({ queryKey: ['cellar-archive'] });
       qc.invalidateQueries({ queryKey: ['archived-wines'] });

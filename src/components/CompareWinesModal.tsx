@@ -72,7 +72,7 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
   }
 
   // Not in the catalogue — use the typed name as it is.
-  function useTyped(i: number) {
+  function applyTyped(i: number) {
     const q = rows[i].query.trim();
     if (!q) return;
     const year = q.match(/\b(19|20)\d{2}\b/)?.[0] ?? '';
@@ -177,7 +177,7 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
                         autoCapitalize="words"
                         autoCorrect={false}
                         returnKeyType="search"
-                        onSubmitEditing={() => useTyped(i)}
+                        onSubmitEditing={() => applyTyped(i)}
                       />
                       {r.scanning || (active === i && loading) ? <ActivityIndicator color={colors.gold} style={{ marginLeft: spacing.sm }} /> : null}
                       <TouchableOpacity onPress={() => void scan(i)} disabled={r.scanning} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.camera} accessibilityLabel={`Scan a label for wine ${i + 1}`}>
@@ -196,7 +196,7 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
                           </TouchableOpacity>
                         ))}
                         {!loading ? (
-                          <TouchableOpacity style={styles.option} onPress={() => useTyped(i)} activeOpacity={0.7}>
+                          <TouchableOpacity style={styles.option} onPress={() => applyTyped(i)} activeOpacity={0.7}>
                             <Text style={styles.optionName}>Use “{r.query.trim()}”</Text>
                             <Text style={styles.optionMetaMuted}>{results.length ? 'Not listed? Enter it yourself.' : 'No match — enter it yourself.'}</Text>
                           </TouchableOpacity>

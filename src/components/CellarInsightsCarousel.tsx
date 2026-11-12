@@ -197,7 +197,7 @@ export function CellarInsightsCarousel() {
     });
   }
 
-  // 5) Labels scanned last month  // 4) Labels scanned last month — a collage of those label thumbnails. Only
+  // 5) Labels scanned last month — a collage of those label thumbnails. Only
   // shown when we have at least one label image.
   {
     const since = Date.now() - MONTH_MS;

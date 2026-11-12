@@ -98,7 +98,11 @@ Deno.serve(async (req) => {
     }
 
     let parsed: any = null;
+    const started = Date.now();
     for (let attempt = 1; attempt <= 2 && !parsed; attempt++) {
+      // Retry only when the first try failed quickly, so one comparison never
+      // outlasts the app's wait (and is never billed as several).
+      if (attempt === 2 && Date.now() - started > 40_000) break;
       try {
         const response = await client.messages.create({
           model: 'claude-sonnet-5-5',

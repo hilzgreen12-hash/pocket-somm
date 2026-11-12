@@ -325,8 +325,12 @@ export function fetchAutoLabelUri(producer?: string | null, wineName?: string | 
 
 async function autoLabelLookup(key: string, p: string, w: string): Promise<string | null> {
   const storeKey = AUTO_LABEL_PREFIX + key;
-  const base = `autolabel-${p}-${w}`.replace(/[^a-z0-9]+/gi, '-').slice(0, 70);
-  const savedName = `${base}-saved.img`;
+  // A short hash of the full key keeps names unique when two wines tidy down to
+  // the same letters (non-Latin or very long names).
+  let h = 5381;
+  for (let i = 0; i < key.length; i++) h = ((h * 33) ^ key.charCodeAt(i)) >>> 0;
+  const base = `autolabel-${p}-${w}`.replace(/[^a-z0-9]+/gi, '-').slice(0, 60);
+  const savedName = `${base}-${h.toString(36)}-saved.img`;
 
   let memo: AutoLabelMemo | null = null;
   try {
@@ -367,20 +371,26 @@ async function autoLabelLookup(key: string, p: string, w: string): Promise<strin
   return null;
 }
 
-// Download one image to the cache; null unless it arrived and decodes.
+// Download one image to the cache; null unless it arrived and decodes. Each
+// attempt downloads to its OWN temporary file and only a validated image is
+// moved to `name` — a slow attempt that outlives its 6s timeout can then never
+// overwrite the good image a later attempt saved.
 async function downloadImage(url: string, name: string): Promise<string | null> {
+  const temp = new File(Paths.cache, `${name}.${Date.now()}-${Math.random().toString(36).slice(2, 8)}.part`);
   try {
-    const dest = new File(Paths.cache, name);
-    try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
     const file = await Promise.race([
-      File.downloadFileAsync(url, dest),
+      File.downloadFileAsync(url, temp),
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 6_000)),
     ]);
-    if ((file.size ?? 0) < 1500) return null; // an error page / pixel, not a label
+    if ((file.size ?? 0) < 1500) { try { file.delete(); } catch { /* ignore */ } return null; } // an error page / pixel, not a label
     const ok = await new Promise<boolean>((resolve) => {
       RNImage.getSize(file.uri, (wd, ht) => resolve(wd >= 60 && ht >= 60), () => resolve(false));
     });
-    return ok ? file.uri : null;
+    if (!ok) { try { file.delete(); } catch { /* ignore */ } return null; }
+    const dest = new File(Paths.cache, name);
+    try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
+    file.move(dest);
+    return dest.uri;
   } catch { return null; }
 }
 
