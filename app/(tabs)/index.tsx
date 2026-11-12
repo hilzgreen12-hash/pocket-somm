@@ -796,7 +796,7 @@ const styles = StyleSheet.create({
   sdCompareCell: { width: '50%', height: '100%', opacity: 0.85 },
   // White name + gold line beneath, matching the carousels below.
   sdName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
-  sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
+  sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3, textTransform: 'uppercase', letterSpacing: 0.4 },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
 
   // Search-a-Wine prompt (opened from the Search tile).
