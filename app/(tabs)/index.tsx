@@ -57,7 +57,8 @@ const SD_RESTAURANT_IMAGE: number | null = require('../../assets/images/tiles/re
 // Light labels only — the Search tile reads best bright (Piper Rare was too dark).
 // Compare Wines tile: two Bordeaux labels side by side.
 const SD_COMPARE_IMAGES = [NAMED_LABELS.gruaudLarose, NAMED_LABELS.rocDeCambes];
-const SD_COLLAGE_IMAGES = [NAMED_LABELS.lynchBages, NAMED_LABELS.tollotBeaut, NAMED_LABELS.donnhoff, NAMED_LABELS.benditoDestino];
+// Generate Wine Intel tile: one label, Dönnhoff.
+const SD_INTEL_IMAGE = NAMED_LABELS.donnhoff;
 
 // The Home carousels take no props, so memoised copies don't redraw when only
 // Home's own state changes (e.g. while a section is being dragged).
@@ -506,11 +507,7 @@ export default function ScanLandingScreen() {
                         onLongPress={() => requireAccount(handleViewLastIntel)}
                         activeOpacity={0.85}
                       >
-                        <View style={styles.sdCollage}>
-                          {SD_COLLAGE_IMAGES.map((img, i) => (
-                            <Image key={i} source={img} style={styles.sdCollageCell} resizeMode="cover" />
-                          ))}
-                        </View>
+                        <Image source={SD_INTEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
                       <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Overview, Market & Serving</Text>
@@ -796,7 +793,6 @@ const styles = StyleSheet.create({
   sdFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
   sdCompareCell: { width: '50%', height: '100%', opacity: 0.85 },
-  sdCollageCell: { width: '50%', height: '50%', opacity: 0.85 },
   // White name + gold line beneath, matching the carousels below.
   sdName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
