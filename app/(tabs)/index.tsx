@@ -511,7 +511,7 @@ export default function ScanLandingScreen() {
                         <Image source={SD_INTEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
-                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Overview, Market & Serving</Text>
+                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Scan & Search</Text>
                     </View>
 
                     {/* Compare Wines or Vintages → pick 2 to 4 wines, then Vinster's
@@ -524,7 +524,7 @@ export default function ScanLandingScreen() {
                           ))}
                         </View>
                       </TouchableOpacity>
-                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Compare Wines or Vintages</Text>
+                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Compare Wines</Text>
                       <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Up to 4 at a time</Text>
                     </View>
 
@@ -795,8 +795,10 @@ const styles = StyleSheet.create({
   sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
   sdCompareCell: { width: '50%', height: '100%', opacity: 0.85 },
   // White name + gold line beneath, matching the carousels below.
-  sdName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
-  sdStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3, textTransform: 'uppercase', letterSpacing: 0.4 },
+  // Fonts swapped (colours kept): the white top line takes the small capitals,
+  // the gold line beneath takes the heading font.
+  sdName: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.text, marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+  sdStamp: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, marginTop: 3, letterSpacing: 0.2 },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
 
   // Search-a-Wine prompt (opened from the Search tile).
