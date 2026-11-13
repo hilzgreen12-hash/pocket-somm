@@ -42,15 +42,8 @@ function FolderBg({ path }: { path?: string | null }) {
 
 const TILE_W = HOME_TILE.w;
 
-// "+ Add Image" under a tile's name (gold, not capitals) — opens Take / Upload.
-// Reads "Change Image" once the tile has one.
-function AddImageLink({ has, onPress }: { has: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={{ alignSelf: 'flex-start', marginTop: 4 }} accessibilityRole="button">
-      <Text style={styles.addImage}>{has ? 'Change Image' : '+ Add Image'}</Text>
-    </TouchableOpacity>
-  );
-}
+// Folder images are added / changed by holding a folder (here or in Your
+// Cookbook) — no link under each tile.
 
 export function CookbookFoldersCarousel() {
   const { collections, rename } = useChefArchiveCollections();
@@ -178,7 +171,6 @@ export function CookbookFoldersCarousel() {
               </View>
             </TouchableOpacity>
             <Text style={styles.cardMeta} numberOfLines={1}>Cookbook · {recipeLabel(favouritesCount)}</Text>
-            <AddImageLink has={!!favCover} onPress={() => openImageMenu(favouritesTile)} />
           </View>
         }
         items={collections.map((c) => ({
@@ -195,7 +187,6 @@ export function CookbookFoldersCarousel() {
                 </View>
               </TouchableOpacity>
               <Text style={styles.cardMeta} numberOfLines={1}>Your Folder · {recipeLabel(c.item_count)}</Text>
-              <AddImageLink has={!!c.image_path} onPress={() => openImageMenu(c)} />
             </View>
           ),
         }))}
@@ -262,7 +253,6 @@ const styles = StyleSheet.create({
   kitchenImg: { position: 'absolute', left: 0, top: 0, width: HOME_TILE.w, height: HOME_TILE.h },
   cardMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
-  addImage: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   cardAdd: { width: HOME_TILE.w, height: HOME_TILE.h, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   cardAddText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   renameOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
