@@ -32,6 +32,18 @@ export default function ScanTab() {
   }
   function dismissSignInPrompt() { setSignInPromptVisible(false); pendingActionRef.current = null; }
 
+  // Add a Lineup → photograph one now, or upload a photo from the library.
+  function chooseLineupSource() {
+    showAlert({
+      title: 'Add a Lineup',
+      buttons: [
+        { text: 'Photograph a Lineup', onPress: () => router.push('/cellar/archive-night') },
+        { text: 'Upload a Lineup', onPress: () => router.push('/cellar/archive-night?upload=1') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
   // Top-right "+ Add" — choose which kind of review, then jump to that flow.
   function openAddReviewChooser() {
     requireAccount(() => showAlert({
@@ -40,7 +52,7 @@ export default function ScanTab() {
       buttons: [
         { text: 'Add a wine review', onPress: () => router.push('/wines/chosen?addManual=1') },
         { text: 'Add a restaurant review', onPress: () => router.push('/restaurants/reviews?add=1') },
-        { text: 'Add a Lineup', onPress: () => router.push('/cellar/archive-night') },
+        { text: 'Add a Lineup', onPress: () => setTimeout(chooseLineupSource, 350) },
         { text: 'Cancel', style: 'cancel' },
       ],
     }));

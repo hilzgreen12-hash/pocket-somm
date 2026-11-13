@@ -76,6 +76,16 @@ export default function LineupLibraryScreen() {
   // just the picture. Once saved it behaves exactly like an Archive-a-Night
   // lineup (favourite, note, share).
   const [addOpen, setAddOpen] = useState(false);
+  function chooseLineupSource() {
+    showAlert({
+      title: 'Add a Lineup',
+      buttons: [
+        { text: 'Photograph a Lineup', onPress: () => router.push('/cellar/archive-night' as any) },
+        { text: 'Upload a Lineup', onPress: () => router.push('/cellar/archive-night?upload=1' as any) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
   const [adding, setAdding] = useState(false);
   async function addLineupFrom(source: 'camera' | 'library') {
     setAddOpen(false);
@@ -314,7 +324,10 @@ export default function LineupLibraryScreen() {
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Lineup Library</Text>
-        <View style={{ width: 40 }} />
+        {/* Add + → photograph a lineup now, or upload one (Archive a Night). */}
+        <TouchableOpacity onPress={chooseLineupSource} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.addLink}>Add +</Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.blurb}>
@@ -526,6 +539,8 @@ export default function LineupLibraryScreen() {
 }
 
 const styles = StyleSheet.create({
+  // "Add +" — top right, as on Your Restaurant Reviews.
+  addLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, width: 50, textAlign: 'right' },
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
