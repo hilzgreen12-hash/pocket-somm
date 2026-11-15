@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -7,7 +7,8 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { prepareScanImageBase64 } from '../../src/services/ocr';
 import { finalizeRecommendation } from '../../src/services/recommender';
-import { startScanJob, pollScanJob } from '../../src/api/scanJob';
+import { startScanJob, pollScanJob, logScanClientError, type StartedScanJob } from '../../src/api/scanJob';
+import { useAuth } from '../../src/hooks/useAuth';
 import { isNetworkError } from '../../src/api/invokeResilient';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { colors, spacing } from '../../src/constants/theme';
@@ -23,6 +24,21 @@ export default function ExtractingScreen() {
   const { preferences: userProfile } = usePreferences();
   const [stage, setStage] = useState<Stage>('reading');
   const [errorDetail, setErrorDetail] = useState('');
+  // Small print on the error screen: a reference code (the job's, or one made
+  // on the phone) and the real reason, so any failure can be traced.
+  const [errorRef, setErrorRef] = useState<{ ref: string; reason: string } | null>(null);
+  const { session } = useAuth();
+  const stepRef = useRef('checking the connection');
+  const jobRef = useRef<StartedScanJob | null>(null);
+  const source = onlineSource ? 'online' : imageSource;
+
+  // A failure on the phone: show its reference and send it to the server log.
+  function phoneFailure(reason: string) {
+    const ref = jobRef.current ? jobRef.current.jobId.slice(0, 8).toUpperCase() : Math.random().toString(36).slice(2, 8).toUpperCase();
+    const full = `${reason} (while ${stepRef.current})`;
+    setErrorRef({ ref, reason: full });
+    logScanClientError({ ref, stage: stepRef.current, message: reason, source, guest: !session });
+  }
 
   useEffect(() => {
     if (!imageUri && !imageUris && !onlineSource) {
@@ -42,6 +58,7 @@ export default function ExtractingScreen() {
       // Step 1: prepare the image(s) locally (resize/compress to base64). Only
       // the prep is client-side now; the OCR itself runs server-side in the job.
       setStage('reading');
+      stepRef.current = 'preparing the photos';
       const uris = onlineSource ? [] : (imageUris ?? (imageUri ? [imageUri] : []));
       const images: string[] = [];
       for (const u of uris) {
@@ -51,6 +68,7 @@ export default function ExtractingScreen() {
       if (!token.active) return;
       if (!images.length && !onlineSource) {
         setErrorDetail('Could not read the photo. Please try a clearer, well-lit shot with the full list in frame.');
+        phoneFailure('none of the photos could be opened on this phone');
         setStage('error');
         return;
       }
@@ -80,10 +98,13 @@ export default function ExtractingScreen() {
         favouriteGrapes: userProfile.favouriteGrapes,
       } : null;
 
-      const jobId = await startScanJob(images, { scanPreferences: preferences, profile, currency: scanCurrency }, onlineSource?.url);
+      stepRef.current = 'sending the list';
+      const job = await startScanJob(images, { scanPreferences: preferences, profile, currency: scanCurrency }, onlineSource?.url);
+      jobRef.current = job;
       if (!token.active) return;
 
-      const outcome = await pollScanJob(jobId, {
+      stepRef.current = 'waiting for the result';
+      const outcome = await pollScanJob(job, {
         isCancelled: () => !token.active,
         timeoutMs: onlineSource ? 300000 : undefined,
         onStatus: (s) => { if (s === 'recommending') setStage('recommending'); },
@@ -91,11 +112,14 @@ export default function ExtractingScreen() {
       if (!token.active) return;
 
       if (outcome.status === 'error' || !outcome.recommendation) {
+        // The server's own record of what went wrong, under this job's code.
+        setErrorRef({ ref: job.jobId.slice(0, 8).toUpperCase(), reason: outcome.failure || outcome.error || 'no picks came back' });
         setErrorDetail(outcome.error ?? (onlineSource ? "Vinster couldn't read that wine list. Try another result, or use Scan a List or Upload a List instead." : 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.'));
         setStage('error');
         return;
       }
 
+      stepRef.current = 'showing the picks';
       // Apply the same post-processing as the inline path — crucially, inject the
       // real menu price into each pick from the OCR-read list.
       const recommendation = finalizeRecommendation(outcome.recommendation, {
@@ -130,6 +154,7 @@ export default function ExtractingScreen() {
         : 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.';
       setErrorDetail(friendly);
       setError(message);
+      phoneFailure(message);
       setStage('error');
     }
   }
@@ -139,6 +164,9 @@ export default function ExtractingScreen() {
       <ScrollView contentContainerStyle={styles.errorContainer}>
         <Text style={styles.errorTitle}>Please try again!</Text>
         <Text style={styles.errorBody}>{errorDetail}</Text>
+        {errorRef ? (
+          <Text style={styles.errorRef} selectable>Ref {errorRef.ref} · {errorRef.reason.slice(0, 160)}</Text>
+        ) : null}
         <TouchableOpacity style={styles.retryButton} onPress={() => router.dismissTo(onlineSource ? '/scan/find-online' : '/scan/wine-list')}>
           <Text style={styles.retryText}>Try Again</Text>
         </TouchableOpacity>
@@ -221,6 +249,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 28,
     marginBottom: spacing.xl,
+  },
+  // Reference code + real reason, small and quiet beneath the message.
+  errorRef: {
+    fontSize: 12,
+    fontFamily: fonts.bodyRegular,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: -spacing.md,
+    marginBottom: spacing.xl,
+    opacity: 0.8,
   },
   retryButton: {
     borderWidth: 1,

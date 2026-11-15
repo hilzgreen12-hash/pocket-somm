@@ -17,6 +17,21 @@ import { createClient } from 'npm:@supabase/supabase-js';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+// Guest (no account) wine-list scans: limited per device address, counted from
+// their own scan_jobs rows (the per-user rate-limit table needs an account).
+const GUEST_HOURLY_LIMIT = 6;
+const GUEST_DAILY_LIMIT = 15;
+
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function json(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
+}
 
 interface ExtractedWine {
   name: string; producer: string; region: string;
@@ -126,10 +141,14 @@ function applyScanFilters(wines: ExtractedWine[], preferences: ScanPrefs | null 
 
 // ---- Server-to-server call to another edge function (buffered) --------------
 
-async function callFn(name: string, body: unknown, authHeader: string): Promise<any> {
+async function callFn(name: string, body: unknown, authHeader: string, internal = false): Promise<any> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: authHeader, apikey: ANON_KEY },
+    headers: {
+      'Content-Type': 'application/json', Authorization: authHeader, apikey: ANON_KEY,
+      // Guest scans: ocr / recommend / find-wine-list trust this instead of a user.
+      ...(internal ? { 'x-vinster-internal': SERVICE_KEY } : {}),
+    },
     body: JSON.stringify(body),
   });
   const text = await res.text();
@@ -140,39 +159,73 @@ async function callFn(name: string, body: unknown, authHeader: string): Promise<
 }
 
 Deno.serve(async (req) => {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-  }
-
-  const admin = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const authHeader = req.headers.get('Authorization') ?? `Bearer ${ANON_KEY}`;
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
   try {
-    const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    const body = await req.json().catch(() => ({}));
+
+    // Guests poll their job here (they can't read scan_jobs directly). The
+    // pollToken handed out at start proves the job is theirs.
+    if (body.action === 'poll') {
+      const { data: j } = await admin.from('scan_jobs')
+        .select('status, extracted_wines, result, error, params, user_id').eq('id', String(body.jobId ?? '')).maybeSingle();
+      if (!j || j.user_id || !j.params?.pollToken || j.params.pollToken !== body.pollToken) return json({ error: 'not_found' }, 404);
+      return json({ status: j.status, extracted_wines: j.extracted_wines, result: j.result, error: j.error, failure: j.params?.failure ?? null });
     }
 
-    const body = await req.json();
+    // A failure on the phone (before or while sending) — logged with its
+    // reference code so it can be found later even though no job ran.
+    if (body.action === 'client_error') {
+      console.error('[scan-client-error]', JSON.stringify({
+        ref: String(body.ref ?? '').slice(0, 12), stage: String(body.stage ?? '').slice(0, 40),
+        message: String(body.message ?? '').slice(0, 300), source: String(body.source ?? '').slice(0, 20),
+        guest: !!body.guest, country: req.headers.get('cf-ipcountry') ?? null,
+      }));
+      return json({ ok: true });
+    }
+
+    const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
+    const { data: { user } } = await userClient.auth.getUser().catch(() => ({ data: { user: null } }) as any);
+    // No account (or an expired login): run as a GUEST scan instead of failing.
+    const guest = !user;
+
     // Accept `images` (array, multi-screenshot) or a single `imageBase64`.
     const images: string[] = Array.isArray(body.images) ? body.images
       : body.imageBase64 ? [body.imageBase64] : [];
     // Find Online: a web link to the restaurant's list instead of photos. The
     // find-wine-list function locates and reads it; everything after is shared.
     const sourceUrl: string | null = typeof body.sourceUrl === 'string' && /^https?:\/\//i.test(body.sourceUrl) ? body.sourceUrl : null;
-    const params = body.params ?? {};
+    const params = { ...(body.params ?? {}) } as Record<string, any>;
     const scanPreferences: ScanPrefs = params.scanPreferences ?? {};
     const profile: ProfileFilters = params.profile ?? null;
     const currency: string = (params.currency ?? 'GBP').toString();
 
     if (!images.length && !sourceUrl) {
-      return new Response(JSON.stringify({ error: 'images required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      return json({ error: 'images required' }, 400);
+    }
+
+    let pollToken: string | null = null;
+    if (guest) {
+      const ip = (req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
+      const guestKey = (await sha256Hex(`vinster-guest:${ip}`)).slice(0, 32);
+      const since = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+      const count = async (h: number) => {
+        const { count: c } = await admin.from('scan_jobs').select('id', { count: 'exact', head: true })
+          .is('user_id', null).eq('params->>guestKey', guestKey).gte('created_at', since(h));
+        return c ?? 0;
+      };
+      if ((await count(1)) >= GUEST_HOURLY_LIMIT || (await count(24)) >= GUEST_DAILY_LIMIT) {
+        return json({ error: 'rate_limit_exceeded', message: "You've scanned a lot of lists recently — please try again in a little while, or create a free account." }, 429);
+      }
+      pollToken = crypto.randomUUID();
+      params.guestKey = guestKey;
+      params.pollToken = pollToken;
     }
 
     const { data: job, error: insertError } = await admin
       .from('scan_jobs')
-      .insert({ user_id: user.id, status: 'pending', params })
+      .insert({ user_id: guest ? null : user!.id, status: 'pending', params })
       .select('id')
       .single();
     if (insertError || !job?.id) throw new Error(`could not create scan job: ${insertError?.message ?? 'no id'}`);
@@ -188,8 +241,8 @@ Deno.serve(async (req) => {
         // the batch), then merge + dedup by name+producer. Mirrors the old client.
         // Find Online reads the web page/PDF instead (one call, chunked inside).
         const results = sourceUrl
-          ? await Promise.allSettled([callFn('find-wine-list', { action: 'read', url: sourceUrl, currency }, authHeader)])
-          : await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader)));
+          ? await Promise.allSettled([callFn('find-wine-list', { action: 'read', url: sourceUrl, currency }, authHeader, guest)])
+          : await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader, guest)));
         const merged: ExtractedWine[] = [];
         const failures: string[] = [];
         for (const r of results) {
@@ -242,7 +295,7 @@ Deno.serve(async (req) => {
           profileStyleProfiles: scanPreferences.profileStyleProfiles,
           currency,
           stream: false,
-        }, authHeader);
+        }, authHeader, guest);
 
         const recWines = Array.isArray(rec?.wines) ? rec.wines : [];
         if (!recWines.length) {
@@ -256,6 +309,9 @@ Deno.serve(async (req) => {
         const message = err instanceof Error ? err.message : String(err);
         console.error('[scan-start] job failed:', jobId, message);
         await patch({
+          // The real reason, kept with the job so the app can show it (small
+          // print, with the reference code) and it can be looked up later.
+          params: { ...params, failure: message.slice(0, 300) },
           status: 'error',
           error: /minute|rate limit|too many|no wines|detected|matched your preferences|no .* wines on this list|couldn.t (find|read|open)/i.test(message)
             ? message
@@ -267,7 +323,7 @@ Deno.serve(async (req) => {
     try { (globalThis as any).EdgeRuntime?.waitUntil?.(work); }
     catch { /* if unavailable, the promise still runs while the worker lives */ }
 
-    return new Response(JSON.stringify({ jobId }), { headers: { 'Content-Type': 'application/json' } });
+    return json({ jobId, pollToken });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('scan-start error:', message);

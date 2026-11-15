@@ -51,7 +51,7 @@ Use this exact format:
 
 If you cannot identify any wines, return: { "wines": [] }`;
 
-const IMAGE_SYSTEM_PROMPT = `You are a wine list parser. Extract every wine from the provided image of a restaurant wine list.\n\n${WINE_FIELDS}`;
+const IMAGE_SYSTEM_PROMPT = `You are a wine list parser. Extract every wine from the provided image of a restaurant wine list.\n\nCUT-OFF ENTRIES: if a wine's name is cut off by the edge of the photo (only partly visible), or its line is mostly out of frame, LEAVE IT OUT entirely — the diner chose not to include that part of the list. Never guess the rest of a cut-off name. A wine whose name is fully visible but whose price is cut off may be kept with menuPrice null.\n\n${WINE_FIELDS}`;
 // The user's currency, used only when the list shows no currency AND nothing
 // on it says where it's from.
 const promptFor = (fallbackCurrency: string) =>
@@ -59,7 +59,12 @@ const promptFor = (fallbackCurrency: string) =>
 
 Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
+  // scan-start calls this server-to-server for GUEST wine-list scans (no user
+  // account). It proves itself with the service key in x-vinster-internal and
+  // has already applied the guest limits, so the user check is skipped.
+  const internal = !!req.headers.get('x-vinster-internal')
+    && req.headers.get('x-vinster-internal') === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!authHeader && !internal) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 
@@ -67,38 +72,40 @@ Deno.serve(async (req) => {
     // Resolve the user from the JWT — we need user_id to rate-limit per
     // user, and we want to reject expired/invalid tokens before paying
     // for a Claude call.
-    const userClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-    }
-
-    // Rate-limit check via service-role RPC. Fail open on infrastructure
-    // errors (logged) so a Supabase blip doesn't lock out legitimate users.
-    const adminClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
-    const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
-      p_user_id: user.id,
-      p_function_name: 'ocr',
-      p_hourly_limit: OCR_HOURLY_LIMIT,
-      p_daily_limit: OCR_DAILY_LIMIT,
-    });
-    if (rlError) {
-      console.error('[ocr] rate-limit RPC failed (failing open):', rlError);
-    } else if (allowed === false) {
-      return new Response(
-        JSON.stringify({
-          error: 'rate_limit_exceeded',
-          message: "You've made a lot of scans recently — please try again in a few minutes.",
-        }),
-        { status: 429, headers: { 'Content-Type': 'application/json' } }
+    if (!internal) {
+      const userClient = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
       );
+      const { data: { user }, error: userError } = await userClient.auth.getUser();
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // Rate-limit check via service-role RPC. Fail open on infrastructure
+      // errors (logged) so a Supabase blip doesn't lock out legitimate users.
+      const adminClient = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      );
+      const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
+        p_user_id: user.id,
+        p_function_name: 'ocr',
+        p_hourly_limit: OCR_HOURLY_LIMIT,
+        p_daily_limit: OCR_DAILY_LIMIT,
+      });
+      if (rlError) {
+        console.error('[ocr] rate-limit RPC failed (failing open):', rlError);
+      } else if (allowed === false) {
+        return new Response(
+          JSON.stringify({
+            error: 'rate_limit_exceeded',
+            message: "You've made a lot of scans recently — please try again in a few minutes.",
+          }),
+          { status: 429, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     const body = await req.json();
