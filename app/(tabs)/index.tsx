@@ -510,8 +510,8 @@ export default function ScanLandingScreen() {
                       >
                         <Image source={SD_INTEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
                       </TouchableOpacity>
-                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
-                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Scan & Search</Text>
+                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Search & Scan</Text>
+                      <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
                     </View>
 
                     {/* Compare Wines or Vintages → pick 2 to 4 wines, then Vinster's
