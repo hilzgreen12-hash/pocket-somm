@@ -37,7 +37,8 @@ const POLL_TIMEOUT_MS = 180000; // 3 min hard ceiling — well past a normal sca
 // Kick off the background job. Returns the jobId immediately (sub-second).
 // Pass `sourceUrl` (Find Online) instead of images to read a list from the web.
 export async function startScanJob(images: string[], params: ScanJobParams, sourceUrl?: string): Promise<StartedScanJob> {
-  const data = await invokeResilient('scan-start', sourceUrl ? { sourceUrl, params } : { images, params }, { timeoutMs: 30000, retries: 2 }) as { jobId?: string; pollToken?: string | null };
+  // guestOk: this version can poll a guest job (see readJob).
+  const data = await invokeResilient('scan-start', sourceUrl ? { sourceUrl, params, guestOk: true } : { images, params, guestOk: true }, { timeoutMs: 30000, retries: 2 }) as { jobId?: string; pollToken?: string | null };
   if (!data?.jobId) throw new Error('Could not start the scan. Please try again.');
   return { jobId: data.jobId, pollToken: data.pollToken ?? null };
 }

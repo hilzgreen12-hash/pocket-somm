@@ -187,8 +187,11 @@ Deno.serve(async (req) => {
 
     const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
     const { data: { user } } = await userClient.auth.getUser().catch(() => ({ data: { user: null } }) as any);
-    // No account (or an expired login): run as a GUEST scan instead of failing.
+    // No account (or an expired login): run as a GUEST scan instead of failing —
+    // but only for app versions that can collect a guest result (guestOk);
+    // older versions poll the table and would wait for nothing.
     const guest = !user;
+    if (guest && body.guestOk !== true) return json({ error: 'Unauthorized' }, 401);
 
     // Accept `images` (array, multi-screenshot) or a single `imageBase64`.
     const images: string[] = Array.isArray(body.images) ? body.images
