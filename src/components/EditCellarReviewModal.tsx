@@ -181,7 +181,6 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
         await syncEditToChosen(session.user.id, identity, fields, { createIfMissing: false, region: wine.region });
         await syncReviewToCellar(session.user.id, identity, fields, { excludeCellarWineId: wine.id });
         qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
-        qc.invalidateQueries({ queryKey: ['wishlist', session.user.id] });
         qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
       } catch (err) {
         console.warn('[cellar review modal] sync failed:', err);
@@ -440,12 +439,6 @@ const styles = StyleSheet.create({
   stampDateInput: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, minWidth: 96 },
   stampSep: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
   stampLocInput: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, flexShrink: 1, flexGrow: 1, minWidth: 120 },
-  confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  confirmTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
-  confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm, marginTop: spacing.sm },
-  confirmButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
-  confirmCancel: { alignItems: 'center', paddingTop: spacing.xs },
-  confirmCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   editScroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },
   editSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   editLabel: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs, marginTop: spacing.sm },
@@ -474,8 +467,6 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
-  wishlistBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  wishlistBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   deleteButton: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
   deleteText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },

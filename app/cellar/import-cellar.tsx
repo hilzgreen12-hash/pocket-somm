@@ -608,7 +608,6 @@ export default function ImportCellarScreen() {
           grape_variety: null,
           label_image_path: null,
           user_notes: null,
-          is_wishlist: false,
           // Market/current value from the import doc (when the sheet had one) →
           // the wine's estimated value, so Cellar Stats reflect it without a lookup.
           estimated_value: w.marketPricePerBottle ?? null,

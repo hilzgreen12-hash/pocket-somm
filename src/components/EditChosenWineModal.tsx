@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
@@ -24,12 +23,10 @@ import { WineReviewShareCard } from './WineReviewShareCard';
 import { getCachedLabelUri } from '../api/labelImageCache';
 import { publishCommunityReview } from '../api/community';
 import { patchChosenWine, clearChosenReview } from '../api/chosenWines';
-import { addCellarWine } from '../api/cellar';
 import { generateWineIntel } from '../services/pricing';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { formatCurrency } from '../constants/currency';
 import { showAlert } from './AppAlert';
-import { useLabelStore } from '../stores/labelStore';
 import { WineReviewFields } from './WineReviewFields';
 import { splitLocationString, clearReviewOnCellar } from '../services/reviewSync';
 import { isoToYmd, ymdToIso } from '../utils/reviewDate';
@@ -53,7 +50,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const { update, remove } = useChosenWines();
   const { session } = useAuth();
   const qc = useQueryClient();
-  const { setWineDetails } = useLabelStore();
   const attachPhoto = useAttachLabelPhoto();
 
   const [userScore, setUserScore] = useState<number | null>(null);
@@ -67,12 +63,10 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const [estimatedValue, setEstimatedValue] = useState<number | null>(null);
   const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
-  const [wishlist, setWishlist] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareLabelUri, setShareLabelUri] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
-  const [removeWishlistOpen, setRemoveWishlistOpen] = useState(false);
   // Edit-identity sheet (name / vintage / region + thumbnail).
   const [identityEditOpen, setIdentityEditOpen] = useState(false);
   const [editProducer, setEditProducer] = useState('');
@@ -111,8 +105,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
       setDrinkingWindow(wine.user_drinking_window ?? '');
       setEstimatedValue(wine.estimated_value ?? null);
       setEstimatedValueAt(wine.estimated_value_at ?? null);
-      setWishlist(!!wine.wishlist);
-      setRemoveWishlistOpen(false);
       // "Edit Wine" entry point opens straight onto the identity sheet.
       if (initialIdentityEdit) openIdentityEdit();
       else setIdentityEditOpen(false);
@@ -189,7 +181,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         isFavourite: wine.is_favourite,
         purchasePrice: validPrice,
         purchasePriceCurrency: validPrice != null ? currency : null,
-        wishlist,
         producer: wine.producer,
         wineName: wine.wine_name,
         vintage: wine.vintage,
@@ -216,81 +207,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
     } finally {
       setSaving(false);
     }
-  }
-
-  // ---- Wish list ----------------------------------------------------------
-  async function setWishlistFlag(next: boolean) {
-    if (!wine) return;
-    setWishlist(next);
-    try {
-      await patchChosenWine(wine.id, { wishlist: next });
-      qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
-    } catch (err) {
-      setWishlist(!next);
-      showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
-  function handleWishlistButton() {
-    if (!wine) return;
-    if (!wishlist) {
-      void setWishlistFlag(true);
-    } else {
-      setRemoveWishlistOpen(true);
-    }
-  }
-
-  async function handleAddToCellar() {
-    if (!wine || !session?.user.id) return;
-    setRemoveWishlistOpen(false);
-    try {
-      const parsed = purchasePrice.trim() ? parseFloat(purchasePrice.trim()) : NaN;
-      const validPrice = Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-      // Construct a cellar bottle from the review. Cast to satisfy the strict
-      // Omit<CellarWine> shape — the DB fills defaults for unspecified columns.
-      await addCellarWine({
-        user_id: session.user.id,
-        wine_name: wine.wine_name,
-        producer: wine.producer,
-        region: wine.region,
-        vintage: wine.vintage != null ? String(wine.vintage) : null,
-        quantity: 1,
-        date_received: new Date().toISOString().split('T')[0],
-        critic_score: wine.critic_score,
-        grape_variety: wine.grape ?? null,
-        tasting_notes: wine.rationale ?? null,
-        user_notes: personalNotes.trim() || null,
-        purchase_price: validPrice,
-        purchase_price_currency: validPrice != null ? currency : null,
-        estimated_value: estimatedValue,
-        estimated_value_currency: estimatedValue != null ? currency : null,
-        estimated_value_at: estimatedValueAt,
-        is_wishlist: false,
-      } as any);
-      await setWishlistFlag(false);
-      qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-      showAlert({ title: 'Added to your cellar', body: `${wine.wine_name} is now in your cellar.` });
-    } catch (err) {
-      showAlert({ title: 'Could not add to cellar', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
-  // Walk the wine through the full Add to Cellar flow (Wine Intel card →
-  // Add to Cellar form) without re-scanning — we already know the bottle
-  // from the review, so pre-fill the label store and drop the user on the
-  // Confirm screen, which flows straight to the Wine Intel card.
-  function handleAddToCellarFlow() {
-    if (!wine) return;
-    setWineDetails({
-      producer: wine.producer,
-      region: wine.region,
-      wineName: wine.wine_name,
-      vintage: wine.vintage != null ? String(wine.vintage) : null,
-      style: null,
-      bottleSizeMl: null,
-    });
-    onClose();
-    router.push('/label/confirm');
   }
 
   // Open the Vinster Wine Knowledge (Dive Deeper) page for this reviewed wine.
@@ -539,9 +455,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
               requireCity
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={setDrinkingWindow}
-              wishlistActive={wishlist}
-              onWishlist={handleWishlistButton}
-              onAddToCellar={handleAddToCellarFlow}
               saving={saving || update.isPending}
               onSave={handleSave}
               saveLabel="Save Review"
@@ -553,25 +466,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
           </KeyboardAwareScrollView>
         </View>
       </View>
-
-      {/* Remove-from-wishlist choice */}
-      <Modal visible={removeWishlistOpen} transparent animationType="fade" onRequestClose={() => setRemoveWishlistOpen(false)}>
-        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setRemoveWishlistOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
-            <Text style={styles.confirmTitle}>Remove from Wish List</Text>
-            <Text style={styles.confirmBody}>Have you bought this wine, or are you just removing it from your wish list?</Text>
-            <TouchableOpacity style={styles.confirmButton} onPress={handleAddToCellar}>
-              <Text style={styles.confirmButtonText}>Add to Cellar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.confirmButton} onPress={() => { setRemoveWishlistOpen(false); void setWishlistFlag(false); }}>
-              <Text style={styles.confirmButtonText}>Remove from Wish List, Keep the Review</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.confirmCancel} onPress={() => setRemoveWishlistOpen(false)}>
-              <Text style={styles.confirmCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       {/* Edit the wine's identity + label photo */}
       <Modal visible={identityEditOpen} transparent animationType="fade" onRequestClose={() => setIdentityEditOpen(false)}>
@@ -718,8 +612,6 @@ const styles = StyleSheet.create({
   vinsterBlock: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, gap: spacing.sm, backgroundColor: 'rgba(212,176,96,0.06)' },
   vinsterLabel: { fontFamily: fonts.bodyBold, color: colors.gold },
   vinsterFieldBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 21 },
-  wishlistBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  wishlistBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
   saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
   deleteButton: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
@@ -727,7 +619,6 @@ const styles = StyleSheet.create({
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   confirmSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   confirmTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
-  confirmBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
   confirmButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
   confirmCancel: { alignItems: 'center', paddingTop: spacing.xs },

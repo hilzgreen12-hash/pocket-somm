@@ -389,7 +389,6 @@ export interface CellarWine {
   // when populated and falls back to user_notes for the community
   // post body so pre-existing posts aren't lost.
   review_note: string | null;
-  is_wishlist: boolean;
   archived_at: string | null;
   purchase_price: number | null;
   purchase_price_currency: string | null;
@@ -588,9 +587,6 @@ export interface ChosenWine {
   other_observations: string | null;
   user_score: number | null;
   is_favourite: boolean;
-  // Review-level wish-list flag (migration 045) — set via "Add to Wish
-  // List" on the review card; drives the Wish List Wines filter.
-  wishlist: boolean;
   // Dismissed from the "Awaiting Review" list on Your Wine Reviews (migration
   // 087). The row is NOT deleted — it still appears on the restaurant's card in
   // Your Restaurants; this just hides it from the awaiting-review nag. Optional

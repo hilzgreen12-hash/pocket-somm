@@ -37,7 +37,7 @@ function useWineReviewItems(): { items: WineItem[]; loading: boolean; wineCount:
   const { wines } = useCellar();
   const { wines: archived } = useArchive();
 
-  const reviewed = chosenWines.filter((w) => !w.wishlist && chosenHasReview(w));
+  const reviewed = chosenWines.filter((w) => chosenHasReview(w));
   // One card per review (an original review + its later entries share a group).
   const groups = new Map<string, ChosenWine>();
   for (const w of reviewed) {

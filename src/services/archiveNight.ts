@@ -103,7 +103,7 @@ export async function archiveBottles(wine: CellarWine, count: number, removeDate
   } else {
     await updateCellarWine(wine.id, { quantity: newQuantity } as any);
     const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine as any;
-    await addCellarWine({ ...rest, quantity: effective, archived_at: archivedAt, is_wishlist: false } as any);
+    await addCellarWine({ ...rest, quantity: effective, archived_at: archivedAt } as any);
     // Free the archived bottles taking loose ones first, then racks, then
     // alt-cellar placements (removeSlotsForWine freed racks only, leaving ghosts).
     const wp = await fetchPlacementsForWine(wine.id);

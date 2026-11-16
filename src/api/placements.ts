@@ -174,13 +174,13 @@ export async function fetchLatestLocationThumbs(userId: string): Promise<{
   const data = await selectAllPages<any>((from, to) =>
     supabase
       .from('cellar_placements')
-      .select('kind, rack_id, bin_cell_id, storage_location_id, created_at, wine:cellar_wines!inner(id, producer, wine_name, label_image_path, archived_at, is_wishlist)')
+      .select('kind, rack_id, bin_cell_id, storage_location_id, created_at, wine:cellar_wines!inner(id, producer, wine_name, label_image_path, archived_at)')
       .order('created_at', { ascending: false })
       .order('id', { ascending: true })
       .range(from, to) as any);
   for (const p of data) {
     const w = p.wine;
-    if (!w || w.archived_at || w.is_wishlist) continue;
+    if (!w || w.archived_at) continue;
     if (!w.label_image_path && !w.producer && !w.wine_name) continue;
     if (p.kind === 'rack' && p.rack_id) add(result.rack, p.rack_id, w);
     else if (p.kind === 'bin' && p.bin_cell_id) { const b = cellToBin[p.bin_cell_id]; if (b) add(result.bin, b, w); }
@@ -328,8 +328,8 @@ export async function fetchLocationPlacementRows(locationId: string): Promise<an
   const wineById = new Map(wines.map((w: any) => [w.id, w]));
   return rows.flatMap((p) => {
     const w = wineById.get(p.cellar_wine_id);
-    // Archived / wishlist wines aren't physically stored here.
-    if (!w || w.archived_at || w.is_wishlist) return [];
+    // Archived wines aren't physically stored here.
+    if (!w || w.archived_at) return [];
     return [{ ...w, quantity: p.quantity, case_id: p.case_id, placement_id: p.id }];
   });
 }
@@ -568,7 +568,7 @@ export async function moveBottlesToLocation(
 // existing line in that cellar (consolidating the split to one line, correct
 // count) and drops the leftover row.
 //
-// Deliberately narrow + idempotent: only ACTIVE, non-wishlist rows that (a) point
+// Deliberately narrow + idempotent: only ACTIVE rows that (a) point
 // at one of the given HOME location ids, (b) aren't awaiting a unit slot, and
 // (c) have no location placement yet. External/imported cellars are excluded by
 // the caller so a big import is never bulk-rewritten. Returns how many it healed.
@@ -583,7 +583,6 @@ export async function reconcileLegacyLocationWines(
       .select('id, producer, wine_name, vintage, bottle_size_ml, quantity, storage_location_id')
       .eq('user_id', cellarOwner(userId))
       .is('archived_at', null)
-      .eq('is_wishlist', false)
       .is('awaiting_placement_unit_id', null)
       .not('storage_location_id', 'is', null)
       .order('id', { ascending: true })
@@ -623,7 +622,6 @@ export async function reconcileQuantityBelowPlacements(userId: string): Promise<
       .select('id, quantity')
       .eq('user_id', cellarOwner(userId))
       .is('archived_at', null)
-      .eq('is_wishlist', false)
       .order('id', { ascending: true })
       .range(from, to) as any);
   if (wines.length === 0) return 0;

@@ -47,10 +47,6 @@ interface Props {
   onDate?: (s: string) => void;
   drinkingWindow: string;
   onDrinkingWindow: (s: string) => void;
-  // Optional Wish List + Add to Cellar (hidden on cellar reviews).
-  wishlistActive?: boolean;
-  onWishlist?: () => void;
-  onAddToCellar?: () => void;
   // Save (+ optional delete).
   saving?: boolean;
   // When true the save button reads "Review Saved" in gold — set by the parent
@@ -68,15 +64,13 @@ interface Props {
 // The shared wine-review input body, used by every review surface (List
 // Review, Your Wine Reviews drill-through, restaurant Review Wine) so they're
 // exactly the same. Order: Your Score → Your Review → Personal Notes → Drinking
-// Window → Price Paid · Estimated Value → Save → Wish List · Add to Cellar →
-// Delete. Share lives in each modal's top-right header. The parent owns state,
+// Window → Price Paid · Estimated Value → Save → Delete. Share lives in each modal's top-right header. The parent owns state,
 // save and the surrounding card chrome (header, share card, etc.).
 export function WineReviewFields({
   score, onScore, pricePaid, onPricePaid, currency,
   estimatedValue, estimatedValueAt, estimating, onEstimate,
   review, onReview, personalNotes, onPersonalNotes, showPersonalNotes = true,
   city, onCity, locationName, onLocationName, showLocation = true, requireCity, date, onDate, drinkingWindow, onDrinkingWindow,
-  wishlistActive, onWishlist, onAddToCellar,
   saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
 }: Props) {
   const currencySymbol = formatCurrency(0, currency, { decimals: 0 }).replace(/[\d.,\s]/g, '') || currency;
@@ -276,10 +270,8 @@ export function WineReviewFields({
         </Text>
       </TouchableOpacity>
 
-      {/* Share now lives in the modal's top-right corner (like the rest of the
-          app), not here — see each review modal's header. Add to Cellar / Wish
-          List were removed from the input — those commands live on the wine
-          reviews page, not the review form. */}
+      {/* Share lives in each review modal's top-right corner, like the rest of
+          the app. */}
 
       {onDelete ? (
         <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>

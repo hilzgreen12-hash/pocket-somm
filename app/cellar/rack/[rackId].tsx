@@ -1450,7 +1450,7 @@ export default function RackGridScreen() {
         // only, THEN decrement the live row, then clone an archive row for them.
         await releaseHereThenSetQuantity(wine.id, count, total - count);
         const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
-        await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
+        await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z` });
       }
       if (session?.user.id) {
         qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
@@ -1717,7 +1717,7 @@ export default function RackGridScreen() {
         await releaseHereThenSetQuantity(wineId, count, qty - count, slot);
         if (wine) {
           const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
-          await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false, archive_note: note.trim().slice(0, 35) || null });
+          await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, archive_note: note.trim().slice(0, 35) || null });
         }
         if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
       }

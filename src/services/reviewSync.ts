@@ -1,9 +1,7 @@
-// Cross-record sync for wine reviews. The same wine identity can live
-// in three places at once: a chosen_wines row (proper review), a
-// cellar_wines row with is_wishlist=true (wishlist), and a cellar_wines
-// row with is_wishlist=false (in the cellar). These helpers keep all
-// matching rows in lock-step when the user edits a review on any of the
-// three entry points.
+// Cross-record sync for wine reviews. The same wine can carry a review in two
+// places: a chosen_wines row (Your Wine Reviews) and a cellar_wines row (the
+// cellar wine card's "Your Review"). These helpers keep the matching rows in
+// lock-step when the user edits a review in either place.
 //
 // Identity match: case-insensitive trimmed producer + wine_name +
 // vintage. Same criterion used by the duplicate-wine prompt.
@@ -12,7 +10,7 @@
 // follow-up. Errors are surfaced to the caller via thrown exceptions —
 // callers typically log and swallow.
 
-import { findMatchingWishlistWine, updateCellarWine } from '../api/cellar';
+import { updateCellarWine } from '../api/cellar';
 import { findMatchingChosenWine, patchChosenWine, createChosenWineFromReview } from '../api/chosenWines';
 import { supabase } from '../api/supabase';
 import type { CellarWine } from '../types/wine';
@@ -44,8 +42,8 @@ function locationString(restaurant: string | undefined, city: string | undefined
   return [restaurant?.trim(), city?.trim()].filter(Boolean).join(', ');
 }
 
-// Find every active cellar_wines row for this user that matches the
-// identity — both wishlist and non-wishlist, archived rows excluded.
+// Find every active (non-archived) cellar_wines row for this user that matches
+// the identity.
 async function findMatchingCellarWines(userId: string, identity: ReviewIdentity): Promise<CellarWine[]> {
   const { data, error } = await supabase
     .from('cellar_wines')
@@ -65,13 +63,11 @@ async function findMatchingCellarWines(userId: string, identity: ReviewIdentity)
   );
 }
 
-// Push a review-style edit (made on chosen_wines or on a wine-detail
-// review form) onto any matching cellar_wines rows. Wishlist rows get
-// the user-facing display fields (tasting_notes, user_notes for
-// location) updated too; non-wishlist rows only get review_* fields so
-// the AI tasting_notes and Additional Notes (user_notes) aren't
-// stomped. Pass excludeCellarWineId when the caller has already
-// written to a specific cellar row and shouldn't echo back to itself.
+// Push a review-style edit (made on chosen_wines or on a wine-detail review
+// form) onto any matching cellar_wines rows. Only the review_* fields are
+// written, so the AI tasting_notes and the user's Additional Notes
+// (user_notes) are never overwritten. Pass excludeCellarWineId when the caller
+// has already written to a specific cellar row and shouldn't echo back to it.
 export async function syncReviewToCellar(
   userId: string,
   identity: ReviewIdentity,
@@ -86,22 +82,11 @@ export async function syncReviewToCellar(
   for (const w of matches) {
     if (options.excludeCellarWineId && w.id === options.excludeCellarWineId) continue;
     const updates: Record<string, unknown> = {};
-    // Review fields are the same on both wishlist and non-wishlist
-    // rows — always safe to update.
     if (fields.userScore !== undefined) updates.review_score = fields.userScore;
     if (fields.restaurantName !== undefined || fields.city !== undefined) {
       updates.review_location = location || null;
     }
     if (reviewDateValue !== undefined) updates.review_date = reviewDateValue;
-    // User-display fields only on the wishlist side — the non-wishlist
-    // tasting_notes column holds the AI-generated note and user_notes
-    // holds the user's Additional Notes (different semantics).
-    if (w.is_wishlist) {
-      if (fields.tastingNote !== undefined) updates.tasting_notes = fields.tastingNote.trim() || null;
-      if (fields.restaurantName !== undefined || fields.city !== undefined) {
-        updates.user_notes = location || null;
-      }
-    }
     if (Object.keys(updates).length === 0) continue;
     await updateCellarWine(w.id, updates as any);
   }
@@ -132,15 +117,12 @@ export async function clearReviewOnCellar(
   }
 }
 
-// Push an edit made on a wishlist (or wine-detail review form) onto a
-// matching chosen_wines row. Patches only the fields the caller asked
-// about so the rest of the review (other_observations etc.) is
-// preserved.
+// Push an edit made on a cellar wine card's review form onto the matching
+// chosen_wines row. Patches only the fields the caller asked about so the rest
+// of the review (other_observations etc.) is preserved.
 //
-// When no matching row exists: the wishlist path leaves it (a wishlist
-// item isn't a review). The cellar wine-detail review form passes
-// createIfMissing so the review becomes a first-class chosen_wines row
-// and shows up in Your Wine Reviews.
+// When no matching row exists, createIfMissing makes the review a first-class
+// chosen_wines row so it shows up in Your Wine Reviews.
 export async function syncEditToChosen(
   userId: string,
   identity: ReviewIdentity,
@@ -171,7 +153,7 @@ export async function syncEditToChosen(
   await patchChosenWine(match.id, updates);
 }
 
-// Split a wishlist "Discovered at" string back into restaurant_name +
+// Split a "restaurant, city" location string back into restaurant_name +
 // city. First comma is the separator; if there's no comma the whole
 // string is the restaurant name.
 export function splitLocationString(raw: string | null | undefined): { restaurantName: string; city: string } {

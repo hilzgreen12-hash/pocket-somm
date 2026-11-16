@@ -875,7 +875,7 @@ export default function StorageLocationScreen() {
       await updateCellarWine(wid, { quantity: total - n });
       if (real) {
         const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = real;
-        await addCellarWine({ ...rest, quantity: n, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
+        await addCellarWine({ ...rest, quantity: n, archived_at: `${today}T12:00:00.000Z` });
       }
     }
   }

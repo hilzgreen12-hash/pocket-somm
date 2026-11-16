@@ -346,7 +346,6 @@ export default function PairingResultsScreen() {
           ...rest,
           quantity: count,
           archived_at: removedAt,
-          is_wishlist: false,
           cellar_note: note,
         });
         // Free the selected bottles from storage — loose first, then racks, then

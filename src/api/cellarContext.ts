@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 // who has accepted invites to shared cellars can switch between "My Cellar" and
 // each shared one (Cellar tab switcher). While a shared cellar is selected,
 // every cellar read/insert uses its OWNER's user_id (migration 123 grants the
-// member access). Reviews, wishlists, scans and the taste profile stay personal
+// member access). Reviews, scans and the taste profile stay personal
 // and keep using the user's own id. The choice is remembered per user.
 
 export type CellarRole = 'owner' | 'edit' | 'view';

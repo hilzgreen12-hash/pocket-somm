@@ -230,17 +230,15 @@ export interface UpdateChosenWineInput {
   userScore: number | null;
   listPrice: number | null;
   isFavourite: boolean;
-  // Purchase price + review-level wish-list flag (migrations 044/045).
-  // Optional so callers that don't touch them are unaffected; each is
-  // only written to the row when explicitly provided.
+  // Purchase price (migration 044). Optional so callers that don't touch it
+  // are unaffected; only written to the row when explicitly provided.
   purchasePrice?: number | null;
   purchasePriceCurrency?: string | null;
-  wishlist?: boolean;
   // Optional "YYYY - YYYY" drinking window; only written when provided.
   userDrinkingWindow?: string | null;
-  // Identity carried through so the post-update sync can find any
-  // matching wishlist row without an extra round-trip. The chosen_wines
-  // update endpoint itself doesn't change these fields.
+  // Identity carried through so the post-update sync can find the matching
+  // cellar rows without an extra round-trip. The chosen_wines update itself
+  // doesn't change these fields.
   producer: string | null;
   wineName: string;
   vintage: number | null;
@@ -260,7 +258,6 @@ export async function updateChosenWine(id: string, input: UpdateChosenWineInput)
     updates.purchase_price = input.purchasePrice;
     updates.purchase_price_currency = input.purchasePriceCurrency ?? null;
   }
-  if (input.wishlist !== undefined) updates.wishlist = input.wishlist;
   if (input.userDrinkingWindow !== undefined) updates.user_drinking_window = input.userDrinkingWindow;
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
   if (error) throw new Error(error.message);
@@ -329,15 +326,14 @@ export async function fetchChosenWines(userId: string): Promise<ChosenWine[]> {
 }
 
 // Look up the most recent chosen_wines (review) row for this user that
-// matches a wine identity. Used by the wishlist sync flow so that edits
-// to a wishlist tasting note or location push the same values back to
-// the matching review.
+// matches a wine identity. Used by the review sync so that a review edited on a
+// cellar wine card pushes the same values back to the matching review.
 export async function findMatchingChosenWine(
   userId: string,
   identity: { producer: string | null; wineName: string; vintage: string | number | null; wsWineId?: string | null }
 ): Promise<ChosenWine | null> {
   // Paged so a match can be found even in a >1000-row review history (otherwise
-  // auto-link / wishlist-sync would only see the most recent 1000).
+  // auto-link / review sync would only see the most recent 1000).
   const list = await fetchAllChosenWines(userId);
 
   const wantId = identity.wsWineId ?? null;
@@ -413,9 +409,9 @@ export async function createChosenWineFromReview(
   if (error) throw new Error(error.message);
 }
 
-// Partial update used by the wishlist→review sync path. Lets the caller
-// touch only the fields that actually changed on the wishlist side rather
-// than overwriting everything with the EditChosenWineModal payload shape.
+// Partial update used by the review sync path. Lets the caller touch only the
+// fields that actually changed rather than overwriting everything with the
+// EditChosenWineModal payload shape.
 export async function patchChosenWine(
   id: string,
   updates: Partial<{
@@ -429,7 +425,6 @@ export async function patchChosenWine(
     estimated_value: number | null;
     estimated_value_currency: string | null;
     estimated_value_at: string | null;
-    wishlist: boolean;
     user_drinking_window: string | null;
     label_image_path: string | null;
     ws_wine_id: string | null;

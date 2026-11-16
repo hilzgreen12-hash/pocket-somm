@@ -1384,7 +1384,6 @@ export default function CellarWineDetail() {
           ...rest,
           quantity: count,
           archived_at: `${removeDate}T12:00:00.000Z`,
-          is_wishlist: false,
           // The archive pop-up's note becomes the archived card's Archive Note.
           archive_note: removeNote.trim().slice(0, 35) || null,
         });

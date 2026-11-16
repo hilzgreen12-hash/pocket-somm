@@ -17,7 +17,6 @@ export async function getCellarWines(userId: string): Promise<CellarWine[]> {
       .from('cellar_wines')
       .select('*')
       .eq('user_id', cellarOwner(userId))
-      .eq('is_wishlist', false)
       .is('archived_at', null)
       .order('created_at', { ascending: false })
       .range(from, from + PAGE - 1);
@@ -88,12 +87,11 @@ export async function fetchWineIdsWithRemovals(): Promise<string[]> {
 
 // Heal data inconsistency: if a wine is currently assigned to a rack_slot, it
 // is by definition part of the user's live cellar. Older versions of the app
-// occasionally left wines flagged is_wishlist=true or archived_at non-null
-// while still referenced from a slot — those wines showed in the rack view
-// but were excluded from getCellarWines, View Cellar Wine Notes, etc.
-// This function clears those flags for any wine currently in any of the
-// user's racks. It's idempotent (no-op when nothing's wrong) and safe to call
-// on every cellar list mount.
+// occasionally left wines with archived_at set while still referenced from a
+// slot — those wines showed in the rack view but were excluded from
+// getCellarWines, View Cellar Wine Notes, etc. This function clears that flag
+// for any wine currently in any of the user's racks. It's idempotent (no-op
+// when nothing's wrong) and safe to call on every cellar list mount.
 export async function repairRackedWines(userId: string): Promise<number> {
   const { data: assignments, error: assignErr } = await supabase
     .from('rack_slots')
@@ -108,28 +106,15 @@ export async function repairRackedWines(userId: string): Promise<number> {
   const wineIds = Array.from(new Set(((assignments ?? []) as any[]).map((r) => r.cellar_wine_id))).filter(Boolean) as string[];
   if (wineIds.length === 0) return 0;
 
-  let fixed = 0;
-  // Reset wishlist flag on racked wines that are wrongly flagged.
-  const { data: wlFixed, error: wlErr } = await supabase
-    .from('cellar_wines')
-    .update({ is_wishlist: false })
-    .in('id', wineIds)
-    .eq('is_wishlist', true)
-    .select('id');
-  if (wlErr) console.error('[repairRackedWines] wishlist reset failed:', wlErr);
-  fixed += (wlFixed ?? []).length;
-
-  // Restore archived flag on racked wines that are wrongly archived.
-  const { data: arFixed, error: arErr } = await supabase
+  // Un-archive racked wines that are wrongly archived.
+  const { data: fixed, error: fixErr } = await supabase
     .from('cellar_wines')
     .update({ archived_at: null })
     .in('id', wineIds)
     .not('archived_at', 'is', null)
     .select('id');
-  if (arErr) console.error('[repairRackedWines] archive reset failed:', arErr);
-  fixed += (arFixed ?? []).length;
-
-  return fixed;
+  if (fixErr) console.error('[repairRackedWines] archive reset failed:', fixErr);
+  return (fixed ?? []).length;
 }
 
 export async function archiveCellarWine(id: string): Promise<void> {
@@ -164,7 +149,6 @@ export async function getArchivedWines(userId: string): Promise<CellarWine[]> {
     .from('cellar_wines')
     .select('*')
     .eq('user_id', cellarOwner(userId))
-    .eq('is_wishlist', false)
     .not('archived_at', 'is', null)
     .order('archived_at', { ascending: false });
   if (error) throw error;
@@ -191,10 +175,9 @@ export async function getCellarWineById(id: string): Promise<CellarWine | null> 
 }
 
 export async function addCellarWine(wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>): Promise<CellarWine> {
-  // Cellar bottles go into the shared cellar (owner's id); wishlist rows stay personal.
-  const isWishlist = !!(wine as any).is_wishlist;
-  if (!isWishlist) assertCanEditCellar();
-  const row = isWishlist ? wine : { ...wine, user_id: cellarOwner((wine as any).user_id) };
+  // Cellar bottles go into the shared cellar (the owner's id).
+  assertCanEditCellar();
+  const row = { ...wine, user_id: cellarOwner(wine.user_id) };
   const { data, error } = await supabase
     .from('cellar_wines')
     .insert(row)
@@ -220,34 +203,6 @@ export async function updateCellarWine(id: string, updates: Partial<CellarWine>)
   }
 }
 
-// Look up an active wishlist row for this user that matches the wine
-// identity (producer + name + vintage, case-insensitive trimmed). Returns
-// null if no match — used by the wine-review sync flow so that saving or
-// editing a chosen_wine review pushes the same notes/score/location into
-// the wishlist entry if the user has one.
-export async function findMatchingWishlistWine(
-  userId: string,
-  identity: { producer: string | null; wineName: string; vintage: string | number | null }
-): Promise<CellarWine | null> {
-  const { data, error } = await supabase
-    .from('cellar_wines')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_wishlist', true)
-    .is('archived_at', null);
-  if (error) throw error;
-  const list = (data ?? []) as CellarWine[];
-  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-  const wantedProducer = norm(identity.producer);
-  const wantedName = norm(identity.wineName);
-  const wantedVintage = identity.vintage != null ? String(identity.vintage).trim() : '';
-  return list.find((w) =>
-    norm(w.producer) === wantedProducer &&
-    norm(w.wine_name) === wantedName &&
-    (w.vintage ?? '').trim() === wantedVintage
-  ) ?? null;
-}
-
 export async function deleteCellarWine(id: string): Promise<void> {
   const { data, error } = await supabase.from('cellar_wines').delete().eq('id', id).select('id');
   if (error) throw error;
@@ -262,7 +217,7 @@ export async function deleteCellarWine(id: string): Promise<void> {
   }
 }
 
-// Find an ACTIVE (non-archived, non-wishlist) cellar wine matching a
+// Find an ACTIVE (non-archived) cellar wine matching a
 // producer+name identity, straight from the DB (not a possibly-stale client
 // cache) — so re-adding a wine merges into its existing line instead of
 // creating a duplicate, even if the cache is momentarily wrong.
@@ -278,7 +233,6 @@ export async function findCellarWineByIdentity(
       .select('*')
       .eq('user_id', cellarOwner(userId))
       .is('archived_at', null)
-      .eq('is_wishlist', false)
       .order('id', { ascending: true })
       .range(from, to) as any);
   // Same wine = same producer+cuvée identity (order-independent word set, so an

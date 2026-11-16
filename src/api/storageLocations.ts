@@ -20,13 +20,13 @@ export async function fetchStorageLocations(userId: string): Promise<StorageLoca
   if (error) throw error;
   const locs = (data ?? []) as any[];
   // Bottle counts come from location PLACEMENTS now (a wine can be split across a
-  // rack and an alt cellar), excluding archived/wishlist wines.
+  // rack and an alt cellar), excluding archived wines.
   // Paged: an imported external cellar alone can hold thousands of placements,
   // well past PostgREST's 1000-row cap (which silently undercounted).
   const placements = await selectAllPages<any>((from, to) =>
     supabase
       .from('cellar_placements')
-      .select('id, quantity, storage_location_id, cellar_wines(archived_at, is_wishlist)')
+      .select('id, quantity, storage_location_id, cellar_wines(archived_at)')
       .eq('kind', 'location')
       .not('storage_location_id', 'is', null)
       .order('id', { ascending: true })
@@ -34,7 +34,7 @@ export async function fetchStorageLocations(userId: string): Promise<StorageLoca
   const countByLoc = new Map<string, number>();
   for (const p of placements) {
     const w = p.cellar_wines;
-    if (w && (w.archived_at || w.is_wishlist)) continue;
+    if (w?.archived_at) continue;
     if (!p.storage_location_id) continue;
     countByLoc.set(p.storage_location_id, (countByLoc.get(p.storage_location_id) ?? 0) + (p.quantity ?? 0));
   }
@@ -117,9 +117,6 @@ export async function fetchStorageLocationWines(locationId: string): Promise<Cel
     .select('*')
     .eq('storage_location_id', locationId)
     .is('archived_at', null)
-    // Wishlist wines aren't physically here — exclude them so the location list
-    // and its count match the racks (S2).
-    .eq('is_wishlist', false)
     // Default list reads in the order wines were added (oldest first).
     .order('created_at', { ascending: true });
   if (error) throw error;

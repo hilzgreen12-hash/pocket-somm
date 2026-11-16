@@ -42,7 +42,7 @@ export function ArchivedReviewPrompt() {
     const reviewedChosen = chosenWines.filter((c) => !!((c.tasting_note && c.tasting_note.trim()) || (c.other_observations && c.other_observations.trim()) || c.user_score != null));
     const picked: CellarWine[] = [];
     const recent = [...archived]
-      .filter((w) => w.archived_at && now - new Date(w.archived_at).getTime() <= WINDOW_MS && !w.is_wishlist)
+      .filter((w) => w.archived_at && now - new Date(w.archived_at).getTime() <= WINDOW_MS)
       .sort((a, b) => new Date(b.archived_at!).getTime() - new Date(a.archived_at!).getTime());
     for (const w of recent) {
       if (picked.length >= MAX) break;

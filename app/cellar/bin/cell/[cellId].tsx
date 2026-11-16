@@ -328,7 +328,6 @@ export default function BinCellScreen() {
             grape_variety: null,
             label_image_path: null,
             user_notes: null,
-            is_wishlist: false,
             estimated_value: null,
             estimated_value_currency: null,
             estimated_value_at: null,

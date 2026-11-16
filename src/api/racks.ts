@@ -125,7 +125,7 @@ export async function getSlotAssignments(rackIds: string[]): Promise<{ rack_id: 
 }
 
 // Per-rack bottle counts computed server-side in ONE query. A slot counts only
-// when its wine is still live (non-archived, non-wishlist) — the `!inner` join
+// when its wine is still live (non-archived) — the `!inner` join
 // on cellar_wines drops slots whose wine has been archived, matching what the
 // cellar list shows. Replaces the old client-side rack_slots × cellar_wines
 // join on the Home Storage screen, which rendered 0 on cold start until BOTH
@@ -134,10 +134,9 @@ export async function getRackBottleCounts(rackIds: string[]): Promise<Record<str
   if (rackIds.length === 0) return {};
   const { data, error } = await supabase
     .from('rack_slots')
-    .select('rack_id, wine:cellar_wines!inner(archived_at, is_wishlist)')
+    .select('rack_id, wine:cellar_wines!inner(archived_at)')
     .in('rack_id', rackIds)
-    .is('wine.archived_at', null)
-    .eq('wine.is_wishlist', false);
+    .is('wine.archived_at', null);
   if (error) throw error;
   const counts: Record<string, number> = {};
   for (const row of (data ?? []) as { rack_id: string }[]) {

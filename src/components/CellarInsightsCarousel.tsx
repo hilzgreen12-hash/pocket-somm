@@ -205,7 +205,6 @@ export function CellarInsightsCarousel() {
     };
     let reviewCount = 0;
     for (const c of chosenWines) {
-      if (c.wishlist) continue;
       const hasReview = !!((c.tasting_note && c.tasting_note.trim()) || (c.other_observations && c.other_observations.trim()) || c.user_score != null);
       if (hasReview && recent(c.reviewed_at ?? c.chosen_at)) { reviewCount++; addPic(c.label_image_path, c.producer, c.wine_name); }
     }

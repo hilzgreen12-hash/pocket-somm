@@ -71,17 +71,16 @@ export function sameWineIdentity(a: WineLike, b: WineLike): boolean {
 }
 
 // THE "do you already own this?" lookup every add path uses (scan → rack / bin
-// / location, Lineup, voice, manual): the active (not archived, not wishlist)
+// / location, Lineup, voice, manual): the active (not archived)
 // cellar row that is the same wine — and, when sizeMl is given, the same bottle
 // format (a magnum is its own line). One rule everywhere, so "Il Marroneto
 // Brunello 2016" added to a bin finds "Marroneto Brunello 2016" in a rack.
-export function findSameCellarWine<T extends WineLike & { archived_at?: string | null; is_wishlist?: boolean | null; bottle_size_ml?: number | null }>(
+export function findSameCellarWine<T extends WineLike & { archived_at?: string | null; bottle_size_ml?: number | null }>(
   wines: readonly T[] | null | undefined,
   candidate: WineLike,
   sizeMl?: number | null,
 ): T | undefined {
-  return (wines ?? []).find((w) => !w.archived_at && !w.is_wishlist
-    && (sizeMl == null || (w.bottle_size_ml ?? 750) === sizeMl)
+  return (wines ?? []).find((w) => !w.archived_at && (sizeMl == null || (w.bottle_size_ml ?? 750) === sizeMl)
     && sameWineIdentity(candidate, w));
 }
 

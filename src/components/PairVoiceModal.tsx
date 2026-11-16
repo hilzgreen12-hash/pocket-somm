@@ -285,7 +285,7 @@ function CellarPicker({ visible, wines, onClose, onPick }: { visible: boolean; w
   useEffect(() => { if (visible) setQ(''); }, [visible]);
   const list = useMemo(() => {
     const t = norm(q);
-    return wines.filter((w) => !w.is_wishlist && !w.archived_at && (!t || norm(cellarName(w)).includes(t))).slice(0, 200);
+    return wines.filter((w) => !w.archived_at && (!t || norm(cellarName(w)).includes(t))).slice(0, 200);
   }, [wines, q]);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>

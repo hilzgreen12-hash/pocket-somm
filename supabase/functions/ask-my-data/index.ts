@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
     // the model then sees no reviews at all.
     const { data: reviews, error: reviewsErr } = await db
       .from('chosen_wines')
-      .select('producer, wine_name, vintage, region, appellation, grape, style, user_score, restaurant_name, city, reviewed_at, chosen_at, wishlist, review_dismissed')
+      .select('producer, wine_name, vintage, region, appellation, grape, style, user_score, restaurant_name, city, reviewed_at, chosen_at, review_dismissed')
       .order('chosen_at', { ascending: false })
       .limit(300);
     if (reviewsErr) console.error('ask-my-data reviews query failed:', reviewsErr.message);
@@ -56,19 +56,20 @@ Deno.serve(async (req) => {
     // The user's CELLAR — each wine row carries the critic score AND the user's
     // own review score/note, so "what's my score for X" must look here too, not
     // only in written reviews. Includes archived bottles.
-    const { data: cellar, error: cellarErr } = await db
+    let cellarQuery = db
       .from('cellar_wines')
-      .select('producer, wine_name, vintage, region, grape_variety, style, critic_score, review_score, review_note, quantity, archived_at, is_wishlist')
-      // Shared cellars: only the cellar selected in the app (plus the user's own
-      // wishlist — RLS already hides anyone else's). Older apps send nothing.
-      .or(typeof cellarOwnerId === 'string' && /^[0-9a-f-]{36}$/i.test(cellarOwnerId)
-        ? `user_id.eq.${cellarOwnerId},is_wishlist.eq.true`
-        : 'id.not.is.null')
+      .select('producer, wine_name, vintage, region, grape_variety, style, critic_score, review_score, review_note, quantity, archived_at');
+    // Shared cellars: only the cellar selected in the app (RLS already limits
+    // rows to cellars the user can see). Older apps send no owner id.
+    if (typeof cellarOwnerId === 'string' && /^[0-9a-f-]{36}$/i.test(cellarOwnerId)) {
+      cellarQuery = cellarQuery.eq('user_id', cellarOwnerId);
+    }
+    const { data: cellar, error: cellarErr } = await cellarQuery
       .order('created_at', { ascending: false })
       .limit(400);
     if (cellarErr) console.error('ask-my-data cellar query failed:', cellarErr.message);
 
-    const reviewLines = (reviews ?? []).filter((r: any) => !r.wishlist && !r.review_dismissed).map((r: any) => {
+    const reviewLines = (reviews ?? []).filter((r: any) => !r.review_dismissed).map((r: any) => {
       const wine = [r.producer, r.wine_name, r.vintage].filter(Boolean).join(' ');
       const score = r.user_score;
       const where = [r.restaurant_name, r.city].filter(Boolean).join(', ');
@@ -85,7 +86,7 @@ Deno.serve(async (req) => {
       const critic = c.critic_score != null ? ` · critic score ${c.critic_score}` : '';
       const note = c.review_note ? ` · my note: ${String(c.review_note).slice(0, 120)}` : '';
       const kind = [c.style, c.grape_variety].filter(Boolean).join(', ');
-      const status = c.archived_at ? ' · (archived)' : c.is_wishlist ? ' · (wishlist — not owned)' : '';
+      const status = c.archived_at ? ' · (archived)' : '';
       return `- ${wine}${c.region ? ` (${c.region})` : ''}${kind ? ` [${kind}]` : ''}${mine}${critic}${note}${status}`;
     });
 

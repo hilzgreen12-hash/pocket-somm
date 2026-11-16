@@ -65,7 +65,6 @@ export function useChosenWines() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
-      qc.invalidateQueries({ queryKey: ['wishlist', userId] });
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
       qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
     },
@@ -84,7 +83,6 @@ export function useChosenWines() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
-      qc.invalidateQueries({ queryKey: ['wishlist', userId] });
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
       qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
     },
@@ -93,7 +91,7 @@ export function useChosenWines() {
   const saveManual = useMutation({
     mutationFn: async (input: ManualSaveChosenWineInput) => {
       const row = await saveManualChosenWine(userId!, input);
-      // Sync to a matching cellar/wishlist row when one exists, same as
+      // Sync to a matching cellar row when one exists, same as
       // the scan-driven save path.
       await syncReviewToCellar(
         userId!,
@@ -107,7 +105,6 @@ export function useChosenWines() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
-      qc.invalidateQueries({ queryKey: ['wishlist', userId] });
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
       qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
     },

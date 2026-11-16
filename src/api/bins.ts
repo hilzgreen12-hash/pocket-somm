@@ -191,7 +191,7 @@ export async function emptyBin(binId: string): Promise<void> {
 // Resolve a set of bin cells' wines from their 'bin' placements (mig 116: bin
 // membership lives in cellar_placements now). Each returned wine's `quantity` is
 // overridden to the bottles IN THAT CELL, and `bin_placement_id` carries the
-// placement row (for per-cell remove/archive/decrement). Archived/wishlist wines
+// placement row (for per-cell remove/archive/decrement). Archived wines
 // are excluded, as on the rack path.
 async function resolveCellWines(cellIds: string[]): Promise<Record<string, CellarWine[]>> {
   const byCell: Record<string, CellarWine[]> = {};
@@ -203,8 +203,7 @@ async function resolveCellWines(cellIds: string[]): Promise<Record<string, Cella
     .from('cellar_wines')
     .select('*')
     .in('id', wineIds)
-    .is('archived_at', null)
-    .eq('is_wishlist', false);
+    .is('archived_at', null);
   if (error) throw error;
   const wineById = new Map((rows ?? []).map((w) => [w.id, w as CellarWine]));
   // Stable order within a cell: oldest placement first.
@@ -212,7 +211,7 @@ async function resolveCellWines(cellIds: string[]): Promise<Record<string, Cella
   for (const p of ordered) {
     if (!p.bin_cell_id) continue;
     const w = wineById.get(p.cellar_wine_id);
-    if (!w) continue; // archived / wishlist / deleted
+    if (!w) continue; // archived / deleted
     // Keep `quantity` the TRUE whole-cellar total; carry the per-cell count in
     // bin_cell_quantity (what the lattice/cell screen display for this cubby).
     (byCell[p.bin_cell_id] ??= []).push({ ...w, bin_cell_quantity: p.quantity ?? 0, bin_placement_id: p.id });
@@ -281,11 +280,10 @@ export async function getBinBottleCounts(binIds: string[]): Promise<Record<strin
   // Sum 'bin' placement quantities per bin, live wines only (mig 116).
   const { data, error } = await supabase
     .from('cellar_placements')
-    .select('quantity, bin_cell_id, wine:cellar_wines!inner(archived_at, is_wishlist)')
+    .select('quantity, bin_cell_id, wine:cellar_wines!inner(archived_at)')
     .eq('kind', 'bin')
     .in('bin_cell_id', cellIds)
-    .is('wine.archived_at', null)
-    .eq('wine.is_wishlist', false);
+    .is('wine.archived_at', null);
   if (error) throw error;
   for (const row of (data ?? []) as { quantity: number; bin_cell_id: string }[]) {
     const binId = binByCell.get(row.bin_cell_id);

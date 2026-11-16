@@ -17,7 +17,7 @@ export function addedDate(w: Pick<CellarWine, 'date_received' | 'created_at'>): 
 }
 
 export async function estimatePurchasePriceOnAdd(saved: CellarWine, currency: string, mode: PurchaseEstimateMode): Promise<boolean> {
-  if (mode === 'none' || saved.is_wishlist || saved.archived_at) return false;
+  if (mode === 'none' || saved.archived_at) return false;
   if (saved.purchase_price != null) return false;
   const at = addedDate(saved);
 

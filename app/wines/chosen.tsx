@@ -141,7 +141,7 @@ function normKey(s: string | null | undefined): string {
   return (s ?? '').trim().toLowerCase();
 }
 
-// Identity key for cross-referencing a review against wishlist/cellar
+// Identity key for cross-referencing a review against cellar
 // rows — producer + name + vintage, normalised. Mirrors the matching
 // used by reviewSync.
 function wineIdentityKey(
@@ -225,8 +225,8 @@ export default function ChosenWinesScreen() {
   // common interaction. Default sort is "Recently added" (the previous
   // 'date' option, renamed for consistency with Full Cellar List).
   type SortMode = 'recent' | 'score-desc' | 'score-asc';
-  // Which collection to show. Wish List is gone from this screen — reviews are
-  // restaurant, cellar, or other only. Drives the centred collection selector.
+  // Which collection to show — reviews are restaurant, cellar or other. Drives
+  // the centred collection selector.
   type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'other';
   type FilterField = 'sort' | 'type' | 'month' | null;
   const [sortMode, setSortMode] = useState<SortMode>('recent');
@@ -667,12 +667,6 @@ export default function ChosenWinesScreen() {
     setReviewPrompt(null);
   }
 
-  // Wish-list is a review-level flag on chosen_wines only — cellar-source
-  // reviews are never wish-list.
-  function isWishlist(item: ReviewItem): boolean {
-    return item.source !== 'cellar' && !!(item.wine as ChosenWine).wishlist;
-  }
-
   // Canonical city for a review so every review type can feed the Location
   // filter. Restaurant / off-list reviews carry a clean chosen_wines.city;
   // cellar reviews keep a free-form review_location ("Restaurant, City" — or
@@ -723,7 +717,6 @@ export default function ChosenWinesScreen() {
   // reviews rather than sitting in a separate section). Used by the Location /
   // Month option lists and the main filter so they agree on what's visible.
   function isShownReview(it: ReviewItem): boolean {
-    if (isWishlist(it)) return false;
     if (it.source === 'restaurant' || it.source === 'other') return chosenHasReview(it.wine as ChosenWine) || isAwaitingPick(it.wine as ChosenWine);
     return true; // cellar reviews are always shown
   }
@@ -766,8 +759,8 @@ export default function ChosenWinesScreen() {
   // are on, matching Full Cellar List's behaviour.
   const q = foldAccents(search.trim());
   const filtered = items.filter((it) => {
-    // Wish List wines never appear here. Awaiting picks DO show now (stacked by
-    // date); the header's "X awaiting" toggle narrows to only them.
+    // Awaiting picks show too (stacked by date); the header's "X awaiting"
+    // toggle narrows to only them.
     if (!isShownReview(it)) return false;
     if (awaitingOnly && !isAwaitingItem(it)) return false;
     // Collection: All shows everything; otherwise a single collection. Maps onto
@@ -904,7 +897,7 @@ export default function ChosenWinesScreen() {
   ];
   // Collection — a filter-carousel chip. Winelist (restaurant-list picks),
   // Cellar (owned wines, incl. cellar bottles drunk out) and Other are distinct
-  // slices mapped onto item.source; Wish List is no longer part of Wine Reviews.
+  // slices mapped onto item.source.
   const COLLECTION_OPTIONS: { value: TypeFilter; label: string }[] = [
     { value: 'all',        label: 'All Wine Reviews' },
     { value: 'restaurant', label: 'Winelist Wines' },
@@ -934,7 +927,7 @@ export default function ChosenWinesScreen() {
   }
   const activeDropdown = dropdownConfig(openDropdown);
 
-  // A review's wine may also live in the wishlist or cellar. Match by
+  // A review's wine may also live in the cellar. Match by
   // identity so each card can note when it was added there. date_received
   // is the user-set acquisition date; fall back to created_at when blank.
   const cellarByIdentity = new Map(
@@ -1498,7 +1491,7 @@ export default function ChosenWinesScreen() {
             {(() => {
               const pq = cellarPickerSearch.trim().toLowerCase();
               const rows = cellarWines
-                .filter((w) => !w.is_wishlist && !w.archived_at)
+                .filter((w) => !w.archived_at)
                 .filter((w) => {
                   if (!pq) return true;
                   const hay = [w.producer, w.wine_name, w.region, w.vintage != null ? String(w.vintage) : null].filter(Boolean).join(' ').toLowerCase();

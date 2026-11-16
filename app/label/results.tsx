@@ -1498,7 +1498,6 @@ export default function LabelResultsScreen() {
       grape_variety: (wine.grape ?? '').trim() || intel.grapeVariety || null,
       label_image_path: null,
       user_notes: null,
-      is_wishlist: false,
       // Prefer the intel estimate; otherwise fall back to the value we pre-fetched
       // for the add card (Wine-Searcher, or Vinster's own estimate) so add flows
       // that skip full intel still contribute to Total Estimated Current Value.
@@ -2185,7 +2184,7 @@ export default function LabelResultsScreen() {
   // ---- Wine Intel (scan / search) — the wine card layout: label hero, pill
   // tabs (Overview / Market / Serve), the same cards and history. -----------
   const intelId = { producer: wine.producer, wineName: wine.wineName, region: wine.region, vintage: wine.vintage };
-  const cellarMatches = wines.filter((w) => !w.is_wishlist && !w.archived_at && sameWineIdentity(intelId, w));
+  const cellarMatches = wines.filter((w) => !w.archived_at && sameWineIdentity(intelId, w));
   const archiveMatches = archivedWines.filter((w) => sameWineIdentity(intelId, w));
   const fmtIntelDay = (d: string | null | undefined) => {
     if (!d) return '';
@@ -2197,7 +2196,7 @@ export default function LabelResultsScreen() {
   // bottles' review entries — newest first.
   const intelReviews = [
     ...chosenWines
-      .filter((c) => !c.wishlist && (c.user_score != null || !!c.tasting_note?.trim()) && sameWineIdentity(intelId, { producer: c.producer, wineName: c.wine_name, vintage: c.vintage }))
+      .filter((c) => (c.user_score != null || !!c.tasting_note?.trim()) && sameWineIdentity(intelId, { producer: c.producer, wineName: c.wine_name, vintage: c.vintage }))
       .map((c) => ({ key: `c-${c.id}`, date: c.reviewed_at ?? c.chosen_at, place: c.restaurant_name ?? null, score: c.user_score, note: c.tasting_note, open: () => router.push(`/wines/chosen?openReview=${c.id}&backTo=${intelReturn}&fromIntel=1` as any) })),
     ...[...cellarMatches, ...archiveMatches].flatMap((w) => entriesOf(w).map((e) => ({ key: `e-${w.id}-${e.id}`, date: e.date ?? e.savedAt, place: e.location ?? null, score: e.score ?? null, note: e.note ?? null, open: () => router.push(`/wines/chosen?openCellarReview=${w.id}&backTo=${intelReturn}` as any) }))),
   ].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());

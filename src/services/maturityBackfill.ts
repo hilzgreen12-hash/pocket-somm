@@ -31,7 +31,6 @@ async function saveUnrecognised(ids: Set<string>): Promise<void> {
 
 function needsWindow(w: CellarWine): boolean {
   return (
-    !w.is_wishlist &&
     w.archived_at == null &&
     w.drinking_window_from == null &&
     w.drinking_window_to == null &&

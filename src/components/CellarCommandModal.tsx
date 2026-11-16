@@ -614,7 +614,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         } else {
           await updateCellarWine(chosenWine.id, { quantity: chosenWine.quantity - count });
           const { id, created_at, updated_at, ...rest } = chosenWine;
-          await addCellarWine({ ...rest, quantity: count, archived_at: removedAt, is_wishlist: false });
+          await addCellarWine({ ...rest, quantity: count, archived_at: removedAt });
         }
         // Free the archived bottles from their storage so a placement count never
         // lingers above the wine's quantity (e.g. "3 bottles in Large Wine Rack"
@@ -705,7 +705,6 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           label_image_path: null,
           user_notes: null,
           review_note: null,
-          is_wishlist: false,
           archived_at: null,
           purchase_price: null,
           purchase_price_currency: null,

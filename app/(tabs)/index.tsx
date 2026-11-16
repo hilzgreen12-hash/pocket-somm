@@ -275,7 +275,7 @@ export default function ScanLandingScreen() {
     const key = wineNameKey(r.producer, r.wineName);
     if (!key) return null;
     const v = (r.vintage ?? '').trim();
-    const matches = cellarWines.filter((w) => !w.archived_at && !w.is_wishlist && (w.quantity ?? 0) > 0
+    const matches = cellarWines.filter((w) => !w.archived_at && (w.quantity ?? 0) > 0
       && wineNameKey(w.producer, w.wine_name) === key && (!v || (w.vintage ?? '').trim() === v));
     if (!matches.length) return null;
     const n = matches.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
@@ -289,7 +289,7 @@ export default function ScanLandingScreen() {
     const key = wineNameKey(r.producer, r.wineName);
     if (!key) return null;
     const v = (r.vintage ?? '').trim();
-    const mine = chosenWines.filter((c) => !c.wishlist && !c.review_dismissed
+    const mine = chosenWines.filter((c) => !c.review_dismissed
       && (!!(c.tasting_note && c.tasting_note.trim()) || c.user_score != null)
       && wineNameKey(c.producer, c.wine_name) === key && (!v || String(c.vintage ?? '').trim() === v));
     if (!mine.length) return null;

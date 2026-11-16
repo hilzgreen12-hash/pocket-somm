@@ -48,17 +48,17 @@ export function useCellar() {
     mutationFn: async (input: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'> & { priceEstimate?: PurchaseEstimateMode }) => {
       const { priceEstimate = 'full', ...wine } = input;
       const saved = await addCellarWine(wine);
-      if (saved?.id && saved.purchase_price == null && !saved.is_wishlist && !saved.archived_at) {
+      if (saved?.id && saved.purchase_price == null && !saved.archived_at) {
         const prefs = qc.getQueryData<{ defaultCurrency?: string | null } | null>(['preferences', userId]);
         const currency = prefs?.defaultCurrency ?? saved.estimated_value_currency ?? 'GBP';
         void estimatePurchasePriceOnAdd(saved, currency, priceEstimate)
           .then((done) => { if (done) qc.invalidateQueries({ queryKey: ['cellar', userId] }); })
           .catch(() => { /* best-effort: the card can still estimate on demand */ });
       }
-      // Best-effort: give an imageless, non-wishlist wine a web label thumbnail so
+      // Best-effort: give an imageless wine a web label thumbnail so
       // it never shows as a blank tile. Fire-and-forget — never blocks the add;
       // any failure is silently ignored.
-      if (saved?.id && !saved.label_image_path && !saved.is_wishlist && saved.producer) {
+      if (saved?.id && !saved.label_image_path && saved.producer) {
         void (async () => {
           try {
             const uri = await fetchAutoLabelUri(saved.producer, saved.wine_name);
@@ -72,7 +72,7 @@ export function useCellar() {
       return saved;
     },
     onSuccess: (saved) => {
-      if (saved && !saved.is_wishlist && !saved.archived_at) noteHappyMoment('cellar-add');
+      if (saved && !saved.archived_at) noteHappyMoment('cellar-add');
       return qc.invalidateQueries({ queryKey: ['cellar', userId] });
     },
   });

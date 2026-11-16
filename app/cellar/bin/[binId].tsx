@@ -315,7 +315,7 @@ export default function BinDetailScreen() {
         const real = await getCellarWineById(w.id);
         if (real) {
           const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = real;
-          await addCellarWine({ ...rest, quantity: cellQty, archived_at: removedAt, is_wishlist: false });
+          await addCellarWine({ ...rest, quantity: cellQty, archived_at: removedAt });
         }
         await updateCellarWine(w.id, { quantity: total - cellQty });
       }

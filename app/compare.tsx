@@ -78,7 +78,7 @@ export default function CompareScreen() {
   // The user's own most recent review of each wine + vintage, if any.
   const myReviews = useMemo(() => wines.map((w) => {
     const key = wineNameKey(w.producer, w.wineName);
-    const mine = chosenWines.filter((c) => !c.wishlist && wineNameKey(c.producer, c.wine_name) === key
+    const mine = chosenWines.filter((c) => wineNameKey(c.producer, c.wine_name) === key
       && String(c.vintage ?? 'NV').trim().toUpperCase() === w.vintage.toUpperCase()
       && (!!(c.tasting_note && c.tasting_note.trim()) || c.user_score != null));
     if (!mine.length) return null;
