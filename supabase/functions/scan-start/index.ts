@@ -1,19 +1,31 @@
-import { createClient } from 'npm:@supabase/supabase-js';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js';
 
-// Async wine-list scan orchestrator.
+// scan-start — the wine-list scan, from photos (or a web link) to three picks.
 //
-// The client used to hold ONE ~90s connection open for OCR → recommend, so a
-// momentary mobile network blip lost the whole thing (the ~50% success rate).
-// Instead: this returns a jobId in <1s, then runs the WHOLE pipeline IN THE
-// BACKGROUND (EdgeRuntime.waitUntil) — OCR (multi-image) → colour check →
-// pre-filter → recommend — reusing the existing `ocr` and `recommend` functions
-// server-to-server (reliable inside the datacenter), writing each stage to the
-// scan_jobs row. The app polls that row and collects the finished result, so a
-// dropped connection / backgrounded app never throws away the work.
+// The app calls this once to START a scan and gets a jobId back in under a
+// second; the work then runs in the background (EdgeRuntime.waitUntil) and is
+// written step by step to a scan_jobs row, which the app polls. A dropped
+// connection or a backgrounded app never loses the work.
 //
-// The colour "no reds on this list" check and the preference pre-filters used to
-// live on the client between OCR and recommend; they're ported here verbatim so
-// the client no longer needs the intermediate round-trip.
+//   start   { images[] | sourceUrl, params, clientRef, guestOk } → { jobId, pollToken }
+//   poll    { action: 'poll', jobId, pollToken }   (guests only — accounts read the row)
+//   report  { action: 'client_error', ref, stage, message }   (a failure on the phone)
+//
+// The job (runScanJob):
+//   1. Read    — ocr per photo (in parallel) or find-wine-list for a web link;
+//                rows cleaned (numeric prices/vintages), one currency for the
+//                whole list, overlapping photos de-duplicated.
+//   2. Filter  — the deterministic "no red wines on this list" check, then the
+//                colour/budget/dislike filters and an even 80-wine sample.
+//   3. Pick    — recommend; retried once if it fails, and once more without the
+//                soft preferences if it returns nothing for wines that qualify.
+//   4. Tidy    — picks put into the shape every app version accepts.
+//
+// Guests (no account, or an expired login) are supported for app versions that
+// say so (guestOk): limited per device address, polled with a one-off token, and
+// ocr / recommend / find-wine-list trust these calls via x-vinster-internal.
+// Every step logs one line with counts and timings, keyed by jobId; a failure
+// keeps its real cause in params.failure, shown in the app beside the Ref code.
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -23,6 +35,9 @@ const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // their own scan_jobs rows (the per-user rate-limit table needs an account).
 const GUEST_HOURLY_LIMIT = 6;
 const GUEST_DAILY_LIMIT = 15;
+
+// A running job not updated for this long is treated as stalled.
+const STALLED_AFTER_MS = 240_000;
 
 async function sha256Hex(text: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -39,7 +54,7 @@ interface ExtractedWine {
   vintage: number | null; menuPrice: number | null; currency: string;
 }
 
-// ---- Ported pure logic (mirror of app/scan/extracting.tsx) ------------------
+// ---- List filters: colour check, preferences, the 80-wine sample -------------
 
 function foldAccents(s: string | null | undefined): string {
   return (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -141,22 +156,341 @@ function applyScanFilters(wines: ExtractedWine[], preferences: ScanPrefs | null 
 
 // ---- Server-to-server call to another edge function (buffered) --------------
 
-async function callFn(name: string, body: unknown, authHeader: string, internal = false): Promise<any> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json', Authorization: authHeader, apikey: ANON_KEY,
-      // Guest scans: ocr / recommend / find-wine-list trust this instead of a user.
-      ...(internal ? { 'x-vinster-internal': SERVICE_KEY } : {}),
-    },
-    body: JSON.stringify(body),
-  });
+// A failed call to another function: which one, its HTTP status, and a short
+// detail code (truncated / parse / overloaded / timeout / network / http_NNN).
+class FnError extends Error {
+  constructor(public fn: string, public status: number, message: string, public detail: string) { super(message); this.name = 'FnError'; }
+}
+
+async function callFn(name: string, body: unknown, authHeader: string, internal = false, timeoutMs = 70_000): Promise<any> {
+  let res: Response;
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', Authorization: authHeader, apikey: ANON_KEY,
+        // Guest scans: ocr / recommend / find-wine-list trust this instead of a user.
+        ...(internal ? { 'x-vinster-internal': SERVICE_KEY } : {}),
+      },
+      body: JSON.stringify(body),
+      // Never wait forever on one step — a stalled call used to leave the job
+      // stuck at "reading" for good.
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (e) {
+    const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    throw new FnError(name, 0, `${name} ${timedOut ? 'timed out' : 'unreachable'}`, timedOut ? 'timeout' : 'network');
+  }
   const text = await res.text();
   let json: any = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
-  if (!res.ok) throw new Error(json?.message || `${name} ${res.status}: ${text.slice(0, 200)}`);
+  if (!res.ok) throw new FnError(name, res.status, json?.message || `${name} ${res.status}: ${text.slice(0, 200)}`, String(json?.detail ?? json?.error ?? `http_${res.status}`));
   return json;
 }
+
+// ---- Cleaning what the photo reader returns -----------------------------------
+
+// "£45", "45,00", "1.200,50", "1,200.50" → a number; anything else → null.
+function toNum(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v !== 'string') return null;
+  let t = v.replace(/[^\d.,]/g, '');
+  if (!t) return null;
+  if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
+  else t = t.replace(/,/g, '');
+  const n = parseFloat(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+// One wine row, made safe for the filters: numeric price and vintage, a name.
+function cleanWine(w: any): ExtractedWine | null {
+  if (!w || typeof w !== 'object') return null;
+  const name = typeof w.name === 'string' ? w.name.trim() : '';
+  const producer = typeof w.producer === 'string' ? w.producer.trim() : '';
+  if (!name && !producer) return null;
+  const vintage = toNum(w.vintage);
+  const cur = typeof w.currency === 'string' && /^[A-Za-z]{3}$/.test(w.currency.trim()) ? w.currency.trim().toUpperCase() : '';
+  return {
+    ...w,
+    name: name || producer,
+    producer,
+    region: typeof w.region === 'string' ? w.region : '',
+    vintage: vintage != null && vintage >= 1900 && vintage <= 2100 ? Math.round(vintage) : null,
+    menuPrice: toNum(w.menuPrice),
+    currency: cur,
+  };
+}
+
+// One currency for the whole list. A page with no £/€ sign falls back to the
+// user's own currency while the other pages show the real one (photo 2 of a
+// French list read as pounds) — so those pages take the real one too.
+function unifyCurrency(perPhoto: ExtractedWine[][], userCurrency: string): void {
+  const own = userCurrency.toUpperCase();
+  const dominant = (ws: ExtractedWine[]) => {
+    const counts: Record<string, number> = {};
+    for (const w of ws) if (w.currency) counts[w.currency] = (counts[w.currency] ?? 0) + 1;
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+  };
+  const pageCurrencies = perPhoto.map(dominant).filter(Boolean);
+  const foreign = pageCurrencies.find((c) => c !== own);
+  if (foreign && pageCurrencies.includes(own)) {
+    for (const ws of perPhoto) if (dominant(ws) === own) for (const w of ws) w.currency = foreign;
+  }
+  for (const ws of perPhoto) for (const w of ws) if (!w.currency) w.currency = foreign ?? own;
+}
+
+// Merge the pages into one list. A repeat (overlapping photos) is the same
+// name, producer AND vintage; different vintages or sizes of one wine (a vertical
+// of Musar, a bottle and a magnum) are kept apart.
+function mergePages(perPhoto: ExtractedWine[][]): ExtractedWine[] {
+  const fold = (t: string | null | undefined) => foldAccents(t).replace(/[^a-z0-9]+/g, ' ').trim();
+  const seen = new Set<string>();
+  const out: ExtractedWine[] = [];
+  for (const w of perPhoto.flat()) {
+    const key = `${fold(w.name)}|${fold(w.producer)}|${w.vintage ?? (w.menuPrice != null ? `nv${w.menuPrice}` : 'nv')}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(w);
+  }
+  return out;
+}
+
+// ---- Request handlers: poll (guests) and phone-side failures ------------------
+
+// Guests can't read scan_jobs, so they poll here; the pollToken handed out at
+// start proves the job is theirs. A job whose worker died never finishes on its
+// own, so one stuck for 4 minutes is closed with an error.
+async function handlePoll(admin: SupabaseClient, body: any): Promise<Response> {
+  const jobId = String(body.jobId ?? '');
+  const { data: j } = await admin.from('scan_jobs')
+    .select('status, extracted_wines, result, error, params, user_id, updated_at').eq('id', jobId).maybeSingle();
+  if (!j || j.user_id || !j.params?.pollToken || j.params.pollToken !== body.pollToken) return json({ error: 'not_found' }, 404);
+  const running = ['pending', 'reading', 'recommending'].includes(j.status);
+  if (running && j.updated_at && Date.now() - new Date(j.updated_at).getTime() > STALLED_AFTER_MS) {
+    const msg = 'This scan took too long to finish — it usually works on a second try.';
+    await admin.from('scan_jobs').update({ status: 'error', error: msg, params: { ...j.params, failure: 'stalled' }, updated_at: new Date().toISOString() }).eq('id', jobId);
+    return json({ status: 'error', extracted_wines: j.extracted_wines, result: null, error: msg, failure: 'stalled' });
+  }
+  return json({ status: j.status, extracted_wines: j.extracted_wines, result: j.result, error: j.error, failure: j.params?.failure ?? null });
+}
+
+// A failure on the phone (before or while sending): logged with its reference
+// code so it can be found later even though no job ran.
+function logClientError(req: Request, body: any): Response {
+  console.error('[scan-client-error]', JSON.stringify({
+    ref: String(body.ref ?? '').slice(0, 12), stage: String(body.stage ?? '').slice(0, 40),
+    message: String(body.message ?? '').slice(0, 300), source: String(body.source ?? '').slice(0, 20),
+    guest: !!body.guest, country: req.headers.get('cf-ipcountry') ?? null,
+  }));
+  return json({ ok: true });
+}
+
+// ---- The scan job ---------------------------------------------------------------
+
+interface ScanJob {
+  admin: SupabaseClient;
+  jobId: string;
+  params: Record<string, any>;
+  images: string[];
+  sourceUrl: string | null;
+  currency: string;
+  scanPreferences: ScanPrefs;
+  profile: ProfileFilters;
+  authHeader: string;
+  guest: boolean;
+}
+
+async function runScanJob(job: ScanJob): Promise<void> {
+  const { admin, jobId, params, images, sourceUrl, currency, scanPreferences, profile, authHeader, guest } = job;
+  const patch = (fields: Record<string, unknown>) =>
+    admin.from('scan_jobs').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', jobId);
+
+  const t0 = Date.now();
+  const elapsed = () => Date.now() - t0;
+  // Which step we're on — decides the message if it fails.
+  let stage: 'reading' | 'picking' = 'reading';
+  // One line per step (counts + timings), findable by jobId in the logs.
+  const log = (event: string, extra: Record<string, unknown> = {}) =>
+    console.log('[scan-start]', JSON.stringify({ jobId, event, ms: elapsed(), guest, ...extra }));
+  try {
+    await patch({ status: 'reading' });
+    // Read every photo in parallel (one bad shot doesn't sink the batch), or
+    // the online list (one call, chunked inside find-wine-list).
+    const results = sourceUrl
+      ? await Promise.allSettled([callFn('find-wine-list', { action: 'read', url: sourceUrl, currency }, authHeader, guest, 120_000)])
+      : await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader, guest, 75_000)));
+
+    const perPhoto: ExtractedWine[][] = [];
+    const failures: FnError[] = [];
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        const ws = Array.isArray(r.value?.wines) ? r.value.wines : [];
+        perPhoto.push(ws.map(cleanWine).filter((w: ExtractedWine | null): w is ExtractedWine => !!w));
+      } else {
+        failures.push(r.reason instanceof FnError ? r.reason : new FnError('ocr', 0, String(r.reason), 'other'));
+      }
+    }
+
+    unifyCurrency(perPhoto, currency);
+    const wines = mergePages(perPhoto);
+    log('read', {
+      photos: sourceUrl ? 0 : images.length, photosRead: perPhoto.length, photosFailed: failures.length,
+      failures: failures.map((f) => `${f.fn}:${f.detail}`), wines: wines.length,
+    });
+
+    if (!wines.length) {
+      const f = failures[0];
+      const msg = sourceUrl
+        ? (f?.message ?? "Vinster couldn't find a wine list on that website. Try another result, or use Scan a List or Upload a List instead.")
+        : f?.detail === 'truncated'
+          ? 'This list has too much on it to read in one photo. Take it in two or three photos, one section at a time, and upload them together.'
+          : f && ['timeout', 'network', 'overloaded', 'parse', 'other'].includes(f.detail) && f.status !== 429
+            ? "Vinster couldn't read the list just now — this usually isn't your photo. Please try again in a moment."
+            : f?.status === 429
+              ? f.message
+              : "Vinster couldn't find any wines in this photo. Make sure the wine list fills the frame, the text is in focus, and there's no glare or shadow across it.";
+      await patch({ status: 'error', error: msg, params: { ...params, failure: f ? `read:${f.fn}:${f.detail}` : 'read:no_wines' } });
+      return;
+    }
+
+    await patch({ status: 'recommending', extracted_wines: wines });
+    stage = 'picking';
+
+    // "No {colour} wines on this list" — deterministic, before recommend.
+    const requestedColours = scanPreferences.wineTypes ?? [];
+    if (requestedColours.length && confidentNoColourMatch(wines, requestedColours)) {
+      await patch({ status: 'error', extracted_wines: wines,
+        params: { ...params, failure: 'pick:no_colour' },
+        error: `There appear to be no ${describeColours(requestedColours)} wines on this list. Please double check the wine list or reset your request and try again. Cheers!` });
+      return;
+    }
+
+    // Preference filters (colour, budget) BEFORE the 80-wine cap, so a long
+    // list isn't cut to its first 80 (often all sparkling/white) first.
+    const winesForRecommend = preFilterWines(applyScanFilters(wines, scanPreferences, currency), profile);
+    log('filtered', { forRecommend: winesForRecommend.length });
+
+    const recBody = {
+      wines: winesForRecommend,
+      wineTypes: scanPreferences.wineTypes,
+      styleProfiles: scanPreferences.styleProfiles,
+      budget: scanPreferences.budget,
+      budgetMin: scanPreferences.budgetMin,
+      foodPairing: scanPreferences.foodPairing,
+      preferredCountry: scanPreferences.preferredCountry,
+      favouriteRegions: scanPreferences.favouriteRegions,
+      favouriteGrapes: scanPreferences.favouriteGrapes,
+      dislikedRegions: scanPreferences.dislikedRegions,
+      dislikedGrapes: scanPreferences.dislikedGrapes,
+      profileWineTypes: scanPreferences.profileWineTypes,
+      profileStyleProfiles: scanPreferences.profileStyleProfiles,
+      currency,
+      stream: false,
+    };
+
+    // One bad answer from the picking step (an overload, a garbled reply)
+    // used to end the scan. Try once more while there's time.
+    let rec: any;
+    try {
+      rec = await callFn('recommend', recBody, authHeader, guest, 80_000);
+    } catch (e) {
+      const fe = e instanceof FnError ? e : new FnError('recommend', 0, String(e), 'other');
+      log('recommend_failed', { detail: fe.detail, status: fe.status });
+      if (fe.status === 429 || elapsed() > 100_000) throw fe;
+      rec = await callFn('recommend', recBody, authHeader, guest, 80_000);
+      log('recommend_retry_ok');
+    }
+
+    let recWines = Array.isArray(rec?.wines) ? rec.wines : [];
+    // Safety net: wines passed the colour/budget filters but no picks came
+    // back — ask once more without the soft preferences (style, food,
+    // country), so a list that HAS suitable wines never ends in an error.
+    if (!recWines.length && winesForRecommend.length && elapsed() < 120_000) {
+      log('empty_picks_retry', { qualifying: winesForRecommend.length });
+      try {
+        const retry = await callFn('recommend', {
+          ...recBody, styleProfiles: [], foodPairing: '', preferredCountry: '', profileWineTypes: [], profileStyleProfiles: [],
+        }, authHeader, guest, 80_000);
+        const again = Array.isArray(retry?.wines) ? retry.wines : [];
+        if (again.length) { rec = retry; recWines = again; }
+      } catch (e) {
+        log('empty_picks_retry_failed', { detail: e instanceof FnError ? e.detail : 'other' });
+      }
+    }
+    if (!recWines.length) {
+      await patch({ status: 'error', extracted_wines: wines, params: { ...params, failure: 'pick:none_matched' },
+        error: 'No wines on this list matched your preferences. Try widening your budget or clearing a filter, then scan again.' });
+      return;
+    }
+
+    // Tidy the picks into the shape every app version accepts (see tidyPick).
+    rec = { ...rec, summary: typeof rec?.summary === 'string' ? rec.summary : '', wines: recWines.slice(0, 3).map(tidyPick) };
+
+    await patch({ status: 'done', extracted_wines: wines, result: rec });
+    log('done', { picks: rec.wines.length });
+  } catch (err) {
+    const fe = err instanceof FnError ? err : null;
+    const message = err instanceof Error ? err.message : String(err);
+    log('failed', { stage, fn: fe?.fn, detail: fe?.detail, status: fe?.status, message: message.slice(0, 200) });
+    // Say which step failed and whose problem it is — never blame the photo
+    // for a server hiccup.
+    const userMsg = fe?.status === 429
+      ? message
+      : stage === 'reading'
+        ? "Vinster couldn't read the list just now — this usually isn't your photo. Please try again in a moment."
+        : 'Vinster read your list but couldn\'t finish choosing your wines just now — it isn\'t your photo. Please try again in a moment.';
+    await patch({
+      // The real reason (step, function, code), kept with the job so the app
+      // shows it beside the reference code and it can be looked up later.
+      params: { ...params, failure: `${stage}:${fe ? `${fe.fn}:${fe.detail}` : 'error'}:${message.slice(0, 160)}` },
+      status: 'error',
+      error: userMsg,
+    });
+  }
+}
+
+// ---- Tidying picks ----------------------------------------------------------------
+
+// Put one pick into the shape every app version accepts. A wine Vinster has no
+// critic data for comes back with criticScore null (never invented); older apps
+// rejected null and threw the whole result away, so it's sent as 0, which the
+// results screen shows as "no score". Optional text the app takes as
+// "text or absent" is dropped when empty; labels outside the app's lists get a
+// neutral value. (src/services/recommender.ts applies the same rules in the app.)
+const VINTAGE_LABELS = ['Exceptional', 'Excellent', 'Good', 'Average', 'Challenging', 'Poor'];
+const WINDOW_STATUSES = ['Too Young', 'Approaching', 'Peak', 'Fading', 'Past Peak'];
+const RARITY_LABELS = ['Very Rare', 'Rare', 'Uncommon', 'Widely Available'];
+
+function tidyPick(w: any): Record<string, unknown> {
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const text = (v: unknown) => (typeof v === 'string' ? v : '');
+  const textOrNull = (v: unknown) => (typeof v === 'string' ? v : null);
+  const va = w?.vintageAssessment ?? {};
+  const dw = w?.drinkingWindow ?? {};
+  const ra = w?.rarityAssessment ?? {};
+  const score = num(w?.criticScore);
+  const { appellation, grape, ...rest } = w ?? {};
+  return {
+    ...rest,
+    ...(typeof appellation === 'string' ? { appellation } : {}),
+    ...(typeof grape === 'string' ? { grape } : {}),
+    name: text(w?.name), producer: text(w?.producer), region: text(w?.region),
+    vintage: num(w?.vintage),
+    criticScore: score != null && score >= 0 && score <= 100 ? score : 0,
+    criticScoreNote: textOrNull(w?.criticScoreNote),
+    valueNote: textOrNull(w?.valueNote),
+    standoutNote: textOrNull(w?.standoutNote),
+    outsidePreferences: textOrNull(w?.outsidePreferences),
+    repeatNote: textOrNull(w?.repeatNote),
+    rationale: textOrNull(w?.rationale),
+    topPickReasons: Array.isArray(w?.topPickReasons) ? w.topPickReasons.filter((t: unknown) => typeof t === 'string') : null,
+    vintageAssessment: { label: VINTAGE_LABELS.includes(va.label) ? va.label : 'Good', notes: text(va.notes) },
+    drinkingWindow: { from: num(dw.from), to: num(dw.to), status: WINDOW_STATUSES.includes(dw.status) ? dw.status : 'Peak', notes: text(dw.notes) },
+    rarityAssessment: { label: RARITY_LABELS.includes(ra.label) ? ra.label : 'Widely Available', notes: text(ra.notes) },
+  };
+}
+
+// ---- Entry point -------------------------------------------------------------------
 
 Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization') ?? `Bearer ${ANON_KEY}`;
@@ -165,25 +499,8 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
 
-    // Guests poll their job here (they can't read scan_jobs directly). The
-    // pollToken handed out at start proves the job is theirs.
-    if (body.action === 'poll') {
-      const { data: j } = await admin.from('scan_jobs')
-        .select('status, extracted_wines, result, error, params, user_id').eq('id', String(body.jobId ?? '')).maybeSingle();
-      if (!j || j.user_id || !j.params?.pollToken || j.params.pollToken !== body.pollToken) return json({ error: 'not_found' }, 404);
-      return json({ status: j.status, extracted_wines: j.extracted_wines, result: j.result, error: j.error, failure: j.params?.failure ?? null });
-    }
-
-    // A failure on the phone (before or while sending) — logged with its
-    // reference code so it can be found later even though no job ran.
-    if (body.action === 'client_error') {
-      console.error('[scan-client-error]', JSON.stringify({
-        ref: String(body.ref ?? '').slice(0, 12), stage: String(body.stage ?? '').slice(0, 40),
-        message: String(body.message ?? '').slice(0, 300), source: String(body.source ?? '').slice(0, 20),
-        guest: !!body.guest, country: req.headers.get('cf-ipcountry') ?? null,
-      }));
-      return json({ ok: true });
-    }
+    if (body.action === 'poll') return await handlePoll(admin, body);
+    if (body.action === 'client_error') return logClientError(req, body);
 
     const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
     const { data: { user } } = await userClient.auth.getUser().catch(() => ({ data: { user: null } }) as any);
@@ -226,6 +543,18 @@ Deno.serve(async (req) => {
       params.pollToken = pollToken;
     }
 
+    // A retried upload (the phone timed out but the first request got through)
+    // must not start a second, paid scan: the same clientRef returns the same job.
+    const clientRef = typeof body.clientRef === 'string' ? body.clientRef.slice(0, 64) : '';
+    if (clientRef) {
+      let q = admin.from('scan_jobs').select('id, params').eq('params->>clientRef', clientRef)
+        .gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString()).limit(1);
+      q = guest ? q.is('user_id', null).eq('params->>guestKey', params.guestKey) : q.eq('user_id', user!.id);
+      const { data: existing } = await q;
+      if (existing?.length) return json({ jobId: existing[0].id, pollToken: existing[0].params?.pollToken ?? null });
+      params.clientRef = clientRef;
+    }
+
     const { data: job, error: insertError } = await admin
       .from('scan_jobs')
       .insert({ user_id: guest ? null : user!.id, status: 'pending', params })
@@ -234,166 +563,7 @@ Deno.serve(async (req) => {
     if (insertError || !job?.id) throw new Error(`could not create scan job: ${insertError?.message ?? 'no id'}`);
     const jobId = job.id as string;
 
-    const patch = (fields: Record<string, unknown>) =>
-      admin.from('scan_jobs').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', jobId);
-
-    const work = (async () => {
-      try {
-        await patch({ status: 'reading' });
-        // OCR every image in parallel (allSettled — one bad shot doesn't sink
-        // the batch), then merge + dedup by name+producer. Mirrors the old client.
-        // Find Online reads the web page/PDF instead (one call, chunked inside).
-        const results = sourceUrl
-          ? await Promise.allSettled([callFn('find-wine-list', { action: 'read', url: sourceUrl, currency }, authHeader, guest)])
-          : await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader, guest)));
-        const merged: ExtractedWine[] = [];
-        const failures: string[] = [];
-        for (const r of results) {
-          if (r.status === 'fulfilled') {
-            const ws = Array.isArray(r.value?.wines) ? r.value.wines : [];
-            merged.push(...ws);
-          } else {
-            failures.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
-          }
-        }
-        const seen = new Set<string>();
-        const wines = merged.filter((w) => {
-          const key = `${w.name}__${w.producer}`.toLowerCase();
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-
-        if (!wines.length) {
-          throw new Error(failures[0] ?? 'No wines were detected. Try a clearer shot with better lighting, and make sure the full list is in frame.');
-        }
-
-        await patch({ status: 'recommending', extracted_wines: wines });
-
-        // "No {colour} wines on this list" — deterministic, before recommend.
-        const requestedColours = scanPreferences.wineTypes ?? [];
-        if (requestedColours.length && confidentNoColourMatch(wines, requestedColours)) {
-          await patch({ status: 'error', extracted_wines: wines,
-            error: `There appear to be no ${describeColours(requestedColours)} wines on this list. Please double check the wine list or reset your request and try again. Cheers!` });
-          return;
-        }
-
-        // Preference filters (colour, budget) BEFORE the 80-wine cap, so a long
-        // list isn't cut to its first 80 (often all sparkling/white) first.
-        const winesForRecommend = preFilterWines(applyScanFilters(wines, scanPreferences, currency), profile);
-
-        let rec = await callFn('recommend', {
-          wines: winesForRecommend,
-          wineTypes: scanPreferences.wineTypes,
-          styleProfiles: scanPreferences.styleProfiles,
-          budget: scanPreferences.budget,
-          budgetMin: scanPreferences.budgetMin,
-          foodPairing: scanPreferences.foodPairing,
-          preferredCountry: scanPreferences.preferredCountry,
-          favouriteRegions: scanPreferences.favouriteRegions,
-          favouriteGrapes: scanPreferences.favouriteGrapes,
-          dislikedRegions: scanPreferences.dislikedRegions,
-          dislikedGrapes: scanPreferences.dislikedGrapes,
-          profileWineTypes: scanPreferences.profileWineTypes,
-          profileStyleProfiles: scanPreferences.profileStyleProfiles,
-          currency,
-          stream: false,
-        }, authHeader, guest);
-
-        let recWines = Array.isArray(rec?.wines) ? rec.wines : [];
-        // Safety net: wines passed the colour/budget filters but no picks came
-        // back — ask once more without the soft preferences (style, food,
-        // country), so a list that HAS suitable wines never ends in an error.
-        if (!recWines.length && winesForRecommend.length) {
-          console.warn('[scan-start] empty picks with', winesForRecommend.length, 'qualifying wines — retrying without soft preferences', jobId);
-          try {
-            const retry = await callFn('recommend', {
-              wines: winesForRecommend,
-              wineTypes: scanPreferences.wineTypes,
-              styleProfiles: [],
-              budget: scanPreferences.budget,
-              budgetMin: scanPreferences.budgetMin,
-              foodPairing: '',
-              preferredCountry: '',
-              favouriteRegions: scanPreferences.favouriteRegions,
-              favouriteGrapes: scanPreferences.favouriteGrapes,
-              dislikedRegions: scanPreferences.dislikedRegions,
-              dislikedGrapes: scanPreferences.dislikedGrapes,
-              profileWineTypes: [],
-              profileStyleProfiles: [],
-              currency,
-              stream: false,
-            }, authHeader, guest);
-            const again = Array.isArray(retry?.wines) ? retry.wines : [];
-            if (again.length) { rec = retry; recWines = again; }
-          } catch (e) {
-            console.error('[scan-start] soft-preference retry failed:', jobId, e instanceof Error ? e.message : String(e));
-          }
-        }
-        if (!recWines.length) {
-          await patch({ status: 'error', extracted_wines: wines,
-            error: 'No wines on this list matched your preferences. Try widening your budget or clearing a filter, then scan again.' });
-          return;
-        }
-
-        // Tidy the picks into the shape every app version accepts. A wine Vinster
-        // has no critic data for comes back with criticScore null (never
-        // invented) — older apps reject null and threw the whole result away,
-        // so it's sent as 0, which the results screen shows as "no score".
-        const VA = ['Exceptional', 'Excellent', 'Good', 'Average', 'Challenging', 'Poor'];
-        const DW = ['Too Young', 'Approaching', 'Peak', 'Fading', 'Past Peak'];
-        const RA = ['Very Rare', 'Rare', 'Uncommon', 'Widely Available'];
-        const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-        const str = (v: unknown) => (typeof v === 'string' ? v : '');
-        rec = {
-          ...rec,
-          summary: str(rec?.summary),
-          wines: recWines.slice(0, 3).map((w: any) => {
-            const score = num(w?.criticScore);
-            const va = w?.vintageAssessment ?? {};
-            const dw = w?.drinkingWindow ?? {};
-            const ra = w?.rarityAssessment ?? {};
-            // Fields older apps accept as text-or-absent, never empty (null):
-            // drop them when missing.
-            const optText = (k: string) => (typeof w?.[k] === 'string' ? { [k]: w[k] } : {});
-            const optNullableText = (k: string) => (typeof w?.[k] === 'string' ? { [k]: w[k] } : { [k]: null });
-            const { appellation: _ap, grape: _gr, ...restW } = w ?? {};
-            return {
-              ...restW,
-              ...optText('appellation'),
-              ...optText('grape'),
-              ...optNullableText('criticScoreNote'),
-              ...optNullableText('valueNote'),
-              ...optNullableText('standoutNote'),
-              ...optNullableText('outsidePreferences'),
-              ...optNullableText('repeatNote'),
-              topPickReasons: Array.isArray(w?.topPickReasons) ? w.topPickReasons.filter((t: unknown) => typeof t === 'string') : null,
-              rationale: typeof w?.rationale === 'string' ? w.rationale : null,
-              name: str(w?.name), producer: str(w?.producer), region: str(w?.region),
-              vintage: num(w?.vintage),
-              criticScore: score != null && score >= 0 && score <= 100 ? score : 0,
-              vintageAssessment: { label: VA.includes(va.label) ? va.label : 'Good', notes: str(va.notes) },
-              drinkingWindow: { from: num(dw.from), to: num(dw.to), status: DW.includes(dw.status) ? dw.status : 'Peak', notes: str(dw.notes) },
-              rarityAssessment: { label: RA.includes(ra.label) ? ra.label : 'Widely Available', notes: str(ra.notes) },
-            };
-          }),
-        };
-
-        await patch({ status: 'done', extracted_wines: wines, result: rec });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error('[scan-start] job failed:', jobId, message);
-        await patch({
-          // The real reason, kept with the job so the app can show it (small
-          // print, with the reference code) and it can be looked up later.
-          params: { ...params, failure: message.slice(0, 300) },
-          status: 'error',
-          error: /minute|rate limit|too many|no wines|detected|matched your preferences|no .* wines on this list|couldn.t (find|read|open)/i.test(message)
-            ? message
-            : 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.',
-        });
-      }
-    })();
+    const work = runScanJob({ admin, jobId, params, images, sourceUrl, currency, scanPreferences, profile, authHeader, guest });
 
     try { (globalThis as any).EdgeRuntime?.waitUntil?.(work); }
     catch { /* if unavailable, the promise still runs while the worker lives */ }

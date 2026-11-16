@@ -186,7 +186,7 @@ Deno.serve(async (req) => {
       const userClient = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_ANON_KEY')!,
-        { global: { headers: { Authorization: authHeader } } }
+        { global: { headers: { Authorization: authHeader! } } }
       );
       const { data: { user }, error: userError } = await userClient.auth.getUser();
       if (userError || !user) {
@@ -431,9 +431,18 @@ ${countryLine}
     //
     // The 429 rate-limit response is returned earlier and never reaches this
     // catch, so extracting.tsx still receives that message intact.
+    // A short, safe failure code for the caller's diagnostics (never the raw text).
+    const raw = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+    const detail = /truncat|max_tokens/i.test(raw) ? 'truncated'
+      : /no JSON|JSON|parse|Unexpected token/i.test(raw) ? 'parse'
+      : /overload|529|rate.?limit|429/i.test(raw) ? 'overloaded'
+      : /timeout|timed out|aborted/i.test(raw) ? 'timeout'
+      : /connection|network|fetch failed|ECONN/i.test(raw) ? 'network'
+      : 'other';
     return new Response(
       JSON.stringify({
         error: 'recommend_failed',
+        detail,
         message: "Vinster had trouble reading the wine list this time. Please try again — usually a second attempt works.",
       }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },

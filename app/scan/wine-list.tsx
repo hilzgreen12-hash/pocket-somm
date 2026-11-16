@@ -186,6 +186,16 @@ export default function WineListScreen() {
     if (action) setTimeout(action, 350);
   }
 
+  // Read Wine List ignores a second tap for a moment, so a double tap can't
+  // open the camera twice or start two (paid) scans.
+  const lastStartRef = useRef(0);
+  function startOnce(): boolean {
+    const now = Date.now();
+    if (now - lastStartRef.current < 1500) return false;
+    lastStartRef.current = now;
+    return true;
+  }
+
   function handleScan() {
     const go = () => { setPreferences(buildPreferences()); router.push('/scan/camera'); };
     if (maybeShowSignInPrompt(go)) return;
@@ -238,6 +248,7 @@ export default function WineListScreen() {
   // sets preferences first; Read Wine List then starts that route.
   const mode: 'scan' | 'upload' | 'online' = readingOnline ? 'online' : uploadParam === '1' ? 'upload' : 'scan';
   function handleFindMyPicks() {
+    if (!startOnce()) return;
     if (mode === 'online') handleReadOnline();
     else if (mode === 'upload') void handleScreenshot();
     else handleScan();

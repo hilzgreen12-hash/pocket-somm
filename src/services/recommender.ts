@@ -78,6 +78,33 @@ const WineRecommendationSchema = z.object({
   repeatNote: z.string().nullable().optional(),
 });
 
+// Put a raw pick into the accepted shape before checking it — the same rules
+// scan-start applies on the server, so the alternative-picks path (which calls
+// recommend directly) is just as forgiving: missing labels get a neutral value,
+// empty optional text is dropped, a missing score becomes 0 ("no score").
+const VINTAGE_LABELS = ['Exceptional', 'Excellent', 'Good', 'Average', 'Challenging', 'Poor'];
+const WINDOW_STATUSES = ['Too Young', 'Approaching', 'Peak', 'Fading', 'Past Peak'];
+const RARITY_LABELS = ['Very Rare', 'Rare', 'Uncommon', 'Widely Available'];
+function tidyPick(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const w = raw as Record<string, any>;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const text = (v: unknown) => (typeof v === 'string' ? v : '');
+  const va = w.vintageAssessment ?? {};
+  const dw = w.drinkingWindow ?? {};
+  const ra = w.rarityAssessment ?? {};
+  const score = num(w.criticScore);
+  return {
+    ...w,
+    name: text(w.name), producer: text(w.producer), region: text(w.region),
+    vintage: num(w.vintage),
+    criticScore: score != null && score >= 0 && score <= 100 ? score : 0,
+    vintageAssessment: { label: VINTAGE_LABELS.includes(va.label) ? va.label : 'Good', notes: text(va.notes) },
+    drinkingWindow: { from: num(dw.from), to: num(dw.to), status: WINDOW_STATUSES.includes(dw.status) ? dw.status : 'Peak', notes: text(dw.notes) },
+    rarityAssessment: { label: RARITY_LABELS.includes(ra.label) ? ra.label : 'Widely Available', notes: text(ra.notes) },
+  };
+}
+
 const RecommendationResponseSchema = z.object({
   // No .min(1): an empty result is a legitimate outcome (every wine filtered
   // out by budget/preferences), not a malformed response. Rejecting it here
@@ -86,7 +113,7 @@ const RecommendationResponseSchema = z.object({
   // Each pick is checked on its own (finalizeRecommendation), so one odd pick
   // can't throw away the others.
   wines: z.array(z.unknown()).max(3),
-  summary: z.string(),
+  summary: z.string().nullish().transform((v) => v ?? ''),
   topScoringMode: z.boolean().optional(),
 });
 
@@ -156,7 +183,7 @@ export function finalizeRecommendation(
   }
   // Keep every pick that's well-formed; drop (not fail on) any that isn't.
   const goodWines = parsedTop.data.wines
-    .map((w) => WineRecommendationSchema.safeParse(w))
+    .map((w) => WineRecommendationSchema.safeParse(tidyPick(w)))
     .filter((r): r is z.ZodSafeParseSuccess<z.infer<typeof WineRecommendationSchema>> => r.success)
     .map((r) => r.data);
   const parsed = { data: { ...parsedTop.data, wines: goodWines } };

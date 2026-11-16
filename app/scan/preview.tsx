@@ -33,8 +33,6 @@ export default function PreviewScreen() {
     if (!imageUri && !leaving.current) leaveCleanly();
   }, [imageUri]);
 
-  if (!imageUri) return null;
-
   function clampPan(nx: number, ny: number, s: number) {
     const maxX = Math.max(0, (box.w * s - box.w) / 2);
     const maxY = Math.max(0, (box.h * s - box.h) / 2);
@@ -91,10 +89,18 @@ export default function PreviewScreen() {
     leaveCleanly();
   }
 
+  // One tap only — a double tap used to start two (paid) scans.
+  const confirmed = useRef(false);
   function handleConfirm() {
+    if (confirmed.current) return;
+    confirmed.current = true;
     leaving.current = true;
     router.push('/scan/extracting');
   }
+
+  // After every hook (an early return above them broke React's hook order and
+  // could crash this screen when Try Again cleared the photo).
+  if (!imageUri) return null;
 
   return (
     <GestureHandlerRootView style={styles.container}>

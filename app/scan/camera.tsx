@@ -11,6 +11,50 @@ import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
+type Dims = { width: number; height: number };
+
+// Re-encode with the EXIF rotation baked in, so the preview and the reader
+// always see the photo upright, and return its true upright size.
+async function normaliseOrientation(uri: string, dims: Dims): Promise<{ uri: string; dims: Dims }> {
+  try {
+    const out = await ImageManipulator.manipulateAsync(uri, [], { compress: 1, format: ImageManipulator.SaveFormat.JPEG });
+    return { uri: out.uri, dims: { width: out.width, height: out.height } };
+  } catch (e) {
+    console.warn('[Camera] orientation normalise failed, using raw photo:', e);
+    return { uri, dims };
+  }
+}
+
+// Crop to what the user actually framed. The live preview fills the window
+// (cover) but the sensor saves a wider field of view, which leaves the list
+// small in the photo. Centre-crop to the window's aspect ratio; any problem
+// falls back to the full photo.
+async function cropToPreview(uri: string, { width: pw, height: ph }: Dims): Promise<string> {
+  try {
+    const { width: winW, height: winH } = Dimensions.get('window');
+    const target = winW / winH;
+    if (!(pw > 0 && ph > 0 && target > 0)) return uri;
+    let cropW = pw, cropH = ph, originX = 0, originY = 0;
+    if (pw / ph > target) {
+      cropW = Math.round(ph * target);          // wider than framed → trim the sides
+      originX = Math.round((pw - cropW) / 2);
+    } else {
+      cropH = Math.round(pw / target);          // taller than framed → trim top/bottom
+      originY = Math.round((ph - cropH) / 2);
+    }
+    if (cropW < 8 || cropH < 8 || cropW > pw || cropH > ph) return uri;
+    const out = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ crop: { originX, originY, width: cropW, height: cropH } }],
+      { compress: 1, format: ImageManipulator.SaveFormat.JPEG },
+    );
+    return out.uri;
+  } catch (e) {
+    console.warn('[Camera] framing crop failed, using full photo:', e);
+    return uri;
+  }
+}
+
 export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -41,76 +85,26 @@ export default function CameraScreen() {
     setTimeout(() => setAutofocus('on'), 50);
   }
 
+  // One capture at a time — a double tap on the shutter used to push two
+  // previews (and so two paid scans).
+  const capturing = useRef(false);
+
   async function handleCapture() {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || capturing.current) return;
+    capturing.current = true;
     try {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const photo = await cameraRef.current.takePictureAsync({
-      base64: false,
-      quality: 1,
-    });
-    if (!photo?.uri) return;
-
-    let uri = photo.uri;
-    let dims = { width: photo.width ?? 0, height: photo.height ?? 0 };
-
-    // Normalise orientation — ImageManipulator re-encodes with the EXIF rotation
-    // baked in, so the preview and OCR always see the photo upright, and gives us
-    // the true upright pixel dimensions to crop against.
-    try {
-      const normalised = await ImageManipulator.manipulateAsync(
-        uri,
-        [],
-        { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
-      );
-      uri = normalised.uri;
-      dims = { width: normalised.width, height: normalised.height };
-    } catch (e) {
-      console.warn('[Camera] orientation normalise failed, using raw photo:', e);
-    }
-
-    // Center-crop to the on-screen preview's aspect ratio. The live CameraView
-    // fills the whole window (cover), but takePictureAsync saves the sensor's
-    // FULL, wider field of view — so the captured photo shows more than the user
-    // framed, leaving the wine list small ("zoomed out") and giving OCR a smaller
-    // target. Cropping to the window aspect makes the saved photo match what was
-    // framed (WYSIWYG) and hands the read a bigger list. We crop to the full
-    // preview area (NOT the tight guide frame, whose screen→pixel math was the
-    // old buggy path) and use the post-normalise upright dims so orientation
-    // can't flip the branch. Best-effort — any issue falls back to the full photo.
-    try {
-      const { width: winW, height: winH } = Dimensions.get('window');
-      const targetAspect = winW / winH;
-      const { width: pw, height: ph } = dims;
-      if (pw > 0 && ph > 0 && targetAspect > 0) {
-        let cropW = pw, cropH = ph, originX = 0, originY = 0;
-        if (pw / ph > targetAspect) {
-          // Photo wider than the framed preview → trim the hidden sides.
-          cropW = Math.round(ph * targetAspect);
-          originX = Math.round((pw - cropW) / 2);
-        } else {
-          // Photo taller than the preview → trim top/bottom.
-          cropH = Math.round(pw / targetAspect);
-          originY = Math.round((ph - cropH) / 2);
-        }
-        if (cropW >= 8 && cropH >= 8 && cropW <= pw && cropH <= ph) {
-          const cropped = await ImageManipulator.manipulateAsync(
-            uri,
-            [{ crop: { originX, originY, width: cropW, height: cropH } }],
-            { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
-          );
-          uri = cropped.uri;
-        }
-      }
-    } catch (e) {
-      console.warn('[Camera] framing crop failed, using full photo:', e);
-    }
-
-    setImage(uri);
-    router.push('/scan/preview');
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 1 });
+      if (!photo?.uri) return;
+      const upright = await normaliseOrientation(photo.uri, { width: photo.width ?? 0, height: photo.height ?? 0 });
+      const framed = await cropToPreview(upright.uri, upright.dims);
+      setImage(framed);
+      router.push('/scan/preview');
     } catch (err) {
       console.error('[Camera] Capture failed:', err);
       showAlert({ title: 'Camera error', body: 'Could not capture the photo. Please try again.' });
+    } finally {
+      capturing.current = false;
     }
   }
 

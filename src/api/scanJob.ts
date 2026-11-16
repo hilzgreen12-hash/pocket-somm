@@ -36,9 +36,15 @@ const POLL_TIMEOUT_MS = 180000; // 3 min hard ceiling — well past a normal sca
 
 // Kick off the background job. Returns the jobId immediately (sub-second).
 // Pass `sourceUrl` (Find Online) instead of images to read a list from the web.
-export async function startScanJob(images: string[], params: ScanJobParams, sourceUrl?: string): Promise<StartedScanJob> {
+// clientRef: one id per scan attempt — if a slow upload times out on the phone
+// after the server already started, the retry gets the SAME job back rather
+// than starting a second, paid one.
+export async function startScanJob(images: string[], params: ScanJobParams, sourceUrl: string | undefined, clientRef: string): Promise<StartedScanJob> {
+  // Give big uploads time: 30s plus ~10s per 300 KB, up to 90s.
+  const bytes = images.reduce((n, b) => n + b.length, 0);
+  const timeoutMs = Math.min(90_000, 30_000 + Math.round(bytes / 300_000) * 10_000);
   // guestOk: this version can poll a guest job (see readJob).
-  const data = await invokeResilient('scan-start', sourceUrl ? { sourceUrl, params, guestOk: true } : { images, params, guestOk: true }, { timeoutMs: 30000, retries: 2 }) as { jobId?: string; pollToken?: string | null };
+  const data = await invokeResilient('scan-start', sourceUrl ? { sourceUrl, params, guestOk: true, clientRef } : { images, params, guestOk: true, clientRef }, { timeoutMs, retries: 2 }) as { jobId?: string; pollToken?: string | null };
   if (!data?.jobId) throw new Error('Could not start the scan. Please try again.');
   return { jobId: data.jobId, pollToken: data.pollToken ?? null };
 }
@@ -76,9 +82,17 @@ export async function pollScanJob(
 ): Promise<ScanJobResult> {
   const started = Date.now();
   let lastStatus = '';
+  // Reads that keep coming back empty (the job can't be seen — e.g. a lost
+  // login mid-scan, or a rejected guest code) end the wait early instead of
+  // running the full ceiling.
+  let misses = 0;
   while (true) {
     if (opts?.isCancelled?.()) throw new Error('cancelled');
     const data = await readJob(job);
+    if (!data) {
+      misses += 1;
+      if (misses >= 8) { const e = new Error('Vinster lost track of this scan.'); e.name = 'ScanLost'; throw e; }
+    } else misses = 0;
 
     // A transient read error (blip) isn't fatal — keep polling until the ceiling.
     if (data) {
@@ -92,7 +106,9 @@ export async function pollScanJob(
     }
 
     if (Date.now() - started > (opts?.timeoutMs ?? POLL_TIMEOUT_MS)) {
-      throw new Error('This scan is taking longer than expected. Please try again.');
+      const e = new Error('This scan is taking longer than expected.');
+      e.name = 'ScanTimeout';
+      throw e;
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }

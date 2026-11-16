@@ -29,6 +29,8 @@ export default function ExtractingScreen() {
   const [errorRef, setErrorRef] = useState<{ ref: string; reason: string } | null>(null);
   const { session } = useAuth();
   const stepRef = useRef('checking the connection');
+  // One id for this scan attempt (see startScanJob) — retries reuse the job.
+  const clientRefRef = useRef(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
   const jobRef = useRef<StartedScanJob | null>(null);
   const source = onlineSource ? 'online' : imageSource;
 
@@ -99,7 +101,7 @@ export default function ExtractingScreen() {
       } : null;
 
       stepRef.current = 'sending the list';
-      const job = await startScanJob(images, { scanPreferences: preferences, profile, currency: scanCurrency }, onlineSource?.url);
+      const job = await startScanJob(images, { scanPreferences: preferences, profile, currency: scanCurrency }, onlineSource?.url, clientRefRef.current);
       jobRef.current = job;
       if (!token.active) return;
 
@@ -149,6 +151,10 @@ export default function ExtractingScreen() {
       const isRateLimit = /minute|too many|rate limit/i.test(message);
       const friendly = isNetworkError(err)
         ? "Vinster couldn't reach the internet — you may be offline or on a weak signal. Find better reception and tap Try Again."
+        : err instanceof Error && err.name === 'ScanTimeout'
+        ? "This scan is taking much longer than usual — it isn't your photo. Please try again in a moment."
+        : err instanceof Error && err.name === 'ScanLost'
+        ? "Vinster lost touch with this scan — it isn't your photo. Please try again; signing in again may help."
         : isRateLimit
         ? message
         : 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.';

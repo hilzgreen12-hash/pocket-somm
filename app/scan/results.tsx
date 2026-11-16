@@ -97,6 +97,13 @@ function joinPlace(appellation?: string | null, region?: string | null): string 
   return `${a}, ${r}`;
 }
 
+// Up to n wines taken evenly across the whole list, keeping its order — so a
+// long list contributes from every section, not just its first pages.
+function sampleAcross<T>(list: T[], n: number): T[] {
+  if (list.length <= n) return list;
+  return Array.from({ length: n }, (_, k) => list[Math.floor((k * list.length) / n)]);
+}
+
 export default function ResultsScreen() {
   const { fromHistory, sessionId, restaurant: historyRestaurant, city: historyCity, date: historyDate } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; restaurant?: string; city?: string; date?: string }>();
   const isFromHistory = fromHistory === 'true';
@@ -713,6 +720,11 @@ export default function ResultsScreen() {
 
   async function handleAlternativeList() {
     if (!extractedWines || !recommendation) return;
+    // Alternatives call recommend directly, which needs an account.
+    if (!session) {
+      showAlert({ title: 'Create a free account', body: 'Sign in or create a free account to get an alternative set of picks from this list.' });
+      return;
+    }
     setIsGenerating(true);
     try {
       // Exclude by full identity (producer + name + vintage), not just the
@@ -722,7 +734,8 @@ export default function ResultsScreen() {
         [w.producer, w.name, w.vintage].filter(Boolean).join(' ')
       );
       const newRec = await recommendWines({
-        wines: extractedWines.slice(0, 80),
+        // Sample the WHOLE list (not just its first 80 rows), as the scan does.
+        wines: sampleAcross(extractedWines, 80),
         ...preferences,
         excludeWines,
         currency: userPrefs?.defaultCurrency ?? 'GBP',
@@ -741,10 +754,18 @@ export default function ResultsScreen() {
       setChosenIndexes(new Set());
       sessionPickIdRef.current.clear();
       pendingIdxRef.current.clear();
+      if (!newRec.wines.length) {
+        showAlert({ title: 'No other picks', body: "Vinster couldn't find a different set that fits your preferences — your current picks stay." });
+        return;
+      }
       setRecommendation(newRec);
       setOpenIndex(0);
     } catch (err) {
-      // silently fail — existing results remain
+      // Keep the current picks, but say why nothing changed.
+      const msg = err instanceof Error && /minute|too many|rate limit/i.test(err.message)
+        ? err.message
+        : "Vinster couldn't find alternative picks just now. Your current picks stay — please try again in a moment.";
+      showAlert({ title: 'No alternatives yet', body: msg });
     } finally {
       setIsGenerating(false);
     }
