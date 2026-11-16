@@ -7,7 +7,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js';
 // written step by step to a scan_jobs row, which the app polls. A dropped
 // connection or a backgrounded app never loses the work.
 //
-//   start   { images[] | sourceUrl, params, clientRef, guestOk } → { jobId, pollToken }
+//   start   { images[] | sourceUrl | pdfBase64, params, clientRef, guestOk } → { jobId, pollToken }
 //   poll    { action: 'poll', jobId, pollToken }   (guests only — accounts read the row)
 //   report  { action: 'client_error', ref, stage, message }   (a failure on the phone)
 //
@@ -40,6 +40,7 @@ const GUEST_DAILY_LIMIT = 25;
 // The app sends a page as up to 3 overlapping tiles, so 12 covers ~4 pages.
 const MAX_IMAGES = 12;
 const MAX_IMAGE_CHARS = 4_000_000;
+const MAX_PDF_CHARS = 14_000_000;   // ≈10 MB PDF
 
 // A running job not updated for this long is treated as stalled.
 const STALLED_AFTER_MS = 240_000;
@@ -303,6 +304,7 @@ interface ScanJob {
   params: Record<string, any>;
   images: string[];
   sourceUrl: string | null;
+  pdfBase64: string | null;
   currency: string;
   scanPreferences: ScanPrefs;
   profile: ProfileFilters;
@@ -311,7 +313,8 @@ interface ScanJob {
 }
 
 async function runScanJob(job: ScanJob): Promise<void> {
-  const { admin, jobId, params, images, sourceUrl, currency, scanPreferences, profile, authHeader, guest } = job;
+  const { admin, jobId, params, images, sourceUrl, pdfBase64, currency, scanPreferences, profile, authHeader, guest } = job;
+  const fromWeb = !!(sourceUrl || pdfBase64);   // read by find-wine-list, not ocr
   const patch = (fields: Record<string, unknown>) =>
     admin.from('scan_jobs').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', jobId);
 
@@ -328,6 +331,8 @@ async function runScanJob(job: ScanJob): Promise<void> {
     // the online list (one call, chunked inside find-wine-list).
     const results = sourceUrl
       ? await Promise.allSettled([callFn('find-wine-list', { action: 'read', url: sourceUrl, currency }, authHeader, guest, 120_000)])
+      : pdfBase64
+      ? await Promise.allSettled([callFn('find-wine-list', { action: 'readPdf', pdfBase64, currency }, authHeader, guest, 120_000)])
       : await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader, guest, 75_000)));
 
     const perPhoto: ExtractedWine[][] = [];
@@ -344,13 +349,13 @@ async function runScanJob(job: ScanJob): Promise<void> {
     unifyCurrency(perPhoto, currency);
     const wines = mergePages(perPhoto);
     log('read', {
-      photos: sourceUrl ? 0 : images.length, photosRead: perPhoto.length, photosFailed: failures.length,
+      photos: fromWeb ? 0 : images.length, photosRead: perPhoto.length, photosFailed: failures.length,
       failures: failures.map((f) => `${f.fn}:${f.detail}`), wines: wines.length,
     });
 
     if (!wines.length) {
       const f = failures[0];
-      const msg = sourceUrl
+      const msg = fromWeb
         ? (f?.message ?? "Vinster couldn't find a wine list on that website. Try another result, or use Scan a List or Upload a List instead.")
         : f?.detail === 'truncated'
           ? 'This list has too much on it to read in one photo. Take it in two or three photos, one section at a time, and upload them together.'
@@ -437,7 +442,7 @@ async function runScanJob(job: ScanJob): Promise<void> {
     rec = { ...rec, summary: typeof rec?.summary === 'string' ? rec.summary : '', wines: recWines.slice(0, 3).map(tidyPick) };
 
     // How many photos couldn't be read, so the app can say so beside the picks.
-    const photos = sourceUrl ? {} : { photosSent: images.length, photosFailed: failures.length };
+    const photos = fromWeb ? {} : { photosSent: images.length, photosFailed: failures.length };
     await patch({ status: 'done', extracted_wines: wines, result: rec, params: { ...params, ...photos } });
     log('done', { picks: rec.wines.length });
   } catch (err) {
@@ -528,12 +533,14 @@ Deno.serve(async (req) => {
     // Find Online: a web link to the restaurant's list instead of photos. The
     // find-wine-list function locates and reads it; everything after is shared.
     const sourceUrl: string | null = typeof body.sourceUrl === 'string' && /^https?:\/\//i.test(body.sourceUrl) ? body.sourceUrl : null;
+    // A PDF wine list shared straight into Vinster (read by find-wine-list).
+    const pdfBase64: string | null = typeof body.pdfBase64 === 'string' && body.pdfBase64.length <= MAX_PDF_CHARS ? body.pdfBase64 : null;
     const params = { ...(body.params ?? {}) } as Record<string, any>;
     const scanPreferences: ScanPrefs = params.scanPreferences ?? {};
     const profile: ProfileFilters = params.profile ?? null;
     const currency: string = (params.currency ?? 'GBP').toString();
 
-    if (!images.length && !sourceUrl) {
+    if (!images.length && !sourceUrl && !pdfBase64) {
       return json({ error: 'images required' }, 400);
     }
     if (images.length > MAX_IMAGES || images.some((b) => typeof b !== 'string' || b.length > MAX_IMAGE_CHARS)) {
@@ -578,7 +585,7 @@ Deno.serve(async (req) => {
     if (insertError || !job?.id) throw new Error(`could not create scan job: ${insertError?.message ?? 'no id'}`);
     const jobId = job.id as string;
 
-    const work = runScanJob({ admin, jobId, params, images, sourceUrl, currency, scanPreferences, profile, authHeader, guest });
+    const work = runScanJob({ admin, jobId, params, images, sourceUrl, pdfBase64, currency, scanPreferences, profile, authHeader, guest });
 
     try { (globalThis as any).EdgeRuntime?.waitUntil?.(work); }
     catch { /* if unavailable, the promise still runs while the worker lives */ }

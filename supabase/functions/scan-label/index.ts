@@ -60,9 +60,11 @@ const LABEL_SCAN_PROMPT = `You are a wine expert analyzing a wine label photogra
 
 8. confidence: How sure you are that producer + wineName together identify the EXACT bottling. Return "high" when the label is clearly legible and you're confident which specific wine this is. Return "low" when the label is blurry, partially obscured, or cropped; when text is hard to read; or when the producer makes a RANGE/SERIES of similar bottlings and you can't be certain which one this is (e.g. you can read "Assemblage" but not whether it's "Tome III" or "Tome IV"). When in doubt, prefer "low" — a low rating lets the app offer the user a list of that producer's bottlings to confirm.
 
-Return ONLY a valid JSON object with exactly these eight keys. Set producer / region / wineName / vintage / grape / bottleSizeMl to null if you cannot confidently identify them from the label (style and confidence are never null). Do not include any explanation or markdown — only the raw JSON.
+9. imageType: what the image shows — "label" for a wine bottle or its label (the usual case), "list" for a restaurant wine list, menu or price list showing SEVERAL different wines with prices, or "other" for anything else. A screenshot of a wine list or a photo of a menu page is "list" even if one wine name stands out.
 
-Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "grape": "Syrah", "bottleSizeMl": 750, "confidence": "high"}`;
+Return ONLY a valid JSON object with exactly these nine keys. Set producer / region / wineName / vintage / grape / bottleSizeMl to null if you cannot confidently identify them from the label (style and confidence are never null). Do not include any explanation or markdown — only the raw JSON.
+
+Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "grape": "Syrah", "bottleSizeMl": 750, "confidence": "high", "imageType": "label"}`;
 
 Deno.serve(async (req) => {
   try {
@@ -129,6 +131,9 @@ Deno.serve(async (req) => {
       // similar bottlings — the Confirm screen then auto-offers a bottling
       // picker. Anything but an explicit "low" is treated as high confidence.
       confidence: parsed.confidence === 'low' ? 'low' : 'high',
+      // Lets a shared screenshot of a wine LIST go to the list scan instead of
+      // being read as one label.
+      imageType: parsed.imageType === 'list' || parsed.imageType === 'other' ? parsed.imageType : 'label',
     }), { headers: { 'Content-Type': 'application/json' } });
 
   } catch (err) {

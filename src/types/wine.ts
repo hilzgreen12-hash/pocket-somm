@@ -86,6 +86,9 @@ export interface RecommendationResponse {
 
 // Label scanner types
 export interface WineDetails {
+  // What the scanned image shows: a bottle 'label' (the usual case), a wine
+  // 'list' (shared screenshots are routed to the list scan), or 'other'.
+  imageType?: 'label' | 'list' | 'other';
   producer: string | null;
   region: string | null;
   wineName: string | null;

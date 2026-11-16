@@ -77,10 +77,15 @@
         "expo-share-intent",
         {
           "iosActivationRules": {
-            "NSExtensionActivationSupportsImageWithMaxCount": 1
+            "NSExtensionActivationSupportsImageWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+            "NSExtensionActivationSupportsFileWithMaxCount": 1
           },
           "androidIntentFilters": [
-            "image/*"
+            "image/*",
+            "text/*",
+            "application/pdf"
           ]
         }
       ]

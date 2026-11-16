@@ -42,12 +42,15 @@ const POLL_TIMEOUT_MS = 180000; // 3 min hard ceiling — well past a normal sca
 // clientRef: one id per scan attempt — if a slow upload times out on the phone
 // after the server already started, the retry gets the SAME job back rather
 // than starting a second, paid one.
-export async function startScanJob(images: string[], params: ScanJobParams, sourceUrl: string | undefined, clientRef: string): Promise<StartedScanJob> {
+// The list comes as photos (images), a web link (sourceUrl) or a shared PDF (pdfBase64).
+export type ScanInput = { images: string[] } | { sourceUrl: string } | { pdfBase64: string };
+
+export async function startScanJob(input: ScanInput, params: ScanJobParams, clientRef: string): Promise<StartedScanJob> {
   // Give big uploads time: 30s plus ~10s per 300 KB, up to 90s.
-  const bytes = images.reduce((n, b) => n + b.length, 0);
+  const bytes = 'images' in input ? input.images.reduce((n, b) => n + b.length, 0) : 'pdfBase64' in input ? input.pdfBase64.length : 0;
   const timeoutMs = Math.min(90_000, 30_000 + Math.round(bytes / 300_000) * 10_000);
   // guestOk: this version can poll a guest job (see readJob).
-  const data = await invokeResilient('scan-start', sourceUrl ? { sourceUrl, params, guestOk: true, clientRef } : { images, params, guestOk: true, clientRef }, { timeoutMs, retries: 2 }) as { jobId?: string; pollToken?: string | null };
+  const data = await invokeResilient('scan-start', { ...input, params, guestOk: true, clientRef }, { timeoutMs, retries: 2 }) as { jobId?: string; pollToken?: string | null };
   if (!data?.jobId) throw new Error('Could not start the scan. Please try again.');
   return { jobId: data.jobId, pollToken: data.pollToken ?? null };
 }

@@ -519,6 +519,22 @@ Deno.serve(async (req) => {
       return json({ wines, sourceUrl: src.url });
     }
 
+    // A PDF wine list shared straight into Vinster (not a link): read its pages.
+    if (action === 'readPdf') {
+      const limited = await checkRateLimit(req, 'find-wine-list-read', 15, 40);
+      if (limited) return limited;
+      const b64 = typeof body.pdfBase64 === 'string' ? body.pdfBase64 : '';
+      const currency = typeof body.currency === 'string' && /^[A-Z]{3}$/.test(body.currency) ? body.currency : 'GBP';
+      const bytes = b64 ? Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)) : new Uint8Array();
+      const isPdf = bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46; // %PDF
+      if (!isPdf || bytes.length > MAX_BYTES) {
+        return json({ error: 'bad_pdf', message: "Vinster couldn't open that file. Share the wine list's web link instead, or a screenshot of it." }, 400);
+      }
+      const wines = await readSource({ url: 'shared.pdf', kind: 'pdf', bytes }, currency);
+      if (!wines.length) return json({ error: 'no_wines', message: "Vinster couldn't find any wines in that PDF." }, 404);
+      return json({ wines, sourceUrl: null });
+    }
+
     return json({ error: 'unknown action' }, 400);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

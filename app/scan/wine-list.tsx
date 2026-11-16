@@ -31,7 +31,8 @@ Record and/or review the bottle you ordered, as well as the restaurant you enjoy
 
 export default function WineListScreen() {
   const { session } = useAuth();
-  const { upload: uploadParam, online: onlineParam } = useLocalSearchParams<{ upload?: string; online?: string }>();
+  // upload=1 / online=1 / shared=1 say how the list will arrive (see `mode`).
+  const { upload: uploadParam, online: onlineParam, shared: sharedParam } = useLocalSearchParams<{ upload?: string; online?: string; shared?: string }>();
   const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
   const { preferences: savedPreferences, prefsLoading } = usePreferences();
 
@@ -91,7 +92,7 @@ export default function WineListScreen() {
 
   // Arriving straight through to Upload / Find Online: skip the intro on that
   // first visit so it can't pop up over the next screen.
-  const skipFirstIntroRef = useRef(uploadParam === '1' || onlineParam === '1');
+  const skipFirstIntroRef = useRef(uploadParam === '1' || onlineParam === '1' || sharedParam === '1');
   useFocusEffect(useCallback(() => {
     if (skipFirstIntroRef.current) { skipFirstIntroRef.current = false; return; }
     // Show the welcome popup every time the page gains focus, until the
@@ -242,7 +243,9 @@ export default function WineListScreen() {
   // here to set preferences; "Read Wine List" then reads that list.
   const onlineSource = useScanStore((st) => st.onlineSource);
   const readingOnline = onlineParam === '1' && !!onlineSource;
-  function handleReadOnline() {
+  // The list is already in hand (online, a shared PDF or a shared screenshot):
+  // save the preferences and read it.
+  function readListInHand() {
     setPreferences(buildPreferences());
     router.push('/scan/extracting');
   }
@@ -250,10 +253,13 @@ export default function WineListScreen() {
   // How the list will arrive, from Home's "Read A Wine List" pop-up: the camera
   // (default), the photo library (?upload=1) or a list found online. The user
   // sets preferences first; Read Wine List then starts that route.
-  const mode: 'scan' | 'upload' | 'online' = readingOnline ? 'online' : uploadParam === '1' ? 'upload' : 'scan';
+  // shared: a screenshot of a list shared into Vinster — the photo is already in hand.
+  const sharedImage = useScanStore((st) => st.imageUri);
+  const readingShared = sharedParam === '1' && !!sharedImage;
+  const mode: 'scan' | 'upload' | 'online' | 'shared' = readingOnline ? 'online' : readingShared ? 'shared' : uploadParam === '1' ? 'upload' : 'scan';
   function handleFindMyPicks() {
     if (!startOnce()) return;
-    if (mode === 'online') handleReadOnline();
+    if (mode === 'online' || mode === 'shared') readListInHand();
     else if (mode === 'upload') void handleScreenshot();
     else handleScan();
   }
@@ -337,6 +343,12 @@ export default function WineListScreen() {
           </View>
         </View>
 
+        {readingShared ? (
+          <View style={styles.onlineCard}>
+            <Text style={styles.onlineLabel}>Wine list from your photo</Text>
+            <Text style={styles.onlineTitle}>Ready to read</Text>
+          </View>
+        ) : null}
         {readingOnline ? (
           <View style={styles.onlineCard}>
             <Text style={styles.onlineLabel}>Wine list found online</Text>

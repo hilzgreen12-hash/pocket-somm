@@ -16,6 +16,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { noteHappyMoment } from '../../src/services/ratingPrompt';
+import { File } from 'expo-file-system';
 
 // The "reading your wine list" screen. It prepares the photos (or the chosen
 // online list), starts the scan on the server (scan-start), polls until the
@@ -113,7 +114,10 @@ export default function ExtractingScreen() {
       } : null;
 
       stepRef.current = 'sending the list';
-      const job = await startScanJob(images, { scanPreferences: preferences, profile, currency: scanCurrency }, onlineSource?.url, clientRefRef.current);
+      const input = onlineSource?.fileUri
+        ? { pdfBase64: await new File(onlineSource.fileUri).base64() }
+        : onlineSource ? { sourceUrl: onlineSource.url } : { images };
+      const job = await startScanJob(input, { scanPreferences: preferences, profile, currency: scanCurrency }, clientRefRef.current);
       jobRef.current = job;
       if (!token.active) return;
 

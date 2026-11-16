@@ -366,6 +366,13 @@ export default function ScanLandingScreen() {
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
       const details = await scanLabel(base64);
+      // A wine LIST (a shared screenshot of a menu, say), not a label: send it to
+      // the list scan — Wine List Preferences, then Read Wine List.
+      if (details.imageType === 'list') {
+        setScanningLabel(false);
+        openSharedWineList({ imageUri: uri });
+        return;
+      }
       setWineDetails(details);
       const confirmed: WineDetailsComplete = {
         producer: (details.producer ?? '').trim(),
@@ -406,21 +413,46 @@ export default function ScanLandingScreen() {
     }
   }
 
-  // A label photo or screenshot shared to Vinster from the phone's share sheet:
-  // generate its Wine Intel straight away (same path as "upload instead").
+  // Something shared to Vinster from another app's share sheet:
+  //   a web page or PDF link  → the wine list online (preferences, then read)
+  //   a PDF file              → that PDF as the wine list
+  //   a photo / screenshot    → a label (Wine Intel) or, if it's a list, the list scan
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const sharedHandledRef = useRef<string | null>(null);
   useEffect(() => {
     if (!hasShareIntent) return;
-    const file = shareIntent?.files?.find((f) => (f.mimeType ?? '').startsWith('image/')) ?? shareIntent?.files?.[0];
-    const path = file?.path;
+    const intent = shareIntent;
     resetShareIntent();
-    if (!path || sharedHandledRef.current === path) return;
-    sharedHandledRef.current = path;
-    const uri = path.startsWith('file://') || path.startsWith('content://') ? path : `file://${path}`;
-    void scanLabelFromUri(uri);
+    const files = intent?.files ?? [];
+    const pdf = files.find((f) => (f.mimeType ?? '').includes('pdf') || /\.pdf$/i.test(f.path ?? ''));
+    const image = files.find((f) => (f.mimeType ?? '').startsWith('image/'));
+    const link = intent?.webUrl || (intent?.text ?? '').match(/https?:\/\/\S+/)?.[0] || null;
+    const key = pdf?.path ?? image?.path ?? link ?? '';
+    if (!key || sharedHandledRef.current === key) return;
+    sharedHandledRef.current = key;
+    const asUri = (p: string) => (p.startsWith('file://') || p.startsWith('content://') ? p : `file://${p}`);
+    if (pdf?.path) openSharedWineList({ fileUri: asUri(pdf.path), title: pdf.fileName ?? 'Wine list (PDF)' });
+    else if (image?.path) void scanLabelFromUri(asUri(image.path));
+    else if (link) openSharedWineList({ url: link, title: intent?.meta?.title ?? undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasShareIntent, shareIntent]);
+
+  // A wine list that arrived from outside (a shared link, PDF or screenshot):
+  // open Wine List Preferences with it ready; Read Wine List then reads it.
+  function openSharedWineList(src: { url?: string; fileUri?: string; title?: string; imageUri?: string }) {
+    requireAuth(() => {
+      const st = useScanStore.getState();
+      if (src.imageUri) {
+        st.setImage(src.imageUri, 'upload');
+        router.push('/scan/wine-list?shared=1' as any);
+        return;
+      }
+      let domain: string | undefined;
+      try { domain = src.url ? new URL(src.url).hostname.replace(/^www\./, '') : undefined; } catch { domain = undefined; }
+      st.setOnlineSource({ url: src.url ?? '', restaurant: '', city: null, title: src.title ?? domain ?? 'Wine list', domain, fileUri: src.fileUri });
+      router.push('/scan/wine-list?online=1' as any);
+    });
+  }
 
   // Generate Wine Intel tile → choose how to find the wine. Each action waits
   // for the pop-up to finish closing; opening a picker or another pop-up while
@@ -577,8 +609,8 @@ export default function ScanLandingScreen() {
         <View style={styles.scanningOverlay}>
           <View style={styles.scanningSheet}>
             <ActivityIndicator color={colors.gold} size="large" />
-            <Text style={styles.scanningTitle}>Reading your wine label…</Text>
-            <Text style={styles.scanningBody}>Vinster is identifying the producer, region and vintage from your photo.</Text>
+            <Text style={styles.scanningTitle}>Reading your photo…</Text>
+            <Text style={styles.scanningBody}>Vinster is checking whether it's a wine label or a wine list, then reading it.</Text>
           </View>
         </View>
       </Modal>
