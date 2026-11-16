@@ -336,6 +336,35 @@ Deno.serve(async (req) => {
           return;
         }
 
+        // Tidy the picks into the shape every app version accepts. A wine Vinster
+        // has no critic data for comes back with criticScore null (never
+        // invented) — older apps reject null and threw the whole result away,
+        // so it's sent as 0, which the results screen shows as "no score".
+        const VA = ['Exceptional', 'Excellent', 'Good', 'Average', 'Challenging', 'Poor'];
+        const DW = ['Too Young', 'Approaching', 'Peak', 'Fading', 'Past Peak'];
+        const RA = ['Very Rare', 'Rare', 'Uncommon', 'Widely Available'];
+        const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+        const str = (v: unknown) => (typeof v === 'string' ? v : '');
+        rec = {
+          ...rec,
+          summary: str(rec?.summary),
+          wines: recWines.slice(0, 3).map((w: any) => {
+            const score = num(w?.criticScore);
+            const va = w?.vintageAssessment ?? {};
+            const dw = w?.drinkingWindow ?? {};
+            const ra = w?.rarityAssessment ?? {};
+            return {
+              ...w,
+              name: str(w?.name), producer: str(w?.producer), region: str(w?.region),
+              vintage: num(w?.vintage),
+              criticScore: score != null && score >= 0 && score <= 100 ? score : 0,
+              vintageAssessment: { label: VA.includes(va.label) ? va.label : 'Good', notes: str(va.notes) },
+              drinkingWindow: { from: num(dw.from), to: num(dw.to), status: DW.includes(dw.status) ? dw.status : 'Peak', notes: str(dw.notes) },
+              rarityAssessment: { label: RA.includes(ra.label) ? ra.label : 'Widely Available', notes: str(ra.notes) },
+            };
+          }),
+        };
+
         await patch({ status: 'done', extracted_wines: wines, result: rec });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

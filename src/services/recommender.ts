@@ -55,7 +55,9 @@ const WineRecommendationSchema = z.object({
   // edge fn), so the main 3-wine call stays light. Optional for back-compat
   // with older cached scans that still carry it.
   rationale: z.string().nullish(),
-  criticScore: z.number().min(0).max(100),
+  // null = Vinster has no critic data for this wine (never invented) — read as 0,
+  // which the results screen shows as "no score".
+  criticScore: z.number().min(0).max(100).nullable().transform((v) => v ?? 0),
   vintageAssessment: VintageAssessmentSchema,
   drinkingWindow: DrinkingWindowSchema,
   rarityAssessment: RarityAssessmentSchema,
@@ -81,7 +83,9 @@ const RecommendationResponseSchema = z.object({
   // out by budget/preferences), not a malformed response. Rejecting it here
   // would surface a generic parse error; extracting.tsx checks the length
   // instead and shows actionable copy about widening the filters.
-  wines: z.array(WineRecommendationSchema).max(3),
+  // Each pick is checked on its own (finalizeRecommendation), so one odd pick
+  // can't throw away the others.
+  wines: z.array(z.unknown()).max(3),
   summary: z.string(),
   topScoringMode: z.boolean().optional(),
 });
@@ -146,10 +150,16 @@ export function finalizeRecommendation(
   raw: unknown,
   input: { wines: ExtractedWine[]; currency?: string; excludeWines?: string[] },
 ): RecommendationResponse {
-  const parsed = RecommendationResponseSchema.safeParse(raw);
-  if (!parsed.success) {
+  const parsedTop = RecommendationResponseSchema.safeParse(raw);
+  if (!parsedTop.success) {
     throw new Error('Could not parse recommendation response.');
   }
+  // Keep every pick that's well-formed; drop (not fail on) any that isn't.
+  const goodWines = parsedTop.data.wines
+    .map((w) => WineRecommendationSchema.safeParse(w))
+    .filter((r): r is z.ZodSafeParseSuccess<z.infer<typeof WineRecommendationSchema>> => r.success)
+    .map((r) => r.data);
+  const parsed = { data: { ...parsedTop.data, wines: goodWines } };
   // INTEGRITY — Vinster never invents or re-states a price. The recommender's
   // job is to select and analyse REAL wines from the scanned list; the price is
   // real data, taken ONLY from the menu the diner is holding (OCR extraction).
