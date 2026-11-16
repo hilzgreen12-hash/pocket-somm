@@ -17,7 +17,9 @@ const WINE_FIELDS = `For each wine return a JSON object with these fields:
 - appellation: specific appellation e.g. "Puligny-Montrachet", "Pauillac" (string, optional)
 - grape: grape variety or blend e.g. "Chardonnay", "Cabernet Sauvignon/Merlot" (string, optional)
 - colour: the wine's colour/type — one of "red", "white", "rose", "sparkling",
-  "orange", "fortified". Infer it from the wine list's SECTION HEADINGS (e.g. a
+  "orange", "sweet", "fortified". Use "sweet" for dessert wines (Sauternes,
+  Barsac, Tokaji, late harvest, ice wine, Vin Santo, Recioto, sweet PX) and
+  "fortified" for Port, Sherry, Madeira, Marsala. Infer it from the wine list's SECTION HEADINGS (e.g. a
   "Rosé" / "Rosés" section, a "Sparkling" / "Champagne" section, "By the Glass"
   sub-headed by colour), then from the grape variety, then the wine name/style.
   Use "rose" (no accent) for rosé/pink wines and "sparkling" for Champagne,
@@ -32,12 +34,15 @@ const WINE_FIELDS = `For each wine return a JSON object with these fields:
   line), a bottle size (75cl, 150cl, 37.5cl, 1.5L, Magnum) or an ABV (12.5%).
   Keep each price with the wine ON ITS OWN LINE / ROW — never shift names or
   prices onto a neighbouring row.
-  IMPORTANT: many wine lists show two or more prices for the same wine —
-  e.g. by-the-glass alongside by-the-bottle (175ml / 250ml / bottle, or
-  similar pour-size columns). When multiple prices are shown for a single
-  wine, always pick the HIGHEST one — that is the bottle price. Do not
-  return the glass price. If a wine is genuinely glass-only (no bottle
-  listed), return that price.
+  IMPORTANT — WHICH PRICE: many lists show several prices per wine (glass /
+  carafe / half bottle / bottle / magnum, often as columns headed "125ml",
+  "175ml", "Btl", "75cl", "1.5L"). Return the STANDARD 75cl BOTTLE price —
+  the column headed Bottle / Btl / 75cl, or when columns are unlabelled, the
+  one that is clearly a full bottle (never a glass, never a magnum). Only when
+  a wine is offered in no 75cl bottle, return the price that is listed and say
+  which in "format".
+- format: the size the price is for — "bottle" (75cl, the usual case), "half"
+  (37.5cl), "magnum" (1.5L) or "glass" (only sold by the glass). (string)
 - currency: the 3-letter currency code of the prices ON THIS LIST (string).
   Use a printed symbol or code if there is one (£ GBP, € EUR, $ USD, CHF, …).
   If NO symbol is printed anywhere, infer it from the list itself — its

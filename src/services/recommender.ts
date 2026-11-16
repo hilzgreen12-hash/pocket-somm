@@ -66,6 +66,11 @@ const WineRecommendationSchema = z.object({
   // Labelled parameter notes (see WineRecommendation). Optional so a
   // response from the pre-upgrade edge function still validates.
   criticScoreNote: z.string().nullable().optional(),
+  // Vinster's own holistic score for the pick (drives the headline number) and a
+  // one-line tasting note. Unlisted fields are stripped by zod, so both must be
+  // named here or they never reach the results screen.
+  vinsterScore: z.number().min(0).max(100).nullish(),
+  flavourProfile: z.string().nullish(),
   // valueNote is the FALLBACK value estimate, shown on the results screen only
   // when live Wine-Searcher market data isn't available for the wine. When WS
   // has data, the real WS comparison is shown instead. The menu price it
@@ -127,6 +132,19 @@ const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/
 // old exact-`norm` compare turned "château" into "ch teau" and lost the price on
 // 2 of 3 picks. Progressive tiers, unambiguous-only so we never attach a wrong
 // price: full identity + vintage → full identity → name + vintage → name.
+// One row from several matches, only when it's clear which: a single hit; or,
+// for a wine listed more than once (by the glass and by the bottle), the single
+// full-bottle row; or rows that all carry the same price. Otherwise none — the
+// price is left unknown rather than guessed.
+function unambiguous(hits: ExtractedWine[]): ExtractedWine | null {
+  if (hits.length === 1) return hits[0];
+  if (hits.length === 0) return null;
+  const bottles = hits.filter((e) => !e.format || e.format === 'bottle');
+  if (bottles.length === 1) return bottles[0];
+  if (bottles.length > 1 && new Set(bottles.map((e) => e.menuPrice)).size === 1) return bottles[0];
+  return null;
+}
+
 function matchExtracted(rec: { producer: string; name: string; vintage: number | null }, list: ExtractedWine[]): ExtractedWine | null {
   const rKey = wineNameKey(rec.producer, rec.name);
   const rNameKey = wineNameKey(null, rec.name);
@@ -139,8 +157,8 @@ function matchExtracted(rec: { producer: string; name: string; vintage: number |
     (e) => !!rNameKey && wineNameKey(null, e.name) === rNameKey,
   ];
   for (const pred of cands) {
-    const hits = list.filter(pred);
-    if (hits.length === 1) return hits[0]; // unambiguous only — never guess a price
+    const hit = unambiguous(list.filter(pred));
+    if (hit) return hit;
   }
   // Final safe fallback: token-SUBSET match. The model sometimes restates a pick's
   // name more (or less) fully than OCR read it — e.g. it echoes the full

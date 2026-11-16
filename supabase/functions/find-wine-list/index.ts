@@ -42,15 +42,19 @@ const WINE_FIELDS = `For each wine return a JSON object with these fields:
 - region: broad region e.g. "Burgundy", "Bordeaux", "Napa Valley" (string)
 - appellation: specific appellation e.g. "Puligny-Montrachet", "Pauillac" (string, optional)
 - grape: grape variety or blend e.g. "Chardonnay", "Cabernet Sauvignon/Merlot" (string, optional)
-- colour: one of "red", "white", "rose", "sparkling", "orange", "fortified".
+- colour: one of "red", "white", "rose", "sparkling", "orange", "sweet", "fortified"
+  ("sweet" = dessert wines such as Sauternes or Tokaji; "fortified" = Port, Sherry, Madeira).
   Infer it from the list's SECTION HEADINGS first, then the grape, then the
   wine name/style. Use "rose" (no accent) for rosé and "sparkling" for
   Champagne, Crémant, Cava, Prosecco etc. null only if impossible to tell.
 - vintage: 4-digit year as integer, or null if non-vintage (number | null)
-- menuPrice: the BOTTLE price as listed (number | null). A bare number in the
-  price position is the price ("45,00" → 45). Never use the vintage, a bin
-  number, a bottle size (75cl, Magnum) or an ABV as the price. When a wine shows
-  several prices (glass / carafe / bottle), use the HIGHEST — the bottle.
+- menuPrice: the STANDARD 75cl BOTTLE price as listed (number | null). A bare
+  number in the price position is the price ("45,00" → 45). Never use the
+  vintage, a bin number, a bottle size (75cl, Magnum) or an ABV as the price.
+  When a wine shows several prices (glass / carafe / half / bottle / magnum),
+  use the 75cl bottle — never a glass, never a magnum.
+- format: "bottle" (75cl, usual), "half", "magnum" or "glass" — the size the
+  price is for. (string)
 - currency: 3-letter code of the prices on this list (£ GBP, € EUR, $ USD, CHF…).
   If no symbol is printed, infer it from the language and place names; only
   if there's nothing to go on, use the fallback currency given below.

@@ -109,6 +109,21 @@ export async function cacheScanLocally(userId: string | null | undefined, input:
   await writeLocal(userId, updated);
 }
 
+// Update the locally cached scan backed by a given scan_sessions row (the
+// restaurant named later, or an alternative set of picks), so View Last Result
+// and Recent Scans replay what the user actually ended up with.
+export async function updateLocalScan(userId: string | null | undefined, sessionId: string, patch: Partial<ScanHistoryItem>) {
+  const existing = await readLocal(userId);
+  if (!existing.some((e) => e.sessionId === sessionId)) return;
+  await writeLocal(userId, existing.map((e) => (e.sessionId === sessionId ? { ...e, ...patch } : e)));
+}
+
+// Keep a scan's saved picks in step with the alternative set the user asked for.
+export async function saveScanRecommendation(userId: string | null | undefined, sessionId: string, recommendation: RecommendationResponse) {
+  await supabase.from('scan_sessions').update({ recommendation }).eq('id', sessionId);
+  await updateLocalScan(userId, sessionId, { recommendation });
+}
+
 export function useScanHistory() {
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -284,6 +299,10 @@ export function useScanHistory() {
         sessionId,
       };
       const existing = await readLocal(session.user.id);
+      // Keep a restaurant name the mount-time entry already had (a Find Online
+      // restaurant) rather than overwriting it with this save's blank one.
+      const earlier = existing.find((e) => e.id === newItem.id);
+      if (!newItem.restaurantName && earlier?.restaurantName) newItem.restaurantName = earlier.restaurantName;
       // Dedupe against the mount-time cacheScanLocally entry for this same scan.
       const updated = [newItem, ...existing.filter((e) => e.id !== newItem.id)].slice(0, MAX_LOCAL);
       await writeLocal(session.user.id, updated);

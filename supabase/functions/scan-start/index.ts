@@ -62,7 +62,9 @@ function foldAccents(s: string | null | undefined): string {
 
 const COLOUR_TOKENS: Record<string, string[]> = {
   red: ['red'], white: ['white'], rose: ['rose'], sparkling: ['sparkling'],
-  'sweet-fortified': ['fortified'], natural: [],
+  // Dessert wines are read as "sweet" (Sauternes, Tokaji) and Port/Sherry as
+  // "fortified"; both answer a "sweet or fortified" request.
+  'sweet-fortified': ['fortified', 'sweet'], natural: [],
 };
 function colourMatches(colour: string | null | undefined, wineTypes: string[]): boolean {
   if (!colour) return false;
@@ -271,7 +273,10 @@ async function handlePoll(admin: SupabaseClient, body: any): Promise<Response> {
     await admin.from('scan_jobs').update({ status: 'error', error: msg, params: { ...j.params, failure: 'stalled' }, updated_at: new Date().toISOString() }).eq('id', jobId);
     return json({ status: 'error', extracted_wines: j.extracted_wines, result: null, error: msg, failure: 'stalled' });
   }
-  return json({ status: j.status, extracted_wines: j.extracted_wines, result: j.result, error: j.error, failure: j.params?.failure ?? null });
+  return json({
+    status: j.status, extracted_wines: j.extracted_wines, result: j.result, error: j.error,
+    failure: j.params?.failure ?? null, photosSent: j.params?.photosSent ?? null, photosFailed: j.params?.photosFailed ?? null,
+  });
 }
 
 // A failure on the phone (before or while sending): logged with its reference
@@ -426,7 +431,9 @@ async function runScanJob(job: ScanJob): Promise<void> {
     // Tidy the picks into the shape every app version accepts (see tidyPick).
     rec = { ...rec, summary: typeof rec?.summary === 'string' ? rec.summary : '', wines: recWines.slice(0, 3).map(tidyPick) };
 
-    await patch({ status: 'done', extracted_wines: wines, result: rec });
+    // How many photos couldn't be read, so the app can say so beside the picks.
+    const photos = sourceUrl ? {} : { photosSent: images.length, photosFailed: failures.length };
+    await patch({ status: 'done', extracted_wines: wines, result: rec, params: { ...params, ...photos } });
     log('done', { picks: rec.wines.length });
   } catch (err) {
     const fe = err instanceof FnError ? err : null;

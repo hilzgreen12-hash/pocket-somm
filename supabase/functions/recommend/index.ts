@@ -244,6 +244,7 @@ Deno.serve(async (req) => {
 
     const colourLabels: Record<string, string> = {
       red: 'red', white: 'white', rose: 'rosé', sparkling: 'sparkling',
+      'sweet-fortified': 'sweet (dessert) or fortified',
     };
 
     const colourLine = wineTypes?.length

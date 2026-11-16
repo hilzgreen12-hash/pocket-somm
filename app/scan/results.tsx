@@ -12,7 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useScanStore } from '../../src/stores/scanStore';
-import { useScanHistory, cacheScanLocally } from '../../src/hooks/useScanHistory';
+import { useScanHistory, cacheScanLocally, updateLocalScan, saveScanRecommendation } from '../../src/hooks/useScanHistory';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
@@ -95,6 +95,20 @@ function joinPlace(appellation?: string | null, region?: string | null): string 
   if (al.includes(rl)) return a;
   if (rl.includes(al)) return r;
   return `${a}, ${r}`;
+}
+
+// Does Wine-Searcher's matched name look like this pick? True when it shares a
+// distinctive word of the producer (or, with no usable producer word, of the
+// wine's name). Generic words ("Château", "Estate", "Winery"…) don't count. An
+// absent matched name is accepted, as before.
+const GENERIC_WINE_WORDS = new Set(['chateau', 'domaine', 'domaines', 'estate', 'estates', 'winery', 'wines', 'wine', 'vineyards', 'vineyard', 'cellars', 'tenuta', 'bodega', 'bodegas', 'cantina', 'weingut', 'maison', 'quinta', 'casa', 'clos', 'cuvee', 'reserve', 'grand', 'blanc', 'rouge', 'rose', 'brut', 'cru']);
+function sameWineByName(producer: string | null | undefined, name: string | null | undefined, wsName: string | null | undefined): boolean {
+  if (!wsName) return true;
+  const words = (t: string | null | undefined) => (t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .split(/[^a-z0-9]+/).filter((x) => x.length >= 4 && !GENERIC_WINE_WORDS.has(x));
+  const ws = new Set(words(wsName));
+  const own = words(producer).length ? words(producer) : words(name);
+  return own.length === 0 || own.some((x) => ws.has(x));
 }
 
 // Up to n wines taken evenly across the whole list, keeping its order — so a
@@ -367,6 +381,10 @@ export default function ResultsScreen() {
         const cur = w.currency || userPrefs?.defaultCurrency || 'GBP';
         const p = await fetchPricing(queryName, w.vintage ?? null, cur);
         if (p.source !== 'wine-searcher' || p.matched === false) return null;
+        // Wine-Searcher matches loosely; for an obscure pick it can return a
+        // different wine, whose score would then replace Vinster's honest
+        // "no critic consensus". Use it only when it's recognisably this wine.
+        if (!sameWineByName(w.producer, w.name, p.wsWineName)) return null;
         return { criticScore: p.criticScore, avgPrice: p.averageMarketPrice, currency: cur, region: p.region ?? null, grape: p.grape ?? null } as WsEnrich;
       }));
       if (!active) return;
@@ -428,6 +446,8 @@ export default function ResultsScreen() {
         .eq('id', liveSessionId);
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      // …and the local copy, so View Last Result shows the restaurant too.
+      await updateLocalScan(session?.user.id ?? null, liveSessionId, { restaurantName: trimmed || null });
     } catch (err) {
       showAlert({ title: 'Could not save', body: errText(err) });
     }
@@ -760,6 +780,10 @@ export default function ResultsScreen() {
       }
       setRecommendation(newRec);
       setOpenIndex(0);
+      // Save the new picks against this scan, so reopening it (View Last Result,
+      // Recent Scans) shows these rather than the first set.
+      const sid = savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+      if (sid) void saveScanRecommendation(session?.user.id ?? null, sid, newRec).catch(() => {});
     } catch (err) {
       // Keep the current picks, but say why nothing changed.
       const msg = err instanceof Error && /minute|too many|rate limit/i.test(err.message)
@@ -826,6 +850,8 @@ export default function ResultsScreen() {
     // thing to land and the results present quicker. History reuses the saved one.
     const alreadyHave = (isFromHistory && wine.rationale) || (reviewByIndex[i] && reviewByIndex[i].length > 0);
     if (alreadyHave || reviewUnknown.has(i) || reviewLoading.has(i)) return;
+    // The review service needs an account; guests see an invitation instead.
+    if (!session) return;
     setReviewLoading((prev) => new Set(prev).add(i));
     setReviewFailed((prev) => { const n = new Set(prev); n.delete(i); return n; });
     try {
@@ -993,7 +1019,15 @@ export default function ResultsScreen() {
         ) : (
           <View style={styles.restaurantLine}>
             <Text style={styles.restaurantPin}>📍</Text>
-            <TouchableOpacity onPress={() => setEditingRestaurant(true)} activeOpacity={0.7} style={styles.restaurantLineNameTap}>
+            <TouchableOpacity
+              onPress={() => (session
+                ? setEditingRestaurant(true)
+                // Saving a restaurant needs an account — say so up front rather
+                // than failing with "Sign in to save" after they've typed it.
+                : showAlert({ title: 'Create a free account', body: 'Sign in or create a free account to save this restaurant and review your visit.' }))}
+              activeOpacity={0.7}
+              style={styles.restaurantLineNameTap}
+            >
               <Text
                 style={[styles.restaurantLineText, !restaurantName && styles.restaurantLinePlaceholder]}
                 numberOfLines={1}
@@ -1130,7 +1164,8 @@ export default function ResultsScreen() {
                     {priceValue != null && (
                       <Text style={styles.priceScoreText}>
                         {currencySymbol(priceCurrency)}{priceValue}
-                        {priceIsEstimate ? <Text style={styles.priceEstimateTag}> avg</Text> : null}
+                        {/* No menu price was read for this pick — this is the shop price. */}
+                        {priceIsEstimate ? <Text style={styles.priceEstimateTag}> market avg</Text> : null}
                       </Text>
                     )}
                     {priceValue != null && headlineScore != null && (
@@ -1244,6 +1279,7 @@ export default function ResultsScreen() {
                   // ready — never pre-baked. History scans reuse the saved rationale.
                   const reviewText = isFromHistory ? (wine.rationale || reviewByIndex[i]) : reviewByIndex[i];
                   if (reviewText) return <Text style={styles.sommNoteText}>{reviewText}</Text>;
+                  if (!session) return <Text style={styles.sommLoadingText}>Create a free account to read Vinster's Review of each pick.</Text>;
                   if (reviewUnknown.has(i)) return <Text style={styles.sommLoadingText}>Vinster doesn't know this bottle well enough to describe it.</Text>;
                   // Failed (and not currently retrying) → offer a tap-to-retry
                   // rather than an endless spinner (the 429 / rate-limit case).

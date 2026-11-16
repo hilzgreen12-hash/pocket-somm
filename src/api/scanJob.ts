@@ -24,6 +24,9 @@ export interface ScanJobResult {
   error: string | null;
   // The real reason behind an error (small print on the error screen).
   failure?: string | null;
+  // Photos sent / photos that couldn't be read (a done scan can still have some).
+  photosSent?: number | null;
+  photosFailed?: number | null;
 }
 
 // A started job. pollToken is set for GUEST scans (no account, or an expired
@@ -51,7 +54,12 @@ export async function startScanJob(images: string[], params: ScanJobParams, sour
 
 // Read one job's state: from the table for account holders, through scan-start
 // (with the poll token) for guests.
-async function readJob(job: StartedScanJob): Promise<{ status: string; extracted_wines: any; result: any; error: string | null; failure?: string | null } | null> {
+type JobState = {
+  status: string; extracted_wines: any; result: any; error: string | null;
+  failure?: string | null; photosSent?: number | null; photosFailed?: number | null;
+};
+
+async function readJob(job: StartedScanJob): Promise<JobState | null> {
   if (job.pollToken) {
     try {
       return await invokeResilient('scan-start', { action: 'poll', jobId: job.jobId, pollToken: job.pollToken }, { timeoutMs: 15000, retries: 1 }) as any;
@@ -63,7 +71,8 @@ async function readJob(job: StartedScanJob): Promise<{ status: string; extracted
     .eq('id', job.jobId)
     .maybeSingle();
   if (error || !data) return null;
-  return { ...data, failure: (data as any).params?.failure ?? null };
+  const params = (data as any).params ?? {};
+  return { ...data, failure: params.failure ?? null, photosSent: params.photosSent ?? null, photosFailed: params.photosFailed ?? null };
 }
 
 // Report a failure that happened on the phone (before or while sending), with
@@ -98,7 +107,7 @@ export async function pollScanJob(
     if (data) {
       if (data.status !== lastStatus) { lastStatus = data.status; opts?.onStatus?.(data.status); }
       if (data.status === 'done') {
-        return { status: 'done', wines: data.extracted_wines ?? null, recommendation: data.result ?? null, error: null };
+        return { status: 'done', wines: data.extracted_wines ?? null, recommendation: data.result ?? null, error: null, photosSent: data.photosSent ?? null, photosFailed: data.photosFailed ?? null };
       }
       if (data.status === 'error') {
         return { status: 'error', wines: data.extracted_wines ?? null, recommendation: null, error: data.error ?? null, failure: data.failure ?? null };

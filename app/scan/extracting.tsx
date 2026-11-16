@@ -9,6 +9,7 @@ import { prepareScanImageBase64 } from '../../src/services/ocr';
 import { finalizeRecommendation } from '../../src/services/recommender';
 import { startScanJob, pollScanJob, logScanClientError, type StartedScanJob } from '../../src/api/scanJob';
 import { useAuth } from '../../src/hooks/useAuth';
+import { showAlert } from '../../src/components/AppAlert';
 import { isNetworkError } from '../../src/api/invokeResilient';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { colors, spacing } from '../../src/constants/theme';
@@ -144,6 +145,14 @@ export default function ExtractingScreen() {
       router.dismissTo('/scan/wine-list');
       router.push('/scan/results');
       noteHappyMoment('wine-list-scan');
+      // Some photos couldn't be read: the picks are real, but from part of the list.
+      if (outcome.photosFailed && outcome.photosSent && outcome.photosFailed > 0) {
+        const n = outcome.photosFailed;
+        setTimeout(() => showAlert({
+          title: `${n} of ${outcome.photosSent} photos couldn't be read`,
+          body: `Your picks come from the other ${outcome.photosSent! - n === 1 ? 'photo' : 'photos'}. For the full list, retake ${n === 1 ? 'that page' : 'those pages'} — straight on, well lit, and in focus.`,
+        }), 600);
+      }
     } catch (err) {
       if (!token.active) return;
       if (err instanceof Error && err.message === 'cancelled') return;

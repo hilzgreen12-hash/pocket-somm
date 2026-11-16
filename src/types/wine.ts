@@ -10,6 +10,10 @@ export interface ExtractedWine {
   vintage: number | null;
   menuPrice: number | null;
   currency: string;
+  // The size menuPrice is for, when the reader could tell: 'bottle' (75cl),
+  // 'half', 'magnum' or 'glass'. Lets a wine listed twice (by the glass and by
+  // the bottle) still get its bottle price.
+  format?: string | null;
 }
 
 export interface VintageAssessment {
