@@ -1982,9 +1982,24 @@ export default function LabelResultsScreen() {
   const windowM = windowMeta(intel.drinkingWindowStatus);
 
   // The three headline stats are tappable — each opens a short "why" popup.
+  // Critic Score → where this number comes from. Crucially, says when it is NOT
+  // a score for this vintage: an average across a wine's vintages can differ a
+  // good deal from one year's score.
   function openScoreInfo() {
-    const body = intel.criticScoreNote?.trim()
-      || "Vinster's score distils critic consensus and Wine-Searcher's aggregate rating for this wine into a single 100-point mark.";
+    const v = wine?.vintage && wine.vintage !== 'NV' ? wine.vintage : null;
+    const thisVintage = v ? `the ${v} vintage` : 'this wine';
+    let body: string;
+    if (intel.criticScoreBasis === 'vintage') {
+      body = `This is the critics' consensus for ${thisVintage}, from Wine-Searcher's aggregate of published critic scores.`;
+    } else if (intel.criticScoreBasis === 'all-vintage') {
+      body = `Critics' scores for ${thisVintage} aren't available, so this score is guided by the AVERAGE of critics' scores across this wine's vintages, adjusted for how ${v ?? 'this vintage'} compares. A score for one specific vintage can differ a good deal from that average.`;
+    } else if (intel.criticScoreBasis === 'vinster') {
+      body = intel.criticScoreNote?.trim()
+        || `No published critic score was found for ${thisVintage}, so this is Vinster's own estimate of where critics would place it — a guide, not a published score.`;
+    } else {
+      body = intel.criticScoreNote?.trim()
+        || "Vinster's score distils critic consensus and Wine-Searcher's aggregate rating for this wine into a single 100-point mark.";
+    }
     showAlert({ title: 'How Vinster scored this', body });
   }
   function openValueInfo() {

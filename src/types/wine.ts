@@ -144,6 +144,11 @@ export interface GrapeVariant {
 }
 
 export interface WineIntelligence {
+  // Where criticScore comes from: 'vintage' = critics' scores for this vintage
+  // (Wine-Searcher); 'all-vintage' = Vinster's score guided by the average of
+  // critics' scores across the wine's vintages; 'vinster' = Vinster's own
+  // estimate. Absent on older saved results.
+  criticScoreBasis?: 'vintage' | 'all-vintage' | 'vinster';
   // Identity gate (wine-intelligence): false when Vinster does NOT genuinely
   // recognise this as a real, specific wine (misheard / misread / fictional).
   // An unidentified wine carries no estimated facts; generateWineIntel throws

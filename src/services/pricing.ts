@@ -290,13 +290,16 @@ export async function generateWineIntel(
 
   let first: PricingData;
   let intel: WineIntelligence;
+  // What Vinster's score was anchored to (see scoreAnchor) — told to the user.
+  let anchorScope: 'vintage' | 'all-vintage' | undefined;
   if (facts?.criticScore != null) {
     // Fast path: we already hold a real WS score to anchor Claude, so fetch the
     // (volatile) price and generate intel IN PARALLEL rather than waiting for WS.
     [first, intel] = await Promise.all([
       fetchPricingWithAlt(queryName, wineQueryAltName(wine.producer, wine.wineName, wine.region), vintageArg, currency).then((r) => r.pricing),
-      getWineIntelligence(wine, currency, facts.criticScore),
+      getWineIntelligence(wine, currency, facts.criticScore, 'vintage'),
     ]);
+    anchorScope = 'vintage';
   } else {
     // No permanent score yet → keep the original sequence so Claude is still
     // anchored to THIS session's WS score when there is one (no regression).
@@ -304,7 +307,9 @@ export async function generateWineIntel(
     const firstMatched = first.source === 'wine-searcher' && first.matched !== false;
     // Claude fills the rich fields; wsScore anchors its critic score to WS. It also
     // returns wsSearchName — the canonical WS query we retry with on a miss.
-    intel = await getWineIntelligence(wine, currency, ...scoreAnchor(first, firstMatched));
+    const anchor = scoreAnchor(first, firstMatched);
+    anchorScope = anchor[1];
+    intel = await getWineIntelligence(wine, currency, ...anchor);
   }
 
   // Retry Wine-Searcher with Claude's canonical name on a miss (cult-producer gap).
@@ -350,6 +355,10 @@ export async function generateWineIntel(
     criticScore: useWsScore ? wsScore : intel.criticScore,
     // A real WS aggregated score is authoritative — no "why it's missing" note.
     criticScoreNote: useWsScore ? null : (intel.criticScoreNote ?? null),
+    // Where the score comes from, explained when the user taps it: critics'
+    // scores for THIS vintage, Vinster's score guided by the average across the
+    // wine's vintages, or Vinster's own estimate.
+    criticScoreBasis: useWsScore ? 'vintage' : anchorScope === 'all-vintage' ? 'all-vintage' : 'vinster',
     estimatedValue: useWs ? pricing.averageMarketPrice : intel.estimatedValue,
     estimatedValueLow: useWs ? pricing.minPrice : (intel.estimatedValueLow ?? null),
     estimatedValueHigh: useWs ? pricing.maxPrice : (intel.estimatedValueHigh ?? null),
