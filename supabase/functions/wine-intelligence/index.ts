@@ -1,5 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
-import { catalogKey, vintageKey, readVintageFacts, recordIdentifiedWine } from '../_shared/vintageFacts.ts';
+import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine } from '../_shared/vintageFacts.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -90,8 +90,9 @@ Return only the raw JSON — no markdown, no explanation.`;
     // What Vinster has already recorded for this vintage (wine_vintage_facts) —
     // guidance so repeat lookups stay consistent and build on earlier findings.
     const vKey = vintageKey(vintage);
-    const inputKey = producer ? catalogKey(String(producer), wineName ? String(wineName) : null) : '';
-    const recorded = inputKey && vKey ? await readVintageFacts(inputKey, vKey) : null;
+    const recorded = producer && vKey
+      ? await readVintageFacts((await resolveCatalogKey(String(producer), wineName ? String(wineName) : null)).key, vKey)
+      : null;
     const recordedGuidance = recorded && (recorded.critic_score != null || recorded.drink_from != null)
       ? `\n\nVINSTER'S RECORD for this wine and vintage (from earlier lookups, IF this is the same wine):${
           recorded.critic_score != null ? ` critic score ${recorded.critic_score}/100 (${recorded.score_source === 'wine-searcher' ? "critics' consensus for this vintage" : "Vinster's earlier estimate"});` : ''}${
@@ -211,8 +212,6 @@ Return only the raw JSON — no markdown, no explanation.`;
       const canonWine = parsed.canonicalProducer ? parsed.canonicalWineName : (wineName ? String(wineName).trim() : null);
       const wsVintageScore = wsScoreNum != null && !anchorAllVintage;
       const save = (async () => {
-        const key = catalogKey(canonProducer, canonWine);
-        const previous = !vKey ? null : key === inputKey ? recorded : await readVintageFacts(key, vKey);
         await recordIdentifiedWine({
           producer: canonProducer,
           wineName: canonWine,
@@ -224,7 +223,6 @@ Return only the raw JSON — no markdown, no explanation.`;
           scoreSource: wsVintageScore ? 'wine-searcher' : 'vinster',
           drinkFrom: parsed.drinkingWindowFrom,
           drinkTo: parsed.drinkingWindowTo,
-          previous,
         });
       })();
       try { (globalThis as any).EdgeRuntime?.waitUntil?.(save); } catch { await save; }
