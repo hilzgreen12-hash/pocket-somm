@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -68,8 +69,15 @@ Return ONLY a valid JSON object with exactly these ten keys. Set producer / regi
 
 Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "grape": "Syrah", "bottleSizeMl": 750, "confidence": "high", "imageType": "label", "completed": false}`;
 
+// Usage limits per account (or per guest device): generous for real scanning,
+// a stop on loops.
+const HOURLY_LIMIT = 30;
+const DAILY_LIMIT = 120;
+
 Deno.serve(async (req) => {
   try {
+    const limited = await checkRateLimit(req, 'scan-label', HOURLY_LIMIT, DAILY_LIMIT);
+    if (limited) return limited;
     const { base64Image } = await req.json();
 
     // Sonnet (not Haiku) for the vision read: OCR fidelity on the producer name

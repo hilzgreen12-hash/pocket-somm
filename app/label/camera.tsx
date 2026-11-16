@@ -44,6 +44,9 @@ export default function LabelCameraScreen() {
   const contextQuery = context ? `?context=${context}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` : '';
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
+  // Set from the first tap until the read finishes: a quick double tap on the
+  // shutter used to start two paid label reads.
+  const capturingRef = useRef(false);
   const [frameRect, setFrameRect] = useState<FrameRect | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   // Overlay caption while the still is on screen: OCR first, then (intel flow)
@@ -60,6 +63,12 @@ export default function LabelCameraScreen() {
   if (!permission.granted) return <PermissionScreen onRequest={requestPermission} />;
 
   async function handleCapture() {
+    if (capturingRef.current) return;
+    capturingRef.current = true;
+    try { await captureAndRead(); } finally { capturingRef.current = false; }
+  }
+
+  async function captureAndRead() {
     if (!cameraRef.current || previewUri) return;
     setStatus('Reading the label…'); // reset in case the screen is reused
     try {

@@ -18,6 +18,7 @@
 //   <grape>Merlot</grape>
 
 import { createClient } from 'npm:@supabase/supabase-js';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const WINE_SEARCHER_API_KEY = Deno.env.get('WINE_SEARCHER_API_KEY')!;
 // Full request URL template, overridable via secret so the exact endpoint can
@@ -294,6 +295,14 @@ Deno.serve(async (req) => {
     // matches far more strictly than the website's fuzzy search. The all-vintage
     // figure is a better answer than a blank, and still anchors the critic score.
     const hasRealVintage = vintageParam !== 'NV';
+
+    // Saved answers above are free; a real lookup counts towards the usage limit,
+    // which stops one account (or guest) using up the app's 100 daily lookups.
+    // Over the limit, the app sees the usual "Wine-Searcher unavailable" answer.
+    if (await checkRateLimit(req, 'wine-searcher-proxy', 40, 60)) {
+      return new Response(JSON.stringify({ ...UNAVAILABLE, down: true }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
     let result: Awaited<ReturnType<typeof lookupWineSearcher>> = null;
     let priceScope: 'vintage' | 'all-vintage' = 'vintage';
     // Set when a lookup failed transiently (timeout / 5xx / suspension or

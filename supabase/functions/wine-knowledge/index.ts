@@ -1,12 +1,18 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 // "Dive Deeper" wine knowledge — four short, elegant profiles (producer,
 // region, vintage, grape) for a single wine. Distinct from wine-intelligence
 // (scores / value / drinking window): this is editorial background prose.
+const HOURLY_LIMIT = 30;
+const DAILY_LIMIT = 100;
+
 Deno.serve(async (req) => {
   try {
+    const limited = await checkRateLimit(req, 'wine-knowledge', HOURLY_LIMIT, DAILY_LIMIT);
+    if (limited) return limited;
     const { producer, region, wineName, vintage, grape } = await req.json();
 
     const vintageStr = !vintage || vintage === 'NV' ? 'Non-Vintage' : vintage;

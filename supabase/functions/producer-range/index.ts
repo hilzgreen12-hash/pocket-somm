@@ -12,6 +12,7 @@
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -43,6 +44,10 @@ Deno.serve(async (req) => {
       const { data: cached } = await admin.from('producer_range_cache').select('response').eq('cache_key', cacheKey).maybeSingle();
       if (cached?.response) return json(cached.response, 200);
     } catch (e) { console.warn('[producer-range] cache read failed (continuing):', e); }
+
+    // Saved results above are free; only new (paid) work counts towards the limit.
+    const limited = await checkRateLimit(req, 'producer-range', 30, 100);
+    if (limited) return limited;
 
     // Catalog-first: pull this producer's REAL cuvées from Vinster's own
     // wines_catalog (thousands of seeded bottlings) and hand them to Claude as

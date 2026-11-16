@@ -10,6 +10,7 @@
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -74,6 +75,9 @@ Deno.serve(async (req) => {
     } catch (_e) { /* fall through to the LLM */ }
 
     // 2) FALLBACK: LLM, only when the catalog knows nothing of this producer.
+    // Only this paid step counts towards the usage limit.
+    const limited = await checkRateLimit(req, 'wine-candidates', 30, 100);
+    if (limited) return limited;
     const prompt = `A wine label was scanned and identified as:
 - Producer: "${producer ?? ''}"
 - Region: "${region ?? ''}"

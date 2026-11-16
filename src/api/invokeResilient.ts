@@ -12,7 +12,9 @@ import { supabase } from './supabase';
 //
 // This helper adds:
 //   - a per-call timeout (so a dead connection fails fast instead of hanging),
-//   - automatic retry with backoff on TRANSPORT failures only, and
+//   - automatic retry with backoff on CONNECTION failures only — never after a
+//     timeout: a request that timed out has usually reached the server and is
+//     still running (and being paid for), so re-sending it doubled the cost, and
 //   - a tagged NetworkError so the UI can show a "weak signal" message.
 //
 // Crucially it does NOT retry real application errors (429 rate-limit, 400,
@@ -114,6 +116,9 @@ export async function invokeResilient(
         throw err;
       }
       lastError = err;
+      // Timed out: the server is most likely still working on it — don't pay
+      // for the same work twice. Report it as a connection problem instead.
+      if ((err as { name?: string } | null)?.name === 'TimeoutError') break;
     }
 
     // Backoff before the next attempt: 800ms, then 1600ms. Short enough not to

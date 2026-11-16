@@ -514,6 +514,18 @@ export default function LabelResultsScreen() {
   // match, or the read as-is) and drop out of the confirm state.
   async function resolveConfirm(identity: WineDetailsComplete) {
     if (confirmGenerating) return;
+    // A fresh scan confirmed with no vintage: ask for the year FIRST, then build
+    // the card once for it (submitVintage → runGenerate). Building it now meant
+    // building it twice — once without a year, then again with one.
+    if (fresh === '1' && !(identity.vintage ?? '').trim()) {
+      setWineDetailsConfirmed(identity);
+      candidatesTriedRef.current = true;
+      resetPerWineState();
+      setAwaitingConfirm(false);
+      vintagePromptedRef.current = true;
+      setVintagePromptOpen(true);
+      return;
+    }
     setConfirmGenerating(true);
     try {
       const generated = await generateWineIntel(identity, userCurrency);

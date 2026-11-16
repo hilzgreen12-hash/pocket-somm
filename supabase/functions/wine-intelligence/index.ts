@@ -1,5 +1,12 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine } from '../_shared/vintageFacts.ts';
+import { intelCacheKey, readIntelCache, saveIntelCache } from '../_shared/intelCache.ts';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
+
+// Usage limits per account (or guest device) for NEW generations; saved results
+// don't count. Covers scans, searches, compares and reopens.
+const HOURLY_LIMIT = 40;
+const DAILY_LIMIT = 150;
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -90,9 +97,26 @@ Return only the raw JSON — no markdown, no explanation.`;
     // What Vinster has already recorded for this vintage (wine_vintage_facts) —
     // guidance so repeat lookups stay consistent and build on earlier findings.
     const vKey = vintageKey(vintage);
-    const recorded = producer && vKey
-      ? await readVintageFacts((await resolveCatalogKey(String(producer), wineName ? String(wineName) : null)).key, vKey)
-      : null;
+    const catalogKey = producer ? (await resolveCatalogKey(String(producer), wineName ? String(wineName) : null)).key : '';
+
+    // A saved result for this exact request → return it: instant, free, and the
+    // same card (insider note included) every time it's opened.
+    const cacheKey = catalogKey ? intelCacheKey({
+      catalogKey, vintage: vKey, currency: cur, style: styleValue, grape: grapeValue,
+      anchor: wsScoreNum == null ? '-' : `${anchorAllVintage ? 'avg' : 'v'}${wsScoreNum}`,
+    }) : '';
+    if (cacheKey) {
+      const saved = await readIntelCache(cacheKey);
+      if (saved) {
+        return new Response(JSON.stringify(saved), { headers: { 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // New generation from here on — this is what the usage limit counts.
+    const limited = await checkRateLimit(req, 'wine-intelligence', HOURLY_LIMIT, DAILY_LIMIT);
+    if (limited) return limited;
+
+    const recorded = catalogKey && vKey ? await readVintageFacts(catalogKey, vKey) : null;
     const recordedGuidance = recorded && (recorded.critic_score != null || recorded.drink_from != null)
       ? `\n\nVINSTER'S RECORD for this wine and vintage (from earlier lookups, IF this is the same wine):${
           recorded.critic_score != null ? ` critic score ${recorded.critic_score}/100 (${recorded.score_note ?? "Vinster's earlier estimate"});` : ''}${
@@ -202,6 +226,12 @@ Return only the raw JSON — no markdown, no explanation.`;
       typeof parsed.insiderNote === 'string' && parsed.insiderNote.trim()
         ? parsed.insiderNote.trim()
         : "Congratulations, you've discovered a wine that even deep AI can't. Humans win, Cheers!";
+
+    // Save this card for the next identical lookup (after the response is sent).
+    if (cacheKey) {
+      const store = saveIntelCache(cacheKey, parsed);
+      try { (globalThis as any).EdgeRuntime?.waitUntil?.(store); } catch { await store; }
+    }
 
     // Fill Vinster's own database: add the wine to the catalogue if it's new,
     // and record this vintage's score and drinking window. Identified wines only
