@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Keyboard, Linking } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Keyboard, Linking, Platform } from 'react-native';
+import { useAuth } from '../../src/hooks/useAuth';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -14,6 +15,16 @@ import { fonts } from '../../src/constants/fonts';
 // picking a list opens the Scan a List form to set preferences before reading.
 export default function FindOnlineScreen() {
   const setOnlineSource = useScanStore((s) => s.setOnlineSource);
+  const { session } = useAuth();
+
+  // Show the list before choosing it. Android's in-app browser downloads PDFs
+  // rather than showing them, so there a PDF opens in a PDF viewer page.
+  function viewList(r: OnlineListResult) {
+    const url = Platform.OS === 'android' && r.isPdf
+      ? `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(r.url)}`
+      : r.url;
+    WebBrowser.openBrowserAsync(url).catch(() => Linking.openURL(r.url).catch(() => {}));
+  }
   const [restaurant, setRestaurant] = useState('');
   const [city, setCity] = useState('');
   const [searching, setSearching] = useState(false);
@@ -28,6 +39,12 @@ export default function FindOnlineScreen() {
     Keyboard.dismiss();
     // A pasted link skips the search and reads that page directly.
     if (isLink) { read(name, ''); return; }
+    // Each search is a paid web search, so it needs an account (sharing a link
+    // or screenshot into Vinster still works without one).
+    if (!session) {
+      setMessage("Create a free account to search for wine lists online — or open the list in your browser and share it to Vinster.");
+      return;
+    }
     setSearching(true);
     setMessage(null);
     setResults(null);
@@ -127,7 +144,7 @@ export default function FindOnlineScreen() {
                   {/* View List opens the page in the in-app browser to check it;
                       Use List picks it and moves on to the preferences. */}
                   <View style={styles.resultBtns}>
-                    <TouchableOpacity style={styles.resultBtn} onPress={() => { WebBrowser.openBrowserAsync(r.url).catch(() => Linking.openURL(r.url).catch(() => {})); }} activeOpacity={0.8}>
+                    <TouchableOpacity style={styles.resultBtn} onPress={() => viewList(r)} activeOpacity={0.8}>
                       <Text style={styles.resultBtnText}>View List</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.resultBtn, styles.resultBtnGold]} onPress={() => read(r.url, r.title, r.domain)} activeOpacity={0.8}>

@@ -3,6 +3,7 @@ import { View, Text, Image, ActivityIndicator, StyleSheet, Dimensions } from 're
 import { showAlert } from '../../src/components/AppAlert';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useScanStore } from '../../src/stores/scanStore';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
@@ -18,6 +19,22 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { WineDetailsComplete } from '../../src/types/wine';
+
+// "This looks like a wine list" — resolves true to read it as a list, false to
+// carry on with the label.
+function askReadAsList(): Promise<boolean> {
+  return new Promise((resolve) => {
+    showAlert({
+      title: 'This looks like a wine list',
+      body: "Read it as a wine list for Vinster's top three picks?",
+      dismissable: false,
+      buttons: [
+        { text: 'Read Wine List', onPress: () => resolve(true) },
+        { text: "No, it's a label", style: 'cancel', onPress: () => resolve(false) },
+      ],
+    });
+  });
+}
 
 export default function LabelCameraScreen() {
   const { context, backTo } = useLocalSearchParams<{ context?: string; backTo?: string }>();
@@ -99,6 +116,12 @@ export default function LabelCameraScreen() {
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
       const details = await scanLabel(base64);
+      // Photographed a wine LIST with the label camera: offer the list scan.
+      if (details.imageType === 'list' && (await askReadAsList())) {
+        useScanStore.getState().setImage(uri, 'camera');
+        router.replace('/scan/wine-list?shared=1' as any);
+        return;
+      }
       setWineDetails(details);
       // Scan Wine Label (intel) skips the confirm-details step entirely: go
       // straight from the read to the Wine Intel card. The user corrects a

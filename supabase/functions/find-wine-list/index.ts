@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
+import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 // Find Online — read a restaurant's wine list from the web.
@@ -114,7 +115,8 @@ async function resolvesPublic(host: string): Promise<boolean> {
   return all.every((ip) => !privateAddress(ip));
 }
 
-type Fetched = { url: string; kind: 'pdf'; bytes: Uint8Array } | { url: string; kind: 'html'; html: string };
+// 'blocked' = the site answered but refused us (bot protection, login wall).
+type Fetched = { url: string; kind: 'pdf'; bytes: Uint8Array } | { url: string; kind: 'html'; html: string } | { url: string; kind: 'blocked' };
 
 async function fetchPage(raw: string): Promise<Fetched | null> {
   // Follow redirects by hand so every hop is checked.
@@ -138,6 +140,7 @@ async function fetchPage(raw: string): Promise<Fetched | null> {
       current = new URL(loc, u).toString();
       continue;
     }
+    if ([401, 403, 406, 429, 451, 503].includes(res.status)) return { url: u.toString(), kind: 'blocked' };
     if (!res.ok || !res.body) return null;
     const len = Number(res.headers.get('content-length') ?? 0);
     if (len > MAX_BYTES) return null;
@@ -240,7 +243,10 @@ function candidateLinks(html: string, base: string): Link[] {
 
 type Source = { url: string; kind: 'pdf'; bytes: Uint8Array } | { url: string; kind: 'text'; text: string };
 
-async function locateList(startUrl: string): Promise<Source | null> {
+// Find the list starting from a page. `blocked` = the starting page refused
+// Vinster, so "no list found" would be the wrong thing to tell the user.
+async function locateList(startUrl: string): Promise<{ source: Source | null; blocked: boolean }> {
+  let blocked = false;
   const queue: string[] = [startUrl];
   const visited = new Set<string>();
   let fallbackText: { url: string; text: string } | null = null;
@@ -253,7 +259,8 @@ async function locateList(startUrl: string): Promise<Source | null> {
     hops++;
     const page = await fetchPage(next);
     if (!page) continue;
-    if (page.kind === 'pdf') return { url: page.url, kind: 'pdf', bytes: page.bytes };
+    if (page.kind === 'blocked') { if (next === startUrl) blocked = true; continue; }
+    if (page.kind === 'pdf') return { source: { url: page.url, kind: 'pdf', bytes: page.bytes }, blocked };
     const text = htmlToText(page.html);
     const links = candidateLinks(page.html, page.url).filter((l) => !visited.has(l.url)).slice(0, 4);
     const strongPdf = links.some((l) => l.pdf && l.score >= 6);
@@ -261,7 +268,7 @@ async function locateList(startUrl: string): Promise<Source | null> {
       // A long list on the page itself wins. A short one (a "highlights"
       // page) next to a wine-list PDF is probably a taster — read the PDF,
       // keeping this page in case the PDF can't be opened.
-      if (text.length > 6000 || !strongPdf) return { url: page.url, kind: 'text', text };
+      if (text.length > 6000 || !strongPdf) return { source: { url: page.url, kind: 'text', text }, blocked };
       fallbackText = { url: page.url, text };
     }
     // Remember a page with SOME wine on it in case nothing better turns up.
@@ -272,7 +279,7 @@ async function locateList(startUrl: string): Promise<Source | null> {
     for (const l of links) if (!(l.pdf && l.score >= 6)) queue.push(l.url);
     for (const l of links.filter((x) => x.pdf && x.score >= 6).reverse()) queue.unshift(l.url);
   }
-  return fallbackText ? { url: fallbackText.url, kind: 'text', text: fallbackText.text } : null;
+  return { source: fallbackText ? { url: fallbackText.url, kind: 'text', text: fallbackText.text } : null, blocked };
 }
 
 // ---- Reading -------------------------------------------------------------------
@@ -538,6 +545,16 @@ function latestEditions<T extends { url: string; title: string; domain: string }
   return results.filter((r) => out.some((o) => o.url === r.url)).map((r) => out.find((o) => o.url === r.url)!);
 }
 
+async function signedInUser(req: Request): Promise<boolean> {
+  const auth = req.headers.get('Authorization');
+  if (!auth) return false;
+  try {
+    const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: auth } } });
+    const { data: { user } } = await client.auth.getUser();
+    return !!user;
+  } catch { return false; }
+}
+
 // ---- Handler ---------------------------------------------------------------------
 
 Deno.serve(async (req) => {
@@ -547,6 +564,12 @@ Deno.serve(async (req) => {
     const action = body.action;
 
     if (action === 'search') {
+      // Searching costs a paid web search each time, and usage limits need an
+      // account — so searching needs one. (Guests can still share a list's link
+      // or a screenshot into Vinster; those are limited per device by scan-start.)
+      if (!(await signedInUser(req))) {
+        return json({ results: [], error: 'Create a free account to search for wine lists online — or share the list\'s link to Vinster from your browser.' }, 401);
+      }
       const limited = await checkRateLimit(req, 'find-wine-list-search', 20, 60);
       if (limited) return limited;
       if (!SERPER_API_KEY) return json({ results: [], error: 'Search is not configured.' });
@@ -566,9 +589,11 @@ Deno.serve(async (req) => {
       const url = String(body.url ?? '');
       const currency = typeof body.currency === 'string' && /^[A-Z]{3}$/.test(body.currency) ? body.currency : 'GBP';
       if (!safeUrl(url)) return json({ error: 'bad_url', message: "Vinster couldn't open that link." }, 400);
-      const src = await locateList(url);
+      const { source: src, blocked } = await locateList(url);
       if (!src) {
-        return json({ error: 'not_found', message: "Vinster couldn't find a wine list on that website. Try another result, or use Scan a List or Upload a List instead." }, 404);
+        return json(blocked
+          ? { error: 'blocked', message: "This website wouldn't let Vinster in. Tap View List, take a screenshot of the wine list, and share that to Vinster instead." }
+          : { error: 'not_found', message: "Vinster couldn't find a wine list on that website. Try another result, or use Scan a List or Upload a List instead." }, 404);
       }
       const wines = await readSource(src, currency);
       if (!wines.length) {

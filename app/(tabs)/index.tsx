@@ -88,8 +88,18 @@ function colourDotColour(c: string | null | undefined): string {
   }
 }
 
+// Largest PDF that can be shared straight into Vinster (the server reads up to ~10 MB).
+const MAX_SHARED_PDF_BYTES = 10 * 1024 * 1024;
+
+// The web link in a share: the shared URL itself, or the first link in shared
+// text ("Our list (https://…pdf)." → without the trailing bracket and full stop).
+function sharedLink(webUrl: string | null | undefined, text: string | null | undefined): string | null {
+  const raw = webUrl || (text ?? '').match(/https?:\/\/\S+/)?.[0];
+  return raw ? raw.replace(/[)\].,;:!?'"’”>]+$/, '') : null;
+}
+
 export default function ScanLandingScreen() {
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   // Match every other tab page's top spacing so the Vinster mark + title sit at
   // a consistent height across the bottom-nav surfaces.
   const { height } = useWindowDimensions();
@@ -420,22 +430,36 @@ export default function ScanLandingScreen() {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const sharedHandledRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!hasShareIntent) return;
+    // Opening from a share can beat the login restoring — wait for it, or a
+    // signed-in user would be asked to sign in.
+    if (!hasShareIntent || authLoading) return;
     const intent = shareIntent;
     resetShareIntent();
     const files = intent?.files ?? [];
     const pdf = files.find((f) => (f.mimeType ?? '').includes('pdf') || /\.pdf$/i.test(f.path ?? ''));
     const image = files.find((f) => (f.mimeType ?? '').startsWith('image/'));
-    const link = intent?.webUrl || (intent?.text ?? '').match(/https?:\/\/\S+/)?.[0] || null;
-    const key = pdf?.path ?? image?.path ?? link ?? '';
+    const link = sharedLink(intent?.webUrl, intent?.text);
+    const key = pdf?.path ?? image?.path ?? link ?? files[0]?.path ?? intent?.text ?? '';
     if (!key || sharedHandledRef.current === key) return;
     sharedHandledRef.current = key;
     const asUri = (p: string) => (p.startsWith('file://') || p.startsWith('content://') ? p : `file://${p}`);
-    if (pdf?.path) openSharedWineList({ fileUri: asUri(pdf.path), title: pdf.fileName ?? 'Wine list (PDF)' });
-    else if (image?.path) void scanLabelFromUri(asUri(image.path));
-    else if (link) openSharedWineList({ url: link, title: intent?.meta?.title ?? undefined });
+    if (pdf?.path) {
+      // Big PDFs can't be sent whole — the list's web link is the better route.
+      if ((pdf.size ?? 0) > MAX_SHARED_PDF_BYTES) {
+        showAlert({ title: 'That PDF is too large', body: "Vinster can read PDFs up to 10 MB. Share the wine list's web link instead, or a screenshot of the page you want." });
+        return;
+      }
+      openSharedWineList({ fileUri: asUri(pdf.path), title: pdf.fileName ?? 'Wine list (PDF)' });
+    } else if (image?.path) {
+      void scanLabelFromUri(asUri(image.path));
+    } else if (link) {
+      openSharedWineList({ url: link, title: intent?.meta?.title ?? undefined });
+    } else {
+      // A file type or plain text Vinster can't use (a document, a note…).
+      showAlert({ title: "Vinster can't read that", body: 'Share a photo or screenshot of a wine list or label, a PDF wine list, or the web link to a wine list.' });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasShareIntent, shareIntent]);
+  }, [hasShareIntent, shareIntent, authLoading]);
 
   // A wine list that arrived from outside (a shared link, PDF or screenshot):
   // open Wine List Preferences with it ready; Read Wine List then reads it.
