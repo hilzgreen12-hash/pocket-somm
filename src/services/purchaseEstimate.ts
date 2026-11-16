@@ -12,7 +12,7 @@ import type { CellarWine, WineDetailsComplete } from '../types/wine';
 //              a Vinster estimate per bottle).
 export type PurchaseEstimateMode = 'full' | 'market' | 'none';
 
-export function addedDate(w: Pick<CellarWine, 'date_received' | 'created_at'>): string {
+function addedDate(w: Pick<CellarWine, 'date_received' | 'created_at'>): string {
   return w.date_received ?? w.created_at;
 }
 

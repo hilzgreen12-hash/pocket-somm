@@ -6,7 +6,7 @@ import { inferWineStyle } from './wineStyle';
 // Small, data-only insights for the wine card — computed on the phone from data
 // the app already has (no extra AI call).
 
-export type VintageVerdict = {
+type VintageVerdict = {
   rows: (VintageComparisonRow & { ppt: number | null })[];
   bestValueVintage: number | null;
   topScoreVintage: number | null; // highest critic score in the run

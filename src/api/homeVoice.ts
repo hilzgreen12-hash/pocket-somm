@@ -4,8 +4,8 @@ import type { CellarWine } from '../types/wine';
 // The guided Home Voice Command's two server calls (edge function home-voice).
 // The app gathers the answers screen by screen; these run once at the end.
 
-export interface CellarPick { id: string; rank: string; why: string; decant: string | null }
-export interface CellarPicksResult { brief: string; picks: CellarPick[] }
+interface CellarPick { id: string; rank: string; why: string; decant: string | null }
+interface CellarPicksResult { brief: string; picks: CellarPick[] }
 
 export async function chooseFromCellar(input: {
   eating: string;
@@ -52,7 +52,7 @@ export async function chooseFromCellar(input: {
 
 export interface MarketPoint { avg: number | null; min: number | null; max: number | null; currency: string | null; criticScore?: number | null }
 
-export interface DecideResult {
+interface DecideResult {
   names?: string[];
   valueNotes?: string[];
   bestValueIndex?: number | null;
@@ -73,17 +73,8 @@ export async function decideBetween(input: { wines: string[]; eating: string; oc
   return data;
 }
 
-// "£45", "under 30 quid", "around $50" … — used to skip the cost question when
-// the user already steered the budget in their own words.
-export function mentionsBudget(...texts: string[]): boolean {
-  const t = texts.join(' ').toLowerCase();
-  return /[£$€]\s?\d/.test(t)
-    || /\d+\s?(pounds|quid|dollars|euros|bucks)\b/.test(t)
-    || /\b(budget|cheap|inexpensive|affordable|expensive|splurge|price|cost)\b/.test(t);
-}
-
-export interface CompareRow { index: number; name: string; figure: string | null; note: string; tag: string | null }
-export interface CompareResult { intro: string; rows: CompareRow[]; closing: string }
+interface CompareRow { index: number; name: string; figure: string | null; note: string; tag: string | null }
+interface CompareResult { intro: string; rows: CompareRow[]; closing: string }
 
 // Generate Intelligence, compare: side-by-side on what the user asked for,
 // grounded in Wine-Searcher data (never estimated numbers).
@@ -93,7 +84,7 @@ export async function compareWines(input: { wines: string[]; measure: string; ma
   return { intro: data.intro ?? '', rows: Array.isArray(data.rows) ? data.rows : [], closing: data.closing ?? '' };
 }
 
-export interface BuyCandidate { producer: string; wine: string; region?: string | null; why: string }
+interface BuyCandidate { producer: string; wine: string; region?: string | null; why: string }
 
 // Pair, wine for my dish, buying: candidate real bottles. The caller keeps only
 // those Wine-Searcher can find, so nothing unverifiable is ever shown.
@@ -103,16 +94,6 @@ export async function buyCandidates(input: { dish: string; budgetText: string; c
   return { brief: data.brief ?? '', candidates: Array.isArray(data.candidates) ? data.candidates : [] };
 }
 
-export interface IngredientGroup { label: string; items: string }
-
-// Pair, dish for my wine: classic pairing ingredients (null when Vinster can't
-// place the wine at all).
-export async function pairingIngredients(input: { wine: string; allergies: string }): Promise<{ intro: string; groups: IngredientGroup[] } | null> {
-  const data = await invokeResilient('home-voice', { mode: 'ingredients', ...input }) as { identified?: boolean; intro?: string; groups?: IngredientGroup[]; error?: string };
-  if (data?.error) throw new Error(data.error);
-  if (data?.identified === false || !Array.isArray(data?.groups) || !data.groups.length) return null;
-  return { intro: data.intro ?? '', groups: data.groups };
-}
 
 // Free-text answers in the chat.
 export function isYes(t: string): boolean {

@@ -1,17 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { useAuth } from '../../src/hooks/useAuth';
-import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { showAlert } from '../../src/components/AppAlert';
 import { RecipeShareCard } from '../../src/components/RecipeShareCard';
-import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../../src/constants/share';
 import { buildRecipeHtml } from '../../src/utils/recipeHtml';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -33,7 +30,6 @@ export default function RecipeFullScreen() {
   const { sessions: labelSessions, updateNotes, save: saveLabelSession } = useChefLabelHistory();
   const shareCardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
-  const [printing, setPrinting] = useState(false);
   // The user's own pairing notes on this saved recipe (chef_label_sessions
   // .user_notes, migration 036). Editable via the "Add Your Pairing Notes" link.
   const savedSession = sessionId ? labelSessions.find((row) => row.id === sessionId) : null;
@@ -114,30 +110,6 @@ export default function RecipeFullScreen() {
       }
     } finally {
       setSharing(false);
-    }
-  }
-
-  async function handlePrint() {
-    if (!pairing || printing) return;
-    setPrinting(true);
-    try {
-      // Lazy require so this file typechecks before expo-print lands in
-      // node_modules. The next EAS build installs it; until then the
-      // catch below shows a graceful fallback message.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const Print = require('expo-print');
-      // Print uses the clean white-paper layout (buildPrintHtml), not the branded
-      // share card — it was written for exactly this but never wired in.
-      await Print.printAsync({ html: buildPrintHtml(pairing, wineLine) });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('Cannot find module') || msg.includes("Can't find variable")) {
-        showAlert({ title: 'Print not available yet', body: 'Print will work in the next app build.' });
-      } else if (!msg.toLowerCase().includes('cancel')) {
-        showAlert({ title: 'Could not print', body: msg });
-      }
-    } finally {
-      setPrinting(false);
     }
   }
 
@@ -227,7 +199,7 @@ export default function RecipeFullScreen() {
         {/* The "Get Vinster" footer is retired from the on-screen card (it still
             appears on the shared/printed export via buildRecipeHtml). */}
 
-        {(sharing || printing) && (
+        {sharing && (
           <View style={styles.busyOverlay}>
             <ActivityIndicator color={colors.gold} />
           </View>
@@ -279,60 +251,6 @@ export default function RecipeFullScreen() {
   );
 }
 
-// Build the printable HTML version. Different aesthetic from the in-app
-// view — white background, dark text, clean serif — designed to look
-// like a proper recipe document on paper. Footer carries the Get Vinster
-// CTA so the printout still drives the brand.
-function buildPrintHtml(pairing: Pairing, wineLine: string): string {
-  const esc = (s: string) =>
-    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const ingredients = pairing.recipe.ingredients.map((i) => `<li>${esc(i)}</li>`).join('');
-  const method = pairing.recipe.instructions.map((step, i) => `<li>${esc(step)}</li>`).join('');
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>${esc(pairing.dishName)} — Vinster</title>
-<style>
-  body { font-family: Georgia, 'Times New Roman', serif; color: #1A1A1A; margin: 40px; line-height: 1.5; }
-  .brand { text-align: center; letter-spacing: 6px; font-size: 14px; color: #8A6A1F; text-transform: uppercase; margin-bottom: 6px; }
-  .brand-sub { text-align: center; font-style: italic; color: #8A6A1F; font-size: 13px; margin-bottom: 24px; }
-  .to-pair { text-align: center; font-size: 13px; color: #555; text-transform: uppercase; letter-spacing: 2px; }
-  .wine { text-align: center; font-size: 22px; font-weight: bold; margin: 4px 0 28px; }
-  hr { border: none; border-top: 1px solid #DDD; margin: 16px 0 24px; }
-  h1 { font-size: 28px; margin: 0 0 4px; font-weight: bold; }
-  .chef { font-style: italic; color: #444; margin-bottom: 4px; }
-  .meta { color: #666; font-size: 14px; margin-bottom: 24px; }
-  h2 { font-size: 16px; text-transform: uppercase; letter-spacing: 2px; color: #8A6A1F; margin: 24px 0 8px; }
-  p, li { font-size: 14px; }
-  ul, ol { padding-left: 20px; }
-  ul li { margin-bottom: 4px; }
-  ol li { margin-bottom: 10px; }
-  .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #DDD; text-align: center; font-size: 13px; color: #555; }
-  .footer .get { letter-spacing: 4px; color: #8A6A1F; font-weight: bold; }
-  .footer .url { color: #1A1A1A; font-weight: bold; margin-top: 4px; }
-</style></head><body>
-  <div class="brand">Recipe Pairing</div>
-  <div class="brand-sub">Generated by Vinster</div>
-  <div class="to-pair">To pair with</div>
-  <div class="wine">${esc(wineLine || '')}</div>
-  <hr/>
-  <h1>${esc(pairing.dishName)}</h1>
-  <div class="chef">Inspired by ${esc(pairing.chefInspiration)}${pairing.chefCountry ? `, ${esc(pairing.chefCountry)}` : ''}</div>
-  <div class="meta">Serves ${esc(String(pairing.recipe.servings))} · Prep ${esc(pairing.recipe.prepTime)} · Cook ${esc(pairing.recipe.cookTime)}</div>
-  <h2>Pairing notes</h2>
-  <p>${esc(pairing.pairingNotes)}</p>
-  <h2>Introduction</h2>
-  <p>${esc(pairing.introduction)}</p>
-  <h2>Ingredients</h2>
-  <ul>${ingredients}</ul>
-  <h2>Method</h2>
-  <ol>${method}</ol>
-  <div class="footer">
-    <div class="get">GET VINSTER</div>
-    <div>${esc(VINSTER_TAGLINE)}</div>
-    <div class="url">${VINSTER_INSTALL_URL.replace(/^https?:\/\//, '')}</div>
-  </div>
-</body></html>`;
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -349,9 +267,7 @@ const styles = StyleSheet.create({
   ruleMark: { color: colors.gold, fontSize: 12, marginHorizontal: spacing.sm },
 
   toPair: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center' },
-  // "Add / Edit Your Pairing Notes" — centred gold link under the wine name.
-  addNotesLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: spacing.sm },
-  yourNotesBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.text, textAlign: 'center', lineHeight: 22, marginTop: spacing.sm, paddingHorizontal: spacing.xl },
+
   // Your-pairing-notes editor.
   notesOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.xl },
   notesSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg },
@@ -375,12 +291,6 @@ const styles = StyleSheet.create({
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.xs },
   body: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },
   bullet: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24, marginBottom: 4 },
-
-  footerRule: { height: 1, backgroundColor: 'rgba(224,184,74,0.45)', marginTop: spacing.xxl, marginBottom: spacing.md },
-  footerBlock: { alignItems: 'center', paddingBottom: spacing.lg },
-  footerHeadline: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.gold, letterSpacing: 4 },
-  footerTagline: { fontFamily: fonts.headingItalic, fontSize: 14, color: 'rgba(255,255,255,0.70)', marginTop: 6, textAlign: 'center' },
-  footerUrl: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF', marginTop: 6, letterSpacing: 0.5 },
 
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
   emptyTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center' },

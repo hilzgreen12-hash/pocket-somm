@@ -7,7 +7,7 @@ import { supabase } from '../../src/api/supabase';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../../src/services/googleAuth';
 import { signInWithApple, isAppleAuthAvailable, isAppleSignInCancelled } from '../../src/services/appleAuth';
 import { SOCIAL_SIGN_IN_ENABLED } from '../../src/constants/features';
-import { colors, typography, spacing } from '../../src/constants/theme';
+import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
 export default function SignUp() {
@@ -248,18 +248,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.headingSemibold,
     fontSize: 16,
   },
-  skipLink: {
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
-    marginTop: spacing.lg,
-  },
-  // Underlined skip link — button-style navigation.
-  skipLinkText: {
-    color: '#FFFFFF',
-    fontFamily: fonts.headingItalic,
-    fontSize: 15,
-    textDecorationLine: 'underline',
-  },
+
   // "Already have an account?" navigation link — button-like.
   link: {
     fontFamily: fonts.headingRegular,

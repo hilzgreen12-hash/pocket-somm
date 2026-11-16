@@ -1,8 +1,7 @@
-import { normalisePriceText, parsePriceText } from '../../src/utils/priceInput';
+import { normalisePriceText } from '../../src/utils/priceInput';
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share, ScrollView } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
@@ -10,17 +9,14 @@ import { showAlert } from '../../src/components/AppAlert';
 import { DateInput } from '../../src/components/DateInput';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
 import { DrinkingWindowSheet } from '../../src/components/winecard/DrinkingWindowSheet';
 import { PlaceWinesSheet } from '../../src/components/winecard/PlaceWinesSheet';
-import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
-import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { SpiritBadge } from '../../src/components/SpiritBadge';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { hasRealInsiderNote } from '../../src/constants/insiderNote';
@@ -32,7 +28,7 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useRackStore } from '../../src/stores/rackStore';
-import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
+import { fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { valueWine, isWineNotFound, fetchVintageComparison, isWineSearcherUnavailable, type VintageComparisonRow } from '../../src/services/pricing';
 import { wineQueryName } from '../../src/utils/wineIdentity';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine, clearSlot } from '../../src/api/racks';
@@ -40,7 +36,7 @@ import { getBins } from '../../src/api/bins';
 import { fetchPlacementsForWine, placedCount, clearLocationPlacements, releaseBottlesFromPlacements, releaseFromLocation, addLocationPlacement, moveBottlesToLocation } from '../../src/api/placements';
 import { releaseHomeBottles } from '../../src/services/moveBottles';
 import { effectiveMaturity } from '../../src/utils/maturity';
-import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals, stampPurchasePriceDate } from '../../src/api/cellar';
+import { addCellarWine, addCellarWineRemoval, stampPurchasePriceDate } from '../../src/api/cellar';
 import { generateServingSuggestion, generateMarketVintage, generateRarity, generateVintageVerdict, generatePairingIngredients, type VintageVerdictAI, type PairingIngredient } from '../../src/api/wineExtras';
 import { PairingIngredientsCard } from '../../src/components/winecard/PairingIngredientsCard';
 import { GenerateRecipesCard, ServingGlance, ComplementaryPairings, CellarPickRow } from '../../src/components/winecard/ServeSections';
@@ -51,11 +47,10 @@ import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { evictCachedLabel, getCachedLabelUri } from '../../src/api/labelImageCache';
-import { LabelThumb } from '../../src/components/LabelThumb';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
-import { fetchStorageLocations, assignWineToStorageLocation, assignWineToCase, deleteEmptyCasesForLocation, fetchStorageLocationCases, fetchStorageCasesByIds } from '../../src/api/storageLocations';
+import { fetchStorageLocations, assignWineToCase, deleteEmptyCasesForLocation, fetchStorageCasesByIds } from '../../src/api/storageLocations';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { PackagingPrompt } from '../../src/components/PackagingPrompt';
@@ -97,32 +92,6 @@ const STATUS_LABELS: Record<string, string> = {
   unknown: 'Unknown',
 };
 
-// Read-only summary row on the wine card. Bottle count and date only —
-// the note-editing affordance lives in the archive folder so this card
-// stays focused on the live cellar view.
-function RemovalRow({ removal }: { removal: { id: string; removed_at: string; count: number; note: string | null } }) {
-  const dateLabel = new Date(removal.removed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  return (
-    <View style={styles.removalRow}>
-      <View style={styles.removalHeader}>
-        <Text style={styles.removalCount}>{removal.count} {removal.count === 1 ? 'bottle' : 'bottles'}</Text>
-        <View style={styles.removalDateWrap}>
-          <Text style={styles.removalDate}>{dateLabel}</Text>
-          {removal.note && removal.note.trim() ? (
-            <TouchableOpacity
-              onPress={() => showAlert({ title: dateLabel, body: removal.note!.trim() })}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.removalNoteLink}>Note</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </View>
-    </View>
-  );
-}
-
 export default function CellarWineDetail() {
   useKeepAwake();
   const { wineId, from, fromRackId, fromRow, fromCol, place } = useLocalSearchParams<{ wineId: string; from?: string; fromRackId?: string; fromRow?: string; fromCol?: string; place?: string }>();
@@ -146,7 +115,7 @@ export default function CellarWineDetail() {
     enabled: !!session?.user.id,
   });
   const { preferences } = usePreferences();
-  const { setWineDetailsConfirmed, setPairings, setFilters, setError } = useLabelStore();
+  const { setWineDetailsConfirmed } = useLabelStore();
   const { setPendingWineId, setPendingAddMode } = useRackStore();
   const qc = useQueryClient();
   const { wines: archivedWines, isLoading: archiveLoading } = useArchive();
@@ -155,7 +124,6 @@ export default function CellarWineDetail() {
   const wine = wines.find((w) => w.id === wineId)
     ?? archivedWines.find((w) => w.id === wineId);
   const isArchived = !!wine?.archived_at;
-
 
   const rackIds = racks.map((r) => r.id);
   const { data: slotAssignments = [] } = useQuery({
@@ -198,10 +166,6 @@ export default function CellarWineDetail() {
     queryFn: () => fetchCellarLocations(session!.user.id),
     enabled: !!session?.user.id,
   });
-  // Cellar List "Location" filters this wine is filed under. Without this the
-  // card only checked rack placement, so a wine filed ONLY in a Location kept
-  // showing "Add to Location" as if it had none.
-  const wineLocations = locations.filter((l) => l.wineIds?.includes(wineId ?? ''));
 
   // Other Home Storage (storage_locations) — also valid "Add to
   // Location" destinations. A wine filed here lives via
@@ -211,15 +175,6 @@ export default function CellarWineDetail() {
     queryFn: () => fetchStorageLocations(session!.user.id),
     enabled: !!session?.user.id,
   });
-  const wineStorageLocation = storageLocations.find((l) => l.id === wine?.storage_location_id) ?? null;
-  // If this wine is boxed in a case within its home storage location, resolve the
-  // case so the placement line can read "Location Name - Case name".
-  const { data: storageCases = [] } = useQuery({
-    queryKey: ['storage-location-cases', wine?.storage_location_id],
-    queryFn: () => fetchStorageLocationCases(wine!.storage_location_id!),
-    enabled: !!wine?.storage_location_id && !!wine?.case_id,
-  });
-  const wineCase = wine?.case_id ? storageCases.find((c) => c.id === wine.case_id) ?? null : null;
   // The location whose membership a pending add/remove applies to.
   const [pendingLocationId, setPendingLocationId] = useState<string | null>(null);
   const [removeLocationId, setRemoveLocationId] = useState<string | null>(null);
@@ -286,7 +241,6 @@ export default function CellarWineDetail() {
   const [moving, setMoving] = useState(false);
   const [addingBottles, setAddingBottles] = useState(false);
 
-  const [findingPairings, setFindingPairings] = useState(false);
   const [postingReview, setPostingReview] = useState(false);
   const [reviewPosted, setReviewPosted] = useState(false);
 
@@ -356,19 +310,10 @@ export default function CellarWineDetail() {
   const [noIntelDismissed, setNoIntelDismissed] = useState(false);
   useEffect(() => { setNoIntelDismissed(false); setAutoGenFailed(false); }, [wine?.id]);
 
-  const [reviewExpanded, setReviewExpanded] = useState(false);
+  const [] = useState(false);
   // The review is now edited only through the canonical EditCellarReviewModal,
   // never inline on the card. This opens it.
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
-
-  // +Add Review goes straight to the review input screen — no "create vs import"
-  // prompt. Any review the user already wrote in Dine → Your Wine Reviews is
-  // pulled in automatically by the auto-link effect below, so there's nothing to
-  // import by hand; the user just writes their review (append-only) and Back
-  // returns them to this wine intel screen.
-  function openAddReview() {
-    setReviewModalOpen(true);
-  }
 
   // Auto-link an existing review: if this cellar wine carries no review yet but
   // the user already reviewed it in Your Wine Reviews (same producer/name/vintage),
@@ -413,10 +358,10 @@ export default function CellarWineDetail() {
   // Vinster's Note — collapsed by default now (was always visible).
   // The "(what's this)" link surfaces a short explanation modal so a
   // user encountering the field for the first time knows what it is.
-  const [vinstersNoteOpen, setVinstersNoteOpen] = useState(false);
+  const [] = useState(false);
   // On-demand card sections (generated when first opened, then cached on the wine).
-  const [servingOpen, setServingOpen] = useState(false);
-  const [marketOpen, setMarketOpen] = useState(false);
+  const [] = useState(false);
+  const [] = useState(false);
   // Live per-vintage Wine-Searcher table (same as the Wine Intel screen).
   const [vintageRows, setVintageRows] = useState<VintageComparisonRow[] | null>(null);
   // Written market & vintage summary — the fallback when Wine-Searcher has no
@@ -436,12 +381,7 @@ export default function CellarWineDetail() {
   // (Refresh / Regenerate to update).
   const [cardTab, setCardTab] = useState<'overview' | 'market' | 'somm' | 'cellar'>('overview');
 
-  // Off-screen share card for "Share outside the app" — captured to
-  // PNG and handed to the native share sheet. Same pattern Wine
-  // Reviews uses.
-  const reviewShareRef = useRef<View>(null);
-  const [sharingOutside, setSharingOutside] = useState(false);
-  const [reviewSharePayload, setReviewSharePayload] = useState<React.ComponentProps<typeof WineReviewShareCard> | null>(null);
+  const [] = useState(false);
 
   // Same off-screen-capture pattern for the top-right "Share" on the wine
   // card itself — shares Vinster's intelligence (scores, value, tasting note).
@@ -714,16 +654,6 @@ export default function CellarWineDetail() {
     );
   }
 
-  // Send the wine to a rack grid for visual placement. `addMode` = are these NEW
-  // bottles (bump quantity) or EXISTING ones being placed/moved (quantity
-  // unchanged)? Passing addMode:true for "Add to Location" (placing already-counted
-  // bottles) double-counted them by adding the placed count to quantity.
-  function placeInRack(rackId: string, addMode: boolean) {
-    setPendingWineId(wine!.id);
-    setPendingAddMode(addMode);
-    router.push(`/cellar/rack/${rackId}` as any);
-  }
-
   // Place EXISTING unplaced bottles: open the rack in select-slots mode, capped at
   // the unplaced count. The user taps that many empty slots (thumbnails fill) and
   // presses Confirm — no "how many?" prompt or starting-slot run.
@@ -920,31 +850,6 @@ export default function CellarWineDetail() {
         { text: 'Bin (diamonds)', onPress: () => router.push('/cellar/bin/resize' as any) },
         { text: 'Alt Cellar', onPress: () => router.push('/cellar/storage-location/new' as any) },
         { text: 'Cancel', style: 'cancel' as const },
-      ],
-    });
-  }
-
-  function handleAddBottlesEntry() {
-    // "+ Add bottles" → choose a destination first: a live rack/fridge for
-    // visual placement, or the Cellar List for a plain count bump. We do NOT
-    // list bespoke Location folders here — folders are managed in the Cellar
-    // List itself, and offering them here filed bottles into the wrong place.
-    const dests: { text: string; onPress: () => void }[] = [
-      // Genuinely NEW bottles → placing them bumps the quantity.
-      ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id, true) })),
-      { text: 'Cellar List', onPress: startAddToCellarList },
-    ];
-    if (dests.length === 1) {
-      // Only the Cellar List option (no racks/fridges yet) — skip the prompt.
-      dests[0].onPress();
-      return;
-    }
-    showAlert({
-      title: 'Add to',
-      body: 'Where are these bottles going?',
-      buttons: [
-        ...dests,
-        { text: 'Cancel', style: 'cancel' as const, onPress: () => { setPendingWineId(null); setPendingAddMode(false); setPendingLocationId(null); } },
       ],
     });
   }
@@ -1485,14 +1390,6 @@ export default function CellarWineDetail() {
     }
   }
 
-  // The Your Review chevron just expands/collapses the read-only note now —
-  // editing happens in EditCellarReviewModal, so there's no save-on-collapse
-  // (which previously saved date-stamp-only reviews). Personal Notes still
-  // uses the inline auto-save pattern below.
-  function toggleReview() {
-    setReviewExpanded((v) => !v);
-  }
-
   async function handleRemoveWine() {
     // Respects the quantity entered in the Archive/Delete sheet. Deleting FEWER
     // than all bottles of a LIVE wine is a partial delete — decrement the row
@@ -1757,61 +1654,6 @@ export default function CellarWineDetail() {
     });
   }
 
-  // Share the review as a branded PNG card via the native share sheet
-  // (WhatsApp, Messages, Instagram, etc.). Mirrors the Wine Reviews
-  // share flow so all three Vinster review surfaces use the same card.
-  async function handleShareReviewOutside() {
-    if (!wine || sharingOutside) return;
-    const headerLine = (() => {
-      const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
-      return sameName
-        ? [wine.producer, wine.vintage].filter(Boolean).join(' ')
-        : [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
-    })();
-    let labelUri: string | null = null;
-    if (wine.label_image_path) {
-      try { labelUri = await getCachedLabelUri(wine.label_image_path); } catch { /* no photo */ }
-    }
-    setReviewSharePayload({
-      producer: wine.producer,
-      wineName: wine.wine_name,
-      vintage: wine.vintage,
-      region: wine.region,
-      userScore: wine.review_score,
-      criticScore: wine.critic_score,
-      tastingNote: wine.review_note ?? wine.user_notes ?? '',
-      otherObservations: null,
-      date: wine.review_date ? new Date(wine.review_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null,
-      location: wine.review_location ?? null,
-      isFavourite: wine.is_favourite,
-      imageUri: labelUri,
-    });
-    setSharingOutside(true);
-    try {
-      // One paint to let the off-screen card mount with the new props.
-      await new Promise((r) => setTimeout(r, 250));
-      if (reviewShareRef.current && (await Sharing.isAvailableAsync())) {
-        const uri = await captureRef(reviewShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine review') });
-        return;
-      }
-      // Plain-text fallback for devices without share-sheet support.
-      const note = (wine.review_note ?? '').trim();
-      const noteFormatted = note ? `\n\n"${note}"` : '';
-      const scoreText = wine.review_score != null ? `\nMy score: ${wine.review_score}/100` : '';
-      const locFormatted = wine.review_location ? `\nWhere: ${wine.review_location}` : '';
-      await Share.share({
-        message: `${headerLine}${scoreText}${locFormatted}${noteFormatted}${VINSTER_TEXT_SHARE_FOOTER}`,
-        title: headerLine,
-      });
-    } catch (err) {
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSharingOutside(false);
-      setReviewSharePayload(null);
-    }
-  }
-
   async function handleShareIntel() {
     if (!wine || sharingIntel) return;
     const headerLine = (() => {
@@ -1897,17 +1739,6 @@ export default function CellarWineDetail() {
     router.push(`/chef/review-requirements?from=cellar&wineId=${wine.id}`);
   }
 
-  if (findingPairings) {
-    return (
-      <SearchProgress
-        title="Crafting your pairings…"
-        subtitle="Vinster needs up to a minute for your result"
-        body="Vinster is selecting three chef-inspired dishes to complement your wine"
-        durationMs={60000}
-      />
-    );
-  }
-
   // Drinking-window status — use the SINGLE canonical derivation (maturity.ts,
   // the same one the Full Cellar List filter, Cellar Statistics and the Drink Now
   // carousel use), so the status shown on the card always matches the bucket the
@@ -1943,12 +1774,6 @@ export default function CellarWineDetail() {
   const bottlesInCellar = wines.filter(matchesIdentity).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
   const archivedMatches = archivedWines.filter(matchesIdentity);
   const bottlesInArchive = archivedMatches.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
-  // Most-recent archive date + bottle size among the matching archived bottles,
-  // for the "Bottles in My Archive" stat (e.g. "1x75cl, 24/06/26").
-  const lastArchivedAt = archivedMatches.reduce<string | null>((latest, w) => {
-    if (!w.archived_at) return latest;
-    return !latest || new Date(w.archived_at).getTime() > new Date(latest).getTime() ? w.archived_at : latest;
-  }, null);
   const archiveBottleMl = archivedMatches.find((w) => w.bottle_size_ml)?.bottle_size_ml ?? wine.bottle_size_ml ?? 750;
 
   function bottleLabel(n: number) {
@@ -1968,98 +1793,6 @@ export default function CellarWineDetail() {
 
   // Full wine identity for the note popups: producer · cuvée · region · vintage.
   const noteWineLine = formatWineTitle({ producer: wine.producer, wineName: wine.wine_name, region: wine.region, vintage: wine.vintage });
-
-  // ---------------------------------------------------------------------------
-  // Card blocks, extracted because a CELLAR-LIST card and an ARCHIVED card put
-  // them in different slots. A cellar wine's card must keep its original shape
-  // (Your Review beside Cellar Note; Serving Suggestions full-width), while an
-  // archived card reads as a record of a wine that's gone: Cellar Note beside
-  // Archive Note, then Your Review beside Vinster's Review — no serving advice,
-  // no market comparison. The same wine seen from the Full Cellar List is a
-  // different row (not archived_at), so it keeps the cellar-list shape even
-  // when its siblings are archived.
-  // ---------------------------------------------------------------------------
-  function renderYourReviewCol() {
-    const hasReview = wine!.review_score != null || wine!.review_note || wine!.review_location || wine!.review_date || wine!.user_drinking_window;
-    const reviewHref = hasReview
-      ? `/wines/chosen?openCellarReview=${wine!.id}${archiveReviewReturn}`
-      : `/wines/chosen?openCellarReviewInput=${wine!.id}${archiveReviewReturn}`;
-    return (
-      <View style={styles.reviewCol}>
-        {/* The chevron opens this wine's review in Your Wine Reviews when one
-            exists, or jumps straight to the review input when it doesn't. */}
-        <View style={styles.vinsterHeaderRow}>
-          <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-            <Text style={styles.vinsterReviewTitle}>Your Review</Text>
-            <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-          </TouchableOpacity>
-        </View>
-        {hasReview ? (
-          <TouchableOpacity onPress={() => router.push(reviewHref as any)} activeOpacity={0.7}>
-            <Text style={styles.reviewScoreLine} numberOfLines={1}>
-              {wine!.review_score != null ? <Text style={styles.reviewScoreValue}>{wine!.review_score}/100</Text> : null}
-              {wine!.review_score != null && wine!.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
-              {wine!.review_date ? (
-                <Text style={styles.reviewScoreDate}>
-                  {new Date(wine!.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </Text>
-              ) : null}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-    );
-  }
-
-
-
-  // Serving Suggestions toggle — cellar-list cards only (full-width row).
-  function renderServingHeader() {
-    return (
-      <View style={styles.vinsterHeaderRow}>
-        <TouchableOpacity onPress={() => setServingOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-          <Text style={styles.vinsterReviewTitle}>Serving Suggestions</Text>
-          <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  function renderVinstersReviewHeader() {
-    return (
-      <View style={styles.vinsterHeaderRow}>
-        <TouchableOpacity onPress={() => setVinstersNoteOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-          <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
-          <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // Vinster's AI tasting note — the body always lays out full width, whichever
-  // column its toggle lives in.
-  function renderVinstersReviewBody() {
-    if (!vinstersNoteOpen) return null;
-    return (
-      <View style={styles.reviewExpandedFull}>
-        {wine!.tasting_notes ? (
-          <>
-            <Text style={styles.tastingNotes}>{wine!.tasting_notes}</Text>
-            {/* The former "(what's this)" explainer, now shown inline. */}
-            <Text style={styles.vinsterExplainer}>
-              Vinster digs deeply into the online world for critic scores and reviews, vintage information, market values, and overall producer quality to generate information on this wine and use it for the basis of its wine note, which covers the classics — fruit, acidity, tannin, body, and finish. Your own thoughts can be recorded in "Your Review" and "Personal Notes" on the wine card.
-            </Text>
-          </>
-        ) : refreshingValue ? (
-          <Text style={styles.tastingNotes}>Generating Vinster's review…</Text>
-        ) : (
-          <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
-            <Text style={styles.generateNoteBtnText}>Generate</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  }
 
   // ---- Wine card (layout E): label hero, tabs, four panels -----------------
   const tabList: { id: 'overview' | 'market' | 'somm' | 'cellar'; label: string }[] = [
@@ -2131,7 +1864,6 @@ export default function CellarWineDetail() {
   const archiveHistory = [...archivedMatches]
     .filter((a) => a.archived_at)
     .sort((a, b) => new Date(b.archived_at!).getTime() - new Date(a.archived_at!).getTime());
-
 
   // Overview stats bar → Value: where the market value came from.
   function openCardValueInfo() {
@@ -2753,7 +2485,6 @@ export default function CellarWineDetail() {
         onClose={() => setPhotoViewerOpen(false)}
       />
 
-
       <Modal visible={grapeConfirmOpen} transparent animationType="fade" onRequestClose={() => setGrapeConfirmOpen(false)}>
         <View style={styles.candOverlay}>
           <View style={styles.candSheet}>
@@ -2918,15 +2649,6 @@ export default function CellarWineDetail() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
-
-      {/* Off-screen share card for the Share button on Your Review.
-          Mounted only while a share is in flight. */}
-      {reviewSharePayload && (
-        <View style={styles.shareCardWrap} pointerEvents="none">
-          <WineReviewShareCard ref={reviewShareRef} {...reviewSharePayload} />
-        </View>
-      )}
 
       {/* Off-screen share card for the top-right "Share" on the wine card. */}
       {intelSharePayload && (
@@ -3352,7 +3074,7 @@ const styles = StyleSheet.create({
   wcLabel: { fontFamily: fonts.bodyRegular, fontSize: 10.5, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' },
   wcValue: { fontFamily: fonts.bodySemibold, fontSize: 19, color: colors.text },
   wcGoldValue: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
-  wcGoldTitle: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold },
+
   wcSmall: { fontFamily: fonts.bodyRegular, fontSize: 12.5, color: 'rgba(255,255,255,0.85)' },
   wcSmallItalic: { fontFamily: fonts.bodyItalic, fontSize: 12, color: 'rgba(255,255,255,0.85)' },
   wcBodyText: { fontFamily: fonts.bodyRegular, fontSize: 14.5, lineHeight: 22, color: colors.text },
@@ -3384,15 +3106,7 @@ const styles = StyleSheet.create({
   wcVerdict: { marginTop: 6, padding: spacing.sm, borderRadius: 12, backgroundColor: 'rgba(224,184,74,0.08)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', gap: 8 },
   wcVerdictPoint: { fontFamily: fonts.bodyRegular, fontSize: 14.5, color: colors.text, lineHeight: 22 },
   wcVerdictPointGold: { fontFamily: fonts.bodySemibold, color: colors.gold },
-  wcChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  wcChip: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', fontFamily: fonts.bodyRegular, fontSize: 12.5, color: colors.text, overflow: 'hidden' },
-  wcChipGold: { borderColor: colors.gold, color: colors.gold },
-  wcChipGreen: { borderColor: colors.gold, color: colors.gold },
-  wcPairings: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: 14, borderWidth: 1, borderColor: colors.gold },
-  wcPairingsSub: { fontFamily: fonts.bodyItalic, fontSize: 13, lineHeight: 19, color: 'rgba(255,255,255,0.9)' },
-  wcPick: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, padding: spacing.sm, borderRadius: 10, backgroundColor: 'rgba(224,184,74,0.08)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)' },
-  wcPickName: { fontFamily: fonts.headingBold, fontSize: 16, color: colors.text },
-  wcPickNone: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+
   wcRarityRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   wcRarityMeter: { flex: 1, flexDirection: 'row', gap: 4 },
   wcRarityStep: { flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.2)' },
@@ -3403,61 +3117,7 @@ const styles = StyleSheet.create({
   errorText: { color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 16 },
   // Cormorant — action link reads as a button
   linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
-  backRow: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
-  // Inter — back/nav link
-  // Back / Share share one Cormorant face, regular weight, first-letter cap —
-  // level with the bold WINE CARD title between them.
-  backText: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.gold },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
-  // Cormorant — card-type header title, bold + uppercase.
-  cardTypeLabel: {
-    fontFamily: fonts.headingBold,
-    fontSize: 16,
-    color: colors.gold,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    flex: 1,
-    textAlign: 'center',
-    marginHorizontal: spacing.md,
-  },
-  topBarActions: { flexDirection: 'column', alignItems: 'flex-end', gap: 6 },
-  // Right-edge spacer balancing the Back arrow so the card-type label centres.
-  topBarSpacer: { width: 24 },
-  topBarShareText: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.gold },
-  favouriteStar: { fontSize: 28, color: 'rgba(255,255,255,0.55)', lineHeight: 28 },
-  favouriteStarActive: { color: colors.gold },
-  header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  headerTextCol: { flex: 1 },
-  addedDate: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  // Date added, centred under the 'Cellar Wine' chip with a gap before the name.
-  addedDateTop: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.md },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
-  // Grape (left) + Added (right) on one line; Edit on its own line below.
-  grapeRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 2 },
-  editRow: { alignItems: 'flex-end', marginTop: 2 },
-  // Subtle gold "Edit" link on the date line — opens the title editor.
-  editTitleLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline' },
-  titleEditOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  titleEditSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  titleEditHeading: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
-  // Archive History table — date / bottles / note across one row per event.
-  ahRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm },
-  ahHeadRow: { borderBottomColor: colors.gold },
-  ahCell: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, lineHeight: 19 },
-  ahHeadCell: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  ahColDate: { width: 68 },
-  ahColCount: { width: 74, textAlign: 'center' },
-  ahColNote: { flex: 1 },
-  photoSaving: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: spacing.sm },
-  // Match the Wine Intel card's label image (larger, 3:4 portrait).
-  detailThumb: { width: 120, height: 160 },
-  // Inter — wine card name (card content, not a page header)
-  headerLine: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text, lineHeight: 28 },
-  // Inter — region caption
-  region: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
-  // Inter — grape caption
-  grape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold },
+
   // "Confirm this wine" grape prompt — mirrors the scan flow's confirm popup.
   candOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   candSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%', maxWidth: 440 },
@@ -3474,34 +3134,13 @@ const styles = StyleSheet.create({
   candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  // Non-standard bottle format line under the grape (e.g. "150cl bottle").
-  bottleFormat: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 2 },
-  tastingBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  // Inter — info label
-  infoLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  // Inter — info value read-out
-  infoValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, textAlign: 'right' },
-  // Inter — small caption sub
-  infoSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'right', marginTop: 2 },
-  section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
-  // Reviews group — one header over Vinster's / Your Review / Personal Notes,
-  // each a borderless subsection so they read as one consistent block.
-  reviewsHeader: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, marginBottom: spacing.xs },
-  reviewPriceRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, backgroundColor: colors.surface, marginBottom: spacing.md },
-  reviewPriceCurrency: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, marginRight: 4 },
-  reviewPriceInput: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm },
-  autoSaveHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginBottom: spacing.sm },
-  reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
-  // The Inside Line + producer range — mirrored from the scan Wine Intel card.
-  insiderSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+
   // "Dive deeper into this wine →" link beneath the inside line — matches the
   // scan Wine Intel card (moved here from a button at the bottom of the screen).
   diveDeeperLink: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, marginTop: spacing.sm },
   insiderTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   insiderBody: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 23 },
-  rangeSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
-  rangeTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+
   rangeHint: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.sm },
   rangeLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   rangeLoadingText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
@@ -3517,32 +3156,7 @@ const styles = StyleSheet.create({
   rangeBandThis: { color: colors.gold },
   rangeTier: { fontSize: 10, fontFamily: fonts.bodyRegular, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 1 },
   rangeSummary: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 21, marginTop: spacing.md },
-  // Two-column review row: Personal Notes (left) beside Your Review (right).
-  // The row carries the horizontal padding; each column just flexes.
-  reviewRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, gap: spacing.lg, alignItems: 'flex-start' },
-  reviewCol: { flex: 1, paddingTop: spacing.sm },
-  // An expanded Your Review / Cellar Note / Vinster's Review / Vinster's Map
-  // body laid out across the full card width, below the two-column header row.
-  reviewExpandedFull: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
-  reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
-  // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
-  vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  vinsterReviewTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: '#FFFFFF' },
-  // Full-width separator between card sections.
-  cardDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.md },
-  // Field label + dictation mic on one row.
-  dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: 6 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  // Cormorant — section header
-  sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
-  // "Your Review" gets a larger subheader treatment vs other section titles.
-  reviewSectionTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text },
-  // Cormorant — edit link reads as a button
-  editLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
-  // Inter — tasting notes body
-  tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
-  // The inlined "what's this" explainer shown in italics after Vinster's Review.
-  vinsterExplainer: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 19, marginTop: spacing.sm },
+
   // "Generate" button shown inside Vinster's Review when there's no note yet.
   // On-demand Serving Suggestions / Market & Vintage dropdown bodies.
   servingLine: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22, marginBottom: spacing.md },
@@ -3551,41 +3165,21 @@ const styles = StyleSheet.create({
   servingBubble: { backgroundColor: 'rgba(224,184,74,0.06)', borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.lg },
   servingTitle: { fontFamily: fonts.bodySemibold, color: colors.gold },
   marketMissingNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.md },
-  servingSubhead: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+
   // Per-vintage Wine-Searcher table — mirrors the Wine Intel screen.
   vintageLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
-  vintageTable: { marginTop: 4 },
-  vintageRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
-  vintageHeadRow: { borderBottomColor: colors.gold },
-  vintageRowThis: { backgroundColor: 'rgba(224,184,74,0.10)' },
-  vintageCell: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text },
-  vintageHeadCell: { fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.6 },
-  vintageColYear: { flex: 1 },
-  vintageColScore: { flex: 1, textAlign: 'center' },
-  vintageColPrice: { flex: 1, textAlign: 'right' },
+
   vintageFootnote: { fontSize: 11, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
   generateNoteBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.xs, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   generateNoteBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
-  // Vinster's Review toggle — mirrors the List results "Sommelier Note":
-  // gold uppercase label + chevron, centred, with the "(what's this)"
-  // explainer link beside it.
-  vinsterReviewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  vinsterReviewToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
-  vinsterReviewToggleText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2 },
+
   // (toggle label intentionally Cormorant, matching the List Sommelier Note toggle)
   // Inter — form label
   fieldLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   // Inter — form input
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
   buttonDisabled: { opacity: 0.6 },
-  // Inter — cancel link inside modal (not a button)
-  cancelText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14 },
-  // Inter — note body
-  noteText: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 22 },
-  cellarNoteEditInline: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold },
-  noteInput: { minHeight: 90, textAlignVertical: 'top' },
-  noteActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },
-  removeBlock: { paddingTop: spacing.sm },
+
   removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   // Cormorant — button text
   removeBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
@@ -3593,20 +3187,10 @@ const styles = StyleSheet.create({
   // Cormorant — button text
   removeWineBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
   archivedDeleteBtn: { marginHorizontal: spacing.xl, marginBottom: spacing.lg },
-  // Inter — subtle small info (archived date)
-  archivedAt: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.5 },
-  removalRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  removalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  removalDateWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  // Count + date match the drinking-window read-out (statValue) size/font.
-  removalCount: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
-  removalDate: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
-  // Gold "Note" link beside the date, shown when the removal carries a note.
-  removalNoteLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
+
   // Char-count hint under the removal note field in the archive modal.
   removeNoteHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: -2, marginBottom: spacing.sm },
-  // Inter — subtle hint
-  removalArchiveHint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
+
   removeModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   removeModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   // Cormorant — remove modal title
@@ -3619,9 +3203,7 @@ const styles = StyleSheet.create({
   removeModalCancel: { alignItems: 'center', paddingVertical: spacing.sm },
   // Inter — cancel link (not a button)
   removeModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
-  removeModalOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  // Cormorant — modal OK button text
-  removeModalOkText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+
   // Inter — caption status
   rackRemovalMsg: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', marginTop: spacing.md },
   chefBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
@@ -3629,9 +3211,7 @@ const styles = StyleSheet.create({
   // Cormorant — button text
   chefBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  archiveAccessBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.md },
-  // Cormorant — button text
-  archiveAccessBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+
   // Yellow Export button above Archive/Delete — matches archiveAccessBtn footprint.
   exportBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md },
   exportBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
@@ -3644,82 +3224,20 @@ const styles = StyleSheet.create({
   archiveModalCancel: { alignItems: 'center', marginTop: spacing.md },
   // Inter — cancel link (not a button)
   archiveModalCancelText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14 },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  // Full-width "label left, value/action right" rows used for Purchase
-  // and Estimated value — these get their own single-line treatment so the
-  // CTAs are scannable instead of cramped into the 50%-wide grid.
-  valueRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
-  // Inter — value label
-  valueLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  // Inter — value read-out
-  valueText: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text, flexShrink: 1, textAlign: 'right' },
-  // Inter — muted variant
-  valueTextMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
-  // Cormorant — action link reads as a button
-  valueAction: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
-  valueEditBlock: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, justifyContent: 'flex-end' },
-  // Inter — form input
-  valueInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minWidth: 80, maxWidth: 120, textAlign: 'right' },
-  // Inter — subtle cancel
-  valueCancel: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  // Cormorant — save button text
-  valueSave: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
-  scoreNoteBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
-  // Inter — note label
-  scoreNoteLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
-  // Inter — note body
-  scoreNoteText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 18 },
-  statCell: {
-    width: '50%',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-  },
-  // Inter — stat label
-  statLabel: {
-    fontSize: 11,
-    fontFamily: fonts.bodySemibold,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  // Inter — stat value read-out
-  statValue: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemibold,
-    color: colors.text,
-    lineHeight: 20,
-  },
+
   // Inter — muted variant
   statValueMuted: {
     color: colors.textMuted,
     fontFamily: fonts.bodyItalic,
   },
-  // Estimated Value shown in gold with an inline "(update)" link.
-  estimatedValueGold: {
-    color: colors.gold,
-  },
-  // Gold note under an auto-estimated purchase price, prompting an update.
-  priceEstimatedNote: {
-    fontFamily: fonts.bodyItalic,
-    fontSize: 12,
-    color: colors.gold,
-    textDecorationLine: 'underline',
-    marginTop: 2,
-  },
+
   estimateUpdateLink: {
     fontFamily: fonts.bodyRegular,
     fontSize: 13,
     color: colors.gold,
     textDecorationLine: 'underline',
   },
-  // Inter — small caption sub
-  statSub: {
-    fontSize: 12,
-    fontFamily: fonts.bodyRegular,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
+
   // Cormorant — action link reads as a button
   statAction: {
     fontSize: 12,
@@ -3731,21 +3249,7 @@ const styles = StyleSheet.create({
   // Same size as the storage location names above (wcRowText).
   cellarCommand: { fontSize: 14.5, marginTop: 6 },
   cellarCommandRule: { height: 1, backgroundColor: 'rgba(255,255,255,0.18)', marginTop: 6, marginBottom: 2 },
-  // Informational (non-tappable) placement note — muted italic.
-  statActionMuted: {
-    fontSize: 12,
-    fontFamily: fonts.bodyItalic,
-    color: colors.textMuted,
-    marginTop: 4,
-  },
-  // External-cellar placement line — same weight as a link but not tappable
-  // (external cellars aren't browsable), so no arrow and the neutral text colour.
-  statActionPlain: {
-    fontSize: 12,
-    fontFamily: fonts.headingSemibold,
-    color: colors.text,
-    marginTop: 4,
-  },
+
   // Inter — subtle cancel
   statCancel: {
     fontSize: 12,
@@ -3771,40 +3275,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
-  // Inter — subtle "(what's this)" inline link
-  whatsThisLink: {
-    fontFamily: fonts.bodyItalic,
-    fontSize: 13,
-    color: colors.textMuted,
-    textDecorationLine: 'underline',
-    marginLeft: spacing.sm,
-  },
-  // Inter — personal notes hint
-  personalNotesHint: {
-    fontFamily: fonts.bodyItalic,
-    fontSize: 13,
-    color: colors.textMuted,
-    marginTop: -spacing.sm,
-    marginBottom: spacing.md,
-  },
-  // Your Review quick-stats row — Score / Where / When at a glance.
-  reviewQuickStats: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  // Collapsed "Your Review" summary line: score in gold, then the date.
-  reviewScoreLine: { marginTop: 2 },
-  // Collapsed cellar-note preview — keep the app font/colour (not the default
-  // black system font) so it matches how it reads when expanded.
-  cellarNotePreview: { marginTop: 2, fontFamily: fonts.bodyItalic, fontSize: 13, color: 'rgba(255,255,255,0.8)' },
-  reviewScoreValue: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
-  reviewScoreDash: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted },
-  reviewScoreDate: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted },
-  // Gold "+ Add Review" link (no review yet) + "Edit Review" link (review exists).
-  addReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: 0 },
-  // "View Full Review(s)" link — drills to the wine's review card.
-  viewFullReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: spacing.xs, textDecorationLine: 'underline' },
+
   // Cellar Note popup.
   addDestRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, borderBottomWidth: 1, borderBottomColor: colors.border },
   addDestName: { flex: 1, fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
@@ -3839,51 +3310,7 @@ const styles = StyleSheet.create({
   cnSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
   cnSaveText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   cnCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
-  cnCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  reviewEmptyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.sm },
-  reviewEntryBlock: { marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
-  reviewEntryMeta: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginBottom: 4 },
-  reviewEntryBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22, marginTop: 2 },
-  reviewEntryBodyMuted: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, lineHeight: 20, marginTop: 2 },
-  editReviewLink: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', marginTop: spacing.sm, textAlign: 'center' },
-  // Inter — user written review body
-  reviewNoteBody: {
-    fontFamily: fonts.bodyItalic,
-    fontSize: 16,
-    color: colors.text,
-    lineHeight: 22,
-    marginBottom: spacing.md,
-  },
-  // Share-to-community + Share buttons under Your Review.
-  reviewShareRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  reviewShareBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.gold,
-    borderRadius: 14,
-    paddingVertical: 7,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Cormorant — share button text
-  reviewShareBtnText: {
-    fontFamily: fonts.headingSemibold,
-    fontSize: 14,
-    color: colors.gold,
-    textAlign: 'center',
-  },
-  // Small "(coming soon)" sub-line under the Share to Community label.
-  reviewShareBtnSub: {
-    fontFamily: fonts.bodyRegular,
-    fontSize: 11,
-    color: colors.textMuted,
-    marginTop: 1,
-  },
+
   // Hides the off-screen branded share card while it's mounted for
   // capture by react-native-view-shot.
   shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },

@@ -18,7 +18,7 @@ type RawRow = { id: string; producer: string | null; wine_name: string | null; v
 type TableName = 'labels' | 'chosen_wines' | 'cellar_wines';
 interface RowRef { table: TableName; id: string }
 
-export interface BackfillResult {
+interface BackfillResult {
   total: number;       // distinct wine identities examined
   resolved: number;    // identities Wine-Searcher matched to an id
   unresolved: number;  // identities Wine-Searcher couldn't identify

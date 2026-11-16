@@ -3,11 +3,11 @@ import { View, Text, ScrollView, Pressable, TouchableOpacity, TextInput, StyleSh
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
-import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, removeWineFromCell, binCellLabels, binDiamondCount } from '../../../src/api/bins';
+import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, binCellLabels, binDiamondCount } from '../../../src/api/bins';
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { RenameModal } from '../../../src/components/RenameModal';
 import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
-import { updateCellarWine, archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWine, getCellarWineById } from '../../../src/api/cellar';
+import { updateCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWine, getCellarWineById } from '../../../src/api/cellar';
 import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, fetchPlacementsForWines, placedCount } from '../../../src/api/placements';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { useCellar } from '../../../src/hooks/useCellar';

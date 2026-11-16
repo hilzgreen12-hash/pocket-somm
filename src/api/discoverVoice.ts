@@ -2,9 +2,9 @@ import { invokeResilient } from './invokeResilient';
 import type { CellarWine } from '../types/wine';
 import { getCellarContext } from './cellarContext';
 
-export type DiscoverIntent = 'cellar_mood' | 'consult' | 'intel' | 'my_data' | 'unclear';
+type DiscoverIntent = 'cellar_mood' | 'consult' | 'intel' | 'my_data' | 'unclear';
 
-export interface DiscoverVoiceResult {
+interface DiscoverVoiceResult {
   intent: DiscoverIntent;
   // cellar_mood
   picks?: { id: string; rank: string; why: string }[];

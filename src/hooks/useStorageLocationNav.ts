@@ -12,7 +12,7 @@ import { useStorageOrder, storageKey } from './useStorageOrder';
 // header ‹ › arrows + swipe on the rack / bin / storage-location screens so they
 // hop through the whole set rather than dead-ending within one type.
 
-export type StorageNavKind = 'rack' | 'bin' | 'location';
+type StorageNavKind = 'rack' | 'bin' | 'location';
 
 export interface StorageNavEntry {
   id: string;
@@ -27,7 +27,7 @@ function routeFor(kind: StorageNavKind, id: string): string {
   return `/cellar/rack/${id}`;
 }
 
-export interface StorageLocationNav {
+interface StorageLocationNav {
   locations: StorageNavEntry[];
   indexOf: (id: string) => number;
   prev: (id: string) => StorageNavEntry | null;

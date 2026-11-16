@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPosts, createPost, deletePost, toggleLike, getComments, addComment } from '../api/community';
-import type { CommunityPost, CommunityComment } from '../types/wine';
+import type { CommunityPost } from '../types/wine';
 
 export function usePosts() {
   const qc = useQueryClient();

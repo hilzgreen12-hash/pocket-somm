@@ -140,5 +140,4 @@ const styles = StyleSheet.create({
   option: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   optionName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
   optionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  hint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
 });

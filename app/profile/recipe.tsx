@@ -207,7 +207,7 @@ export default function RecipeProfileScreen() {
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, paddingHorizontal: spacing.md },
-  backRow: { paddingTop: 70, paddingBottom: spacing.md },
+
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   // Standard header bar (matches Find a Wine Pairing).
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 80, marginBottom: spacing.md },

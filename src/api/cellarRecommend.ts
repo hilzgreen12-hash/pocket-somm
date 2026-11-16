@@ -3,7 +3,7 @@ import type { CellarWine } from '../types/wine';
 
 // One of Vinster's three mood picks — the cellar wine id, a short evocative
 // rank label, and a justification tying the wine to the user's stated mood.
-export interface MoodPick {
+interface MoodPick {
   id: string;
   rank: string;
   why: string;

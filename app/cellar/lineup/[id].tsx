@@ -10,7 +10,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLineupArchive, lineupSignedUrl, setLineupNote, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupWine } from '../../../src/api/lineups';
 import * as ImagePicker from 'expo-image-picker';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
@@ -34,10 +33,7 @@ import { useCellar } from '../../../src/hooks/useCellar';
 import { useChosenWines } from '../../../src/hooks/useChosenWines';
 import { useLabels } from '../../../src/hooks/useLabels';
 import { findWineConnections } from '../../../src/utils/wineConnections';
-import { generateWineIntel } from '../../../src/services/pricing';
 import { useLabelStore } from '../../../src/stores/labelStore';
-import { useLastIntelStore } from '../../../src/stores/lastIntelStore';
-import { usePreferences } from '../../../src/hooks/usePreferences';
 import { SearchProgress } from '../../../src/components/SearchProgress';
 import { Modal } from 'react-native';
 import { colors, spacing } from '../../../src/constants/theme';
@@ -54,8 +50,6 @@ export default function LineupDetailScreen() {
     enabled: !!id,
   });
 
-  const { preferences } = usePreferences();
-  const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const [genIntel, setGenIntel] = useState(false);
   // Where this lineup review/intel flow should return to on Back.
   const backToLineup = `&backTo=${encodeURIComponent(`/cellar/lineup/${id}`)}`;
@@ -100,11 +94,6 @@ export default function LineupDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photoFailed, lineup?.image_path]);
 
-  function openNameEdit() {
-    if (!lineup) return;
-    setNameDraft(lineup.name ?? '');
-    setNameOpen(true);
-  }
   async function saveName() {
     if (!lineup || savingName) return;
     setSavingName(true);
@@ -131,44 +120,6 @@ export default function LineupDetailScreen() {
     } catch (err) {
       showAlert({ title: 'Could not save title', body: err instanceof Error ? err.message : 'Please try again.' });
     }
-  }
-
-  // Write the note to the DB (no local setState — callers own that). The lineup
-  // refetch this triggers won't clobber the live draft: hydration is one-shot.
-  async function saveNoteToDb(next: string) {
-    if (!lineup) return;
-    try {
-      await setLineupNote(lineup.id, next.trim() || null);
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
-    } catch (err) {
-      showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-  // Mic dictation fires on every interim chunk — update the copy live, but debounce
-  // the DB write so a single dictation is one save, not dozens.
-  const noteSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function onNoteDictate(next: string) {
-    setNote(next);
-    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
-    noteSaveTimer.current = setTimeout(() => { void saveNoteToDb(next); }, 900);
-  }
-  // Immediate persist for clearing (trash / mic clear).
-  function persistNote(next: string) {
-    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
-    setNote(next);
-    void saveNoteToDb(next);
-  }
-  function confirmClearNote() {
-    if (!note.trim()) return;
-    showAlert({
-      title: 'Clear these notes?',
-      body: 'This removes your lineup notes & musings.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: () => persistNote('') },
-      ],
-    });
   }
 
   // Persist an updated wines array (used by tick-to-confirm and cellar-matching).
@@ -304,9 +255,6 @@ export default function LineupDetailScreen() {
   const [restaurantPickerOpen, setRestaurantPickerOpen] = useState(false);
   const [savingMatch, setSavingMatch] = useState(false);
   const [restaurantSearch, setRestaurantSearch] = useState('');
-  // The user can say this lineup has no matching review — dismissed locally so
-  // the prompt stays hidden for THIS lineup. Loaded once the id is known.
-  const [noMatchDismissed, setNoMatchDismissed] = useState(false);
   const matchedRestaurant = lineup?.restaurant_session_id
     ? restaurantArchive.find((a) => a.id === lineup.restaurant_session_id) ?? null
     : null;
@@ -326,20 +274,12 @@ export default function LineupDetailScreen() {
     }
   }
 
-  const noMatchKey = `lineup-nomatch-${id}`;
-  useEffect(() => {
-    AsyncStorage.getItem(noMatchKey).then((v) => setNoMatchDismissed(!!v)).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-  async function dismissNoMatch() {
-    try { await AsyncStorage.setItem(noMatchKey, '1'); } catch { /* non-fatal */ }
-    setNoMatchDismissed(true);
+  // "No matching review" in the picker: just close it.
+  function dismissNoMatch() {
     setRestaurantPickerOpen(false);
   }
-  // Remove the match and bring the "Match to a review?" question back.
+  // Remove the lineup's link to a restaurant review.
   async function unmatchLineup() {
-    try { await AsyncStorage.removeItem(noMatchKey); } catch { /* non-fatal */ }
-    setNoMatchDismissed(false);
     await matchRestaurant(null);
   }
 
@@ -562,23 +502,6 @@ export default function LineupDetailScreen() {
       ],
     });
   }
-
-  // "Archive from cellar" on a single lineup wine row.
-  function archiveOneLineupWine(w: LineupWine) {
-    const cw = cellarWines.find((c) => c.id === w.cellar_wine_id);
-    if (!cw) return;
-    const label = wineHeaderLine(cw.producer, cw.wine_name, cw.vintage) || cw.wine_name;
-    const n = Math.min(w.count ?? 1, cw.quantity ?? 1);
-    showAlert({
-      title: 'Archive from your cellar?',
-      body: `Move ${n} ${n === 1 ? 'bottle' : 'bottles'} of ${label} from your cellar into your archive?`,
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive', onPress: () => { archiveCellarBottles([w]).catch((err) => showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' })); } },
-      ],
-    });
-  }
-
 
   // Branded share (photo + date + note), mirroring Your Lineup Library.
   const [shareData, setShareData] = useState<{ url: string; date: string; note: string } | null>(null);
@@ -1089,26 +1012,20 @@ const styles = StyleSheet.create({
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   backLink: { fontSize: 15, color: colors.gold },
-  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
-  // Small white label above the title — same size as the date/location stamp.
-  // Matches the Full Cellar List page header (Your Cellar List) — 22 / headingBold.
-  headerTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.8, marginTop: spacing.lg },
+
   // "Title" — the lineup's own name, the large heading (was the page title's font); stays gold.
   titleInput: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, paddingVertical: 4, marginTop: spacing.xs, alignSelf: 'stretch', paddingHorizontal: spacing.xl },
   headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.xs },
-  matchRow: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.sm },
-  // Matched state: "View …" link with a yellow underlined "(unmatch)" beside it.
-  matchRowInline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, marginTop: spacing.sm },
-  matchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
+
   unmatchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
-  matchedText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
+
   pickerOption: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   pickerOptionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   pickerOptionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   pickerRemove: { alignItems: 'center', paddingTop: spacing.md },
   pickerRemoveText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   headerStamp: { fontSize: 17, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center' },
-  shareText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
+
   photoWrap: { alignItems: 'center', paddingTop: spacing.md },
   // The touchable owns the 92% width; the image fills it (a percentage width on
   // the image alone collapses to 0 inside an auto-width touchable).
@@ -1117,9 +1034,7 @@ const styles = StyleSheet.create({
   // Camera (change photo) + favourite star, clustered top-right on the photo.
   photoBadges: { position: 'absolute', top: spacing.lg, right: '8%', flexDirection: 'row', gap: spacing.sm },
   photoBadge: { backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18, minWidth: 34, height: 32, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-  favStarText: { fontSize: 22, color: '#FFFFFF' },
-  favStarActive: { color: colors.gold },
-  stampEditHint: { fontSize: 13, color: colors.textMuted },
+
   stampOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   stampSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
   stampTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.4, marginBottom: spacing.md },
@@ -1128,7 +1043,7 @@ const styles = StyleSheet.create({
   stampSaveBtn: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)' },
   stampSaveText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   winesHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  reIdentifyLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
+
   identifyBtn: { marginHorizontal: spacing.xl, marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)' },
   identifyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   confirmBlurb: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.md, lineHeight: 20 },
@@ -1140,14 +1055,14 @@ const styles = StyleSheet.create({
   confirmCellarTag: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, marginTop: 2 },
   confirmCancel: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.xs },
   confirmCancelText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted },
-  dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
+
   dictateRowFlush: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   // Section headers — yellow, all-caps, matching the stats-bar type.
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
   noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
-  noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm, gap: spacing.sm },
+
   noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.sm },
-  noteHeadActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+
   // Saved note reads back as copy (like a review); tap to edit in the popup.
   // Match the Date · Location · Venue line's font (headingSemibold) so the note
   // reads consistently with the rest of the header, not in an odd body face.
@@ -1161,8 +1076,7 @@ const styles = StyleSheet.create({
   matchButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
   exportButton: { alignSelf: 'center', alignItems: 'center', minWidth: '82%', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(224,184,74,0.12)' },
   exportButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
-  // Always-visible "brief thoughts" input on the review form.
-  thoughtsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 80, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlignVertical: 'top' },
+
   // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
   noteHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 0 },
   // In the editor popup's header row the title must shrink so the mic + close
@@ -1174,26 +1088,16 @@ const styles = StyleSheet.create({
   noMatchRow: { paddingTop: spacing.md, paddingBottom: spacing.sm, paddingHorizontal: spacing.lg, alignItems: 'center' },
   noMatchText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textAlign: 'center', textDecorationLine: 'underline' },
   pickerDivider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
-  noteText: { paddingHorizontal: spacing.xl, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
-  addNoteLink: { paddingHorizontal: spacing.xl, fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+
   noteEditorInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 100, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
-  noteInput: { marginHorizontal: spacing.xl, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 90, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  saveNoteBtn: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
-  saveNoteText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
+
   wineList: { paddingHorizontal: spacing.xl },
   wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   wineName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
   // Region · grape line beneath the name — mirrors the Full Cellar List row detail.
   wineDetail: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   tagRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 4 },
-  // Right-hand confirmation tick on each wine row.
-  wineCheck: { paddingLeft: spacing.sm },
-  wineCheckText: { fontSize: 22, color: colors.textMuted },
-  wineCheckTextOn: { color: colors.gold },
-  // Prompt under an un-ticked wine — confirm it or correct it.
-  confirmHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  intelOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.85)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  intelOverlayText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
+
   // Non-link status stamps — all yellow (Off-cellar, Not reviewed, Archived).
   stampTag: { alignSelf: 'flex-start', fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
   viewLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },

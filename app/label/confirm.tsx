@@ -8,12 +8,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { normaliseVintage } from '../../src/utils/wineIdentity';
-import { generatePairings, fetchAutoLabelUri, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
+import { fetchAutoLabelUri, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { findSameCellarWine } from '../../src/utils/wineMatch';
 import { formatWineTitle } from '../../src/utils/wineTitle';
-import { File, Paths } from 'expo-file-system';
 import { generateWineIntel, isWineNotFound } from '../../src/services/pricing';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { useRackStore } from '../../src/stores/rackStore';
@@ -25,7 +24,6 @@ import { addBinPlacement } from '../../src/api/placements';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { BottleSizePicker } from '../../src/components/BottleSizePicker';
 import { WineSearchInput } from '../../src/components/WineSearchInput';
-import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { StartAlignedInput } from '../../src/components/StartAlignedInput';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { currencySymbol } from '../../src/constants/currency';
@@ -83,7 +81,7 @@ export default function LabelConfirmScreen() {
   // Reached from Scan a Lineup — Back returns to the lineup list to continue
   // onboarding the remaining bottles.
   const isLineup = context === 'lineup';
-  const { wineDetails, imageUri, setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setPairings, setError } = useLabelStore();
+  const { wineDetails, imageUri, setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError } = useLabelStore();
   const { preferences } = usePreferences();
   // Rack-placement context: when the user reached here by tapping an empty rack
   // slot, we skip Wine Intel and drop the bottle straight into the slot.
@@ -1139,13 +1137,4 @@ const styles = StyleSheet.create({
   // obscure wines it's the RIGHT choice, not a fallback.
   candKeepBtn: { marginTop: spacing.md, alignSelf: 'stretch', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center' },
   candKeepText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
-  placeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: spacing.xl },
-  placeSheet: { backgroundColor: colors.background, borderRadius: 18, padding: spacing.xl },
-  placeTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
-  placeNote: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.gold, textAlign: 'center', lineHeight: 21, marginBottom: spacing.sm },
-  orientRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  orientBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },
-  orientBtnOn: { borderColor: colors.gold },
-  orientText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.textMuted },
-  orientTextOn: { color: colors.gold },
 });

@@ -15,7 +15,7 @@ function norm(s: string | null | undefined): string {
 
 // Tolerant accessor — rows come from the cellar (wine_name) or from review-style
 // callers (wineName), so accept either field name for the cuvée name.
-export interface WineLike {
+interface WineLike {
   producer?: string | null;
   wine_name?: string | null;
   wineName?: string | null;
@@ -84,7 +84,7 @@ export function findSameCellarWine<T extends WineLike & { archived_at?: string |
     && sameWineIdentity(candidate, w));
 }
 
-export interface WineGroup<T> {
+interface WineGroup<T> {
   rep: T;
   rows: T[];
   totalQuantity: number;

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../api/supabase';
 import { cellarOwner } from '../api/cellarContext';
-import { useChefPairingHistory, useChefLabelHistory } from '../hooks/useChefHistory';
+import { useChefLabelHistory } from '../hooks/useChefHistory';
 import { useScanHistory } from '../hooks/useScanHistory';
 import { useCellar } from '../hooks/useCellar';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -60,14 +60,11 @@ type Tile = {
 export function CellarInsightsCarousel() {
   const { session } = useAuth();
   const userId = session?.user.id;
-  const { sessions: pairingSessions } = useChefPairingHistory();
   const { sessions: recipeSessions } = useChefLabelHistory();
   const { archive } = useScanHistory();
   const { wines } = useCellar();
   const { chosenWines } = useChosenWines();
   const { labels } = useLabels();
-  // Cellar wine thumbnails by id — for the pairings collage.
-  const thumbById = new Map(wines.filter((w) => w.label_image_path).map((w) => [w.id, w.label_image_path as string]));
   // Thumbnail by wine IDENTITY (producer + name) — so a recipe's wine (stored as
   // details, not an id) can find its label image from the cellar or a label scan.
   const thumbByKey = new Map<string, string>();
@@ -157,7 +154,6 @@ export function CellarInsightsCarousel() {
       onTap: () => router.push('/profile/personality?category=alter-ego' as any),
     });
   }
-
 
   // 2) Bottles archived last month (collage of their labels). Needs ≥1 label.
   const archivedBottles = archivedLM.reduce((s: number, w: any) => s + (w.quantity ?? 0), 0);

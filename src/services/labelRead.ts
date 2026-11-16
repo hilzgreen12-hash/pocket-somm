@@ -7,7 +7,7 @@ import type { WineDetails } from '../types/wine';
 // get their messages from — so a server or connection problem is never blamed
 // on the user's photo, and a photo that isn't a label is never treated as one.
 
-export type LabelReadKind = 'label' | 'list' | 'not-wine' | 'unreadable';
+type LabelReadKind = 'label' | 'list' | 'not-wine' | 'unreadable';
 
 export function classifyLabelRead(d: WineDetails): LabelReadKind {
   if (d.imageType === 'list') return 'list';

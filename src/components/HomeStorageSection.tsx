@@ -433,8 +433,7 @@ const styles = StyleSheet.create({
   // banner and the other inverted pages).
   // Stats BAR — full-width green rule beneath only (no top rule).
   stats: { marginVertical: spacing.sm, paddingVertical: spacing.sm, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
-  // Full-width faded separators framing the stats bar.
-  fadedRule: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
+
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
   error: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   // The swipe hint sits directly above, so no extra top gap here.

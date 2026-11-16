@@ -6,7 +6,7 @@ import { byRecency, entriesOf } from './cellarReview';
 // entries (newest first); occasion reviews come from grouped chosen_wines rows,
 // cellar reviews from a bottle's review_entries list.
 
-export interface UnifiedEntry {
+interface UnifiedEntry {
   id: string;
   savedAt: string | null; // immutable 24h edit clock
   dateIso: string | null; // drinking date, for the entry heading
@@ -25,7 +25,7 @@ export interface UnifiedEntry {
 // the review card (kept out of the user's OWN review area). The sommelier note
 // (rationale) is fetched on demand when saved-empty; the rest is whatever was
 // captured on the wine at save time.
-export interface VinsterIntel {
+interface VinsterIntel {
   criticScore: number | null;
   vintageAssessment: VintageAssessment | null;
   rarityAssessment: RarityAssessment | null;

@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 // grape, critic score — the parts that don't change, unlike price). Reading these
 // grounds Wine Intel without a live WS call. See migration 110 + the proxy's
 // wine_facts upsert. Public-read; grows as real lookups happen.
-export interface WineFacts {
+interface WineFacts {
   region: string | null;
   grape: string | null;
   criticScore: number | null;

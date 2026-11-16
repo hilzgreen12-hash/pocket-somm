@@ -27,11 +27,10 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { prepareImageBase64, scanLabel, searchWines, fetchAutoLabelUri, type WineSearchResult } from '../../src/api/label';
-import { File, Paths } from 'expo-file-system';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { tidyWineRegion } from '../../src/utils/regionFormat';
-import { generateWineIntel, verifyOnWineSearcher } from '../../src/services/pricing';
+import { verifyOnWineSearcher } from '../../src/services/pricing';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { wineNameKey, normaliseVintage } from '../../src/utils/wineIdentity';
@@ -129,7 +128,6 @@ export default function ScanLandingScreen() {
   const [vintageDraft, setVintageDraft] = useState('');
   // Compare Wines or Vintages pop-up.
   const [compareOpen, setCompareOpen] = useState(false);
-  const [generatingIntel, setGeneratingIntel] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [hardGate, setHardGate] = useState(false);
@@ -330,41 +328,6 @@ export default function ScanLandingScreen() {
     // confirmed=1: the user picked this exact wine, so don't re-ask "which wine".
     // noRecent=1: Manually Search isn't a tile scan — keep it out of Recent Scans.
     router.push(`/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1&backTo=${encodeURIComponent('/(tabs)')}`);
-  }
-
-  // "Scan a Lineup" now offers two destinations: add the bottles to the cellar
-  // (scan-lineup), or archive them as a drunk lineup (archive-night).
-  function handleScanLineup() {
-    requireAuth(() => showAlert({
-      title: 'Scan a Lineup',
-      body: 'What would you like to do with this lineup?',
-      buttons: [
-        { text: 'Add a lineup to Your Cellar', onPress: () => router.push('/cellar/scan-lineup' as any) },
-        { text: 'Archive a Lineup', onPress: () => router.push('/cellar/archive-night') },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    }));
-  }
-  // "manual input" under Search a Wine — enter a wine by hand (no typeahead) via
-  // the manual confirm screen.
-  function handleManualInput() {
-    requireAuth(() => {
-      resetLabelStore();
-      router.push(`/label/confirm?manual=1&mode=input&context=intel&backTo=${encodeURIComponent('/(tabs)')}`);
-    });
-  }
-  // "upload instead" — same two destinations, but each opens the library picker
-  // straight away (?upload=1) rather than the in-app camera.
-  function handleUploadLineup() {
-    requireAuth(() => showAlert({
-      title: 'Upload a Lineup',
-      body: 'What would you like to do with this lineup?',
-      buttons: [
-        { text: 'Add a lineup to Your Cellar', onPress: () => router.push('/cellar/scan-lineup?upload=1' as any) },
-        { text: 'Archive a Lineup', onPress: () => router.push('/cellar/archive-night?upload=1') },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    }));
   }
 
   async function handleUploadLabel() {
@@ -688,16 +651,6 @@ export default function ScanLandingScreen() {
         </View>
       </Modal>
 
-      <Modal visible={generatingIntel} transparent animationType="fade">
-        <View style={styles.scanningOverlay}>
-          <View style={styles.scanningSheet}>
-            <ActivityIndicator color={colors.gold} size="large" />
-            <Text style={styles.scanningTitle}>Generating wine intel…</Text>
-            <Text style={styles.scanningBody}>Vinster is pulling in scores, tasting notes, the drinking window and value.</Text>
-          </View>
-        </View>
-      </Modal>
-
       {/* Search a Wine — predictive typeahead in a prompt (opened from the tile). */}
       <Modal visible={searchModalOpen} transparent animationType="fade" onRequestClose={() => setSearchModalOpen(false)}>
         <KeyboardAvoidingView style={styles.searchModalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -808,7 +761,6 @@ export default function ScanLandingScreen() {
         onContinue={continueWithoutAccount}
       />
 
-
     </GHScrollView>
     </TabSwipeView>
   );
@@ -822,7 +774,6 @@ const styles = StyleSheet.create({
   // other tabs (whose scrolls have no horizontal padding).
   headerBleed: { marginLeft: -spacing.xl },
 
-  hero: { alignItems: 'center', marginBottom: spacing.sm },
   // Welcome overlay — centred brand sheet on first landing.
   welcomeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   welcomeSheet: { backgroundColor: colors.background, borderRadius: 20, borderWidth: 1, borderColor: colors.gold, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.xl, alignItems: 'center', width: '100%', maxWidth: 460 },
@@ -849,8 +800,7 @@ const styles = StyleSheet.create({
   // 18pt under the last caption line beneath the tiles (as under the header).
   sectionSeparator: { height: 1, backgroundColor: colors.divider, marginTop: 18, marginBottom: 18 },
   carouselHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.md },
-  // Gold stats line under a carousel header (matches the app-wide stats bars).
-  carouselStats: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginTop: -spacing.sm, marginBottom: spacing.md },
+
   carouselBleed: { marginHorizontal: -spacing.xl },
   // Search & Discover carousel — same card shape as the carousels below
   // (220×165 image, title, gold note).
@@ -870,7 +820,6 @@ const styles = StyleSheet.create({
   // the gold line beneath takes the heading font.
   sdName: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.text, marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   sdStamp: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, marginTop: 3, letterSpacing: 0.2 },
-  discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
 
   // Search-a-Wine prompt (opened from the Search tile).
   searchModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.xl },
@@ -905,7 +854,7 @@ const styles = StyleSheet.create({
   vintageInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, fontSize: 18, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', marginBottom: spacing.md },
   vintageBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   vintageBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  vintageNv: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', paddingVertical: spacing.md },
+
   vintageCancel: { alignItems: 'center', paddingBottom: 4 },
   vintageCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 
@@ -913,15 +862,4 @@ const styles = StyleSheet.create({
   scanningSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, alignItems: 'center', gap: spacing.md, width: '100%' },
   scanningTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
   scanningBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21 },
-
-  readyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  readySheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
-  readyLabel: { fontFamily: fonts.headingSemibold, fontSize: 11, color: 'rgba(224,184,74,0.75)', letterSpacing: 1.8, textAlign: 'center', marginBottom: spacing.xs },
-  readyHeading: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  readyTitle: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.gold, textAlign: 'center', lineHeight: 32, marginBottom: spacing.md },
-  readyBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
-  readyPrimaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
-  readyPrimaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
-  readyDismissBtn: { alignItems: 'center', paddingVertical: spacing.sm },
-  readyDismissBtnText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 });

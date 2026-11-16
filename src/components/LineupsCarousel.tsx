@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md },
   card: { width: HOME_TILE.w },
   cardImageWrap: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  cardImage: { width: HOME_TILE.w, height: HOME_TILE.h },
+
   // Lineup title white; date · location gold beneath it.
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },

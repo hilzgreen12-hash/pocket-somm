@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import { cellarOwner, assertCanEditCellar } from './cellarContext';
-import { invokeResilient } from './invokeResilient';
 import type { WineRack, RackSlot } from '../types/wine';
 
 export async function getRacks(userId: string): Promise<WineRack[]> {

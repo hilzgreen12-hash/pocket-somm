@@ -7,13 +7,12 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { repairRackedWines, updateCellarWine } from '../../src/api/cellar';
 import { generateWineIntel } from '../../src/services/pricing';
-import { isMissingIntel } from '../../src/services/bulkIntel';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
-import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
+import { inferWineStyle } from '../../src/utils/wineStyle';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { mostRepresentedRegions, classifiedRegionBottles } from '../../src/utils/wineRegionGroup';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
@@ -27,18 +26,6 @@ function fmtMultiCurrency(totals: Record<string, number>): string {
   return Object.entries(totals)
     .map(([code, amt]) => formatCurrency(amt, code, { decimals: 0 }))
     .join(' · ');
-}
-
-function groupBy<T, K extends string>(items: T[], key: (t: T) => K | null): Map<K, T[]> {
-  const out = new Map<K, T[]>();
-  for (const item of items) {
-    const k = key(item);
-    if (k == null) continue;
-    const list = out.get(k) ?? [];
-    list.push(item);
-    out.set(k, list);
-  }
-  return out;
 }
 
 function pct(n: number, total: number): string {
@@ -135,8 +122,6 @@ export default function CellarStatsScreen() {
     if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
     setValueEditor(null);
   }
-  // "Missing intel" = never valued (no critic score / pricing downloaded yet).
-  const winesMissingIntel = wines.filter(isMissingIntel);
   const lastEstimateAt = useMemo(() => {
     let latest: string | null = null;
     for (const w of wines) {
@@ -256,20 +241,6 @@ export default function CellarStatsScreen() {
       await processBatch(targets);
     } catch {
       showAlert({ title: 'Could not finish', body: 'Some wines could not be valued. Please try again.' });
-    } finally {
-      setCalculating(false);
-    }
-  }
-
-  // "Update all" on the missing-intel line — refresh critic score + pricing for
-  // every wine that has never been valued (no Vinster review generated).
-  async function handleUpdateMissingIntel() {
-    if (winesMissingIntel.length === 0) return;
-    setCalculating(true);
-    try {
-      await processBatch(winesMissingIntel);
-    } catch {
-      showAlert({ title: 'Could not finish', body: 'Some wines could not be updated. Please try again.' });
     } finally {
       setCalculating(false);
     }
@@ -619,18 +590,13 @@ const styles = StyleSheet.create({
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
   // Cormorant — page header
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  // Cormorant — empty-state header
-  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
-  // Inter — empty body
-  emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+
   emptyBanner: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 4 },
   // Cormorant — empty banner title (header)
   emptyBannerTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.text },
   // Inter — empty banner body
   emptyBannerBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 20 },
-  missingIntelRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
-  missingIntelText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
+
   // Left-aligned, borderless variant — sits directly under Total Purchase Value.
   missingValueRow: { paddingTop: 2, paddingBottom: spacing.xs, alignItems: 'flex-start' },
   missingValueText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted },
@@ -651,25 +617,13 @@ const styles = StyleSheet.create({
   valueAmount: { fontSize: 17, fontFamily: fonts.bodyBold, color: colors.text, marginLeft: spacing.md },
   // Inter — muted variant of value
   valueAmountMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
-  // Inter — hint
-  valueDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  calcBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
-  // Cormorant — button text
-  calcBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  estimateMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
+
   estimateMetaStack: { marginTop: spacing.sm, gap: 4 },
-  // Inter — note
-  estimateUpdateNote: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 18 },
-  // Inter — subtle small info
-  lastEstimate: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted },
-  // Cormorant — inline action link reads as a button
-  recalcLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
-  unvaluableNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 18, marginTop: spacing.xs },
+
   changeStack: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'flex-end' },
   changePct: { fontSize: 15, fontFamily: fonts.bodySemibold },
   breakdownRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  // Inter — list rank
-  breakdownRank: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold, width: 24 },
+
   // Inter — breakdown label
   breakdownLabel: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   // Inter — count value
@@ -685,14 +639,4 @@ const styles = StyleSheet.create({
   conditionWineRow: { paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
   conditionWineName: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text },
   conditionWineMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  // Inter — muted hint
-  muted: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 17, marginTop: spacing.xs },
-  // Cormorant — processing screen title
-  calcTitle: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
-  // Inter — processing subtitle (body)
-  calcSubtitle: { fontFamily: fonts.bodyItalic, fontSize: 16, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
-  // Inter — large stat value read-out
-  calcPercent: { fontFamily: fonts.bodyBold, fontSize: 56, color: colors.gold, marginBottom: spacing.xs },
-  // Inter — small caption
-  calcCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
 });

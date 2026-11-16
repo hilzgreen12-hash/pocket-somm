@@ -15,7 +15,7 @@
 // Status vocabulary matches MATURITY_OPTIONS and the rack colour-coding:
 //   'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown'
 
-export type MaturityStatus = 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';
+type MaturityStatus = 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';
 
 // How many years before a window opens we start calling a wine 'approaching'.
 const APPROACHING_YEARS = 2;

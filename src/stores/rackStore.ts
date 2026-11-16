@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export interface PendingSlot {
+interface PendingSlot {
   rackId: string;
   row: number;
   col: number;
@@ -20,7 +20,7 @@ export interface PendingSlot {
 // component state) so a move started on one rack survives navigating to a
 // different rack — letting the user pick up a bottle on rack A and drop it on
 // rack B. sourceRackId remembers where it came from.
-export interface PendingMove {
+interface PendingMove {
   sourceRackId: string;
   row: number;
   col: number;

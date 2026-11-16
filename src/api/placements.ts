@@ -48,17 +48,7 @@ export async function fetchPlacementsForWines(wineIds: string[]): Promise<Cellar
       .range(from, to) as any);
 }
 
-// Every placement that lives in a given rack / bin / alt cellar — for the
-// per-location screens and their bottle counts. Paged (an imported external
-// cellar can hold thousands of placements).
-export async function fetchPlacementsForRack(rackId: string): Promise<CellarPlacement[]> {
-  return selectAllPages<CellarPlacement>((from, to) =>
-    supabase.from('cellar_placements').select(COLS)
-      .eq('rack_id', rackId)
-      .order('id', { ascending: true })
-      .range(from, to) as any);
-}
-export async function fetchPlacementsForLocation(locationId: string): Promise<CellarPlacement[]> {
+async function fetchPlacementsForLocation(locationId: string): Promise<CellarPlacement[]> {
   return selectAllPages<CellarPlacement>((from, to) =>
     supabase.from('cellar_placements').select(COLS)
       .eq('storage_location_id', locationId)
@@ -402,7 +392,7 @@ export async function clearAppPlacementsForWine(
 // were deleted (ON DELETE CASCADE): removal/archive history, notes, a review,
 // custom-filter memberships, or a community post. Conservative — any read error
 // counts as "has history" so we never delete on doubt.
-export async function wineRowHasHistory(wineId: string): Promise<boolean> {
+async function wineRowHasHistory(wineId: string): Promise<boolean> {
   try {
     const { data: row, error } = await supabase
       .from('cellar_wines')

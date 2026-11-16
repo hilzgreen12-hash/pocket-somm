@@ -5,7 +5,7 @@
 // Priority: explicit style > region keywords (Champagne, Port, etc.) >
 // grape variety lookup > null.
 
-export type WineStyle = 'Red' | 'White' | 'Rosé' | 'Sparkling' | 'Fortified';
+type WineStyle = 'Red' | 'White' | 'Rosé' | 'Sparkling' | 'Fortified';
 
 const SPARKLING_REGION_HINTS = ['champagne', 'cava', 'prosecco', 'crémant', 'cremant', 'franciacorta', 'asti', 'sekt'];
 const FORTIFIED_REGION_HINTS = ['port', 'sherry', 'jerez', 'madeira', 'marsala', 'banyuls', 'rutherglen'];

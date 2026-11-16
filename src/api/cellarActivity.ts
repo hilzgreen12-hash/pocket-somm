@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 // Shared cellar activity (migration 127): changes someone the cellar is shared
 // with made to the owner's cellar. Written by database triggers; the owner reads
 // them and marks them seen.
-export interface CellarActivity {
+interface CellarActivity {
   id: string;
   actor_id: string;
   actor_name: string | null;

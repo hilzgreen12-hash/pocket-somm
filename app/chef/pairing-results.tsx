@@ -195,8 +195,7 @@ function GeneralResults({ results, summary, currency }: { results: GeneralRecomm
 }
 
 export default function PairingResultsScreen() {
-  const { fromHistory, savedAt, city } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string }>();
-  const isFromHistory = fromHistory === 'true';
+  const { savedAt, city } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string }>();
   const { dish, mode, cellarResult, generalResult, generalSummary, stylePreference, budget, setCellarResult, setMode } = useFoodPairingStore();
   // Only bottles kept at home are recommended (never external storage).
   const { wines } = useHomeCellarWines();
@@ -427,7 +426,6 @@ export default function PairingResultsScreen() {
         <Text style={styles.shareButtonText}>{sharing ? 'Preparing…' : 'Share this pairing'}</Text>
       </TouchableOpacity>
 
-
       <Modal visible={selecting !== null} transparent animationType="fade" onRequestClose={closeSelect}>
         <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
@@ -517,8 +515,7 @@ const styles = StyleSheet.create({
   stampRow: { alignItems: 'center', gap: 2, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
   stampDate: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   stampLocation: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
-  // Page title — matches "Pairing to a Wine" on the sibling results page.
-  pageTitle: { fontSize: 26, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, paddingTop: spacing.xs, marginBottom: spacing.md },
+
   cellarPromptWrap: { paddingHorizontal: spacing.xl, alignItems: 'center' },
   cellarPromptLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textDecorationLine: 'underline', marginTop: spacing.md, textAlign: 'center' },
   successTick: { fontFamily: fonts.headingBold, fontSize: 56, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
@@ -558,8 +555,7 @@ const styles = StyleSheet.create({
   archiveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   archiveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   btnDisabled: { opacity: 0.6 },
-  secondaryBtn: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
-  secondaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text },
+
   cancelLink: { alignItems: 'center', paddingVertical: spacing.md },
   cancelLinkText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 });

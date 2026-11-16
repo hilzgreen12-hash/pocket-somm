@@ -35,7 +35,7 @@ export function bottleSizeCl(ml: number): string {
 // Standard rack slots are 750ml by convention — that's what a normal wine
 // rack is built to hold. The large-format row (row_index = -1 in our
 // schema) carries its own configured size on the rack record.
-export function expectedSlotSizeMl(
+function expectedSlotSizeMl(
   rowIndex: number,
   largeFormatBottleSizeMl: number | null | undefined,
 ): number {
@@ -43,7 +43,7 @@ export function expectedSlotSizeMl(
   return 750;
 }
 
-export interface PlacementMismatch {
+interface PlacementMismatch {
   bottleMl: number;
   slotMl: number;
   bottleLabel: string;

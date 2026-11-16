@@ -21,7 +21,7 @@ export interface VintageAssessment {
   notes: string;        // e.g. "2014 was an outstanding year for white Burgundy"
 }
 
-export interface DrinkingWindow {
+interface DrinkingWindow {
   from: number | null;  // earliest year to drink
   to: number | null;    // latest year to drink
   status: 'Too Young' | 'Approaching' | 'Peak' | 'Fading' | 'Past Peak';
@@ -130,7 +130,7 @@ export interface WineDetailsComplete {
 // abbreviation (JS = James Suckling, JR = Jancis Robinson, NM = Neal
 // Martin, WK = William Kelly, etc.). Most critics score out of 100;
 // `scale` carries the denominator since Jancis Robinson uses /20.
-export interface CriticScore {
+interface CriticScore {
   critic: string;
   score: number;
   scale: string;
@@ -240,7 +240,7 @@ export interface WineIntelligence {
   producerRange?: import('../api/label').ProducerRange | null;
 }
 
-export interface Recipe {
+interface Recipe {
   servings: number;
   prepTime: string;
   cookTime: string;
@@ -259,8 +259,8 @@ export interface Pairing {
   recipe: Recipe;
 }
 
-export type DietaryPreference = 'vegetarian' | 'pescatarian' | 'carnivore' | 'vegan';
-export type AllergenFilter = 'dairy-free' | 'nut-free' | 'gluten-free';
+type DietaryPreference = 'vegetarian' | 'pescatarian' | 'carnivore' | 'vegan';
+type AllergenFilter = 'dairy-free' | 'nut-free' | 'gluten-free';
 
 export interface DietaryFilters {
   dietary: DietaryPreference | null;

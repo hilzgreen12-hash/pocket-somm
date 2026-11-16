@@ -1,8 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-  Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard, Share, Image,
-} from 'react-native';
+import { useState, useEffect } from 'react';
+import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, Keyboard, Image } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../api/labelPhotos';
@@ -13,25 +10,16 @@ import { AddPhotoThumb } from './AddPhotoThumb';
 import { ReviewCardHeader, ReviewedLineEditable } from './ReviewCardHeader';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { useAttachLabelPhoto } from '../hooks/useAttachLabelPhoto';
-import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom, vinsterSharedLead } from '../utils/shareCard';
-import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
-import { WineReviewShareCard } from './WineReviewShareCard';
-import { getCachedLabelUri } from '../api/labelImageCache';
-import { publishCommunityReview } from '../api/community';
 import { patchChosenWine, clearChosenReview } from '../api/chosenWines';
 import { generateWineIntel } from '../services/pricing';
-import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
-import { formatCurrency } from '../constants/currency';
 import { showAlert } from './AppAlert';
 import { WineReviewFields } from './WineReviewFields';
-import { splitLocationString, clearReviewOnCellar } from '../services/reviewSync';
+import { clearReviewOnCellar } from '../services/reviewSync';
 import { isoToYmd, ymdToIso } from '../utils/reviewDate';
 import { captureCity } from '../utils/captureCity';
-import { normaliseCity } from '../utils/city';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { ChosenWine } from '../types/wine';
@@ -64,9 +52,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [shareLabelUri, setShareLabelUri] = useState<string | null>(null);
-  const [posting, setPosting] = useState(false);
+  const [] = useState(false);
   // Edit-identity sheet (name / vintage / region + thumbnail).
   const [identityEditOpen, setIdentityEditOpen] = useState(false);
   const [editProducer, setEditProducer] = useState('');
@@ -80,7 +66,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const [editImageUri, setEditImageUri] = useState<string | null>(null);
   const [labelViewerOpen, setLabelViewerOpen] = useState(false);
   const [savingIdentity, setSavingIdentity] = useState(false);
-  const shareCardRef = useRef<View>(null);
 
   const currency = (wine?.currency ?? 'GBP').toUpperCase();
 
@@ -209,62 +194,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
     }
   }
 
-  // Open the Vinster Wine Knowledge (Dive Deeper) page for this reviewed wine.
-  // The review may not be in the cellar, so pass the wine fields as params —
-  // the Wine Knowledge screen falls back to them when there's no cellar row.
-  // ---- Sharing ------------------------------------------------------------
-  async function handleShareToCommunity() {
-    if (!wine || posting) return;
-    if (!session?.user.id) { showAlert({ title: 'Sign in required', body: 'You need an account to share to the community.' }); return; }
-    Keyboard.dismiss();
-    setPosting(true);
-    try {
-      await persist();
-      const title = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' · ').trim() || wine.wine_name || 'Wine review';
-      await publishCommunityReview(
-        {
-          category: 'wine', source_table: 'chosen_wines', source_id: wine.id,
-          title, subtitle: wine.region || null, rating: userScore,
-          body: tastingNote.trim() || personalNotes.trim() || null,
-          metadata: { producer: wine.producer ?? null, region: wine.region ?? null, vintage: wine.vintage ?? null, critic_score: wine.critic_score ?? null },
-        },
-        (session.user.email ?? '').split('@')[0] || null,
-      );
-      showAlert({ title: 'Shared to community', body: 'Your wine review now appears in the Vinster community feed.' });
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      const already = detail.toLowerCase().includes('duplicate') || detail.toLowerCase().includes('unique');
-      showAlert({ title: already ? 'Already shared' : 'Could not share', body: already ? "You've already shared this review." : detail });
-    } finally {
-      setPosting(false);
-    }
-  }
-
-  async function handleShare() {
-    if (!wine || sharing) return;
-    Keyboard.dismiss();
-    let labelUri: string | null = null;
-    if (wine.label_image_path) { try { labelUri = await getCachedLabelUri(wine.label_image_path); } catch { /* no photo */ } }
-    setShareLabelUri(labelUri);
-    setSharing(true);
-    try {
-      await new Promise((r) => setTimeout(r, 250));
-      if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
-        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine review') });
-        return;
-      }
-      const header = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
-      const scoreText = userScore != null ? `\nMy score: ${userScore}/100` : '';
-      const noteFormatted = tastingNote.trim() ? `\n\n"${tastingNote.trim()}"` : '';
-      await Share.share({ message: `${header}${scoreText}${noteFormatted}${VINSTER_TEXT_SHARE_FOOTER}`, title: header });
-    } catch (err) {
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSharing(false);
-    }
-  }
-
   function handleDelete() {
     if (!wine) return;
     const label = wine.vintage ? `${wine.vintage} ${wine.wine_name}` : wine.wine_name;
@@ -371,16 +300,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   }
 
   if (!wine) return null;
-
-  // Header mirrors the cellar card: producer · wine name · vintage, then
-  // region, then grape.
-  const headerLine = (() => {
-    const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
-    const parts = sameName ? [wine.producer, wine.vintage] : [wine.producer, wine.wine_name, wine.vintage];
-    return parts.filter(Boolean).join(' · ');
-  })();
-  const drinkingRange = wine.drinking_window?.from && wine.drinking_window?.to ? `${wine.drinking_window.from}–${wine.drinking_window.to}` : null;
-  const drinkingStatus = wine.drinking_window?.status ?? null;
 
   // No presentationStyle — iOS-only, and it forces a black modal window on
   // Android during the slide-in. iOS is full-screen by default (not transparent).
@@ -526,25 +445,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         </View>
       </Modal>
 
-      {sharing && (
-        <View style={styles.shareCardWrap} pointerEvents="none">
-          <WineReviewShareCard
-            ref={shareCardRef}
-            producer={wine.producer}
-            wineName={wine.wine_name}
-            vintage={wine.vintage}
-            region={wine.region}
-            userScore={userScore}
-            criticScore={wine.critic_score}
-            tastingNote={tastingNote}
-            otherObservations={personalNotes || null}
-            date={wine.chosen_at ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null}
-            location={wine.restaurant_name ?? null}
-            isFavourite={wine.is_favourite}
-            imageUri={shareLabelUri}
-          />
-        </View>
-      )}
     </Modal>
     {/* Full-screen zoomable viewer — a SIBLING of the edit Modal (nested modals
         fail to present on Android). Opened by tapping the header thumbnail. */}
@@ -562,70 +462,24 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: colors.background },
   sheet: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, paddingTop: 56, paddingBottom: 60 },
-  // Gold text link below the buttons (Dive Deeper → Wine Knowledge).
-  diveDeeperLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
-  diveDeeperLinkText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
+
   backText: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  topShareText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  header: { alignItems: 'center', marginBottom: spacing.sm },
-  // With a label photo the header becomes a row: thumbnail left, text right.
-  headerWithThumb: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+
   headerThumb: { width: 96, height: 128, borderRadius: 5 },
-  headerTextCol: { flex: 1 },
-  headerLineLeft: { textAlign: 'left' },
-  regionLeft: { textAlign: 'left' },
-  stampLineLeft: { textAlign: 'left' },
-  headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
-  region: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: 2 },
-  // Date · location stamp beneath region/grape — the "where & when" of the review.
-  stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
-  grape: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
+
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.sm },
-  statCell: { width: '50%', paddingVertical: spacing.sm, paddingRight: spacing.sm },
-  statLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 },
-  statValue: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, lineHeight: 20 },
-  statMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
-  statSub: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  estimatedValueGold: { color: colors.gold },
-  estimateUpdateLink: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
-  statInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  priceRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, backgroundColor: colors.surface },
-  priceCurrency: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, marginRight: 4 },
-  priceInput: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.xs },
-  sectionTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.sm },
-  // Section title + dictation mic on one line.
-  dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  personalNotesHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, marginBottom: spacing.sm, marginTop: -spacing.xs },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
-  noteInput: { minHeight: 90 },
-  shareRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  shareBtn: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  shareBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', textAlign: 'center' },
+
   btnDisabled: { opacity: 0.5 },
-  vinsterWrap: { marginBottom: spacing.md },
-  vinsterHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
-  vinsterToggle: { paddingVertical: 6 },
-  vinsterToggleText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2 },
-  whatsThisLink: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
-  vinsterBlock: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, gap: spacing.sm, backgroundColor: 'rgba(212,176,96,0.06)' },
-  vinsterLabel: { fontFamily: fonts.bodyBold, color: colors.gold },
-  vinsterFieldBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 21 },
-  saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
-  deleteButton: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
-  deleteText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
+
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  confirmSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+
   confirmTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
   confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
   confirmButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
   confirmCancel: { alignItems: 'center', paddingTop: spacing.xs },
   confirmCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
-  topRight: { alignItems: 'flex-end', gap: 2 },
-  topEditText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+
   editScroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },
   editSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   editLabel: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs, marginTop: spacing.sm },

@@ -12,26 +12,14 @@ const COMMUNITY_HELP = `Share is where Vinster users will share wine reviews, re
 It's not live yet. We're building it carefully so it stays warm and high-signal rather than noisy.
 
 In the meantime, anything you share — your reviews, your wine and foodie personalities — is being saved, and will surface here when it opens up.`;
-import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 export default function CommunityTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(55, height * 0.095);
-  const { session } = useAuth();
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
-
-  function gated(route: string) {
-    const proceed = () => router.push(route as any);
-    if (session) {
-      proceed();
-      return;
-    }
-    pendingActionRef.current = proceed;
-    setSignInPromptVisible(true);
-  }
 
   // Dismissing the prompt (tap X / tap outside) carries on with the
   // pending action — same as scan/cellar/profile. Otherwise the user

@@ -8,8 +8,8 @@ import { supabase } from './supabase';
 // member access). Reviews, scans and the taste profile stay personal
 // and keep using the user's own id. The choice is remembered per user.
 
-export type CellarRole = 'owner' | 'edit' | 'view';
-export type SharedCellar = { ownerId: string; ownerName: string | null; role: 'view' | 'edit' };
+type CellarRole = 'owner' | 'edit' | 'view';
+type SharedCellar = { ownerId: string; ownerName: string | null; role: 'view' | 'edit' };
 type Ctx = { userId: string | null; ownerId: string | null; role: CellarRole; ownerName: string | null; shared: SharedCellar[] };
 
 let ctx: Ctx = { userId: null, ownerId: null, role: 'owner', ownerName: null, shared: [] };

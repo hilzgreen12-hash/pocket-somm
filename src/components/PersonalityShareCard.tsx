@@ -1,8 +1,8 @@
 import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, share } from '../constants/theme';
+import { share } from '../constants/theme';
 import { personalityBlurb } from '../utils/personalityText';
-import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
+import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
 
 // Branded card for sharing personality sketches — 1080 wide and as tall
 // as the sketch needs (a fixed height clipped longer ones). Rendered

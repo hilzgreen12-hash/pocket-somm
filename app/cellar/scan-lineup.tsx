@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Modal, TextInput } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -27,9 +26,6 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 type Stage = 'capture' | 'analyzing' | 'review';
-
-// Persisted "don't show me this again" flag for the fridge-lineup photo tip.
-const FRIDGE_TIP_KEY = 'vinster_hide_fridge_lineup_tip';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
@@ -116,8 +112,6 @@ export default function ScanLineupScreen() {
   // Original (unrotated) capture, kept so the Flip toggle can re-read the other
   // way up. `flipped` = we rotated the photo 180° before analysis (auto for rack
   // placement, where bottles sit neck-forward = upside down).
-  const [rawUri, setRawUri] = useState<string | null>(null);
-  const [flipped, setFlipped] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState({ producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750, quantity: 1, overrideImageUri: null as string | null });
   const [scanningEdit, setScanningEdit] = useState(false);
@@ -141,8 +135,6 @@ export default function ScanLineupScreen() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 1 });
       if (!photo?.uri) return;
-      setRawUri(photo.uri);
-      setFlipped(false);
       await analyze(photo.uri, false);
     } catch (err) {
       showAlert({ title: 'Camera error', body: err instanceof Error ? err.message : 'Could not capture the photo. Please try again.' });
@@ -171,25 +163,15 @@ export default function ScanLineupScreen() {
       // dropping onto the live camera behind it.
       if (result.canceled || !result.assets.length) { if (params.upload === '1') router.back(); return; }
       const uri = result.assets[0].uri;
-      setRawUri(uri);
       // Read the photo exactly as taken — never auto-rotate. A 180° flip also
       // mirrors left↔right, so blindly flipping an already-upright rack shot both
       // turns the preview upside down AND reverses the bottle order, placing the
       // lineup back-to-front. Users whose bottles sit neck-forward (label upside
       // down in frame) tap "Labels upside down? Flip & re-read" to invert.
-      setFlipped(false);
       await analyze(uri, false);
     } catch (err) {
       showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
     }
-  }
-
-  // Re-read the photo the other way up (undo/redo the 180° rotation).
-  function handleFlip() {
-    if (!rawUri) return;
-    const nf = !flipped;
-    setFlipped(nf);
-    void analyze(rawUri, nf);
   }
 
   async function analyze(uri: string, flip = false) {
@@ -911,7 +893,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.8 },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: 60 },
   centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
-  lead: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', marginBottom: spacing.sm },
+
   hint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
   preview: { width: '80%', height: 240, borderRadius: 12, backgroundColor: '#000' },
   previewSmall: { width: '100%', height: 160, borderRadius: 12, backgroundColor: '#000', marginBottom: spacing.md },
@@ -922,7 +904,7 @@ const styles = StyleSheet.create({
   doneBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   doneBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: spacing.sm },
-  summaryLine: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
+
   // Consistent gold stats bar shared with Archive a Night.
   statsBar: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: spacing.md, marginBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   statsBarText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
@@ -935,8 +917,7 @@ const styles = StyleSheet.create({
   // Batched-bottle count shown after the region, e.g. "×2 bottles".
   qtyTag: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
   unconfident: { fontFamily: fonts.bodyRegular, fontSize: 11, color: colors.gold, marginTop: 2 },
-  // "X btl · Edit to add more vertically" under each lineup wine.
-  bottleLine: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+
   // Quantity stepper in the lineup edit sheet.
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.xs },
   qtyBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
@@ -944,12 +925,7 @@ const styles = StyleSheet.create({
   qtyValue: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, minWidth: 32, textAlign: 'center' },
   editHintCaptured: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.gold, textAlign: 'center', marginTop: spacing.sm },
   editAddLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
-  // Rack-placement review: per-row remove toggle (legacy, unused now).
-  rowRemoved: { opacity: 0.4 },
-  removeLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted },
-  removeLinkUndo: { color: colors.gold, textDecorationLine: 'underline' },
-  // Rack-placement quick-confirm rows + edit modal.
-  listHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs },
+
   confirmAllLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   // "Place in <location>" — centred gold header above the stats.
   placeInHeader: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center', marginBottom: spacing.xs },
@@ -959,7 +935,7 @@ const styles = StyleSheet.create({
   checkbox: { width: 28, alignItems: 'center' },
   checkboxText: { fontSize: 24, color: colors.textMuted },
   checkboxTextOn: { color: colors.gold },
-  formatTag: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
+
   editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   editOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
   editSheet: { backgroundColor: colors.background, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: spacing.xl, maxHeight: '88%' },
@@ -973,14 +949,4 @@ const styles = StyleSheet.create({
   progressHint: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
   successBlock: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   successTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', lineHeight: 28, marginBottom: spacing.sm },
-  tipOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: spacing.xl },
-  tipSheet: { backgroundColor: colors.background, borderRadius: 18, padding: spacing.xl },
-  tipTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
-  tipBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22, textAlign: 'center', marginBottom: spacing.lg },
-  tipCheckRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, justifyContent: 'center', marginBottom: spacing.sm },
-  tipCheckbox: { fontSize: 20, color: colors.textMuted },
-  tipCheckboxOn: { color: colors.gold },
-  tipCheckLabel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  tipCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
-  tipCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

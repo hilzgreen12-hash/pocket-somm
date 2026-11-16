@@ -97,7 +97,6 @@ export function PlaceholderCardView({ card, compact = true, stampCaps = false }:
 }
 
 const styles = StyleSheet.create({
-  carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   card: { width: 220 },
   thumbWrap: { width: 220, height: 165, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface },
   thumbWrapCompact: { width: HOME_TILE.w, height: HOME_TILE.h, borderWidth: 1, borderColor: colors.borderWhite },

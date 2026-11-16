@@ -1,14 +1,11 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard, NAMED_LABELS } from './ExamplePlaceholder';
 import { useLabels } from '../hooks/useLabels';
 import { useLabelStore } from '../stores/labelStore';
-import { useScanStore } from '../stores/scanStore';
 import { getCachedLabelUri } from '../api/labelImageCache';
-import { useScanHistory, type ScanArchiveItem } from '../hooks/useScanHistory';
-import { useAttachRestaurantPhoto } from '../hooks/useAttachRestaurantPhoto';
 import { useAttachLabelPhoto } from '../hooks/useAttachLabelPhoto';
 import { showAlert } from './AppAlert';
 import { formatWineTitle } from '../utils/wineTitle';
@@ -47,14 +44,6 @@ function labelKey(producer: string | null, wineName: string | null, vintage: num
   return [producer, wineName, vintage].map((s) => (s ?? '').toString().trim().toLowerCase()).join('|');
 }
 
-// Totals for the stats line under the header.
-export function useRecentScanCounts(): { labels: number; lists: number } {
-  const { labels } = useLabels();
-  const { archive } = useScanHistory();
-  const lists = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0).length;
-  return { labels: labels.length, lists };
-}
-
 function RecentCard({ item }: { item: Recent }) {
   // A wine-list card with no photo shows a tappable "+ Add Image" tile that runs
   // the add-photo flow, instead of a plain fallback thumbnail.
@@ -83,8 +72,6 @@ function RecentCard({ item }: { item: Recent }) {
 
 export function RecentScansCarousel() {
   const { labels, remove: removeLabel } = useLabels();
-  const { archive, removeArchiveItem } = useScanHistory();
-  const attachRestaurantPhoto = useAttachRestaurantPhoto();
   const attachLabelPhoto = useAttachLabelPhoto();
 
   // Long-press → "Update photo" / "Remove from carousel" for either card type.
@@ -94,16 +81,6 @@ export function RecentScansCarousel() {
       buttons: [
         { text: 'Update photo', onPress: () => setTimeout(() => attachLabelPhoto.present({ kind: 'label', wineId: l.id, producer: l.producer, wineName: l.wine_name, hasPhoto: !!l.label_image_path }), 250) },
         { text: 'Remove from carousel', style: 'destructive', onPress: () => removeLabel.mutate(l.id) },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-  function listLongPress(a: ScanArchiveItem) {
-    showAlert({
-      title: 'Recent scan',
-      buttons: [
-        { text: 'Update photo', onPress: () => setTimeout(() => attachRestaurantPhoto.present({ sessionId: a.id, restaurant: a.restaurantName?.trim() || null, city: a.city?.trim() || null, hasPhoto: !!a.restaurantPhotoPath }), 250) },
-        { text: 'Remove from carousel', style: 'destructive', onPress: () => removeArchiveItem.mutate(a.id) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -160,45 +137,6 @@ export function RecentScansCarousel() {
     });
   }
 
-  // Every wine-list scan belongs in Recent Scans — it's the scanned list itself.
-  // Rating/noting the restaurant additionally surfaces it in Recent Reviews, but
-  // must NOT remove it from here (previously it did, so saving a restaurant review
-  // made the scan vanish from the scans carousel).
-  const listItems: Recent[] = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0).map((a) => {
-    const d = a.capturedAt ? new Date(a.capturedAt) : null;
-    const dateStr = d ? stampDate(d) : '';
-    const venue = a.restaurantName?.trim() || '';
-    const loc = a.city?.trim() || '';
-    // Title = the venue/location the user entered; date (+ location when the title
-    // is the venue) sits beneath it.
-    const title = venue || loc || 'Wine list';
-    const stamp = [dateStr, venue && loc ? loc : null].filter(Boolean).join(' · ');
-    return {
-      kind: 'list' as const,
-      ts: a.capturedAt ? new Date(a.capturedAt).getTime() : 0,
-      title,
-      stamp,
-      path: a.restaurantPhotoPath,
-      // No photo yet → the card shows "+ Add Image", which runs the restaurant
-      // photo flow (take / upload / find online) for this scan's session.
-      onAddImage: a.restaurantPhotoPath
-        ? undefined
-        : () => attachRestaurantPhoto.present({ sessionId: a.id, restaurant: venue || null, city: loc || null, hasPhoto: false }),
-      onLongPress: () => listLongPress(a),
-      open: () => {
-        const ss = useScanStore.getState();
-        ss.setExtractedWines(a.extractedWines);
-        ss.setRecommendation(a.recommendation);
-        const params = new URLSearchParams({ fromHistory: 'true' });
-        if (a.id) params.set('sessionId', a.id);
-        if (a.restaurantName) params.set('restaurant', a.restaurantName);
-        if (a.city) params.set('city', a.city);
-        if (a.capturedAt) params.set('date', a.capturedAt);
-        router.push(`/scan/results?${params.toString()}`);
-      },
-    };
-  });
-
   // Label scans only — wine-list scans were dropped from this carousel (it's now
   // "Your Recent Label Scans"). listItems is still built above but not surfaced here.
   const merged = [...labelItems].sort((a, b) => b.ts - a.ts).slice(0, 8);
@@ -222,15 +160,11 @@ const styles = StyleSheet.create({
   // No bottom padding: the separator below sits 18pt under the last caption line.
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md },
   card: { width: HOME_TILE.w },
-  thumb: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  thumbImg: { width: '100%', height: '100%' },
-  thumbFallback: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
+
   // "+ Add Image" tile for a photo-less wine-list card.
   addImageThumb: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 6 },
   addImageText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   // Date line in gold caps, matching Cellar Insights.
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3, textTransform: 'uppercase', letterSpacing: 0.4 },
-  emptyCard: { height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', padding: spacing.md },
-  emptyText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textAlign: 'center', lineHeight: 18 },
 });

@@ -5,7 +5,7 @@ import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // Live cellar context for components (re-renders on switch / join / leave).
-export function useCellarContext() {
+function useCellarContext() {
   return useSyncExternalStore(subscribeCellarContext, getCellarContext, getCellarContext);
 }
 

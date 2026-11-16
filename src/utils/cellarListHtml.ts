@@ -3,7 +3,7 @@ import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../co
 
 // One row in the exported cellar list. (Previously lived on the now-removed
 // CellarListShareCard; the branded PDF is the single cellar-list export model.)
-export interface CellarListLine {
+interface CellarListLine {
   producer: string | null;
   wineName: string | null;
   region: string | null;

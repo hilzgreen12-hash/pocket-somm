@@ -4,9 +4,9 @@ import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // 'link' = a white underlined text link beneath the buttons (e.g. View Last Result).
-export type AppAlertButtonStyle = 'default' | 'cancel' | 'destructive' | 'gold' | 'link';
+type AppAlertButtonStyle = 'default' | 'cancel' | 'destructive' | 'gold' | 'link';
 
-export type AppAlertButton = {
+type AppAlertButton = {
   text: string;
   onPress?: () => void;
   style?: AppAlertButtonStyle;
@@ -14,7 +14,7 @@ export type AppAlertButton = {
   separator?: boolean;
 };
 
-export type AppAlertOptions = {
+type AppAlertOptions = {
   title: string;
   body?: string;
   // An italicised note rendered below the body — for secondary asides (e.g.
@@ -31,7 +31,7 @@ let setAlertImpl: ((opts: AppAlertOptions | null) => void) | null = null;
 // Any connectivity failure — whatever raw wording the underlying fetch / Supabase
 // edge-function call produced — surfaces as ONE friendly popup app-wide, instead
 // of "scan label: failed to send a request to the edge function" and the like.
-export const OFFLINE_ALERT: AppAlertOptions = {
+const OFFLINE_ALERT: AppAlertOptions = {
   title: 'No Connection',
   body: 'Please move into a wifi zone to complete this function.',
 };
@@ -52,7 +52,7 @@ const OFFLINE_PATTERNS = [
   'econnaborted',
 ];
 
-export function isOfflineText(s: string | null | undefined): boolean {
+function isOfflineText(s: string | null | undefined): boolean {
   const t = (s ?? '').toLowerCase();
   return !!t && OFFLINE_PATTERNS.some((p) => t.includes(p));
 }

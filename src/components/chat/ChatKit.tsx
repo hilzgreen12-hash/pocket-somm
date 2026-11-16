@@ -114,7 +114,7 @@ export function useChat() {
 
   return { items, pending, busy, push, say, hear, ask, answer, answerAlt, working, reset, token, alive };
 }
-export type Chat = ReturnType<typeof useChat>;
+type Chat = ReturnType<typeof useChat>;
 
 // ---------------------------------------------------------------------------
 // Sheet + thread
@@ -217,7 +217,7 @@ function Linked({ text, style }: { text: string; style: any }) {
   );
 }
 
-export function VBubble({ text, children }: { text?: string; children?: ReactNode }) {
+function VBubble({ text, children }: { text?: string; children?: ReactNode }) {
   return (
     <View style={styles.vWrap}>
       <View style={styles.vBubble}>
@@ -228,7 +228,7 @@ export function VBubble({ text, children }: { text?: string; children?: ReactNod
   );
 }
 
-export function UBubble({ text, children }: { text?: string; children?: ReactNode }) {
+function UBubble({ text, children }: { text?: string; children?: ReactNode }) {
   return (
     <View style={styles.uWrap}>
       <View style={styles.uBubble}>

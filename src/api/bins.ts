@@ -7,7 +7,7 @@ import type { WineRack, BinCell, CellarWine } from '../types/wine';
 // interior cells are full diamonds, cells on the edge of the unit are triangles
 // holding half a diamond's capacity.
 
-export interface BinCellSpec { idx: number; kind: 'diamond' | 'triangle'; capacity: number }
+interface BinCellSpec { idx: number; kind: 'diamond' | 'triangle'; capacity: number }
 
 // Counts derived from the actual diamond tessellation clipped to the frame (see
 // the geometry diagram + app/cellar/bin/resize.tsx), so the stored cells match
@@ -53,7 +53,7 @@ export function buildBinCells(across: number, down: number, diamondCapacity: num
 // are aligned to the tessellation emit order
 // (see tessellate() in the bin screen): diamonds in geo.full order, triangles in
 // geo.clipped order — so they pair 1:1 with the stored cells' idx.
-export interface BinLabelInfo {
+interface BinLabelInfo {
   diamondLabels: (string | null)[];
   triangleLabels: (string | null)[];
 }

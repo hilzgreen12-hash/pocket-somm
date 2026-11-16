@@ -70,7 +70,6 @@ export default function PersonalityScreen() {
   // Vinster judged there isn't enough genuine signal yet to draw an authentic
   // sketch (its server-side sufficiency gate) — hold the milestone.
   const [notReady, setNotReady] = useState(false);
-  const [publishState, setPublishState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const shareCardRef = useRef<View>(null);
 
   // When the user has the current sketch on screen, mark it acknowledged
@@ -194,7 +193,6 @@ export default function PersonalityScreen() {
         return;
       }
       setText(result.text);
-      setPublishState('idle');
       const now = new Date().toISOString();
       setLastGeneratedAt(now);
       const textColumn = textColFor(cat);
@@ -228,8 +226,8 @@ export default function PersonalityScreen() {
         console.error('[personality] failed to append sketch to archive:', archiveError);
       }
 
-      // Snapshot the engagement score at generation time so the auto-refresh nudge
-      // (usePersonalityPrompt) can detect meaningful GROWTH since this sketch.
+      // Snapshot the engagement score at generation time, so growth since this
+      // sketch can be measured later.
       try {
         const eng = personalityEngagement({
           wines: wines ?? [], chosenWines: chosenWines ?? [], archive: archive ?? [],
@@ -242,27 +240,6 @@ export default function PersonalityScreen() {
       setError(err instanceof Error ? err.message : 'Could not generate personality.');
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleUploadToCommunity() {
-    if (!text || !session?.user.id || publishState !== 'idle') return;
-    const username = session.user.user_metadata?.display_name
-      || (session.user.email?.split('@')[0] ?? 'Anonymous');
-    const field = cat === 'wine' ? 'wine_personality' : cat === 'recipe' ? 'recipe_personality' : 'alter_ego_personality';
-    setPublishState('saving');
-    try {
-      const { error } = await supabase.from('community_profiles').upsert({
-        user_id: session.user.id,
-        username,
-        [field]: text,
-        updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-      setPublishState('saved');
-    } catch (err) {
-      setPublishState('idle');
-      showAlert({ title: 'Could not upload', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
@@ -435,8 +412,7 @@ const styles = StyleSheet.create({
   refreshHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg, marginHorizontal: spacing.xl },
   sketchTitle: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.gold, letterSpacing: 0.5, lineHeight: 30, marginBottom: spacing.md, textAlign: 'center' },
   sketchText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 26 },
-  archiveLink: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
-  archiveLinkText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+
   // Hidden off-screen by position only (NOT opacity:0 — that degrades the
   // view-shot rasterisation on Android, which was softening the text).
   offscreenShareWrap: { position: 'absolute', left: -10000, top: 0 },

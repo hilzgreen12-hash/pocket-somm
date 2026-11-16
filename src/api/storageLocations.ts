@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { cellarOwner } from './cellarContext';
 import { evictCachedLabel } from './labelImageCache';
 import { selectAllPages, selectAllInChunks, chunkIds } from './paging';
-import type { StorageLocation, StorageCase, CellarWine } from '../types/wine';
+import type { StorageLocation, StorageCase } from '../types/wine';
 
 // Home storage locations (migration 064) — non-grid spaces the user photographs
 // and fills with a loose list of wines via cellar_wines.storage_location_id.
@@ -108,25 +108,6 @@ export async function deleteStorageLocation(id: string): Promise<void> {
     for (const p of paths) evictCachedLabel(p); // drop local cached copies too
   }
   if (readErr) { /* tolerated: the row delete above is the operation that matters */ }
-}
-
-// Wines physically filed into this location (newest first).
-export async function fetchStorageLocationWines(locationId: string): Promise<CellarWine[]> {
-  const { data, error } = await supabase
-    .from('cellar_wines')
-    .select('*')
-    .eq('storage_location_id', locationId)
-    .is('archived_at', null)
-    // Default list reads in the order wines were added (oldest first).
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as CellarWine[];
-}
-
-// File (or unfile, with null) a wine into a location.
-export async function assignWineToStorageLocation(wineId: string, locationId: string | null): Promise<void> {
-  const { error } = await supabase.from('cellar_wines').update({ storage_location_id: locationId }).eq('id', wineId);
-  if (error) throw error;
 }
 
 // ---- Cases (migration 069) — bottles boxed together inside a location. ----

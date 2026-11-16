@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   intro: { alignItems: 'center', marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   brand: { fontFamily: fonts.headingBold, fontSize: 26, color: '#FFFFFF', letterSpacing: 1, marginBottom: spacing.xs, textAlign: 'center' },
   introBody: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21, marginBottom: spacing.md },
-  thanks: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.gold, textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.sm },
+
   section: { marginBottom: spacing.md },
   sectionLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
   // Clean underline inputs (no boxed fill) for the username + currency.
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   currencyValue: { fontFamily: fonts.bodySemibold, fontSize: 17, color: colors.gold, flexShrink: 1, textAlign: 'right' },
   selectChevron: { fontSize: 14, color: colors.gold },
   subheading: { fontFamily: fonts.headingBold, fontSize: 16, color: colors.text, letterSpacing: 0.3, marginTop: spacing.md, marginBottom: 2 },
-  subheadingHint: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
+
   hardRulesTitle: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.xs },
   hardRulesBody: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, lineHeight: 20, textAlign: 'center', marginBottom: spacing.sm },
   // Accordion chrome mirrors app/profile/wine.tsx so the look carries

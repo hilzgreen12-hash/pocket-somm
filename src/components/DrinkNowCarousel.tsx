@@ -33,7 +33,7 @@ const LAST_CALL_HORIZON = 2;
 const RUNNING_LOW_BIG_START = 6;
 const RUNNING_LOW_BIG_LEFT = 2;
 
-export function isLastCall(w: CellarWine, nowYear: number = new Date().getFullYear()): boolean {
+function isLastCall(w: CellarWine, nowYear: number = new Date().getFullYear()): boolean {
   // Spirits don't mature — never surface them as Last Call / peak-now.
   if (w.is_spirit) return false;
   const to = w.drinking_window_to;
@@ -79,14 +79,6 @@ function buildCellarInsights(wines: CellarWine[]): InsightTile[] {
   return tiles;
 }
 
-// Back-compat: index.tsx used to read counts for the (now-removed) stats line.
-export function useDrinkNowCounts(): { total: number; lastCall: number } {
-  const { wines } = useCellar();
-  const nowYear = new Date().getFullYear();
-  const lc = wines.filter((w) => (w.quantity ?? 0) > 0 && isLastCall(w, nowYear)).length;
-  return { total: buildCellarInsights(wines).length + (lc > 0 ? 1 : 0), lastCall: lc };
-}
-
 // The cellar wines Cellar Insights looks at: the whole cellar, including wines
 // kept in external storage.
 function useInsightWines(): { cellarWines: CellarWine[]; archived: CellarWine[] } {
@@ -103,7 +95,7 @@ function useInsightWines(): { cellarWines: CellarWine[]; archived: CellarWine[] 
   return { cellarWines, archived };
 }
 
-export type RunningLowWine = { wine: CellarWine; left: number; started: number };
+type RunningLowWine = { wine: CellarWine; left: number; started: number };
 
 // Running Low wines in the cellar, fewest bottles left first. Bottles are
 // counted per wine + vintage across cellar rows; "started" = bottles now plus

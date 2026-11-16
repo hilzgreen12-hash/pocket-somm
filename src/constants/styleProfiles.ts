@@ -11,7 +11,7 @@ import type { WineType } from '../types/preferences';
 // on-screen order of bubbles, so the lists are sequenced to match how
 // the user listed them in the brief.
 
-export interface StyleProfile {
+interface StyleProfile {
   id: string;
   label: string;
   description: string;
@@ -60,4 +60,3 @@ export const STYLE_PROFILES: readonly StyleProfile[] = [
   { id: 'sweet-rich', label: 'Sweet',       description: 'Dessert wines — Sauternes, PX sherry, Tokaji',           applicableTypes: ['sweet-fortified'] },
 ];
 
-export type StyleProfileId = string;

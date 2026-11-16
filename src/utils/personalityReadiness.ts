@@ -10,7 +10,7 @@
 //   • TIME    — activity spread across at least a couple of distinct days, so a
 //               single first-session burst doesn't trip it
 
-export const PERSONALITY_GATE = {
+const PERSONALITY_GATE = {
   wineMinWines: 8,          // distinct cellar wines
   wineMinListPicks: 4,      // distinct List-scan sessions where a bottle was picked
   wineMinReviews: 8,        // distinct reviewed wines (incl. imported reviews) — a
@@ -56,7 +56,7 @@ function distinctDays(isos: Array<string | null | undefined>): number {
   return days.size;
 }
 
-export interface PersonalityReadinessInput {
+interface PersonalityReadinessInput {
   wines: Array<{ created_at?: string | null }>;
   chosenWines: Array<{ source?: string | null; scan_session_id?: string | null; chosen_at?: string | null; user_score?: number | null; tasting_note?: string | null }>;
   archive: Array<{ restaurantName?: string | null; ratingOverall?: number | null; ratingFood?: number | null; restaurantNote?: string | null; capturedAt?: string | null }>;

@@ -90,19 +90,6 @@ const REGION_GROUPS: { canonical: string; keys: string[] }[] = [
   { canonical: 'Maipo', keys: ['maipo', 'colchagua', 'casablanca'] },
 ];
 
-export function canonicalWineRegion(region: string | null | undefined): string | null {
-  const text = (region ?? '').toLowerCase().trim();
-  if (!text) return null;
-  for (const g of REGION_GROUPS) {
-    for (const k of g.keys) {
-      if (text.includes(k)) return g.canonical;
-    }
-  }
-  // No known region matched — group by country if we can, else keep the raw
-  // string (trimmed) so it still shows rather than being dropped.
-  return inferCountry(region) ?? ((region ?? '').trim() || null);
-}
-
 function keysFor(canonical: string): string[] {
   return REGION_GROUPS.find((g) => g.canonical === canonical)?.keys ?? [];
 }

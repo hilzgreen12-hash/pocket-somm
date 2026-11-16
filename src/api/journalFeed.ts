@@ -1,9 +1,9 @@
 // The Journal now lives on the Vinster website (a Squarespace blog). Its RSS
 // feed is public, so the app reads the latest posts straight from it — publish
 // on the website and the post appears in the Share tab's Journal carousel.
-export const JOURNAL_FEED_URL = 'https://www.vinsterapp.com/share?format=rss';
+const JOURNAL_FEED_URL = 'https://www.vinsterapp.com/share?format=rss';
 
-export interface JournalPost {
+interface JournalPost {
   title: string;
   link: string;
   publishedAt: string | null; // ISO date

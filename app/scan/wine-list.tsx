@@ -33,7 +33,7 @@ export default function WineListScreen() {
   const { session } = useAuth();
   // upload=1 / online=1 / shared=1 say how the list will arrive (see `mode`).
   const { upload: uploadParam, online: onlineParam, shared: sharedParam } = useLocalSearchParams<{ upload?: string; online?: string; shared?: string }>();
-  const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
+  const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset } = useScanStore();
   const { preferences: savedPreferences, prefsLoading } = usePreferences();
 
   // Restore the inputs from the last search when it FAILED, so a retry doesn't

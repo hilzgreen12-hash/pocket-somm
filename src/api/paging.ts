@@ -6,8 +6,8 @@
 // goes into the URL, which overflows on big id sets. These helpers page through
 // a query with `.range()` and split `.in()` lists into chunks.
 
-export const PAGE_SIZE = 1000;
-export const IN_CHUNK = 300;
+const PAGE_SIZE = 1000;
+const IN_CHUNK = 300;
 
 type PageResult<T> = { data: T[] | null; error: unknown };
 

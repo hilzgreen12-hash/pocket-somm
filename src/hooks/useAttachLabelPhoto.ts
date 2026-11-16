@@ -14,7 +14,7 @@ import { useAuth } from './useAuth';
 // shot, so we let the user attach one three ways — camera, library, or an
 // online label search — and store it against the right row (chosen_wines for
 // restaurant/other reviews, cellar_wines for cellar wines).
-export type AttachKind = 'chosen' | 'cellar' | 'label';
+type AttachKind = 'chosen' | 'cellar' | 'label';
 
 export function useAttachLabelPhoto() {
   const { session } = useAuth();

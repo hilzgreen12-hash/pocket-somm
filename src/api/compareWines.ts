@@ -14,7 +14,7 @@ export interface CompareWineInput {
   vintage: string; // 4-digit year or 'NV'
 }
 
-export interface CompareWineResult {
+interface CompareWineResult {
   identified: boolean;
   criticScore: number | null;
   drinkingWindowFrom: number | null;
@@ -28,7 +28,7 @@ export interface CompareWineResult {
   grapeNote?: string | null;
 }
 
-export interface ComparePick { wine: number; reason: string }
+interface ComparePick { wine: number; reason: string }
 
 export interface Comparison {
   mode: 'vintages' | 'wines';

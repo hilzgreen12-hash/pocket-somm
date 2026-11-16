@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
-import { colors, share } from '../constants/theme';
+import { share } from '../constants/theme';
 import type { Pairing } from '../types/wine';
 
 // Branded card for sharing a single recipe via the native share sheet —
@@ -79,9 +79,6 @@ export const RecipeShareCard = forwardRef<View, Props>(({ pairing, wineHeader },
   );
 });
 
-export const RECIPE_SHARE_QR_URL = QR_URL;
-export const RECIPE_SHARE_INSTALL_URL = VINSTER_INSTALL_URL;
-
 const CARD_WIDTH = 1080;
 
 const styles = StyleSheet.create({
@@ -123,7 +120,7 @@ const styles = StyleSheet.create({
   footerCopy: { flex: 1, paddingRight: 24 },
   footerHeadline: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4, marginBottom: 4 },
   footerLine: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 20, color: share.ink },
-  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: share.ink, marginTop: 2 },
+
   footerTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 18, color: share.inkMuted, marginTop: 8, lineHeight: 24 },
   qrWrap: {
     width: QR_SIZE,

@@ -16,7 +16,7 @@ export interface ChefLabelSession {
   image_path?: string | null;
 }
 
-export interface ChefPairingSession {
+interface ChefPairingSession {
   id: string;
   saved_at: string;
   dish: string;

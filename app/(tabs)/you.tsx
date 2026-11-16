@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Switch, Modal, Keyboard, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Modal, useWindowDimensions } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
@@ -214,8 +214,6 @@ export default function YouScreen() {
         </TouchableOpacity>
       </Modal>
 
-
-
       </View>
     </KeyboardAwareScrollView>
     </TabSwipeView>
@@ -234,16 +232,14 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   // "Hilary · Vinster since 17/06/26" line directly under the title.
   identityLine: { fontSize: 14, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', marginBottom: spacing.sm },
-  // Italic blurb under the page heading — editorial intro, stays Cormorant.
-  thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
+
   // 18pt either side of every separator, app-wide.
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: 18 },
   // Header separator: 18pt from the identity line (it has 8 of its own) and 18pt below, as on Home.
   headerDivider: { height: 1, backgroundColor: colors.divider, marginTop: 10, marginBottom: 18 },
-  goldLine: { height: 1, backgroundColor: colors.gold, opacity: 0.55, marginVertical: spacing.md },
+
   block: { gap: 4 },
-  // Section header label.
-  blockHeading: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+
   prefButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
   prefButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
   // "Vinster's Review of You" carousel section (moved from the Review tab).
@@ -251,33 +247,7 @@ const styles = StyleSheet.create({
   sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 23, marginBottom: spacing.lg, paddingHorizontal: spacing.sm },
   // Let the carousel scroll edge-to-edge, breaking out of the body's h-padding.
   carouselBleed: { marginHorizontal: -spacing.xl },
-  grapeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  grapeSheet: { width: '100%', maxWidth: 340, borderRadius: 16, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
-  grapeTitle: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, textAlign: 'center' },
-  grapeCount: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold, textAlign: 'center' },
-  grapeHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
-  // Form-style label in identity rows.
-  rowLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  // Form-style value rendered to the right of the row label.
-  rowValue: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, textAlign: 'right', flexShrink: 1, marginLeft: spacing.md },
-  rowValueSmall: { fontSize: 13, fontFamily: fonts.bodyRegular },
-  // Currency selector tappable value — still a value, leans Inter.
-  rowValueLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: '#FFFFFF' },
-  editLinkBtn: { alignSelf: 'flex-end', marginTop: 2 },
-  // "Edit" link button text.
-  editLinkText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold },
-  editPanel: { marginTop: spacing.sm, gap: 4 },
-  fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 8, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: 4 },
-  editActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md, marginTop: 4 },
-  // Cancel link inside the inline edit panel.
-  cancelText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted },
-  saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md, minWidth: 70, alignItems: 'center' },
-  saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: 4 },
-  // Toggle row descriptive label — form-style content, switches to Inter.
-  toggleLabel: { flex: 1, fontSize: 15, fontFamily: fonts.bodyItalic, color: '#FFFFFF', lineHeight: 20 },
+
   signOutButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginTop: spacing.xs, marginBottom: 6 },
   signOutText: { color: colors.gold, fontSize: 15, fontFamily: fonts.headingSemibold },
   versionText: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg, marginBottom: spacing.sm, opacity: 0.7 },
@@ -297,16 +267,4 @@ const styles = StyleSheet.create({
   confirmCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   // "Delete Account" underlined link — button-style action.
   deleteText: { color: colors.gold, fontSize: 13, fontFamily: fonts.headingRegular, textDecorationLine: 'underline' },
-  currencyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  currencySheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, width: '100%', maxWidth: 420, padding: spacing.lg },
-  currencySheetTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
-  currencyOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  currencyOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
-  // Modal option row label.
-  currencyOptionText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text },
-  currencyOptionTextActive: { fontFamily: fonts.bodySemibold, color: colors.gold },
-  currencyCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold },
-  currencyClose: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-  // Close link inside currency picker — cancel-style.
-  currencyCloseText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
 });

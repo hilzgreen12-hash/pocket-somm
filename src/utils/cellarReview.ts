@@ -1,13 +1,12 @@
 import * as Crypto from 'expo-crypto';
 import type { ReviewEntry, CellarWine } from '../types/wine';
-import { isReviewEditable } from './reviewDedup';
 
 // A cellar bottle's review is an append-only list of dated entries (migration
 // 080), stored on cellar_wines.review_entries. Storage order is newest-last; the
 // helpers below present newest-first for display. The flat review_* fields on
 // the row mirror the LATEST entry so existing surfaces keep working unchanged.
 
-export interface ReviewEntryInput {
+interface ReviewEntryInput {
   note: string;
   personalNotes: string;
   score: number | null;
@@ -40,10 +39,6 @@ export function byRecency(entries: ReviewEntry[]): ReviewEntry[] {
 
 export function latestEntry(entries: ReviewEntry[]): ReviewEntry | null {
   return byRecency(entries)[0] ?? null;
-}
-
-export function isEntryEditable(entry: ReviewEntry | null | undefined): boolean {
-  return isReviewEditable(entry?.savedAt);
 }
 
 // The flat review_* patch that mirrors the latest entry onto the cellar_wines

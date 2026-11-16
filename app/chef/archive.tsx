@@ -636,8 +636,7 @@ const styles = StyleSheet.create({
   headerRow: { paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: 2, flexDirection: 'row', alignItems: 'flex-start' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  // Filter/stats bar — copied from the Full Cellar List so the two read alike.
-  listHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
+
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   recipeSearch: { marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 15 },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
@@ -660,11 +659,7 @@ const styles = StyleSheet.create({
   // Darker fade so the recipe text stays readable over the label.
   cardBgFade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.72)' },
   cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs },
-  typePill: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: 10, borderWidth: 1 },
-  typePillRecipe: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
-  typePillPairing: { borderColor: colors.borderLight, backgroundColor: 'rgba(255,255,255,0.06)' },
-  // Small "RECIPE" / "PAIRING" type pill on each card — treat as a meta/badge label.
-  typePillText: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.6 },
+
   cardDate: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5 },
   starBtn: { padding: 4 },
   starText: { fontSize: 22, color: colors.textMuted },
@@ -676,8 +671,7 @@ const styles = StyleSheet.create({
   folderBadgeText: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold },
   cardActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   assignLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
-  viewBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 6 },
-  viewBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 13 },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
   modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },

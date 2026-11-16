@@ -200,15 +200,12 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
 }
 
 // Join a dictated chunk onto existing field text with sensible spacing.
-export function joinDictation(base: string, chunk: string): string {
+function joinDictation(base: string, chunk: string): string {
   const head = (base ?? '').trimEnd();
   const tail = (chunk ?? '').trim();
   if (!tail) return head;
   return head ? `${head} ${tail}` : tail;
 }
-
-// Back-compat alias for older append-style callers.
-export const appendDictation = joinDictation;
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },

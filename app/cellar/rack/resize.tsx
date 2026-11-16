@@ -188,19 +188,17 @@ const styles = StyleSheet.create({
   statsBar: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center', marginBottom: spacing.md },
   // Stacked, centred nudge groups (Horizontal above Vertical).
   nudgeCol: { alignItems: 'center', gap: spacing.md, marginTop: spacing.lg },
-  badge: { alignItems: 'center', marginBottom: spacing.md },
-  badgeText: { fontSize: 30, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 1 },
-  badgeSub: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+
   canvas: { flex: 1, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   slot: { flex: 1, borderRadius: 5, borderWidth: 1, borderColor: colors.gold, backgroundColor: colors.surfaceElevated },
   handle: { position: 'absolute', width: HANDLE, height: HANDLE, borderRadius: HANDLE / 2, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
-  nudgeRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: spacing.lg },
+
   nudgeGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nudgeLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 4 },
   nudgeBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   nudgeBtnText: { fontSize: 20, fontFamily: fonts.bodyRegular, color: colors.text },
   nudgeVal: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.text, minWidth: 28, textAlign: 'center' },
-  fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.xl, marginBottom: spacing.sm },
+
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
   saveBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
   saveBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 17 },

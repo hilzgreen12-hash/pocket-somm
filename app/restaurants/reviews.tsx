@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
-import { captureRef } from 'react-native-view-shot';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -13,24 +10,16 @@ import { useAttachRestaurantPhoto } from '../../src/hooks/useAttachRestaurantPho
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
-import { generateWineIntel } from '../../src/services/pricing';
 import { labelSignedUrl } from '../../src/api/labelPhotos';
-import { getCachedLabelUri } from '../../src/api/labelImageCache';
 import { fetchAutoLabelUri } from '../../src/api/label';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { useLastIntelStore } from '../../src/stores/lastIntelStore';
-import { usePreferences } from '../../src/hooks/usePreferences';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { StarRating } from '../../src/components/StarRating';
-import { ShareIcon } from '../../src/components/ShareIcon';
-import { RestaurantReviewShareCard } from '../../src/components/RestaurantReviewShareCard';
-import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { showAlert } from '../../src/components/AppAlert';
 import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import type { LibraryFilter } from '../../src/api/libraryFilters';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
-import { normaliseCity, cityKey } from '../../src/utils/city';
 import { foldAccents } from '../../src/utils/wineIdentity';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -46,9 +35,6 @@ function normName(s: string | null | undefined): string {
 }
 
 type RatingFilter = 'all' | '5' | '4plus' | '3plus';
-// 'toreview' = a restaurant added from a List result that has no ratings or
-// note yet; 'reviewed' = it carries review content.
-type ReviewStatusFilter = 'all' | 'toreview' | 'reviewed';
 type FilterField = 'date' | 'rating' | null;
 
 // Year-month key + label for the Date filter — one entry per month that
@@ -60,137 +46,13 @@ function monthKey(iso: string): string {
 function monthLabel(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
-// A bottle pick counts as "reviewed" once it carries any review content.
-function chosenHasReview(w: ChosenWine): boolean {
-  return !!(
-    (w.tasting_note && w.tasting_note.trim()) ||
-    (w.other_observations && w.other_observations.trim()) ||
-    w.user_score != null
-  );
-}
 
 export default function RestaurantReviewsScreen() {
   // archiveError was already exposed by the hook but never read here, so a
   // failed fetch fell through to "No restaurants yet" — reads as lost visits.
   const { archive, archiveLoading, archiveError, removeArchiveItem } = useScanHistory();
 
-  // Off-screen branded share card — mirrors the WineListShareCard +
-  // WineReviewShareCard pattern so all three Vinster surfaces share
-  // one visual language when posted into a chat thread. Only mounted
-  // during a share so it doesn't sit idle in the tree.
-  const restaurantShareRef = useRef<View>(null);
-  const [restaurantSharing, setRestaurantSharing] = useState(false);
-  const [restaurantSharePayload, setRestaurantSharePayload] = useState<{
-    restaurantName: string;
-    city: string | null;
-    date: string | null;
-    ratingOverall: number | null;
-    ratingFood: number | null;
-    ratingService: number | null;
-    ratingWineList: number | null;
-    ratingAtmosphere: number | null;
-    ratingGlassware: number | null;
-    ratingValue: number | null;
-    note: string | null;
-    wines: Array<{ producer: string | null; wineName: string; vintage: string | number | null; userScore: number | null }>;
-    imageUri?: string | null;
-  } | null>(null);
-
-  // Render a single rating as a "★★★★☆ (4/5)" plain-text line for the
-  // share text body. Returns null when the rating is missing. Used by
-  // the plain-text fallback share only — the branded card builds its
-  // own star rows.
-  function ratingLine(label: string, value: number | null): string | null {
-    if (value == null) return null;
-    const stars = '★'.repeat(value) + '☆'.repeat(5 - value);
-    return `${label}: ${stars} (${value}/5)`;
-  }
-
-  // Hand a restaurant visit to the native share sheet as a branded
-  // PNG capture. Mirrors the WineListShareCard / WineReviewShareCard
-  // flow. Falls back to the previous plain-text share if capture or
-  // expo-sharing isn't available on the device.
-  async function handleShareRestaurant(item: ScanArchiveItem) {
-    if (restaurantSharing) return;
-    const restaurant = item.restaurantName?.trim() || 'Restaurant visit';
-    const date = formatDate(item.capturedAt);
-    const chosen = findChosenForVisit(item);
-    const winesForCard = chosen.map((cw) => ({
-      producer: cw.producer,
-      wineName: cw.wine_name,
-      vintage: cw.vintage,
-      userScore: cw.user_score,
-    }));
-
-    let venueUri: string | null = null;
-    if (item.restaurantPhotoPath) {
-      try { venueUri = await getCachedLabelUri(item.restaurantPhotoPath); } catch { /* no photo */ }
-    }
-    setRestaurantSharePayload({
-      restaurantName: restaurant,
-      city: item.city?.trim() || null,
-      date,
-      ratingOverall: item.ratingOverall,
-      ratingFood: item.ratingFood,
-      ratingService: item.ratingService,
-      ratingWineList: item.ratingWineList,
-      ratingAtmosphere: item.ratingAtmosphere,
-      ratingGlassware: item.ratingGlassware,
-      ratingValue: item.ratingValue,
-      note: item.restaurantNote?.trim() || null,
-      wines: winesForCard,
-      imageUri: venueUri,
-    });
-    setRestaurantSharing(true);
-
-    try {
-      // One paint to mount the off-screen card with the new props
-      // before the snapshot.
-      await new Promise((r) => setTimeout(r, 250));
-      if (restaurantShareRef.current && (await Sharing.isAvailableAsync())) {
-        const uri = await captureRef(restaurantShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a restaurant review') });
-        return;
-      }
-
-      // Plain-text fallback — preserves the previous behaviour for
-      // devices where capture / expo-sharing isn't available.
-      const header = item.city?.trim() ? `${restaurant} · ${item.city.trim()}` : restaurant;
-      const ratings = [
-        ratingLine('Overall',  item.ratingOverall),
-        ratingLine('Food',     item.ratingFood),
-        ratingLine('Wine list', item.ratingWineList),
-        ratingLine('Service',  item.ratingService),
-        ratingLine('Atmosphere', item.ratingAtmosphere),
-        ratingLine('Glassware', item.ratingGlassware),
-        ratingLine('Value',    item.ratingValue),
-      ].filter(Boolean).join('\n');
-      const note = item.restaurantNote?.trim()
-        ? `\n\n"${item.restaurantNote.trim()}"`
-        : '';
-      const winesBlock = chosen.length === 0
-        ? ''
-        : '\n\nWines I had:\n' + chosen.map((cw) => {
-            const wineLine = [cw.producer, cw.wine_name, cw.vintage]
-              .filter((x) => x != null && String(x).trim().length > 0)
-              .join(' · ');
-            const score = cw.user_score != null ? ` (${cw.user_score}/100)` : '';
-            return `· ${wineLine}${score}`;
-          }).join('\n');
-      const message =
-        `${header}\n${date}` +
-        (ratings ? `\n\n${ratings}` : '') +
-        note +
-        winesBlock +
-        VINSTER_TEXT_SHARE_FOOTER;
-      await Share.share({ message, title: restaurant });
-    } catch (err) {
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setRestaurantSharing(false);
-      setRestaurantSharePayload(null);
-    }
-  }
+  const [] = useState(false);
 
   function handleLongPressRestaurant(item: ScanArchiveItem) {
     const label = item.restaurantName?.trim() || 'this restaurant';
@@ -228,7 +90,7 @@ export default function RestaurantReviewsScreen() {
   const [dateFilter, setDateFilter] = useState<string>('all');         // 'all' | 'YYYY-MM'
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
-  const [bottlePicksOpen, setBottlePicksOpen] = useState(false);
+  const [] = useState(false);
   const [awaitingOpen, setAwaitingOpen] = useState(false);
   // Bespoke user-created filters (the "+ Add" chip), same as the Label Library.
   const { filters: customFilters, create: createFilter, setItems: setFilterItems, rename: renameFilter, remove: removeFilter } = useLibraryFilters('restaurant-review');
@@ -364,10 +226,6 @@ export default function RestaurantReviewsScreen() {
     return { chosenBySession: bySession, chosenByRestaurant: byRestaurant };
   }, [chosenWines]);
 
-  const { preferences } = usePreferences();
-  const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
-  const [genIntel, setGenIntel] = useState(false);
-
   // Generate + show Wine Intel for a wine tapped in the restaurant modal. Same
   // pattern as the Label Library: fill the label store, stash it as the last
   // result, and open the intel card.
@@ -399,18 +257,6 @@ export default function RestaurantReviewsScreen() {
     router.push(`/label/results?context=intel&confirmed=1&gen=1&noRecent=1${backTo}` as any);
   }
 
-  // Long-press a wine on a restaurant card (or the Delete option in the review
-  // modal): edit it, or permanently delete it from the visit.
-  function onLongPressCardWine(cw: ChosenWine) {
-    showAlert({
-      title: wineHeaderLine(cw.producer, cw.wine_name, cw.vintage) || 'This wine',
-      buttons: [
-        { text: 'Edit Wine', onPress: () => { setEditWineIdentity(true); setEditingWine(cw); } },
-        { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteWine(cw) },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
   function confirmDeleteWine(cw: ChosenWine) {
     showAlert({
       title: 'Delete wine?',
@@ -480,23 +326,6 @@ export default function RestaurantReviewsScreen() {
     return Array.from(seen.entries())
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
       .map(([value, iso]) => ({ value, label: monthLabel(iso) }));
-  }, [reviewed]);
-
-  // Location options — every city visited, plus an "Unrecorded" bucket when
-  // any visit has no city recorded.
-  const availableLocations = useMemo(() => {
-    // De-duplicate by canonical key so "Novello" and "Novello, Italy" collapse
-    // to one entry (keeping the richer label).
-    const byKey = new Map<string, string>();
-    let hasUnrecorded = false;
-    for (const item of reviewed) {
-      const c = normaliseCity(item.city);
-      if (!c) { hasUnrecorded = true; continue; }
-      const key = cityKey(c);
-      const prev = byKey.get(key);
-      if (!prev || c.length > prev.length) byKey.set(key, c);
-    }
-    return { cities: Array.from(byKey.values()).sort((a, b) => a.localeCompare(b)), hasUnrecorded };
   }, [reviewed]);
 
   // A restaurant counts as reviewed once it carries any rating or a note.
@@ -627,16 +456,6 @@ export default function RestaurantReviewsScreen() {
   }
   const activeDropdown = dropdownConfig(openDropdown);
 
-  // Tap a bottle pick → go to the restaurant where it was picked (its review
-  // modal offers "Review this wine →"). Falls back to the wine's own review
-  // when the pick isn't tied to a restaurant visit.
-  function openBottlePick(cw: ChosenWine) {
-    setBottlePicksOpen(false);
-    const visit = cw.scan_session_id ? archive.find((a) => a.id === cw.scan_session_id) : null;
-    if (visit) { setEditing(visit); setEditingFromLink(false); }
-    else { setEditWineIdentity(false); setEditingWine(cw); }
-  }
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -752,7 +571,6 @@ export default function RestaurantReviewsScreen() {
             </View>
           ) : (
             sorted.map((item) => {
-              const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null || item.ratingAtmosphere != null || item.ratingGlassware != null || item.ratingValue != null;
               return (
                 <TouchableOpacity
                   key={item.id}
@@ -902,13 +720,6 @@ export default function RestaurantReviewsScreen() {
         />
       )}
 
-      {genIntel ? (
-        <View style={styles.intelOverlay} pointerEvents="auto">
-          <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.intelOverlayText}>Loading wine intel…</Text>
-        </View>
-      ) : null}
-
       <EditChosenWineModal
         // Live row (not the snapshot) so a label photo attached in the modal
         // shows immediately.
@@ -994,29 +805,6 @@ export default function RestaurantReviewsScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Off-screen branded share card. Mounted only during a share
-          so layout work doesn't sit idle when nothing is queued. */}
-      {restaurantSharePayload && (
-        <View style={styles.shareCardWrap} pointerEvents="none">
-          <RestaurantReviewShareCard
-            ref={restaurantShareRef}
-            restaurantName={restaurantSharePayload.restaurantName}
-            city={restaurantSharePayload.city}
-            date={restaurantSharePayload.date}
-            ratingOverall={restaurantSharePayload.ratingOverall}
-            ratingFood={restaurantSharePayload.ratingFood}
-            ratingService={restaurantSharePayload.ratingService}
-            ratingWineList={restaurantSharePayload.ratingWineList}
-            ratingAtmosphere={restaurantSharePayload.ratingAtmosphere}
-            ratingGlassware={restaurantSharePayload.ratingGlassware}
-            ratingValue={restaurantSharePayload.ratingValue}
-            note={restaurantSharePayload.note}
-            wines={restaurantSharePayload.wines}
-            imageUri={restaurantSharePayload.imageUri}
-          />
-        </View>
-      )}
-
       {/* Full-screen, zoomable "photo of the night" viewer — pinch/double-tap to
           zoom, drag to pan, ✕ (top-right) to close. */}
       <LabelPhotoViewer
@@ -1036,8 +824,7 @@ const styles = StyleSheet.create({
   // bubbles, chips and search bar keep their own terracotta fill (below) so
   // their interiors — and their white/gold text — are unchanged.
   scrollArea: { flex: 1 },
-  intelOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
-  intelOverlayText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
+
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
   addLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, width: 50, textAlign: 'right' },
@@ -1045,17 +832,11 @@ const styles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
-  // Hides the off-screen branded share card from the visible layout
-  // while still mounting it so react-native-view-shot can snapshot.
-  // Matches the WineListShareCard / WineReviewShareCard pattern. No
-  // opacity:0 — on Android that degrades the rasterised PNG, so the card
-  // is hidden by off-screen position alone.
-  shareCardWrap: { position: 'absolute', left: -10000, top: 0 },
+
   // Review bubbles — the same brown as the carousel cards on other pages.
   cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
   cardCompactRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
-  // Star rating sits above the share icon on the right of each card.
-  rightCluster: { alignItems: 'flex-end', gap: spacing.xs },
+
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
   restaurantName: { flex: 1, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
   // Photo-of-the-night thumbnail + header, side by side.
@@ -1068,15 +849,7 @@ const styles = StyleSheet.create({
   // Overall stars moved beneath the date · location line.
   starRow: { marginTop: 6, flexDirection: 'row' },
   metaText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  notePreview: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4, lineHeight: 18 },
-  ratingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.xs },
-  ratingCell: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  ratingCellLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  wineList: { marginTop: spacing.xs, gap: 2 },
-  wineRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingVertical: 4 },
-  // Wine name italics inside a restaurant card — wine reference, treat as caption.
-  wineLine: { flex: 1, fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold },
-  wineScore: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginLeft: spacing.sm },
+
   // Black on the cream scroll page (was muted white on terracotta).
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
@@ -1111,7 +884,7 @@ const styles = StyleSheet.create({
   awaitingReviewNote: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
   awaitingName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   awaitingMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  sectionDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.xs },
+
   // Search bar beneath the filter chips.
   // Search bar — mirrors Your Wine Reviews: a light input, not a dark filled row.
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
@@ -1121,18 +894,4 @@ const styles = StyleSheet.create({
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   summaryLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 4 },
-  bottlePicksLinkRow: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs },
-  bottlePicksLink: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold, letterSpacing: 0.5 },
-  bottlePicksList: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md },
-  bottlePicksEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, paddingVertical: spacing.md, textAlign: 'center' },
-  pickRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm },
-  pickRowMain: { flex: 1 },
-  pickWine: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text },
-  pickMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  pickStatusCol: { alignItems: 'flex-end', minWidth: 64 },
-  pickStatus: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  pickStatusDone: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
-  pickStatusDate: { fontFamily: fonts.bodyRegular, fontSize: 11, color: colors.textMuted, marginTop: 2 },
-  personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(212,176,96,0.08)' },
-  personalityButtonText: { fontFamily: fonts.headingBold, fontSize: 15, color: colors.gold, letterSpacing: 0.5 },
 });

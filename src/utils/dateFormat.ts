@@ -17,7 +17,7 @@ function deviceRegion(): string | null {
   }
 }
 
-export function isMonthFirst(currency?: string | null): boolean {
+function isMonthFirst(currency?: string | null): boolean {
   const region = deviceRegion();
   if (region === 'US' || region === 'CA') return true;
   if (region) return false; // a known non-US/CA region → day first

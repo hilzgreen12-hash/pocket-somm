@@ -52,7 +52,7 @@ const REGION_TO_COUNTRY: Record<string, string> = {
   constantia: 'South Africa', tokaj: 'Hungary', santorini: 'Greece', nemea: 'Greece',
 };
 
-export function regionCountry(region: string | null | undefined): string | null {
+function regionCountry(region: string | null | undefined): string | null {
   const r = (region ?? '').trim().toLowerCase();
   if (!r) return null;
   // Already a country (or ends in one, e.g. "Barossa Valley, Australia").

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCellar } from '../../../src/hooks/useCellar';
-import { useAuth } from '../../../src/hooks/useAuth';
 import { getWineKnowledge } from '../../../src/api/label';
 import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
 import type { WineKnowledgeData } from '../../../src/types/wine';
@@ -17,7 +16,6 @@ export default function WineKnowledgeScreen() {
     wineId: string; producer?: string; region?: string; wineName?: string; vintage?: string; grape?: string;
   }>();
   const { wines, updateWine } = useCellar();
-  const { session } = useAuth();
   const cellarWine = wines.find((w) => w.id === params.wineId) ?? null;
 
   const info = {
@@ -90,16 +88,6 @@ export default function WineKnowledgeScreen() {
     })();
     return () => { cancelled = true; };
   }, [infoKey]);
-
-  // Header line — an exact replica of the wine card's header (producer · name ·
-  // region · vintage dedup, then grape underneath).
-  const headerLine = (() => {
-    const sameName = info.wineName?.trim().toLowerCase() === info.producer?.trim().toLowerCase();
-    const parts = sameName
-      ? [info.producer, info.region, info.vintage]
-      : [info.producer, info.wineName, info.region, info.vintage];
-    return parts.filter(Boolean).join(' · ');
-  })();
 
   return (
     <View style={styles.container}>
@@ -221,13 +209,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  shareText: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.gold },
-  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
-  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 80 },
 
-  // Wine card header replica.
-  cardHeaderLine: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text, lineHeight: 28, textAlign: 'center' },
-  cardGrape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, marginTop: 2, textAlign: 'center' },
+  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 80 },
 
   brandHeading: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 4, textTransform: 'uppercase', textAlign: 'center' },
   brandSub: { fontFamily: fonts.headingItalic, fontSize: 14, color: 'rgba(224,184,74,0.75)', textAlign: 'center', marginTop: 4 },
@@ -236,7 +219,6 @@ const styles = StyleSheet.create({
   rule: { flex: 1, height: 1, backgroundColor: 'rgba(224,184,74,0.45)' },
   ruleMark: { color: colors.gold, fontSize: 12, marginHorizontal: spacing.sm },
 
-  wineHeader: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', lineHeight: 32 },
   shortDivider: { width: 40, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', alignSelf: 'center', marginVertical: spacing.lg },
 
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.xs },

@@ -1,6 +1,5 @@
 import { TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { spacing } from '../constants/theme';
 
 // The Vinster wine-ring mark, centred at the top of every tab page. Tapping
 // it opens the full About Vinster screen — this replaces the old "About

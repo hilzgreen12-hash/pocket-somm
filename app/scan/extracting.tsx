@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
@@ -226,49 +226,6 @@ export default function ExtractingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    padding: spacing.xl,
-  },
-  brand: {
-    fontSize: 36,
-    fontFamily: fonts.headingSemibold,
-    color: colors.text,
-    letterSpacing: 1.5,
-    marginBottom: spacing.xxl,
-  },
-  title: {
-    fontSize: 20,
-    fontFamily: fonts.headingBold,
-    color: colors.text,
-    marginBottom: spacing.sm,
-    textAlign: 'center',
-  },
-  // Italic timing hint sitting under the progress title — body-italic.
-  timing: {
-    fontSize: 16,
-    fontFamily: fonts.bodyItalic,
-    color: colors.gold,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  body: {
-    fontSize: 14,
-    fontFamily: fonts.bodyRegular,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-  stayNote: {
-    fontSize: 12,
-    fontFamily: fonts.bodySemibold,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-    opacity: 0.8,
-  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',

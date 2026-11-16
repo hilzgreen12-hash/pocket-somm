@@ -8,7 +8,7 @@ import { ensureConnectionForUpload } from '../../../../src/utils/connectionGuard
 import { getBins, getBinCell, removeWineFromCell, binCellLabel } from '../../../../src/api/bins';
 import { addCellarWine, updateCellarWine } from '../../../../src/api/cellar';
 import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, decrementPlacement } from '../../../../src/api/placements';
-import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../../../../src/api/racks';
+import { removeSlotsForWine, getSlotAssignments } from '../../../../src/api/racks';
 import { fetchStorageLocations } from '../../../../src/api/storageLocations';
 import { useRacks } from '../../../../src/hooks/useRacks';
 import { prepareImageBase64, scanLabel } from '../../../../src/api/label';
@@ -28,8 +28,6 @@ import { fonts } from '../../../../src/constants/fonts';
 import type { CellarWine } from '../../../../src/types/wine';
 import { findSameCellarWine } from '../../../../src/utils/wineMatch';
 
-const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-
 type Draft = {
   id: string | null; // existing cellar_wine id when editing, null when adding
   producer: string;
@@ -39,8 +37,6 @@ type Draft = {
   bottleSizeMl: number;
   quantity: number;
 };
-
-const EMPTY_DRAFT: Draft = { id: null, producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750, quantity: 1 };
 
 export default function BinCellScreen() {
   const { cellId, add } = useLocalSearchParams<{ cellId: string; add?: string }>();
@@ -543,10 +539,9 @@ const styles = StyleSheet.create({
   empty: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowThumb: { width: 40, height: 52 },
-  rowQty: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.gold, minWidth: 34 },
+
   rowMain: { flex: 1 },
-  rowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
-  rowMeta: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+
   rowFormat: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4, letterSpacing: 0.3 },
   addBtn: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   addBtnText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },

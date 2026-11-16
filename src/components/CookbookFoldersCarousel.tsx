@@ -58,7 +58,6 @@ export function CookbookFoldersCarousel() {
     enabled: !!userId,
     queryFn: () => getFavouritesCover(userId),
   });
-  const favouritesTile = { id: FAVOURITES_ID, name: 'Favourite Recipes', image_path: favCover } as unknown as ChefArchiveCollection;
 
   // Drag to reorder (hold a folder, then drag). Saved to the account.
   async function saveOrder(ids: string[]) {
@@ -224,11 +223,7 @@ const styles = StyleSheet.create({
   // Cookbook →" link line, then the stats bar and carousel.
   cookbookTitle: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.sm },
   blurb: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.textMuted, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
-  // The text sizes the wrap; the arrow is absolute (left: 100%) so it doesn't
-  // count toward the centred width.
-  viewLinkWrap: { alignItems: 'center', justifyContent: 'center' },
-  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
-  viewLinkArrow: { position: 'absolute', left: '100%', marginLeft: 6, fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.gold },
+
   // Stats bar — the "View Your Cookbook" link sits above the recipe · folder
   // count (mirrors Your Cellar Archive), between full-width gold rules.
   // No top rule; a single faded-yellow separator line below (not a boxed bar).

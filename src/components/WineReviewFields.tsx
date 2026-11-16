@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   dwDash: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.textMuted, marginBottom: spacing.md },
   // Location row: 📍 pin + stacked city / place-name inputs.
   locRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.md },
-  locPin: { fontSize: 18, marginTop: 8 },
+
   locFields: { flex: 1, gap: spacing.sm },
   locInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
   locInputSecond: {},
@@ -312,16 +312,7 @@ const styles = StyleSheet.create({
   estSub: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   sectionTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.sm },
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  shareRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  shareBtn: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  shareBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', textAlign: 'center' },
-  btnDisabled: { opacity: 0.5 },
-  actionPairRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  pairBtn: { flex: 1, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
-  goldBtn: { borderWidth: 1, borderColor: colors.gold },
-  // Button text reduced to the refined "Drinking Window — your call" label
-  // treatment: small, uppercase, letter-spaced (rather than big heading text).
-  goldBtnText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5 },
+
   saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.5 },
   // After a successful save the button turns gold and reads "Review Saved".

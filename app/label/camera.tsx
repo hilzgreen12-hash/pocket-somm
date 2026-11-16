@@ -12,15 +12,13 @@ import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraO
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { prepareImageBase64 } from '../../src/api/label';
 import { scanLabel } from '../../src/api/label';
-import { generateWineIntel, verifyOnWineSearcher } from '../../src/services/pricing';
+import { verifyOnWineSearcher } from '../../src/services/pricing';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
-import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { WineDetailsComplete } from '../../src/types/wine';
 import { classifyLabelRead, alertBadLabelPhoto, alertLabelFailure, askReadAsList } from '../../src/services/labelRead';
-
 
 export default function LabelCameraScreen() {
   const { context, backTo } = useLocalSearchParams<{ context?: string; backTo?: string }>();

@@ -57,24 +57,6 @@ export async function deleteRecipeCollection(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function listCollectionIdsForRecipe(recipeId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('recipe_collection_items')
-    .select('collection_id')
-    .eq('chosen_recipe_id', recipeId);
-  if (error) throw error;
-  return (data ?? []).map((row) => row.collection_id as string);
-}
-
-export async function listRecipeIdsInCollection(collectionId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('recipe_collection_items')
-    .select('chosen_recipe_id')
-    .eq('collection_id', collectionId);
-  if (error) throw error;
-  return (data ?? []).map((row) => row.chosen_recipe_id as string);
-}
-
 export async function addRecipeToCollection(collectionId: string, recipeId: string): Promise<void> {
   const { error } = await supabase
     .from('recipe_collection_items')

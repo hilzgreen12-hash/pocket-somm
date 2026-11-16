@@ -213,15 +213,6 @@ export default function ReviewRequirementsScreen() {
     }
   }
 
-  // Mode B alternative — type the wine in by hand. Stash the requirements,
-  // clear any stale scan, and open the confirm form with blank fields; the
-  // user fills them and Confirm generates the pairings.
-  function handleManual() {
-    setFilters(buildFilters() as unknown as Record<string, unknown>);
-    setWineDetails({ producer: '', region: '', wineName: null, vintage: '', style: null } as any);
-    router.push('/chef/confirm');
-  }
-
   // Mode B — pick a wine from the catalog Search (replaces free-text Manual
   // Input). Pre-fills the confirm form with the chosen identity; the user can
   // still tweak fields, and WineSearchInput's own "Use '<typed>'" fallback
@@ -557,8 +548,7 @@ const styles = StyleSheet.create({
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginTop: spacing.xs, marginBottom: spacing.md },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
-  heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
-  subheading: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.sm },
+
   label: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginBottom: 2, letterSpacing: 0.3 },
   // Lower-case parenthetical beside the Dietary/Allergies labels.
   labelHint: { textTransform: 'none', fontFamily: fonts.bodyItalic, fontSize: 11, letterSpacing: 0, color: colors.textMuted },
@@ -582,10 +572,7 @@ const styles = StyleSheet.create({
   // Rows inside the "Choose Your Wine" chooser popup.
   chooserOption: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
   chooserOptionText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
-  back: { alignItems: 'center', paddingVertical: spacing.lg },
-  backText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
-  // Top-left Back, matching the rest of the app.
-  backTop: { alignSelf: 'flex-start', marginBottom: spacing.md },
+
   backTopText: { color: colors.gold, fontFamily: fonts.bodyRegular, fontSize: 16 },
   pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21, paddingVertical: spacing.md },
   pickerRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },

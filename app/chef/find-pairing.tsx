@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { MicButton } from '../../src/components/MicButton';
@@ -63,13 +63,6 @@ export default function FindPairingScreen() {
       pathname: '/chef/pairing-results',
       params: { fromHistory: 'true', savedAt: last.saved_at, city: last.city ?? '' },
     });
-  }
-
-  // Jump to the wine-preferences editor and back. Pushed (not replaced) so the
-  // editor's Back returns here with this form's state intact.
-  function handleOpenPreferences() {
-    if (!session) { setSignInPromptVisible(true); return; }
-    router.push('/profile/wine');
   }
 
   const STYLE_CHOICES = ['White', 'Red', 'Rosé', 'Sparkling', 'Fortified'];
@@ -314,41 +307,24 @@ export default function FindPairingScreen() {
 const styles = StyleSheet.create({
   askBtn: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
   askBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: spacing.xl },
-  // Brand wordmark shown on the loading splash — keep editorial Cormorant.
-  loadingBrand: { fontSize: 36, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1.5, marginBottom: spacing.xxl },
-  loadingTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
-  loadingTiming: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
-  loadingBody: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
-  loadingStay: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textAlign: 'center', opacity: 0.8 },
+
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: 20, paddingTop: 112, paddingBottom: 60 },
-  backRow: { alignSelf: 'flex-start', marginBottom: spacing.xl },
+
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, width: 44 },
   // Cellar-style header bar.
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
-  blurb: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, textAlign: 'center', marginBottom: spacing.sm },
-  // Inline preferences link — inherits the blurb's font/size, gold + underline.
-  blurbLink: { color: colors.gold, textDecorationLine: 'underline' },
+
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
-  fieldLabelCaps: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
-  // Mixed-case form label (no caps) + centred variant for the cooking /
-  // regional inputs, matching the rest of the app's input labels.
-  fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, letterSpacing: 0.3, marginBottom: spacing.xs },
+
   // "What are you cooking?" left-aligned, with the mic/bin pushed to the right.
   cookingLabel: { fontFamily: fonts.headingRegular, fontSize: 19, color: colors.text },
   cookingHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm },
-  centredLabel: { textAlign: 'center', alignSelf: 'stretch' },
-  // Label above each preference bubble group.
-  chipFieldLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
+
   // Expanded accordion body holding the bubbles.
   pickerWrap: { marginTop: spacing.sm, marginBottom: spacing.sm },
-  regionInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
-  helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
-  micRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.sm },
-  styleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: spacing.lg },
-  rowLabel: { marginBottom: 0, flexShrink: 1 },
+
   // Wine Style row — mirrors the Recipe Requirements accordion input rows.
   styleAccordion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)', paddingVertical: 8 },
   styleAccordionLeft: { flex: 1, alignItems: 'flex-start' },
@@ -356,47 +332,13 @@ const styles = StyleSheet.create({
   styleAccordionSummary: { fontFamily: fonts.bodyRegular, fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 1 },
   // Gold once a region (named or confirmed custom) is chosen.
   styleAccordionSummaryActive: { color: colors.gold },
-  // 'Other' custom-region input row + Confirm button (input hides on confirm).
-  regionOtherRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xl },
-  regionOtherInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  regionOtherConfirm: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, paddingHorizontal: spacing.md },
-  regionOtherConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
+
   styleAccordionChevron: { fontSize: 14, color: '#FFFFFF', marginLeft: spacing.sm },
-  heading: { fontSize: 30, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
-  subheading: { fontSize: 17, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl, textAlign: 'center' },
-  profileNote: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
-  profileNoteLink: { fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline' },
-  // "Update your preferences here." — a quiet link tucked just beneath the
-  // blurb (negative top margin pulls it up close), not a prominent button.
-  preferencesLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginTop: -spacing.md, marginBottom: spacing.xl },
-  // Inline link inside the blurb — taps through to the wine-preferences editor.
-  preferencesInline: { fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline' },
-  label: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm, textAlign: 'center' },
-  // Left-aligned field label (mixed case) for the cooking + style inputs.
-  leftLabel: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.text, alignSelf: 'flex-start', marginBottom: spacing.xs },
-  fieldHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
-  helperLeft: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'left', alignSelf: 'flex-start', lineHeight: 19, marginBottom: spacing.sm },
+
   inputLeft: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 10, padding: 12, fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 84, marginBottom: spacing.sm, width: '100%', textAlign: 'left' },
-  dropdownChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'flex-start', minWidth: 160, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.xl },
-  dropdownChipText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
-  dropdownChevron: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, marginLeft: spacing.md },
-  dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  dropdownSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
-  dropdownTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
-  dropdownOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  dropdownOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
-  dropdownOptionText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text },
-  dropdownOptionTextActive: { color: colors.gold },
-  dropdownCheck: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
-  // Lower-case helper line beneath "What are you cooking?".
-  helperText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.md },
+
   budgetBlock: { width: '100%', marginTop: spacing.md, marginBottom: spacing.sm },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 17, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 90, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
-  difficultyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xl, width: '100%' },
-  difficultyBtn: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', width: '48.5%' },
-  difficultyBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
-  difficultyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.textMuted },
-  difficultyBtnTextActive: { color: colors.gold },
+
   toggleRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm, marginBottom: spacing.sm, width: '100%' },
   toggleBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
   // Thin vertical rule between the From My Cellar / Suggest a Style buttons.
@@ -406,11 +348,7 @@ const styles = StyleSheet.create({
   toggleTextActive: { color: colors.gold },
   toggleSub: { fontSize: 11, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   toggleSubActive: { color: colors.gold },
-  styleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xl, width: '100%', justifyContent: 'center' },
-  styleBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
-  styleBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
-  styleBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.textMuted },
-  styleBtnTextActive: { color: colors.gold },
+
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%' },
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
   // White "View Last Result" bubble beneath Find Pairing — same footprint as the

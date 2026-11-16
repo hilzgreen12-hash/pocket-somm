@@ -143,11 +143,6 @@ export async function setLineupName(id: string, name: string | null): Promise<vo
   if (error) throw error;
 }
 
-export async function setLineupFavourite(id: string, isFavourite: boolean): Promise<void> {
-  const { error } = await supabase.from('lineup_archives').update({ is_favourite: isFavourite }).eq('id', id);
-  if (error) throw error;
-}
-
 // Attach (or clear) the free-text "memory" note on a lineup. Empty/whitespace
 // stores null so the Library can treat a blank note as "no note yet".
 export async function setLineupNote(id: string, note: string | null): Promise<void> {

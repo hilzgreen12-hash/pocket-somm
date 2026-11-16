@@ -6,8 +6,6 @@
 // are compared key to key. Runs on the phone against the cellar it already has.
 
 import type { CellarWine } from '../types/wine';
-import { BURGUNDY_NAMES } from '../constants/burgundyNames';
-import { EUROPEAN_WINE_NAMES } from '../constants/europeanWineNames';
 
 // Words that carry no identity (and generic estate words) — dropped before keys
 // are built, so "Château X" and "Domaine X" key on X. ("Clos" stays: in
@@ -117,7 +115,7 @@ function keyOfWords(ws: string[], dropFinal = false): string {
 }
 
 // Rough phonetic key for ONE word.
-export function soundKey(word: string): string {
+function soundKey(word: string): string {
   return keyOfWords([word]);
 }
 
@@ -165,7 +163,7 @@ function bestWindowScore(nameWords: string[], spoken: string[]): number {
   return best;
 }
 
-export type SoundMatch = { wine: CellarWine; score: number };
+type SoundMatch = { wine: CellarWine; score: number };
 
 function runTogether(nameWords: string[], spoken: string[]): boolean {
   const keys = nameWords.map(soundKey).filter((k) => k.length >= 3);
@@ -246,11 +244,11 @@ export function rankWinesBySound(spokenText: string, wines: CellarWine[], max = 
 // Rewrite misheard wine names in a sentence to the real name (the user's own
 // wines, or a general list such as Burgundy appellations) when the match is
 // strong ("where did I drink chateau rear sack" → "…Château Rieussec").
-export type SoundNameEntry = {
+type SoundNameEntry = {
   name: string; folded: string; words: number; isStatic: boolean;
   key: string; keyDrop: string; keyAll: string; keyAllDrop: string;
 };
-export type SoundNameIndex = SoundNameEntry[];
+type SoundNameIndex = SoundNameEntry[];
 
 function allWords(s: string): string[] {
   return fold(s).split(/[^a-z0-9]+/).filter((t) => t && !/^\d+$/.test(t));
@@ -363,9 +361,3 @@ export function correctWineNamesBySound(text: string, names: string[] | SoundNam
   return out;
 }
 
-// Burgundy + German, Spanish and Italian names, keyed once on first use.
-let euroIndex: SoundNameIndex | null = null;
-export function europeanSoundIndex(): SoundNameIndex {
-  if (!euroIndex) euroIndex = buildSoundNameIndex([...BURGUNDY_NAMES, ...EUROPEAN_WINE_NAMES], true);
-  return euroIndex;
-}

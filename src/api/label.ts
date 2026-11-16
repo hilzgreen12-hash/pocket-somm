@@ -418,7 +418,7 @@ async function downloadImage(url: string, name: string): Promise<string | null> 
 // Returned by the on-demand note fetchers when the server's recognition gate
 // says the model doesn't genuinely know this wine — callers show an honest
 // "doesn't know this wine" line and never persist it as content.
-export const WINE_UNKNOWN = { unknown: true } as const;
+const WINE_UNKNOWN = { unknown: true } as const;
 
 // On-demand "Vinster's Review" (the sommelier tasting note). The recommend call
 // no longer generates this up front — the results card fetches it here when the
@@ -447,14 +447,14 @@ export async function fetchVinsterReview(input: {
   } catch { return null; }
 }
 
-export interface RangeWineNote {
+interface RangeWineNote {
   grape: string | null;
   region: string | null;
   style: string | null;
   note: string;
 }
 
-export type RangeWineNoteResult = RangeWineNote | typeof WINE_UNKNOWN;
+type RangeWineNoteResult = RangeWineNote | typeof WINE_UNKNOWN;
 
 // On-demand "inside line" for one wine tapped in a producer's range — technical
 // details (grape/region/style) plus a short in-the-know note. Returns
@@ -500,7 +500,7 @@ export async function searchFolderImages(folderName: string): Promise<LabelImage
 // Live web lookup for a name Vinster didn't recognise (misheard / misread):
 // returns the real wine it most plausibly is, backed by a cited web page, or
 // null. Server-side it also adds the wine to the catalogue for next time.
-export interface ResolvedWine { producer: string; wineName: string | null; region: string | null; grape: string | null; style: string | null }
+interface ResolvedWine { producer: string; wineName: string | null; region: string | null; grape: string | null; style: string | null }
 export async function resolveWine(input: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | null }): Promise<ResolvedWine | null> {
   try {
     const data = await invokeFunction('resolve-wine', {
@@ -539,7 +539,7 @@ export async function getWineIntelligence(
   return data;
 }
 
-export interface WineKnowledge {
+interface WineKnowledge {
   producerProfile: string;
   regionProfile: string;
   vintageProfile: string;

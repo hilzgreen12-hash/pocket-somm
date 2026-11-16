@@ -28,12 +28,6 @@ export function sharerNameFrom(
   return email.split('@')[0]?.trim() || 'Someone';
 }
 
-// The message that rides along with the share — the tappable "Get Vinster" CTA.
-export function vinsterShareMessage(sharerName: string | null | undefined): string {
-  const name = (sharerName ?? '').trim() || 'Someone';
-  return `${name} has shared a Vinster result with you. Get Vinster: ${APP_STORE_URL}`;
-}
-
 // Lead sentence for shareResult({ message }), tailored to WHAT was shared so the
 // caption reflects the media rather than a generic "Vinster result". Pass a noun
 // phrase, e.g. 'a wine lineup', 'a restaurant review', 'their wine personality'.

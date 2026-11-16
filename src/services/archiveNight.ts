@@ -11,7 +11,7 @@ export interface NightMatch {
   anyUnconfident: boolean;  // at least one matched detection was a low-confidence read
 }
 
-export interface NightMatchResult {
+interface NightMatchResult {
   matched: NightMatch[];
   // Bottles Vinster read but couldn't find in the live cellar.
   unmatched: DetectedBottle[];

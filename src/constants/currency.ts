@@ -1,4 +1,4 @@
-export interface Currency {
+interface Currency {
   code: string;
   symbol: string;
   label: string;
@@ -17,7 +17,7 @@ export const CURRENCIES: Currency[] = [
   { code: 'SGD', symbol: 'S$', label: 'Singapore Dollar (S$)' },
 ];
 
-export const DEFAULT_CURRENCY = 'GBP';
+const DEFAULT_CURRENCY = 'GBP';
 
 // ISO 3166-1 alpha-2 country code → currency code.
 // Covers all currencies in CURRENCIES plus the eurozone. Anything not listed

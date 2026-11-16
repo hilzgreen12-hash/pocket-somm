@@ -25,7 +25,7 @@ function scoreAnchor(p: PricingData, matched: boolean): [number | null, 'vintage
   return [null, undefined];
 }
 
-export class WineNotFoundError extends Error {
+class WineNotFoundError extends Error {
   constructor() { super("Vinster couldn't find this wine."); this.name = 'WineNotFoundError'; }
 }
 export function isWineNotFound(e: unknown): boolean {
@@ -169,7 +169,7 @@ export async function fetchVintageComparison(
   return rows;
 }
 
-export class WineSearcherUnavailableError extends Error {
+class WineSearcherUnavailableError extends Error {
   constructor() { super("Wine-Searcher isn't responding right now."); this.name = 'WineSearcherUnavailableError'; }
 }
 export function isWineSearcherUnavailable(e: unknown): boolean {
@@ -180,7 +180,7 @@ export function isWineSearcherUnavailable(e: unknown): boolean {
 // the wine matches, with the Claude estimate as fallback. The critic score is
 // always a Vinster score — but anchored to Wine-Searcher's ws-score (the
 // "north star") when a match exists, so it's grounded in real data.
-export interface WineValuation {
+interface WineValuation {
   estimatedValue: number | null;
   estimatedValueLow: number | null;
   estimatedValueHigh: number | null;

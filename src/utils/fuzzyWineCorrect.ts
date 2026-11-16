@@ -46,7 +46,7 @@ const STOP = new Set([
   'grand', 'premier', 'vintage', 'bottle', 'glass', 'lovely', 'great', 'really', 'bought',
 ]);
 
-export interface ProducerIndex {
+interface ProducerIndex {
   entries: { canonical: string; key: string; words: number }[];
 }
 

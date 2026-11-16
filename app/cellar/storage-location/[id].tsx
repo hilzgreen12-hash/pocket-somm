@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToCase, fetchStorageLocationCases, createStorageCase, updateStorageCase, deleteStorageCase, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
+import { fetchStorageLocation, deleteStorageLocation, renameStorageLocation, assignWineToCase, fetchStorageLocationCases, createStorageCase, updateStorageCase, deleteStorageCase, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
 import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
 import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement, setPlacementCase, releaseFromLocation, moveBottlesToLocation, fetchPlacementsForWine } from '../../../src/api/placements';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
@@ -26,7 +26,6 @@ import { useLabelStore } from '../../../src/stores/labelStore';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { useLabelImageUrl } from '../../../src/hooks/useLabelImageUrl';
 import { useAuth } from '../../../src/hooks/useAuth';
-import { useLocationFilters } from '../../../src/hooks/useLocationFilters';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { effectiveMaturity } from '../../../src/utils/maturity';
@@ -60,10 +59,6 @@ const LIST_VIEW_OPTIONS: { value: 'bottles' | 'default'; label: string }[] = [
   { value: 'default', label: 'Wines Grouped by Case' },
 ];
 
-function bottleLabel(n: number) {
-  return n === 0 ? 'Empty' : `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
-}
-
 export default function StorageLocationScreen() {
   const { id, highlight, placeWine } = useLocalSearchParams<{ id: string; highlight?: string; placeWine?: string }>();
   // Quick Command "Find a bottle": show just this wine, as an applied filter would.
@@ -79,7 +74,6 @@ export default function StorageLocationScreen() {
   const [maturity, setMaturity] = useState('');
   const [maturityOpen, setMaturityOpen] = useState(false);
   const [packaging, setPackaging] = useState('');
-  const [packagingOpen, setPackagingOpen] = useState(false);
   const [listView, setListView] = useState<'default' | 'bottles' | 'cases'>('bottles');
   // When set, the flat list is narrowed to a single case (picked from the List
   // dropdown, below the view-mode options). Cleared by any view-mode choice.
@@ -89,14 +83,6 @@ export default function StorageLocationScreen() {
   const [editingImage, setEditingImage] = useState(false);
   // Voice Command entry — mirrors the Cellar tab, scoped copy for home storage.
   const [voiceOpen, setVoiceOpen] = useState(false);
-  // Bespoke "+ Add" filters, scoped to this location (migration 075).
-  const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useLocationFilters(id);
-  const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
-  const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [editingFilterId, setEditingFilterId] = useState<string | null>(null);
-  const [filterName, setFilterName] = useState('');
-  const [selectedWineIds, setSelectedWineIds] = useState<Set<string>>(new Set());
-  const [savingFilter, setSavingFilter] = useState(false);
   // Multi-select — long-press a wine to select, then bulk archive / delete /
   // remove-from-location. Mirrors the Full Cellar List select-mode.
   const [selectMode, setSelectMode] = useState(false);
@@ -258,12 +244,6 @@ export default function StorageLocationScreen() {
     }
   }
 
-  const activeFilterWineIds = useMemo(() => {
-    if (!activeCustomFilterId) return null;
-    const f = customFilters.find((cf) => cf.id === activeCustomFilterId);
-    return new Set(f?.wineIds ?? []);
-  }, [activeCustomFilterId, customFilters]);
-
   const filtered = useMemo(() => {
     const q = foldAccents(search.trim());
     return wines.filter((w) => {
@@ -271,7 +251,6 @@ export default function StorageLocationScreen() {
       // Packaging filter: "loose" keeps only un-cased bottles. (Case grouping is
       // now filtered via the case chips on the carousel, not a packaging kind.)
       if (packaging === 'loose' && w.case_id) return false;
-      if (activeFilterWineIds && !activeFilterWineIds.has(w.id)) return false;
       if (highlightOnly && w.id !== highlightOnly) return false;
       if (caseFilter && w.case_id !== caseFilter) return false;
       if (q) {
@@ -281,12 +260,11 @@ export default function StorageLocationScreen() {
       }
       return true;
     });
-  }, [wines, search, maturity, packaging, activeFilterWineIds, caseFilter, highlightOnly]);
+  }, [wines, search, maturity, packaging, caseFilter, highlightOnly]);
 
   // Stats bar figures — cases, loose (un-cased) bottles, and the grand total.
   const caseCount = cases.length;
   const looseBottles = wines.filter((w) => !w.case_id).reduce((s, w) => s + (w.quantity ?? 0), 0);
-  const totalBottles = wines.reduce((s, w) => s + (w.quantity ?? 0), 0);
 
   // Bottles moved here (e.g. by Voice Command) that haven't been filed yet.
   // Only wines awaiting THIS alt cellar (or loose) — not ones flagged as awaiting
@@ -349,13 +327,6 @@ export default function StorageLocationScreen() {
     setPendingStorageLocationId(id);
     setPendingCaseId(caseId);
     router.push('/label/camera?context=add-location' as any);
-  }
-  function handleManual(caseId: string | null = null) {
-    if (!id) return;
-    setPendingStorageLocationId(id);
-    setPendingCaseId(caseId);
-    useLabelStore.getState().reset();
-    router.push('/label/confirm?manual=1&context=add-location' as any);
   }
   // Catalog Search replaces free-text Manual Input across the add-a-wine flows.
   // WineSearchInput's 'Use <typed>' escape hatch still covers absent wines.
@@ -473,58 +444,6 @@ export default function StorageLocationScreen() {
     });
   }
 
-  // ---- Bespoke filters ----
-  function applyCustomFilter(filterId: string) {
-    setActiveCustomFilterId((prev) => (prev === filterId ? null : filterId));
-  }
-  function openCreateFilter() {
-    setEditingFilterId(null);
-    setFilterName('');
-    setSelectedWineIds(new Set());
-    setFilterModalOpen(true);
-  }
-  function openEditFilter(f: { id: string; name: string; wineIds: string[] }) {
-    setEditingFilterId(f.id);
-    setFilterName(f.name);
-    setSelectedWineIds(new Set(f.wineIds));
-    setFilterModalOpen(true);
-  }
-  function openFilterOptions(f: { id: string; name: string; wineIds: string[] }) {
-    showAlert({
-      title: f.name,
-      body: 'Rename this filter or change the wines it holds, or delete it. Your wines stay in the location either way.',
-      buttons: [
-        { text: 'Rename / Add / Remove Wines', onPress: () => openEditFilter(f) },
-        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomFilterId === f.id) setActiveCustomFilterId(null); removeFilter.mutate(f.id); } },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-  function toggleWineInSelection(wineId: string) {
-    setSelectedWineIds((prev) => { const next = new Set(prev); next.has(wineId) ? next.delete(wineId) : next.add(wineId); return next; });
-  }
-  async function saveFilter() {
-    const name = filterName.trim();
-    if (!name) { showAlert({ title: 'Name needed', body: 'Give your filter a name first.' }); return; }
-    const here = new Set(wines.map((w) => w.id));
-    const wineIds = Array.from(selectedWineIds).filter((wid) => here.has(wid));
-    setSavingFilter(true);
-    try {
-      if (editingFilterId) {
-        await renameFilter.mutateAsync({ filterId: editingFilterId, name });
-        await setFilterWines.mutateAsync({ filterId: editingFilterId, wineIds });
-      } else {
-        await createFilter.mutateAsync({ name, wineIds });
-      }
-      setFilterModalOpen(false);
-      setEditingFilterId(null);
-    } catch (err) {
-      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingFilter(false);
-    }
-  }
-
   function handleLongPressHeader() {
     if (!location) return;
     showAlert({
@@ -569,7 +488,6 @@ export default function StorageLocationScreen() {
     });
   }
 
-  function enterSelect(wineId: string) { setSelectMode(true); setSelectedIds(new Set([wineId])); }
   function toggleSelected(wineId: string) {
     setSelectedIds((prev) => { const next = new Set(prev); next.has(wineId) ? next.delete(wineId) : next.add(wineId); return next; });
   }
@@ -1318,7 +1236,7 @@ export default function StorageLocationScreen() {
               can't be hijacked into showing a case name. */}
           <TouchableOpacity
             style={[styles.filterChip, (listView !== 'bottles' || !!packaging) && styles.filterChipActive]}
-            onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); setPackagingOpen(false); }}
+            onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); }}
             activeOpacity={0.7}
           >
             <Text style={[styles.filterChipText, (listView !== 'bottles' || !!packaging) && styles.filterChipTextActive]} allowFontScaling={false}>
@@ -1328,7 +1246,7 @@ export default function StorageLocationScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.filterChip, maturity ? styles.filterChipActive : null]}
-            onPress={() => { setMaturityOpen((v) => !v); setPackagingOpen(false); setListOpen(false); }}
+            onPress={() => { setMaturityOpen((v) => !v); setListOpen(false); }}
             activeOpacity={0.7}
           >
             <Text style={[styles.filterChipText, maturity ? styles.filterChipTextActive : null]} allowFontScaling={false}>
@@ -1604,36 +1522,6 @@ export default function StorageLocationScreen() {
         </View>
       </Modal>
 
-      {/* Bespoke-filter builder — name it, tick the wines it holds. */}
-      <Modal visible={filterModalOpen} transparent animationType="fade" onRequestClose={() => setFilterModalOpen(false)}>
-        <View style={styles.caseModalOverlay}>
-          <View style={styles.caseModalSheet}>
-            <Text style={styles.caseModalTitle}>{editingFilterId ? 'Edit Filter' : 'New Filter'}</Text>
-            <TextInput style={styles.caseModalInput} value={filterName} onChangeText={setFilterName} placeholder="Filter name (e.g. Drink First)" placeholderTextColor={colors.textSubtle} />
-            <Text style={[styles.caseModalLabel, { marginTop: spacing.md }]}>Wines in this filter</Text>
-            <ScrollView style={{ maxHeight: 280 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-              {wines.length === 0 ? (
-                <Text style={styles.emptyList}>No wines in this location yet.</Text>
-              ) : wines.map((w) => {
-                const on = selectedWineIds.has(w.id);
-                return (
-                  <TouchableOpacity key={w.id} style={styles.pickRow} onPress={() => toggleWineInSelection(w.id)} activeOpacity={0.7}>
-                    <View style={[styles.pickCheckbox, on && styles.pickCheckboxOn]}>{on ? <Text style={styles.pickCheckboxTick}>✓</Text> : null}</View>
-                    <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity style={[styles.caseModalSave, savingFilter && { opacity: 0.5 }]} onPress={saveFilter} disabled={savingFilter} activeOpacity={0.85}>
-              {savingFilter ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.caseModalSaveText}>{editingFilterId ? 'Save Filter' : 'Create Filter'}</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setFilterModalOpen(false)}>
-              <Text style={styles.caseModalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Select from Cellar List — pick an existing wine to place/move here. */}
       <CellarWinePicker visible={cellarPickerOpen} allowPlaced onClose={() => setCellarPickerOpen(false)} onSelect={onPickCellarWine} />
 
@@ -1768,8 +1656,7 @@ const styles = StyleSheet.create({
   titleNav: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   navArrow: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, paddingHorizontal: 2 },
   navArrowDisabled: { color: 'rgba(224,184,74,0.25)' },
-  headerActions: { alignItems: 'flex-end', gap: 4 },
-  headerLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
+
   // Portrait photo, ~2/3 the old footprint, centred.
   // ~15% smaller than before (85% → 72%). The camera badge sits in its corner.
   photoWrap: { alignSelf: 'center', width: '72%', marginVertical: spacing.md },
@@ -1777,7 +1664,7 @@ const styles = StyleSheet.create({
   photoEditBadge: { position: 'absolute', top: 8, right: 8, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   photoAdd: { alignSelf: 'center', width: '72%', aspectRatio: 4 / 3, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginVertical: spacing.md },
   photoAddText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  sectionLine: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.xs },
+
   // Stats bar — full-width yellow (gold) rules top and bottom, beneath the photo.
   // Counts + a "+ Add Wine" link stacked inside one bordered bar.
   statsBar: { paddingVertical: spacing.sm, marginBottom: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, alignItems: 'center', gap: spacing.xs },
@@ -1789,33 +1676,16 @@ const styles = StyleSheet.create({
   awaitingRow: { marginHorizontal: spacing.xl, marginTop: spacing.sm, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
   awaitingWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   awaitingHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  // "+ Add Wine" — its own centred line below the stats bar (moved out of the
-  // cramped top-right header stack).
-  // "+ Add Wine" — stats-bar format (yellow full-width rules), below the header.
-  addWineRow: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
+
   // Matches the counts line above it (uppercase gold, bodySemibold).
   addWineText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6 },
   filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
   filterChipAddText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
-  pickRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  pickCheckbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  pickCheckboxOn: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.16)' },
-  pickCheckboxTick: { fontSize: 13, color: colors.gold, fontFamily: fonts.bodySemibold },
-  addSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.sm },
-  addRow: { flexDirection: 'row', gap: spacing.sm },
-  addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  addBtnSecondary: { borderColor: '#FFFFFF' },
-  addBtnText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
-  addBtnTextSecondary: { color: '#FFFFFF' },
-  listHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginBottom: spacing.sm },
   searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
   searchClear: { fontSize: 15, color: colors.textMuted, paddingLeft: spacing.sm },
-  maturityRow: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
-  maturityChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingVertical: 6, paddingHorizontal: spacing.md },
-  maturityChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)' },
-  maturityChipText: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  maturityChipTextActive: { color: colors.gold, fontFamily: fonts.bodySemibold },
+
   // Filter chips + Maturity dropdown — matched to the rack/fridge screens so the
   // Other Home Storage filters read the same (was a lighter, muted pill before).
   filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.sm },
@@ -1824,7 +1694,7 @@ const styles = StyleSheet.create({
   filterChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
   filterChipTextActive: { color: colors.gold },
   maturityDropdown: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
-  dropdownDivider: { height: 1, backgroundColor: colors.border },
+
   maturityOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   maturityOptionActive: { backgroundColor: 'rgba(212,176,96,0.12)' },
   maturityOptionText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
@@ -1842,8 +1712,7 @@ const styles = StyleSheet.create({
   caseHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: 'rgba(224,184,74,0.10)' },
   caseTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   caseName: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, flexShrink: 1 },
-  caseChip: { borderWidth: 1, borderColor: colors.gold, borderRadius: 999, paddingVertical: 2, paddingHorizontal: 8 },
-  caseChipText: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.gold, letterSpacing: 0.3 },
+
   caseNoteText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 3 },
   caseAdd: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   looseHeader: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.sm, marginBottom: spacing.xs },
@@ -1858,7 +1727,7 @@ const styles = StyleSheet.create({
   caseModalHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 4, marginBottom: spacing.xs },
   swipeHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: spacing.xl, marginTop: -2, marginBottom: spacing.sm },
   swipeHintText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, letterSpacing: 0.2 },
-  caseModalNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+
   caseModalNoteInput: { flex: 1, minHeight: 44, textAlignVertical: 'top' },
   caseModalSave: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.lg },
   caseModalSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
@@ -1881,10 +1750,9 @@ const styles = StyleSheet.create({
   selectActionText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.cream, textAlign: 'center', letterSpacing: 0.3 },
   thumb: { width: 34, height: 44 },
   wineMain: { flex: 1 },
-  wineName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
-  wineMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+
   wineMeta: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, flexShrink: 1 },
-  wineMetaDot: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+
   uploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
   uploadingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
 });

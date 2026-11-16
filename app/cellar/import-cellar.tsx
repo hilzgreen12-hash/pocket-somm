@@ -13,11 +13,11 @@ import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { fileToSheets, type ImportSheet } from '../../src/utils/cellarImportDecode';
 import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
-import { saveManualChosenWine, bulkCreateChosenReviews } from '../../src/api/chosenWines';
+import { bulkCreateChosenReviews } from '../../src/api/chosenWines';
 import { createLibraryFilter } from '../../src/api/libraryFilters';
 import { supabase } from '../../src/api/supabase';
 import { parseVivinoReviews, isMonthFirstCurrency, type VivinoReview } from '../../src/utils/vivinoCsv';
-import { fetchStorageLocations, createStorageLocation, createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
+import { fetchStorageLocations, createStorageLocation, createStorageCase } from '../../src/api/storageLocations';
 import { addLocationPlacement } from '../../src/api/placements';
 import type { CellarWine, StorageLocation } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
@@ -295,19 +295,6 @@ export default function ImportCellarScreen() {
     }
   }
 
-  // "How to import from {source}" — the exact export steps for the current CSV
-  // source. Vivino's route (Settings → Account Management → Export Your Data)
-  // works on the free tier; CellarTracker's is My Cellar → Export on desktop.
-  function showCsvSteps() {
-    if (!csv?.steps) return;
-    showAlert({
-      title: `How to import from ${csv.name}`,
-      body: csv.steps,
-      note: csv.stepsNote,
-      buttons: [{ text: 'Got it' }],
-    });
-  }
-
   // Pick the CSV/spreadsheet the user exported and parse it (reviews are captured
   // too, for the later reviews-import feature). Shared by Vivino, CellarTracker
   // and generic file uploads — the parser is format-agnostic.
@@ -500,9 +487,6 @@ export default function ImportCellarScreen() {
   }
 
   const keptCount = keep.filter(Boolean).length;
-  // Whether any kept wine is a real case — drives whether the location step is
-  // worth showing (loose-only imports can just go unplaced).
-  const keptHasCase = wines.some((w, i) => keep[i] && isCased(w));
 
   async function loadLocations() {
     const userId = session?.user.id;
@@ -927,8 +911,7 @@ const styles = StyleSheet.create({
   centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   lead: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', marginBottom: spacing.sm },
   hint: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
-  howToLink: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.md },
-  footnote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginTop: spacing.lg },
+
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
   primaryBtnDisabled: { opacity: 0.5 },
   primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
@@ -954,8 +937,7 @@ const styles = StyleSheet.create({
   rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted },
   // Small pill explaining why a row was pre-unticked (dup of cellar / import).
   rowTag: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5 },
-  // Case breakdown line under a wine on the review screen.
-  rowCase: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
+
   dedupNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, lineHeight: 18, marginBottom: spacing.md },
   // Storage-location step.
   locRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 12, marginBottom: spacing.sm },

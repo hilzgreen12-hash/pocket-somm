@@ -15,13 +15,13 @@ import { findMatchingChosenWine, patchChosenWine, createChosenWineFromReview } f
 import { supabase } from '../api/supabase';
 import type { CellarWine } from '../types/wine';
 
-export interface ReviewIdentity {
+interface ReviewIdentity {
   producer: string | null;
   wineName: string;
   vintage: string | number | null;
 }
 
-export interface ReviewFields {
+interface ReviewFields {
   tastingNote?: string;
   restaurantName?: string;
   city?: string;

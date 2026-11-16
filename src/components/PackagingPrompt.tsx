@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   saveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   caseRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   caseName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, flexShrink: 1 },
-  caseKind: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginLeft: spacing.md },
+
   cancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
   cancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

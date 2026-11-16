@@ -6,7 +6,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 import { useScanStore } from '../../src/stores/scanStore';
-import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraOverlay';
+import { CameraOverlay } from '../../src/components/scan/CameraOverlay';
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -61,7 +61,6 @@ export default function CameraScreen() {
   const cameraRef = useRef<CameraView>(null);
   const { setImage } = useScanStore();
   const [autofocus, setAutofocus] = useState<'on' | 'off'>('on');
-  const [frameRect, setFrameRect] = useState<FrameRect | null>(null);
   // "Steady!" prompt — fires on every mount of the scan camera so the
   // user is reminded about lighting / focus / framing before each
   // capture. Initialised true so it appears even when the camera screen
@@ -126,7 +125,6 @@ export default function CameraScreen() {
       />
       <CameraOverlay
         onCapture={handleCapture}
-        onFrameLayout={setFrameRect}
         hint={cameraPages.length ? `Page ${cameraPages.length + 1} — frame the next section of the list` : undefined}
       />
       <TouchableOpacity

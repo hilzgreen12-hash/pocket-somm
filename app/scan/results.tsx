@@ -16,7 +16,7 @@ import { useScanHistory, cacheScanLocally, updateLocalScan, saveScanRecommendati
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
-import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
+import { findExistingReview } from '../../src/utils/reviewDedup';
 import { normaliseCity } from '../../src/utils/city';
 import { currencySymbol } from '../../src/constants/currency';
 import { recommendWines } from '../../src/services/recommender';
@@ -537,8 +537,6 @@ export default function ResultsScreen() {
   // Your Restaurants, but there's no longer an explicit save button or
   // post-save confirmation block on this screen.
 
-  const isSaved = !!autoSave.data;
-
   // Quick Select — the user says "I chose this one" without writing a
   // full review. Writes a chosen_wines row with empty review fields so
   // Vinster's personalisation has the signal but the user isn't pushed
@@ -731,7 +729,6 @@ export default function ResultsScreen() {
     setPendingWine(null);
     if (target) await handleQuickSelect(target.wine, target.i, { restaurant: name, city: cityVal || undefined });
   }
-
 
   async function handleAlternativeList() {
     if (!extractedWines || !recommendation) return;
@@ -1154,7 +1151,6 @@ export default function ResultsScreen() {
                   size="md"
                 />
 
-
                 {/* Price + score share one line beneath the name. Either
                     field can be missing (some lists omit the price, some
                     wines lack a critic score) — the row stays balanced
@@ -1546,24 +1542,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     textAlign: 'center',
   },
-  // Footer CTA — sits below the third wine card, routes the user to
-  // Your Restaurants for the proper review/edit flow. Margin-wide so it
-  // mirrors the alternativeButton beneath it.
-  reviewRestaurantBtn: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.lg,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  reviewRestaurantBtnText: {
-    fontFamily: fonts.headingSemibold,
-    fontSize: 14,
-    color: '#FFFFFF',
-  },
+
   list: {
     paddingHorizontal: spacing.md,
   },
@@ -1577,23 +1556,7 @@ const styles = StyleSheet.create({
   cardInner: {
     padding: spacing.md,
   },
-  // Wine name on the recommendation card — body (data value).
-  wineName: {
-    fontSize: 21,
-    fontFamily: fonts.bodyBold,
-    color: colors.text,
-    letterSpacing: -0.2,
-    marginBottom: 2,
-    textAlign: 'center',
-  },
-  wineProducer: {
-    fontSize: 15,
-    fontFamily: fonts.bodyRegular,
-    color: colors.textMuted,
-    letterSpacing: 0.2,
-    textAlign: 'center',
-    marginBottom: 6,
-  },
+
   // Price + score share one line directly below the producer row.
   priceScoreRow: {
     flexDirection: 'row',
@@ -1664,34 +1627,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
-  // Two-button row, side by side.
-  detailActionsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  detailActionBtn: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-    borderRadius: 10,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  detailActionBtnDone: {
-    borderColor: colors.gold,
-    backgroundColor: 'rgba(212,176,96,0.10)',
-  },
-  detailActionBtnText: {
-    color: '#FFFFFF',
-    fontFamily: fonts.headingSemibold,
-    fontSize: 15,
-    letterSpacing: 0.4,
-  },
-  detailActionBtnTextDone: {
-    color: colors.gold,
-  },
+
   // Long primary CTA — Add to Your Bottle Picks. Sits below the
   // two-button row as the headline action on each card.
   // "Select This Wine" bar — a gold band at the top of the card, above the
@@ -1790,14 +1726,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textMuted,
   },
-  sommRetryText: {
-    marginTop: 4,
-    fontFamily: fonts.bodyItalic,
-    fontSize: 14,
-    color: colors.textMuted,
-    lineHeight: 20,
-    paddingHorizontal: spacing.xs,
-  },
+
   outsideNotice: {
     backgroundColor: 'rgba(180,140,60,0.12)',
     borderLeftWidth: 2,

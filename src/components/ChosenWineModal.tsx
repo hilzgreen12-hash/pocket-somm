@@ -6,7 +6,6 @@ import {
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from './AppAlert';
 import { MicButton } from './MicButton';
-import { CityAutocomplete } from './CityAutocomplete';
 import { WineIdentityHeader } from './WineIdentityHeader';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
@@ -35,24 +34,6 @@ function todayIso(): string {
 // invalid and make the user confirm.
 function isValidVintageYear(v: number | null | undefined): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1800 && v <= new Date().getFullYear() + 1;
-}
-
-// One-line summary for the collapsed "Discovered At" row. Combines whatever
-// the user has into a readable phrase so they don't need to expand the
-// editor unless something looks wrong.
-function formatDiscoveredSummary(restaurant: string, city: string, dateIso: string): string {
-  const place = [restaurant, city].map((s) => s.trim()).filter(Boolean).join(', ');
-  let prettyDate = '';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
-    const d = new Date(dateIso + 'T00:00:00');
-    if (!Number.isNaN(d.getTime())) {
-      prettyDate = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    }
-  }
-  if (place && prettyDate) return `${place} · ${prettyDate}`;
-  if (place) return place;
-  if (prettyDate) return prettyDate;
-  return 'Tap edit to add location';
 }
 
 interface Props {
@@ -84,10 +65,6 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
   // (edit) link. Stored as yyyy-mm-dd; pre-filled on every open so the
   // value always matches "today" if the user didn't touch it.
   const [reviewDate, setReviewDate] = useState(todayIso());
-  // Discovered-At editor starts collapsed — the previous screen already
-  // captured the restaurant and city, so we assume they're correct unless
-  // the user opens the editor to adjust.
-  const [editingLocation, setEditingLocation] = useState(false);
   // Vintage the review will actually be saved with. Seeded from the pick, but
   // if that isn't a valid year the user is asked to confirm it before saving
   // (see the vintage-confirm prompt below).
@@ -106,7 +83,6 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
       setIsFavourite(false);
       setSaved(false);
       setReviewDate(todayIso());
-      setEditingLocation(false);
       setVintageValue(isValidVintageYear(wine?.vintage) ? wine!.vintage : null);
       setVintagePromptOpen(false);
       setVintageDraft('');
@@ -501,7 +477,7 @@ const styles = StyleSheet.create({
   vpPrimaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   vpPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   vpLinkBtn: { paddingVertical: spacing.sm, alignItems: 'center' },
-  vpLinkText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.gold },
+
   vpCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, opacity: 0.6 },
   overlay: {
     flex: 1,
@@ -511,13 +487,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  favouriteBtn: {
-    position: 'absolute',
-    top: 56,
-    right: spacing.xl,
-    zIndex: 10,
-    padding: 4,
-  },
+
   // Back link mirrors the favourite-star position on the opposite
   // side — same top offset so they sit on a shared visual baseline.
   backBtn: {
@@ -533,35 +503,14 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: colors.gold,
   },
-  favouriteStar: {
-    fontSize: 22,
-    color: colors.textMuted,
-  },
-  favouriteStarActive: {
-    color: colors.gold,
-  },
+
   content: {
     padding: spacing.xl,
     // Clear of the back arrow + favourite star (top: 56, ~30px tall).
     paddingTop: 104,
     paddingBottom: 60,
   },
-  heading: {
-    fontFamily: fonts.headingBold,
-    fontSize: 26,
-    color: colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-    marginBottom: spacing.xs,
-  },
-  wineProducer: {
-    // Wine producer caption — Inter italic
-    fontFamily: fonts.bodyItalic,
-    fontSize: 15,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
+
   divider: {
     height: 1,
     backgroundColor: colors.border,
@@ -576,15 +525,6 @@ const styles = StyleSheet.create({
   // Section label + dictation mic on one line.
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
 
-  fieldLabel: {
-    // Field label — form label, Inter
-    fontFamily: fonts.bodyMedium,
-    fontSize: 12,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -617,54 +557,7 @@ const styles = StyleSheet.create({
   dwRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg },
   dwInput: { flex: 1, marginBottom: 0 },
   dwDash: { fontFamily: fonts.bodyRegular, fontSize: 18, color: colors.textMuted },
-  scoreHint: {
-    // Score hint — Inter italic
-    fontFamily: fonts.bodyItalic,
-    fontSize: 13,
-    color: colors.textMuted,
-    marginBottom: spacing.lg,
-  },
-  // Compact "Discovered At [summary] (edit)" row that replaces the old
-  // "Where did you drink it?" three-field block. Expands inline when the
-  // (edit) link is tapped.
-  discoveredRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  discoveredLabel: {
-    // Section-title-style label ("Discovered At") — Cormorant
-    fontFamily: fonts.headingSemibold,
-    fontSize: 16,
-    color: colors.text,
-  },
-  editLink: {
-    // Inline edit link (button) — Cormorant
-    fontFamily: fonts.headingRegular,
-    fontSize: 13,
-    color: colors.gold,
-    textDecorationLine: 'underline',
-  },
-  discoveredSummary: {
-    // Italic summary caption — Inter
-    fontFamily: fonts.bodyItalic,
-    fontSize: 15,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-    lineHeight: 20,
-  },
-  locationEditor: {
-    marginBottom: spacing.sm,
-  },
-  dateHint: {
-    // Date hint — Inter italic
-    fontFamily: fonts.bodyItalic,
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: -4,
-    marginBottom: spacing.sm,
-  },
+
   // cancelLink / cancelLinkText removed — exit is now via the top-
   // left Back link (see backBtn / backBtnText).
   savedBlock: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.sm, gap: 6 },
@@ -674,12 +567,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  savedText: {
-    // "Saved —" label paired with the View link — Cormorant to match the link
-    fontFamily: fonts.headingSemibold,
-    fontSize: 16,
-    color: colors.gold,
-  },
+
   savedLink: {
     fontFamily: fonts.headingSemibold,
     fontSize: 16,

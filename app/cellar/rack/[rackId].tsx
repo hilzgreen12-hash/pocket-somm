@@ -15,8 +15,8 @@ import { useLineupStore } from '../../../src/stores/lineupStore';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
-import { addCellarWineRemoval, addCellarWine, deleteCellarWine } from '../../../src/api/cellar';
-import { fetchStorageLocations, assignWineToStorageLocation } from '../../../src/api/storageLocations';
+import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
+import { fetchStorageLocations } from '../../../src/api/storageLocations';
 import { addLocationPlacement, fetchPlacementsForWine, fetchPlacementsForWines, decrementPlacement, addBinPlacement, releaseBottlesFromPlacements, placedCount } from '../../../src/api/placements';
 import { getBins, getBinCells } from '../../../src/api/bins';
 import { supabase } from '../../../src/api/supabase';
@@ -36,10 +36,6 @@ import { LabelThumb } from '../../../src/components/LabelThumb';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
-
-function truncate(str: string, max: number) {
-  return str.length > max ? str.slice(0, max - 1) + '…' : str;
-}
 
 // Lets the rack search match a wine's drinking-window status as well as its
 // producer / name / region / vintage. Each status maps to the words a user
@@ -86,7 +82,7 @@ export default function RackGridScreen() {
   const { rackId, highlight, lineup, placed, placeWine, placeLimit, addMoreWine: addMoreWineParam } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string; placed?: string; placeWine?: string; placeLimit?: string; addMoreWine?: string }>();
   const navigation = useNavigation();
   const { session } = useAuth();
-  const { slots, isLoading, assign } = useRack(rackId);
+  const { slots, isLoading } = useRack(rackId);
   const { racks, remove: removeRack, rename: renameRackMutation, wipe: wipeRackMutation, resize: resizeRackMutation } = useRacks();
   // useCellar gives us access to updateWine so we can bump the wine's
   // quantity when the user places multiple bottles from this screen.
@@ -140,8 +136,6 @@ export default function RackGridScreen() {
     queryFn: () => getBins(session!.user.id),
     enabled: !!session?.user.id,
   });
-  // "Move to a Cellar or Bin" destination picker (Alt Cellars + bins).
-  const [locBinPicker, setLocBinPicker] = useState<{ wineId: string; wineName: string } | null>(null);
   // Unified destination picker for the redesigned long-press menu — "Move Bottles"
   // (mode 'move') and "Add More Bottles" (mode 'addMore'). Carries the tapped slot so
   // a move to another slot in this rack knows its source.
@@ -234,8 +228,6 @@ export default function RackGridScreen() {
   useEffect(() => {
     if (placed && !placedShownRef.current) { placedShownRef.current = true; setSavedMsg('Added to your cellar'); }
   }, [placed]);
-
-
 
   const rack = racks.find((r) => r.id === rackId);
 
@@ -336,92 +328,6 @@ export default function RackGridScreen() {
   const zTy = useRef(new Animated.Value(0)).current;
   const zBase = useRef({ scale: 1, tx: 0, ty: 0 }).current;
   const zCur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
-
-  // ---- Long-press-and-drag to move a thumbnail (DRAFT — needs device tuning) ---
-  // Enabled only at REST (!isZoomed): when zoomed, one finger pans the grid, so a
-  // drag there would conflict. At rest the canvas transform is identity, so we can
-  // hit-test the finger against each cell's measured layout rect (handles gaps /
-  // padding / the large-format row automatically — no transform maths).
-  const [drag, setDrag] = useState<{ row: number; col: number; wine: CellarWine } | null>(null);
-  const [dragHoverKey, setDragHoverKey] = useState<string | null>(null);
-  const dragPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  // Measured geometry: each row's rect (canvas-relative) + each cell's x/width
-  // (row-relative); combined in cellAt(). Canvas window origin for abs→local.
-  const rowRectsRef = useRef<Record<number, { x: number; y: number; w: number; h: number }>>({});
-  const cellXRef = useRef<Record<string, { x: number; w: number }>>({});
-  const canvasRef = useRef<any>(null);
-  const canvasWin = useRef({ x: 0, y: 0 });
-  // Live mirrors so the memoised gesture's callbacks never read stale closures.
-  const dragRef = useRef<{ row: number; col: number; wine: CellarWine } | null>(null);
-  const slotMapRef = useRef<Record<string, RackSlot>>({});
-  const gridRowsRef = useRef<Array<{ rowIndex: number; cols: number; slotWidth: number }>>([]);
-  const handleDropRef = useRef<(toRow: number, toCol: number, src?: { row: number; col: number; wineId: string; wineName: string }) => void>(() => {});
-  const onLongPressSlotRef = useRef<(row: number, col: number) => void>(() => {});
-  const slotSizeRef = useRef(40);
-
-  // Which cell is under a point. (lx, ly) are LOCAL to the grid canvas — the
-  // GestureDetector is on the canvas, so gesture e.x/e.y are already in this
-  // space, matching the onLayout rects. No window-measure needed (measureInWindow
-  // on an Animated.View ref was unreliable and left the drop mis-computed).
-  function cellAt(lx: number, ly: number): { row: number; col: number } | null {
-    for (const rd of gridRowsRef.current) {
-      const r = rowRectsRef.current[rd.rowIndex];
-      if (!r || ly < r.y || ly > r.y + r.h) continue;
-      for (let col = 0; col < rd.cols; col++) {
-        const c = cellXRef.current[`${rd.rowIndex},${col}`];
-        if (!c) continue;
-        const cx = r.x + c.x;
-        if (lx >= cx && lx <= cx + c.w) return { row: rd.rowIndex, col };
-      }
-    }
-    return null;
-  }
-
-  const dragGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .enabled(!isZoomed)
-        .activateAfterLongPress(350)
-        .runOnJS(true)
-        .onBegin(() => {
-          // Re-measure the canvas window at touch time — it drifts as the page
-          // scrolls, so measuring only on layout made the drop cell mis-compute
-          // (the "move popup but nothing moved" bug). Resolves well before the
-          // 350ms long-press activation.
-          canvasRef.current?.measureInWindow((x: number, y: number) => { canvasWin.current = { x, y }; });
-        })
-        .onStart((e) => {
-          const cell = cellAt(e.absoluteX, e.absoluteY);
-          if (!cell) return;
-          const w = slotMapRef.current[`${cell.row},${cell.col}`]?.wine as CellarWine | undefined;
-          if (!w) {
-            // Empty cell long-press → start/extend multi-select (unchanged).
-            setMultiSlots((prev) => { const n = new Set(prev); n.add(`${cell.row},${cell.col}`); return n; });
-            return;
-          }
-          const picked = { row: cell.row, col: cell.col, wine: w };
-          dragRef.current = picked;
-          setDrag(picked);
-          dragPos.setValue({ x: e.absoluteX, y: e.absoluteY });
-        })
-        .onUpdate((e) => {
-          if (!dragRef.current) return;
-          dragPos.setValue({ x: e.absoluteX, y: e.absoluteY });
-          const cell = cellAt(e.absoluteX, e.absoluteY);
-          setDragHoverKey(cell ? `${cell.row},${cell.col}` : null);
-        })
-        .onEnd((e) => {
-          const picked = dragRef.current;
-          if (!picked) return;
-          const target = cellAt(e.absoluteX, e.absoluteY);
-          if (target && !(target.row === picked.row && target.col === picked.col)) {
-            handleDropRef.current(target.row, target.col, { row: picked.row, col: picked.col, wineId: picked.wine.id, wineName: picked.wine.wine_name });
-          }
-          // Released in place → nothing (the action popup is a short tap now).
-        })
-        .onFinalize(() => { dragRef.current = null; setDrag(null); setDragHoverKey(null); }),
-    [isZoomed],
-  );
 
   function resetZoom() {
     zBase.scale = 1; zCur.scale = 1; zBase.tx = 0; zBase.ty = 0; zCur.tx = 0; zCur.ty = 0;
@@ -827,12 +733,6 @@ export default function RackGridScreen() {
   for (let r = 0; r < (rack?.rows ?? 0); r++) {
     gridRows.push({ rowIndex: r, cols, slotWidth: slotSize });
   }
-  // Slot font sizing scales with the slot — same clamp formula in both
-  // the standard grid and the (typically wider) large-format row.
-  function fontForSlot(size: number) {
-    const fontSize = Math.max(8, Math.min(18, Math.floor(size * 0.22)));
-    return { fontSize, lineHeight: fontSize + 2, maxChars: Math.max(10, Math.floor(size / 3.5)) };
-  }
 
   // Long-press a slot:
   //  • a FILLED slot "lifts" the bottle to move it — it enters move mode and the
@@ -1018,7 +918,7 @@ export default function RackGridScreen() {
     const wine = slot?.wine as CellarWine | null | undefined;
     if (wine) {
       // A short tap on a filled slot opens the action popup (View Wine Intel,
-      // Edit, Add More, Move, Archive/Delete). Long-press is reserved for drag.
+      // Edit, Add More, Move, Archive/Delete).
       pickUpSlot(row, col);
     } else if (pendingWineId) {
       if (placePrechosen) {
@@ -1227,7 +1127,7 @@ export default function RackGridScreen() {
       // If somehow there are no slots here, bail rather than fall back to `|| 1` and
       // add a phantom location bottle (placed would exceed quantity → heal inflates).
       const movedCount = Math.min(count ?? slotsForWine(wineId), slotsForWine(wineId));
-      if (movedCount <= 0) { setLocBinPicker(null); setDestPicker(null); return; }
+      if (movedCount <= 0) { setDestPicker(null); return; }
       await removeSlotsForWine(wineId, movedCount, rackId);
       await addLocationPlacement(wineId, locId, null, movedCount);
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
@@ -1236,7 +1136,6 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['placements-list'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-      setLocBinPicker(null);
       setDestPicker(null);
       setSavedMsg('Wine moved to your cellar');
     } catch (err) {
@@ -1253,7 +1152,7 @@ export default function RackGridScreen() {
   // exceeds quantity.
   async function moveWineToBin(wineId: string, binId: string, count?: number) {
     const movedCount = Math.min(count ?? slotsForWine(wineId), slotsForWine(wineId));
-    if (movedCount <= 0) { setLocBinPicker(null); setDestPicker(null); return; }
+    if (movedCount <= 0) { setDestPicker(null); return; }
     try {
       const cells = await getBinCells(binId);
       const freed = await removeSlotsForWine(wineId, movedCount, rackId);
@@ -1279,7 +1178,6 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['bins'] });
       qc.invalidateQueries({ queryKey: ['bin-cells'] });
-      setLocBinPicker(null);
       setDestPicker(null);
       router.push(`/cellar/bin/${binId}?highlight=${wineId}` as any);
     } catch (err) {
@@ -1427,72 +1325,6 @@ export default function RackGridScreen() {
         return true;
       });
     });
-  }
-
-  async function archiveWholeNow(wine: CellarWine) {
-    if (archiving) return;
-    const today = new Date().toISOString().split('T')[0];
-    const total = wine.quantity ?? 1;
-    const here = rackCountOf(wine.id) || total; // bottles of this wine in THIS rack
-    const count = Math.min(here, total);
-    setArchiving(true);
-    try {
-      await addCellarWineRemoval({ cellarWineId: wine.id, removedAt: today, count, note: null });
-      if (count >= total) {
-        // This rack holds every bottle → full archive (clear all spots, mark row).
-        await freeAllPlacementsForArchive(wine.id);
-        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: total, archived_at: `${today}T12:00:00.000Z` } });
-        if (session?.user.id) {
-          qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wine.id));
-        }
-      } else {
-        // Only the bottles in THIS rack leave: free that many slots from THIS rack
-        // only, THEN decrement the live row, then clone an archive row for them.
-        await releaseHereThenSetQuantity(wine.id, count, total - count);
-        const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
-        await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z` });
-      }
-      if (session?.user.id) {
-        qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-        qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-      }
-      qc.invalidateQueries({ queryKey: ['cellar-removals', wine.id] });
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['placements'] });
-      qc.invalidateQueries({ queryKey: ['placements-list'] });
-      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-      setSavedMsg(count >= total ? `${wine.wine_name} archived` : `${count} bottle${count === 1 ? '' : 's'} archived from ${rack?.name ?? 'this rack'}`);
-    } catch (err) {
-      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setArchiving(false);
-    }
-  }
-
-  // Immediate permanent delete of the WHOLE wine — the menu already warned it's
-  // permanent, so there's no further confirm.
-  async function deleteWholeNow(wine: CellarWine) {
-    if (deleting) return;
-    setDeleting(true);
-    try {
-      await clearWineFromRacks(wine.id);
-      await deleteCellarWine(wine.id);
-      if (session?.user.id) {
-        qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wine.id));
-      }
-      qc.invalidateQueries({ queryKey: ['cellar'] });
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['placements'] });
-      qc.invalidateQueries({ queryKey: ['placements-list'] });
-      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-      setSavedMsg(`${wine.wine_name} deleted`);
-    } catch (err) {
-      showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setDeleting(false);
-    }
   }
 
   function computePlacementSlots(startRow: number, startCol: number, count: number, orient: 'Vertical' | 'Horizontal') {
@@ -1645,7 +1477,7 @@ export default function RackGridScreen() {
     if (!wine || !slot?.cellar_wine_id) return;
     const wineId = slot.cellar_wine_id;
     const title = wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name;
-    // Opened by a SHORT TAP now (long-press is reserved for drag). Grouped with
+    // Opened by a short tap on a filled slot. Grouped with
     // separators: identity actions, then placement actions, then archive/delete.
     showAlert({
       title,
@@ -1822,7 +1654,6 @@ export default function RackGridScreen() {
   // than the old straight-to-Delete confirm (which fired an aggressive delete
   // on a mis-hold). Mirrors the slot menu's verbs.
   function openWineListMenu(wine: CellarWine) {
-    const qty = wine.quantity ?? 1;
     showAlert({
       title: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name,
       body: 'What would you like to do?',
@@ -1889,13 +1720,12 @@ export default function RackGridScreen() {
     }
   }
 
-  async function handleDrop(toRow: number, toCol: number, srcOverride?: { row: number; col: number; wineId: string; wineName: string }) {
-    // `srcOverride` comes from the long-press-drag gesture (which knows its own
-    // source cell); the tap-to-move flow uses the `moving` store value.
-    const src = srcOverride ?? (moving ? { row: moving.row, col: moving.col, wineId: moving.wineId, wineName: moving.wineName } : null);
-    if (!src) return;
+  // Tap-to-move: drop the bottle picked up (the `moving` store value) here.
+  async function handleDrop(toRow: number, toCol: number) {
+    if (!moving) return;
+    const src = { row: moving.row, col: moving.col, wineId: moving.wineId, wineName: moving.wineName };
     const sourceWine = src.wineId;
-    const sourceRackId = srcOverride ? rackId : moving!.sourceRackId;
+    const sourceRackId = moving.sourceRackId;
     const srcRow = src.row;
     const srcCol = src.col;
     const destSlot = slotMap[`${toRow},${toCol}`];
@@ -1948,10 +1778,6 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] }); // snap back to server truth
       showAlert({ title: 'Move failed', body: 'Could not move the wine. Please try again.' });
     }
-  }
-
-  function toggleHighlight(wineId: string) {
-    setHighlightedWineId((prev) => (prev === wineId ? null : wineId));
   }
 
   const filteredWines = useMemo(() => {
@@ -2114,7 +1940,6 @@ export default function RackGridScreen() {
       return (
         <View
           key={rowDef.rowIndex}
-          onLayout={(e) => { const l = e.nativeEvent.layout; rowRectsRef.current[rowDef.rowIndex] = { x: l.x, y: l.y, w: l.width, h: l.height }; }}
           style={[styles.gridRow, { gap: GAP, marginBottom: GAP }, isLargeFormat && { marginBottom: GAP * 2 }]}
         >
           {Array.from({ length: rowDef.cols }, (_, col) => {
@@ -2129,12 +1954,9 @@ export default function RackGridScreen() {
             const isDimmed = highlightedIds.size > 0 && !!wine && !highlightedIds.has(wine.id);
             const isMovingSource = !!moving && moving.sourceRackId === rackId && moving.row === rowDef.rowIndex && moving.col === col;
             const isMultiSelected = multiSlots.has(`${rowDef.rowIndex},${col}`);
-            const isDragSource = !!drag && drag.row === rowDef.rowIndex && drag.col === col;
-            const isDropTarget = dragHoverKey === slotKey && !isDragSource;
             return (
               <TouchableOpacity
                 key={col}
-                onLayout={(e) => { cellXRef.current[slotKey] = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width }; }}
                 style={[
                   styles.slot,
                   { width: rowDef.slotWidth, height: rowDef.slotWidth },
@@ -2143,8 +1965,6 @@ export default function RackGridScreen() {
                   isDimmed && styles.slotDimmed,
                   isMovingSource && styles.slotMovingSource,
                   isMultiSelected && styles.slotMultiSelected,
-                  isDragSource && styles.slotDragging,
-                  isDropTarget && styles.slotDropTarget,
                 ]}
                 onPress={() => openSlot(rowDef.rowIndex, col)}
                 onLongPress={() => onLongPressSlot(rowDef.rowIndex, col)}
@@ -2177,14 +1997,6 @@ export default function RackGridScreen() {
       );
     });
   }
-
-  // Keep the drag gesture's refs pointing at the latest values/functions each
-  // render (the gesture object itself is memoised on [isZoomed]).
-  slotMapRef.current = slotMap;
-  gridRowsRef.current = gridRows;
-  slotSizeRef.current = slotSize;
-  handleDropRef.current = handleDrop;
-  onLongPressSlotRef.current = onLongPressSlot;
 
   return (
     <GestureDetector gesture={swipeGesture}>
@@ -2541,18 +2353,11 @@ export default function RackGridScreen() {
           style={styles.rackViewport}
           onLayout={(e) => { vpSize.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }; }}
         >
-          {/* Long-press-drag disabled: it mis-computed the drop cell on-device
-              (looked moved, wasn't) and its empty-cell branch fired a spurious
-              "add multiples" popup. Needs live on-device gesture debugging. Moving
-              is via the tap popup's "Move to Another Location" meanwhile. */}
           <GestureDetector gesture={inlineZoomGesture}>
             <Animated.View
-              ref={canvasRef}
               style={[styles.rackCanvas, { transform: [{ translateX: zTx }, { translateY: zTy }, { scale: zScale }] }]}
               onLayout={(e) => {
                 contentSize.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height };
-                // Cache the canvas' window origin so a drag can map abs→local at rest.
-                canvasRef.current?.measureInWindow((x: number, y: number) => { canvasWin.current = { x, y }; });
               }}
             >
             {!fullScreen && renderRackRows()}
@@ -2560,23 +2365,7 @@ export default function RackGridScreen() {
           </GestureDetector>
         </View>
 
-
       </KeyboardAwareScrollView>
-
-      {/* Follow-finger ghost while dragging a thumbnail to a new slot. */}
-      {drag ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.dragGhost,
-            // Grows ~35% larger than the slot so the picked-up bottle visibly
-            // lifts under the finger; centred on the touch point.
-            { width: Math.round(slotSize * 1.35), height: Math.round(slotSize * 1.35), transform: [{ translateX: Animated.subtract(dragPos.x, Math.round(slotSize * 1.35) / 2) }, { translateY: Animated.subtract(dragPos.y, Math.round(slotSize * 1.35) / 2) }] },
-          ]}
-        >
-          <LabelThumb path={drag.wine.label_image_path} fallbackText={drag.wine.wine_name} style={styles.dragGhostThumb} radius={4} frame={2} />
-        </Animated.View>
-      ) : null}
 
       {/* Placement modal — opens when the user taps an empty slot while a
           pending wine is set. Asks how many bottles to place; orientation
@@ -3154,13 +2943,7 @@ const styles = StyleSheet.create({
   slotChooserCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   slotUploadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
   slotUploadingText: { fontFamily: fonts.bodyItalic, fontSize: 15, color: '#FFFFFF' },
-  // Active "Add a Lineup" prompt — a single gold line beneath the blurb (not a
-  // top banner). Tapping a slot fulfils it; a small Cancel backs out.
-  // "Add a Lineup" prompt — the brown/yellow instruction bubble shared with the
-  // home-storage features (gold outline + gold-tint fill over the terracotta).
-  lineupPrompt: { marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.14)' },
-  lineupPromptText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, lineHeight: 21 },
-  lineupPromptCancel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginTop: spacing.sm },
+
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
@@ -3174,12 +2957,7 @@ const styles = StyleSheet.create({
   titleNav: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   navArrow: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, paddingHorizontal: 2 },
   navArrowDisabled: { color: 'rgba(224,184,74,0.25)' },
-  // Inter-rack swipe bar — small gold arrows + count, sits directly
-  // below the rack-name header so the user sees the swipe affordance
-  // before they reach for the grid.
-  // "Rack Bottle List" gold prompt + the list it reveals.
-  bottleListLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline', letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
-  bottleListHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+
   // Filter carousel chips (List / Maturity / custom filters / + Add).
   filterScroll: { flexGrow: 0, marginBottom: spacing.sm },
   filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: spacing.sm },
@@ -3197,8 +2975,7 @@ const styles = StyleSheet.create({
   maturityOptionText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
   maturityOptionTextActive: { color: colors.gold, fontFamily: fonts.bodySemibold },
   bottleList: { paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
-  createFilterRow: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  createFilterLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+
   // Create-custom-filter modal.
   filterModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   filterModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
@@ -3213,15 +2990,7 @@ const styles = StyleSheet.create({
   filterCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   filterSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
   filterSaveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  swipeBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xs, gap: spacing.sm },
-  swipeSide: { flex: 1, paddingVertical: 4 },
-  // Cormorant — inline swipe arrow link reads as a button
-  swipeArrow: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3 },
-  swipeArrowDisabled: { color: colors.textMuted, opacity: 0.4 },
-  // Inter — small caption
-  swipeCount: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
-  // Inter — hint
-  scrollHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingBottom: spacing.xs },
+
   placeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   placeSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
   // Cormorant — place pop-up title
@@ -3277,21 +3046,12 @@ const styles = StyleSheet.create({
   counterBtnText: { fontSize: 22, color: colors.text, fontFamily: fonts.headingRegular },
   counterValue: { fontSize: 24, fontFamily: fonts.bodyBold, color: colors.text, minWidth: 40, textAlign: 'center' },
   slotMovingSource: { borderColor: colors.gold, borderWidth: 2, opacity: 0.4 },
-  // Drag-to-move: the picked-up cell dims; the hovered drop cell gets a gold ring.
-  slotDragging: { opacity: 0.3 },
-  slotDropTarget: { borderColor: colors.gold, borderWidth: 2.5 },
-  dragGhost: { position: 'absolute', left: 0, top: 0, zIndex: 50, borderRadius: 6, borderWidth: 2, borderColor: colors.gold, backgroundColor: colors.surface, overflow: 'hidden', elevation: 8, shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
-  dragGhostThumb: { width: '100%', height: '100%' },
   movingBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, padding: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)' },
   // Inter — banner body
   movingBannerText: { flex: 1, fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 18 },
   // Cormorant — inline cancel link reads as an action
   movingCancelLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline' },
-  legend: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  // Inter — small caption
-  legendText: { fontSize: 11, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+
   gridRow: { flexDirection: 'row' },
   slot: { borderRadius: 4, borderWidth: 1, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center', padding: 2, overflow: 'hidden' },
   // Filled slot — the framed label thumbnail is the visual, so drop the
@@ -3313,24 +3073,13 @@ const styles = StyleSheet.create({
   fsContainer: { flex: 1, backgroundColor: colors.background },
   fsGestureArea: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   fsCanvas: { alignItems: 'center' },
-  fsClose: { position: 'absolute', top: 48, right: 20, width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
-  fsCloseText: { color: colors.gold, fontSize: 18, fontFamily: fonts.headingSemibold },
+
   fsHint: { position: 'absolute', bottom: 40, left: 0, right: 0, textAlign: 'center', color: colors.textMuted, fontSize: 13, fontFamily: fonts.bodyRegular },
-  zoomHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', paddingTop: spacing.sm, textDecorationLine: 'underline' },
-  // Full-screen zoom viewer — dark backdrop so the labels pop; tighter slots.
-  zoomBackdrop: { flex: 1, backgroundColor: 'rgba(18,11,10,0.97)', alignItems: 'center', justifyContent: 'center' },
-  zoomCanvas: { alignItems: 'center' },
-  zoomSlot: { borderRadius: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  zoomSlotEmpty: { width: '100%', height: '100%', borderRadius: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  zoomClose: { position: 'absolute', top: 52, right: 24, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
-  zoomCloseText: { color: '#FFFFFF', fontSize: 20, fontFamily: fonts.bodySemibold },
-  zoomViewerHint: { position: 'absolute', bottom: 48, color: 'rgba(255,255,255,0.7)', fontSize: 13, fontFamily: fonts.bodyItalic },
+
   slotEmpty: { borderColor: 'rgba(87,47,43,0.20)', backgroundColor: 'rgba(255,255,255,0.35)' },
-  slotHighlighted: { borderColor: '#FFFFFF', borderWidth: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
+
   slotDimmed: { opacity: 0.25 },
-  // Inter — tiny slot label
-  slotText: { fontSize: 8, fontFamily: fonts.bodySemibold, color: colors.text, textAlign: 'center', lineHeight: 10 },
-  slotTextHighlighted: { color: '#FFFFFF' },
+
   // Inter — slot plus glyph
   slotPlus: { fontSize: 16, color: 'rgba(87,47,43,0.40)', fontFamily: fonts.bodyRegular },
   slotPlusSelected: { color: colors.gold, fontFamily: fonts.headingBold },
@@ -3338,7 +3087,7 @@ const styles = StyleSheet.create({
   rackSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingVertical: spacing.sm, marginTop: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
   // "Awaiting placement" banner + yellow rows (moved here, no slot yet).
   awaitingBlock: { paddingTop: spacing.sm },
-  awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl },
+
   awaitingTitle: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.4 },
   // Checklist row: checkbox + wine + placed/total. White/unfilled by default; the
   // ticked (active) row brightens with a gold wash.
@@ -3364,15 +3113,12 @@ const styles = StyleSheet.create({
   // Small centred "Cancel" link below the primary button.
   multiBarCancelLink: { alignItems: 'center', paddingTop: 2 },
   multiBarCancelLinkText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted },
-  wineList: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
-  // Inter — hint
-  rackHint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 4, lineHeight: 20 },
-  rackHintLine2: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, lineHeight: 20 },
+
   rackHintLink: { fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline' },
   rackHintBlock: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, gap: 4 },
-  rackHintCentred: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+
   rackHintBullet: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'left', lineHeight: 20 },
-  rackHintDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
+
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.background, paddingHorizontal: spacing.md },
   // Inter — form input
   searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
@@ -3383,50 +3129,11 @@ const styles = StyleSheet.create({
   wineRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   wineRowActive: { borderBottomColor: colors.gold },
   wineRowMain: { flex: 1 },
-  // Inter — wine card name
-  wineRowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
-  wineRowNameActive: { color: colors.gold },
-  // Inter — wine detail caption
-  wineRowDetail: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+
   // Inter — count read-out
   wineRowCount: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   wineRowCountActive: { color: colors.gold },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, maxHeight: '80%' },
-  // Cormorant — modal pop-up title
-  modalTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, marginBottom: 2 },
-  // Inter — producer sub-line in modal
-  modalProducer: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: 2 },
-  // Inter — sub caption
-  modalSub: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, marginBottom: spacing.md },
-  scoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
-  // Inter — score label
-  scoreLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  // Inter — score value read-out
-  scoreValue: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold },
-  // Inter — tasting notes body
-  tastingNotes: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 20, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
-  // Inter — form label
-  noteLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: spacing.sm },
-  // Inter — form input
-  noteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.background, minHeight: 72, marginBottom: spacing.md },
-  saveNoteButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  // Cormorant — save button text
-  saveNoteText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
-  clearButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, alignItems: 'center', marginBottom: spacing.md },
-  // Cormorant — clear button text
-  clearButtonText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.textMuted },
-  cancelButton: { alignItems: 'center', marginTop: spacing.sm },
-  // Inter — cancel link (not a button)
-  cancelText: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  // Cormorant — sub-section header
-  removeHeading: { fontSize: 15, fontFamily: fonts.headingBold, color: colors.text, marginTop: spacing.lg, marginBottom: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
-  // Inter — form label
-  fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
-  // Inter — form input
-  modalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.background, marginBottom: spacing.md },
-  // Inter — status caption
-  rackRemovalMsg: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
+
   savedBanner: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, alignItems: 'center' },
   // Inter — banner body
   savedBannerText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.gold, letterSpacing: 0.3 },

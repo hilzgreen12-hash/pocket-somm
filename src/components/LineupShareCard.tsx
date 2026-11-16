@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
-import { colors, share } from '../constants/theme';
+import { share } from '../constants/theme';
 import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
 
 // Branded card for sharing an archived night's lineup: the photo + a date (and

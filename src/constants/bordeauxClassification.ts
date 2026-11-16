@@ -91,11 +91,6 @@ export function bordeauxInfoFor(producer: string | null | undefined): { classifi
   return BY_KEY[key] ?? null;
 }
 
-// Back-compat: classification only.
-export function bordeauxGrowthFor(producer: string | null | undefined): string | null {
-  return bordeauxInfoFor(producer)?.classification ?? null;
-}
-
 // Fill in the classification (as the wine name) and the appellation (as the
 // region) for a known classified Bordeaux château, WITHOUT overwriting a genuine
 // cuvée name or an already-known region. Generic over any identity shape that

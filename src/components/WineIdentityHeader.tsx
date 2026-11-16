@@ -19,9 +19,9 @@ import { tidyWineRegion } from '../utils/regionFormat';
 // centred modal header and a compact review-card header without letting the
 // STRUCTURE drift.
 
-export type WineHeaderSize = 'sm' | 'md' | 'lg';
+type WineHeaderSize = 'sm' | 'md' | 'lg';
 
-export interface WineIdentityHeaderProps {
+interface WineIdentityHeaderProps {
   producer?: string | null;
   wineName?: string | null;
   vintage?: string | number | null;

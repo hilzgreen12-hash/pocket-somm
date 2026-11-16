@@ -11,7 +11,7 @@ export interface ChefArchiveCollection {
   sort_order?: number | null;
 }
 
-export interface ChefArchiveItemRef {
+interface ChefArchiveItemRef {
   collection_id: string;
   label_session_id: string | null;
   pairing_session_id: string | null;

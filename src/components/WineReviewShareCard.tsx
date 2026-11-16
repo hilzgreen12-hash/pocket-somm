@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
-import { colors, share } from '../constants/theme';
-import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
+import { share } from '../constants/theme';
+import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
 import { wineHeaderLine } from '../utils/wineHeader';
 
 // Branded card for sharing a single wine review out of Your Wine

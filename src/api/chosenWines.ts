@@ -92,7 +92,7 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
 }
 
 // One imported Vivino review → a standalone chosen_wines row.
-export interface ImportReviewInput {
+interface ImportReviewInput {
   producer: string;
   wineName: string;
   vintage: number | null;

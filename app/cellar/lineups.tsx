@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { LineupThumb } from '../../src/components/LineupThumb';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Modal, TextInput, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
@@ -58,7 +58,6 @@ function LineupTile({ item, size, onPress, onLongPress }: { item: LineupArchive;
 
 export default function LineupLibraryScreen() {
   const { session } = useAuth();
-  const { width } = useWindowDimensions();
   const qc = useQueryClient();
   const userId = session?.user.id;
 
@@ -216,22 +215,10 @@ export default function LineupLibraryScreen() {
     });
   }
 
-  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
-  const [viewerOpen, setViewerOpen] = useState(false);
-  async function openViewer(item: LineupArchive) {
-    const u = await lineupSignedUrl(item.image_path);
-    setViewerUrl(u);
-    setViewerOpen(true);
-  }
-
   // Note "letter" — view / record / type a memory note for a lineup.
   const [noteTarget, setNoteTarget] = useState<LineupArchive | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
-  function openNote(item: LineupArchive) {
-    setNoteTarget(item);
-    setNoteDraft(item.note ?? '');
-  }
   async function saveNote() {
     if (!noteTarget || savingNote) return;
     setSavingNote(true);
@@ -291,10 +278,6 @@ export default function LineupLibraryScreen() {
       capturedRef.current = false;
     }
   }
-
-  const cols = 2;
-  const gap = spacing.md;
-  const tileWidth = (width - spacing.xl * 2 - gap * (cols - 1)) / cols;
 
   const cityLabel = cityFilter === 'All' ? 'All cities' : cityFilter;
   const monthLabel = monthFilter === 'All' ? 'All dates' : monthFilter;
@@ -437,12 +420,6 @@ export default function LineupLibraryScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <Modal visible={viewerOpen} transparent animationType="fade" onRequestClose={() => setViewerOpen(false)}>
-        <TouchableOpacity style={styles.viewerOverlay} activeOpacity={1} onPress={() => setViewerOpen(false)}>
-          {viewerUrl ? <Image source={{ uri: viewerUrl }} style={styles.viewerImage} resizeMode="contain" /> : <ActivityIndicator color={colors.gold} />}
-        </TouchableOpacity>
-      </Modal>
-
       {/* The "letter" — opens with the night's note. View it, or record / type
           one if it's empty. */}
       <Modal visible={!!noteTarget} transparent animationType="fade" onRequestClose={() => setNoteTarget(null)}>
@@ -543,7 +520,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
-  headerSpacer: { width: 40 },
+
   addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
   blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, paddingHorizontal: spacing.xl, paddingTop: spacing.md, textAlign: 'center' },
@@ -572,27 +549,9 @@ const styles = StyleSheet.create({
   rowStampRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rowStamp: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   rowVenue: { fontSize: 13.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3 },
-  rowCount: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
+
   rowNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, padding: spacing.xl, paddingBottom: 60 },
-  tile: { alignItems: 'flex-start' },
-  tileImageWrap: { borderRadius: 10, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  // Date + envelope share a top-aligned row; bottle count sits below.
-  tileTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', alignSelf: 'stretch', marginTop: spacing.xs },
-  tileDate: { flex: 1, fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, marginRight: spacing.sm },
-  envelopeWrap: { marginRight: spacing.xs },
-  tileCount: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  // Hand-drawn envelope: a gold-outlined body with a "V" flap (two rotated
-  // gold strokes), ~3:2 wide so it stands out. Matches the mic / bin motif.
-  envelope: { width: 40, height: 26, borderWidth: 1.5, borderColor: colors.gold, borderRadius: 3, overflow: 'hidden' },
-  envelopeEmpty: { opacity: 0.45 },
-  envFlapLeft: { position: 'absolute', top: 5.5, left: -0.5, width: 22, height: 1.5, backgroundColor: colors.gold, transform: [{ rotate: '30deg' }] },
-  envFlapRight: { position: 'absolute', top: 5.5, left: 18.5, width: 22, height: 1.5, backgroundColor: colors.gold, transform: [{ rotate: '-30deg' }] },
-  favStar: { position: 'absolute', top: spacing.xs, right: spacing.xs, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-  // Small gold dot marking a lineup that already has a note.
-  noteDot: { position: 'absolute', top: spacing.sm, left: spacing.sm, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold },
-  favStarText: { fontSize: 20, color: '#FFFFFF', lineHeight: 22 },
-  favStarActive: { color: colors.gold },
+
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
   retryBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
@@ -614,8 +573,7 @@ const styles = StyleSheet.create({
   addBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   savingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
   savingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
-  viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
-  viewerImage: { width: '100%', height: '80%' },
+
   // The note "letter" — a cream card with a gold flap glyph at the top.
   letterSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg, width: '100%', alignSelf: 'center', marginHorizontal: spacing.xl },
   letterFlap: { fontSize: 28, color: colors.gold, textAlign: 'center', marginBottom: spacing.xs },

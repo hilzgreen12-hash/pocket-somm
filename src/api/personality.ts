@@ -19,16 +19,3 @@ export async function listPersonalitySketches(userId: string, category: 'wine' |
   return (data ?? []) as PersonalitySketch[];
 }
 
-export async function insertPersonalitySketch(input: { userId: string; category: 'wine' | 'recipe'; text: string }): Promise<void> {
-  const { error } = await supabase.from('personality_sketches').insert({
-    user_id: input.userId,
-    category: input.category,
-    text: input.text,
-  });
-  if (error) throw error;
-}
-
-export async function deletePersonalitySketch(id: string): Promise<void> {
-  const { error } = await supabase.from('personality_sketches').delete().eq('id', id);
-  if (error) throw error;
-}

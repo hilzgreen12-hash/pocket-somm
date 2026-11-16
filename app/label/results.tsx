@@ -1,9 +1,8 @@
-import { normalisePriceText, parsePriceText } from '../../src/utils/priceInput';
+import { parsePriceText } from '../../src/utils/priceInput';
 import { useMemo, useState, useEffect, useRef, useCallback, type ComponentProps } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, Share, BackHandler } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/components/VinstersNoteHeading';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
@@ -19,8 +18,6 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { useAutoLabel } from '../../src/hooks/useAutoLabel';
 import { useLabels } from '../../src/hooks/useLabels';
-import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
-import { captureCity } from '../../src/utils/captureCity';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
@@ -35,7 +32,7 @@ import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { patchChosenWine } from '../../src/api/chosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
-import { createStorageCase, assignWineToCase, deleteStorageCase, fetchStorageLocationCases, fetchStorageLocation, fetchStorageLocations } from '../../src/api/storageLocations';
+import { createStorageCase, fetchStorageLocationCases, fetchStorageLocation, fetchStorageLocations } from '../../src/api/storageLocations';
 import { addLocationPlacement, fetchPlacementsForWine } from '../../src/api/placements';
 import { MicButton } from '../../src/components/MicButton';
 import type { ChosenWine, WineIntelligence } from '../../src/types/wine';
@@ -43,14 +40,14 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
-import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, type VintageComparisonRow, verifyOnWineSearcher } from '../../src/services/pricing';
+import { assignSlots, getRackSlots, getSlotAssignments } from '../../src/api/racks';
+import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
 import { generateServingSuggestion, generateRarity, generateVintageVerdict, generateMarketVintage, generatePairingIngredients, type VintageVerdictAI, type PairingIngredient } from '../../src/api/wineExtras';
 import { PairingIngredientsCard } from '../../src/components/winecard/PairingIngredientsCard';
 import { GenerateRecipesCard, ServingGlance, ComplementaryPairings, CellarPickRow } from '../../src/components/winecard/ServeSections';
 import type { WineServingSuggestion } from '../../src/types/wine';
 import { peekIntelCurrency, homeCurrency as fetchHomeCurrency } from '../../src/utils/localCurrency';
-import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
+import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { updateLabelIntel } from '../../src/api/labels';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import * as Sharing from 'expo-sharing';
@@ -62,34 +59,13 @@ import { regionWithCountry } from '../../src/utils/wineOrigin';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
-import type { WineDetails, WineDetailsComplete } from '../../src/types/wine';
-import { useScanStore } from '../../src/stores/scanStore';
+import type { WineDetailsComplete } from '../../src/types/wine';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
-import { classifyLabelRead, alertBadLabelPhoto, alertLabelFailure, askReadAsList } from '../../src/services/labelRead';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { hasRealInsiderNote } from '../../src/constants/insiderNote';
-
-function DrinkingWindowBadge({ status, from, to }: { status: string; from: number | null; to: number | null }) {
-  const labels: Record<string, { text: string; color: string }> = {
-    too_young: { text: 'Too Young', color: colors.warning },
-    approaching: { text: 'Approaching Peak', color: colors.gold },
-    peak: { text: 'Peak Now', color: colors.gold },
-    declining: { text: 'Declining', color: colors.gold },
-    unknown: { text: 'Drinking Window Unknown', color: colors.textMuted },
-  };
-  const badge = labels[status] ?? labels.unknown;
-  const window = from && to ? `${from}–${to}` : null;
-
-  return (
-    <View style={styles.badge}>
-      <Text style={[styles.badgeText, { color: badge.color }]}>{badge.text}</Text>
-      {window && <Text style={styles.badgeWindow}>{window}</Text>}
-    </View>
-  );
-}
 
 // Compact label + colour for the drinking-window stat cell — mirrors the badge
 // above and the cellar wine card, with shorter labels for the tight cell.
@@ -103,7 +79,6 @@ function windowMeta(status: string): { text: string; color: string } {
   };
   return map[status] ?? map.unknown;
 }
-
 
 // Stand-in intel for the no-intel "Add Wine" flow so the shared render + save
 // code can read intel.* uniformly (all blank — real intel is generated later
@@ -120,10 +95,9 @@ const EMPTY_INTEL: WineIntelligence = {
 };
 
 export default function LabelResultsScreen() {
-  const { context, fresh, backTo, via, confirm, labelId, confirmed, gen, noRecent } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string; labelId?: string; confirmed?: string; gen?: string; noRecent?: string }>();
+  const { context, fresh, backTo, confirm, labelId, confirmed, gen, noRecent } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string; labelId?: string; confirmed?: string; gen?: string; noRecent?: string }>();
   // A caller (e.g. a lineup wine) that KNOWS the identity — never disambiguate.
   const identityConfirmed = confirmed === '1';
-  const isUploadFlow = via === 'upload';
   // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
   // a review, so the action area collapses to a single "Review this Wine"
   // and the back + post-save routing land on /wines/chosen.
@@ -143,7 +117,7 @@ export default function LabelResultsScreen() {
   // no-intel adds — 'add-location' must be included or the guard below dead-ends
   // on "No results available" and the wine never saves (regression from 7e9deec).
   const isAddFlow = context === 'add' || context === 'add-location';
-  const { wineDetailsConfirmed, intelligence, imageUri, setImage, setImageUri, setWineDetails, setWineDetailsConfirmed, setIntelligence } = useLabelStore();
+  const { wineDetailsConfirmed, intelligence, imageUri, setImageUri, setWineDetailsConfirmed, setIntelligence } = useLabelStore();
   // When the intel card has no stored/selected photo — e.g. a wine named by Voice
   // Command or typed in manually — fall back to a web-fetched label for the wine's
   // identity so the card always shows a thumbnail (same source the Discover
@@ -155,7 +129,7 @@ export default function LabelResultsScreen() {
   // Serve before/after picks come only from bottles kept at home.
   const { wines: homeWines } = useHomeCellarWines();
   const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
-  const { create: createLabel, remove: removeLabel, labels } = useLabels();
+  const { create: createLabel } = useLabels();
   const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId, pendingCaseId, setPendingCaseId } = useRackStore();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
@@ -185,7 +159,6 @@ export default function LabelResultsScreen() {
   // Single-select tick in the "Which wine is this?" list (lineup-style rows).
   const [selectedCand, setSelectedCand] = useState<number | null>(null);
   const [regenerating, setRegenerating] = useState(false);
-  const [reReading, setReReading] = useState(false);
   const candidatesTriedRef = useRef(false);
   // Producer range ("where this wine sits in the lineup") — fetched once on the
   // Wine Intel card. Best-effort: an empty result simply hides the section.
@@ -392,74 +365,6 @@ export default function LabelResultsScreen() {
   const [vintageInput, setVintageInput] = useState('');
   const vintagePromptedRef = useRef(false);
 
-  // A newly read photo: carry on only if it's a wine label. A wine list offers
-  // the list scan; anything else says what's wrong with the photo.
-  async function acceptLabelRead(details: WineDetails, uri: string): Promise<boolean> {
-    const kind = classifyLabelRead(details);
-    if (kind === 'list') {
-      if (await askReadAsList()) {
-        useScanStore.getState().setImage(uri, 'upload');
-        router.push('/scan/wine-list?shared=1' as any);
-        return false;
-      }
-      return true;
-    }
-    if (kind === 'not-wine' || kind === 'unreadable') {
-      alertBadLabelPhoto(kind);
-      return false;
-    }
-    return true;
-  }
-
-  // "Upload Again" — re-pick a label and regenerate intel in place (the upload
-  // flow's equivalent of the camera's "Scan Again"). Stays on this screen; the
-  // store update re-renders the card with the new wine.
-  async function handleUploadAgain() {
-    if (reReading) return;
-    if (!(await ensureMediaPermission('library'))) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-    if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
-    if (!(await ensureConnectionForUpload())) return;
-    setReReading(true);
-    try {
-      const base64 = await prepareImageBase64(uri);
-      // Read the new label FIRST — only swap the on-screen photo once the read
-      // succeeds, so a failed re-read never leaves the new photo over the old wine.
-      const details = await scanLabel(base64);
-      if (!(await acceptLabelRead(details, uri))) return;
-      setImage(uri, base64);
-      setWineDetails(details);
-      const confirmed: WineDetailsComplete = {
-        producer: (details.producer ?? '').trim(),
-        region: (details.region ?? '').trim(),
-        wineName: (details.wineName ?? '').trim() || null,
-        vintage: (details.vintage ?? '').trim(),
-        style: (details.style ?? '').trim() || null,
-        grape: (details.grape ?? '').trim() || null,
-        bottleSizeMl: details.bottleSizeMl ?? null,
-        quantity: details.quantity ?? 1,
-      };
-      setWineDetailsConfirmed(confirmed);
-      const intel = await generateWineIntel(confirmed, userCurrency);
-      setIntelligence(intel);
-      useLastIntelStore.getState().setLast(confirmed, intel);
-      // Let the disambiguation check run again for the new wine.
-      candidatesTriedRef.current = false;
-      setCandidates([]);
-      setCandidatesOpen(false);
-      setNoIntelDismissed(false);
-      // New wine → nothing from the previous one may linger.
-      resetPerWineState();
-      // (Label Library retired — scanned labels are no longer saved to a library;
-      // the user saves the wine to Your Wine Reviews from the intel card instead.)
-    } catch (e) {
-      alertLabelFailure(e);
-    } finally {
-      setReReading(false);
-    }
-  }
-
   useEffect(() => {
     if (candidatesTriedRef.current) return;
     if (!isIntelOnlyFlow || !intelligence || !wineDetailsConfirmed) return;
@@ -650,71 +555,11 @@ export default function LabelResultsScreen() {
     return () => sub.remove();
   }, [awaitingConfirm, intelligence]);
 
-  function openManualConfirm() {
-    confirmTriedRef.current = false;
-    autoConfirmedRef.current = false;
-    setConfirmOptions([]);
-    setAwaitingConfirm(true);
-  }
   // Confirm-step "keep" action: on a manual re-confirm keep the existing card;
   // on the initial (no-card) confirm, generate intel for the read as-is.
   function keepCurrentOrRead() {
     if (intelligence) { setAwaitingConfirm(false); return; }
     if (wineDetailsConfirmed) resolveConfirm(wineDetailsConfirmed);
-  }
-  // "Scan Again" / "Upload Again" from the confirm screen — re-capture a photo
-  // and re-run the same read + verify-first, so a bad photo can be redone
-  // without leaving the flow. Camera re-opens the scanner; upload re-picks from
-  // the library in place.
-  async function recaptureFromConfirm() {
-    if (!isUploadFlow) {
-      router.replace(`/label/camera?context=intel${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` as any);
-      return;
-    }
-    if (reReading) return;
-    if (!(await ensureMediaPermission('library'))) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-    if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
-    if (!(await ensureConnectionForUpload())) return;
-    setReReading(true);
-    try {
-      const base64 = await prepareImageBase64(uri);
-      const details = await scanLabel(base64);
-      if (!(await acceptLabelRead(details, uri))) return;
-      setImage(uri, base64);
-      setWineDetails(details);
-      const confirmed: WineDetailsComplete = {
-        producer: (details.producer ?? '').trim(),
-        region: (details.region ?? '').trim(),
-        wineName: (details.wineName ?? '').trim() || null,
-        vintage: (details.vintage ?? '').trim(),
-        style: (details.style ?? '').trim() || null,
-        grape: (details.grape ?? '').trim() || null,
-        bottleSizeMl: details.bottleSizeMl ?? null,
-        quantity: details.quantity ?? 1,
-      };
-      setWineDetailsConfirmed(confirmed);
-      // Verify-first again: a confident re-read goes straight to the card; an
-      // unconfirmed one stays on the confirm screen with fresh matches.
-      const verified = await verifyOnWineSearcher(confirmed, userCurrency);
-      if (verified) {
-        const intel = await generateWineIntel(confirmed, userCurrency);
-        setIntelligence(intel);
-        useLastIntelStore.getState().setLast(confirmed, intel);
-        setAwaitingConfirm(false);
-      } else {
-        setIntelligence(null);
-        confirmTriedRef.current = false;
-        autoConfirmedRef.current = false;
-        setConfirmOptions([]);
-        setAwaitingConfirm(true);
-      }
-    } catch (e) {
-      alertLabelFailure(e);
-    } finally {
-      setReReading(false);
-    }
   }
   // "Search Again" — back to the Scan hub, where the user can re-scan, upload,
   // search the catalogue, or type the wine in by hand. Reset the just-read wine
@@ -978,7 +823,7 @@ export default function LabelResultsScreen() {
     useLabelStore.getState().wineDetailsConfirmed?.bottleSizeMl ?? 750
   );
   const [saving, setSaving] = useState(false);
-  const [showEstimate, setShowEstimate] = useState(false);
+  const [] = useState(false);
   // "Edit Wine" manual-edit modal (top-right on the intel card): free-text edit of
   // the identity + grape + bottle size + photo, then regenerate the intel card.
   const [editWineOpen, setEditWineOpen] = useState(false);
@@ -1420,13 +1265,6 @@ export default function LabelResultsScreen() {
 
         <LabelPhotoViewer visible={zoomOpen} uri={imageUri} onClose={() => setZoomOpen(false)} />
 
-        {/* Re-reading overlay while a re-capture is processed. */}
-        <Modal visible={reReading} transparent animationType="fade">
-          <View style={styles.reReadOverlay}>
-            <ActivityIndicator size="large" color={colors.gold} />
-            <Text style={styles.reReadText}>Finding this wine…</Text>
-          </View>
-        </Modal>
       </ScrollView>
     );
   }
@@ -1965,14 +1803,6 @@ export default function LabelResultsScreen() {
     await performNewEntry();
   }
 
-  // Compact Add-to-Cellar field dropdowns.
-  const storageLabel = selectedRackId === '__new__'
-    ? '+ New Location'
-    : selectedRackId
-      ? (racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack')
-      : selectedLocationId
-        ? (cellarLocations.find((l) => l.id === selectedLocationId)?.name ?? 'Location')
-        : 'Cellar List';
   // Destinations: Cellar List (unplaced), each rack/fridge, each bespoke cellar
   // Location, then "+ Create new rack". Per-rack filters are deliberately not
   // offered here. Picking one kind clears the other so they stay exclusive.
@@ -1992,8 +1822,6 @@ export default function LabelResultsScreen() {
         : openField === 'count'
           ? Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1, onSelect: () => setBottleCount(i + 1) }))
           : [];
-
-  const windowM = windowMeta(intel.drinkingWindowStatus);
 
   // The three headline stats are tappable — each opens a short "why" popup.
   // Critic Score → where this number comes from. Crucially, says when it is NOT
@@ -2266,7 +2094,6 @@ export default function LabelResultsScreen() {
     }
     if (t === 'serve' && !servingExpanded) void toggleServing();
   }
-
 
   function intelPickRow(found: CellarPick | null, slot: 'before' | 'after', suggested: string) {
     const qs = new URLSearchParams({ slot, suggested });
@@ -2762,14 +2589,6 @@ export default function LabelResultsScreen() {
         editLabel="Check details"
       />
 
-      {/* Upload Again — re-reading the new photo + regenerating intel. */}
-      <Modal visible={reReading} transparent animationType="fade">
-        <View style={styles.reReadOverlay}>
-          <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.reReadText}>Finding this wine…</Text>
-        </View>
-      </Modal>
-
       {/* Vintage prompt — the label had no readable vintage. */}
       <Modal visible={vintagePromptOpen} transparent animationType="fade" onRequestClose={confirmNoVintage}>
         <View style={styles.candOverlay}>
@@ -3045,7 +2864,6 @@ export default function LabelResultsScreen() {
           />
         </>
       )}
-
 
       {!isAddFlow && !isIntelOnlyFlow && (
         <View style={styles.section}>
@@ -3537,12 +3355,11 @@ const styles = StyleSheet.create({
   linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm, alignSelf: 'flex-start' },
   backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  scanAgainBtn: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, paddingVertical: spacing.xs },
+
   scanAgainText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   // Stacked top-right actions (Export, then Edit / Scan Again), same gold font.
   topRightActions: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, alignItems: 'flex-end', gap: spacing.xs },
-  reReadOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  reReadText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF' },
+
   pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },
   // No bottom border now — the stats bar (moved below this block) provides the
   // separator above Vinster's Note / Map.
@@ -3583,23 +3400,7 @@ const styles = StyleSheet.create({
   candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  producer: { fontSize: 20.5, fontFamily: fonts.bodyBold, color: colors.text },
-  wineName: { fontSize: 19, fontFamily: fonts.bodyItalic, color: colors.text, marginTop: 2 },
-  detail: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.xs },
-  grape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, marginTop: 2 },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  scoreLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  score: { fontSize: 28, fontFamily: fonts.bodyBold, color: colors.gold },
-  // Avg Critic Score header row + per-critic breakdown beneath it.
-  criticBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  criticScoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  criticBreakdown: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.sm, columnGap: spacing.md, rowGap: spacing.xs },
-  criticChipText: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text },
-  criticChipName: { fontFamily: fonts.bodyBold, color: colors.gold },
-  criticBreakdownCaption: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 18 },
-  badge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  badgeText: { fontSize: 14, fontFamily: fonts.bodySemibold },
-  badgeWindow: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Vinster's Note + Map combined block — tighter than a full section, with a
   // single bottom border (the separator before The Inside Line) and no divider
@@ -3610,12 +3411,11 @@ const styles = StyleSheet.create({
   // Vinster's Note beside Vinster's Map — centred as a pair with an indent
   // between them; text baselines aligned so both titles sit on one line.
   noteMapHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline', gap: spacing.xl, flexWrap: 'wrap' },
-  // Pulls the Map heading up close beneath the note (squeezed together).
-  mapHeadingTight: { marginTop: spacing.sm },
+
   // The "(what's this)" explainer, now shown inline in gold italics below the
   // note when it's expanded instead of behind a link.
   noteExplainer: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 19, marginTop: spacing.sm },
-  sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
+
   // Inline headline stats bar: Score · Value · Drinking Window, bracketed by
   // full-width rules top and bottom (matches the app's other stats bars).
   // Full-width yellow (gold) rules bracketing the stats bar, edge to edge.
@@ -3645,17 +3445,16 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
   statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
-  statBarValue: { fontSize: 18.5, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
+
   statBarValueMuted: { color: colors.textMuted, fontFamily: fonts.bodySemibold },
-  statBarLabel: { fontSize: 10, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, textAlign: 'center' },
-  statBarSep: { fontSize: 18, color: colors.border, marginBottom: 16 },
+
   // Gold, label-less headline stats bar under the title — tappable figures.
   statBarValueGold: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
   statBarSepGold: { fontSize: 26, color: colors.gold, opacity: 0.75 },
   // Caption that marks the stat bar as tappable (Option A). Only on interactive
   // bars — static bars app-wide omit it, keeping the bar's format identical.
   statBarHint: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: colors.gold, opacity: 0.85, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
-  valueCaveat: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.sm, lineHeight: 16 },
+
   // Vinster's Vintage & Market Comparison — collapsible section + its table.
   vintageSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   vintageHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },
@@ -3677,9 +3476,7 @@ const styles = StyleSheet.create({
   servingLine: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22, marginBottom: spacing.md },
   servingTitle: { fontFamily: fonts.bodySemibold, color: colors.gold },
   marketMissingNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.md },
-  // Compact 2-column stat grid mirroring the cellar wine card.
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  statCell: { width: '50%', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
+
   // "The Inside Line" — sommelier-best-friend commentary. Header matches the
   // producer-range header (rangeTitle) and is gold, per design.
   insiderTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
@@ -3704,16 +3501,13 @@ const styles = StyleSheet.create({
   rangeSummary: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 21, marginTop: spacing.md },
   // Confirm-first panel (shown before a card when the scan couldn't be verified).
   confirmTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.xs },
-  confirmBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 21, marginBottom: spacing.md },
+
   confirmLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
   confirmLoadingText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted },
   confirmRow: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   confirmRowName: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.text },
   confirmRowMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
-  confirmPrimary: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
-  confirmPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
-  confirmManualLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
-  confirmManualText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+
   // Thumbnail-only header on the confirm screen (no wine title).
   confirmThumbRow: { alignItems: 'center', paddingTop: spacing.lg, paddingBottom: spacing.xs },
   // Selected row in the confirm list — subtle gold highlight.
@@ -3725,36 +3519,15 @@ const styles = StyleSheet.create({
   confirmActionText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
   confirmActionGhost: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center', justifyContent: 'center' },
   confirmActionGhostText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
-  // "Not this wine?" correction link under the header on the intel card.
-  wrongWineLink: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingTop: 2, paddingBottom: spacing.md },
-  wrongWineText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: '#FFFFFF', textDecorationLine: 'underline', textAlign: 'center' },
-  statLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
-  statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
-  statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
-  statSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
-  marketNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 18, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.sm, marginHorizontal: spacing.xl },
-  estimatedByLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline', marginTop: 3 },
-  estimatedValueGold: { color: colors.gold },
-  // "Dive Deeper" / "Chef, find me a recipe" — gold-outline actions.
-  deepBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
-  deepBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+
   // Yellow italic "Dive deeper" link, sits below The Inside Line blurb.
   diveDeeperLink: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, marginTop: spacing.sm },
-  // Primary CTA above Dive Deeper — gold-filled to stand out.
-  saveReviewBtn: { borderWidth: 1, borderColor: colors.text, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },
-  saveReviewBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, letterSpacing: 0.3 },
+
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
-  // Vinster's Map — collapsible heading + placeholder body.
-  mapHeadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+
   mapTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   mapChevron: { fontSize: 15, color: colors.gold, fontFamily: fonts.bodySemibold },
-  mapBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, marginTop: spacing.sm },
-  estimateHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  estimateGenerateLink: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
-  estimateValue: { fontSize: 32, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 0.5 },
-  estimateRange: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: 2, textTransform: 'capitalize' },
-  estimateUnavailable: { fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.textMuted },
-  estimateCaption: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.xs, lineHeight: 19 },
+
   communityRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   communityLabel: { fontSize: 16, fontFamily: fonts.bodySemibold, color: 'rgba(212,176,96,0.45)', letterSpacing: 0.3 },
   communityComingSoon: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textTransform: 'lowercase', letterSpacing: 0.5 },
@@ -3762,14 +3535,10 @@ const styles = StyleSheet.create({
   actionStack: { marginHorizontal: spacing.xl, marginTop: spacing.xl, gap: spacing.sm },
   primaryAddBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center' },
   primaryAddBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, letterSpacing: 0.3 },
-  secondaryAddBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.md, alignItems: 'center' },
-  secondaryAddBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+
   reviewNoteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 100, lineHeight: 22, marginBottom: spacing.md },
   bottleSizeWrap: { marginBottom: spacing.md },
-  // Compact Add-to-Cellar field dropdowns (Storage location | Bottle size,
-  // then Number of bottles).
-  fieldRow: { flexDirection: 'row', gap: spacing.md },
-  fieldCol: { flex: 1 },
+
   fieldSelect: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginBottom: spacing.md },
   // "Where should this live?" destination chips — a visible one-tap choice.
   storageChipsScroll: { flexGrow: 0, marginBottom: spacing.md },
@@ -3815,15 +3584,9 @@ const styles = StyleSheet.create({
   pkgBubbleActive: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: '#FFFFFF' },
   pkgBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF' },
   pkgBubbleTextActive: { color: '#FFFFFF' },
-  caseKindRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  caseKindBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: colors.surface },
-  caseKindBtnOn: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.14)' },
-  caseKindText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted },
-  caseKindTextOn: { color: colors.gold },
+
   caseInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, marginBottom: spacing.sm },
-  caseSuggestRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
-  caseSuggestChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 999, paddingVertical: 5, paddingHorizontal: spacing.md },
-  caseSuggestText: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.gold },
+
   caseNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.md },
   caseNoteInput: { flex: 1, minHeight: 44, marginBottom: 0, textAlignVertical: 'top' },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
@@ -3841,12 +3604,4 @@ const styles = StyleSheet.create({
   orientationBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
   orientationBtnText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.textMuted },
   orientationBtnTextActive: { color: colors.gold },
-  rackList: { gap: spacing.xs, marginBottom: spacing.md },
-  rackOption: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
-  rackOptionActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },
-  rackOptionText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.textMuted },
-  rackOptionTextActive: { color: colors.gold },
-  rackOptionPrimary: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
-  rackOptionPrimaryActive: { backgroundColor: 'rgba(255,255,255,0.10)' },
-  rackOptionPrimaryText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: '#FFFFFF' },
 });

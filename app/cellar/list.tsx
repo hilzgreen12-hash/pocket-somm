@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput, Share } from 'react-native';
-import * as Sharing from 'expo-sharing';
-import { captureRef } from 'react-native-view-shot';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
@@ -14,9 +12,8 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { updateCellarIntelBatch, isMissingIntel } from '../../src/services/bulkIntel';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { useLineupStore } from '../../src/stores/lineupStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
-import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
+import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWine } from '../../src/api/cellar';
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
@@ -92,7 +89,7 @@ type ArchivedFilter = 'hide' | 'include' | 'only';
 
 export default function FullCellarListScreen() {
   const { session } = useAuth();
-  const { wines, isLoading, isError, addWine, updateWine } = useCellar();
+  const { wines, isLoading, isError, updateWine } = useCellar();
   const { wines: archivedWines } = useArchive();
   const { racks } = useRacks();
   const qc = useQueryClient();
@@ -115,7 +112,6 @@ export default function FullCellarListScreen() {
     if (!userId || wines.length === 0) return;
     void backfillMissingMaturities(wines, () => qc.invalidateQueries({ queryKey: ['cellar', userId] }));
   }, [userId, wines.length, qc]);
-
 
   // Cellar-wide "Location" filters (custom_filters with rack_id NULL).
   const { data: locations = [] } = useQuery({
@@ -328,17 +324,6 @@ export default function FullCellarListScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
-  function enterSelect(wineId: string) {
-    setSelectMode(true);
-    setSelectedIds(new Set([wineId]));
-  }
-  function toggleSelected(wineId: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.has(wineId) ? next.delete(wineId) : next.add(wineId);
-      return next;
-    });
-  }
   function exitSelect() {
     setSelectMode(false);
     setSelectedIds(new Set());
@@ -714,7 +699,7 @@ export default function FullCellarListScreen() {
   const isArchiveView = archived === '1';
   // Archive view: each shown line's id → every archived row it stands for.
   const archiveGroupIdsRef = useRef(new Map<string, string[]>());
-  const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>(isArchiveView ? 'only' : 'hide');
+  const [archivedFilter] = useState<ArchivedFilter>(isArchiveView ? 'only' : 'hide');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
 
@@ -1298,10 +1283,6 @@ export default function FullCellarListScreen() {
           contentContainerStyle={{ paddingTop: spacing.xs, paddingBottom: selectMode ? 150 : 60 }}
         >
           {sorted.map((w) => {
-            const headerLine = wineHeaderLine(w.producer, w.wine_name, w.vintage);
-            // Bottle size now rides on the quantity line as "qty x format"
-            // (e.g. 1x150), so it no longer needs appending to the region line.
-            const subParts = [w.region, w.grape_variety].filter(Boolean);
             const valueText = w.estimated_value != null
               ? formatCurrency(Number(w.estimated_value), w.estimated_value_currency, { decimals: 0 })
               : null;
@@ -1664,13 +1645,7 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   // Inter — back/nav link (gold, to match the rest of the app)
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
-  // Add + Share stacked at the top-right of the header.
-  headerActions: { alignItems: 'flex-end', gap: 6 },
-  // Cormorant — add link reads as a button
-  // Add / Share match Back exactly (same Spectral face + size), stacked at the
-  // top-right so Add sits in line with Back and the title.
-  addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
-  shareLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
+
   exitUpdateBtn: { position: 'absolute', bottom: 64, alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: colors.background },
   exitUpdateText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   deleteProgressWrap: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.md },
@@ -1679,7 +1654,7 @@ const styles = StyleSheet.create({
   deleteProgressTrack: { width: '100%', maxWidth: 340, height: 8, borderRadius: 4, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   deleteProgressFill: { height: '100%', backgroundColor: colors.gold },
   deleteProgressHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
-  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
+
   // Inter — body in modal
   addBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
@@ -1702,8 +1677,7 @@ const styles = StyleSheet.create({
   missingIntelLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
   // Inter — hint
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
-  // Interaction hint shown under the Full Cellar List header.
-  listHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
+
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   listScroll: { flex: 1 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
@@ -1757,11 +1731,7 @@ const styles = StyleSheet.create({
   locNameInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
   rowThumb: { width: 38, height: 48, marginRight: spacing.md },
   rowMain: { flex: 1, marginRight: spacing.md },
-  // Inter — wine card name
-  rowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
-  rowStar: { color: colors.gold, fontSize: 16 },
-  // Inter — wine detail caption
-  rowDetail: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+
   rowArchivedDate: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3, letterSpacing: 0.2 },
   rowRight: { alignItems: 'flex-end', gap: 2 },
   // Inter — score value

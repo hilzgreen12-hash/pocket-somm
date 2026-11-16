@@ -1,8 +1,8 @@
 import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, share } from '../constants/theme';
+import { share } from '../constants/theme';
 import { currencySymbol } from '../constants/currency';
-import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
+import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
 import type { WineRecommendation } from '../types/wine';
 
 // Branded card for sharing wine recommendations from the List flow.

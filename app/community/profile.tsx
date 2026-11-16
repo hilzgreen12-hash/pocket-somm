@@ -167,18 +167,10 @@ const styles = StyleSheet.create({
   loadingRow: { padding: spacing.xl, alignItems: 'center' },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   publishedCard: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, backgroundColor: 'rgba(212,176,96,0.06)', gap: spacing.xs },
-  publishedLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+
   publishedTitle: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold, lineHeight: 24, marginBottom: 2 },
   publishedText: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22 },
-  latestCard: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, padding: spacing.md, gap: spacing.xs, marginTop: spacing.sm },
-  latestLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  latestTitle: { fontSize: 16, fontFamily: fonts.bodyBold, color: colors.text, lineHeight: 22, marginBottom: 2 },
-  latestText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 20 },
-  publishBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  publishBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  btnDisabled: { opacity: 0.5 },
+
   unpublishBtn: { alignItems: 'center', paddingVertical: spacing.sm },
   unpublishText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
-  generateBtn: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  generateBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.textMuted },
 });

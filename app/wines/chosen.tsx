@@ -10,7 +10,7 @@ import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
-import { clearChosenReview, patchChosenWine, bulkDeleteChosenWines } from '../../src/api/chosenWines';
+import { patchChosenWine, bulkDeleteChosenWines } from '../../src/api/chosenWines';
 import { deleteLibraryFilter } from '../../src/api/libraryFilters';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -21,7 +21,6 @@ import { byRecency, entriesOf, flatMirror } from '../../src/utils/cellarReview';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { showAlert } from '../../src/components/AppAlert';
-import { ShareIcon } from '../../src/components/ShareIcon';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { isMonthFirstCurrency } from '../../src/utils/vivinoCsv';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
@@ -39,10 +38,9 @@ import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import type { LibraryFilter } from '../../src/api/libraryFilters';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
-import { normaliseCity, cityKey } from '../../src/utils/city';
+import { normaliseCity } from '../../src/utils/city';
 import { foldAccents } from '../../src/utils/wineIdentity';
 import { wineNameKey } from '../../src/utils/wineConnections';
-import { splitLocationString } from '../../src/services/reviewSync';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ChosenWine, CellarWine } from '../../src/types/wine';
@@ -64,50 +62,6 @@ function monthLabel(key: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
-// Mic + Camera marks drawn in the same hand-drawn gold-outline style as the
-// home-screen tile motifs (List / Chef / Cellar / Community) — bordered Views,
-// no image assets.
-function MicMotif() {
-  return (
-    <View style={motifStyles.micStack}>
-      <View style={motifStyles.micHead} />
-      <View style={motifStyles.micStem} />
-      <View style={motifStyles.micBase} />
-    </View>
-  );
-}
-
-function CameraMotif() {
-  return (
-    <View style={motifStyles.cameraBody}>
-      <View style={motifStyles.cameraBump} />
-      <View style={motifStyles.cameraLens} />
-    </View>
-  );
-}
-
-function PencilMotif() {
-  return (
-    <View style={motifStyles.pencilStack}>
-      <View style={motifStyles.pencilBody} />
-      <View style={motifStyles.pencilTip} />
-    </View>
-  );
-}
-
-const motifStyles = StyleSheet.create({
-  micStack: { alignItems: 'center' },
-  micHead: { width: 13, height: 19, borderWidth: 1, borderColor: colors.gold, borderRadius: 6.5 },
-  micStem: { width: 1.5, height: 5, backgroundColor: colors.gold },
-  micBase: { width: 14, height: 1.5, backgroundColor: colors.gold, borderRadius: 1 },
-  cameraBody: { width: 30, height: 22, borderWidth: 1, borderColor: colors.gold, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
-  cameraBump: { position: 'absolute', top: -4, alignSelf: 'center', width: 10, height: 4, borderWidth: 1, borderColor: colors.gold, borderBottomWidth: 0, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
-  cameraLens: { width: 11, height: 11, borderWidth: 1, borderColor: colors.gold, borderRadius: 5.5 },
-  pencilStack: { alignItems: 'center' },
-  pencilBody: { width: 9, height: 15, borderWidth: 1, borderColor: colors.gold, borderTopLeftRadius: 2, borderTopRightRadius: 2, borderBottomWidth: 0 },
-  pencilTip: { width: 0, height: 0, borderLeftWidth: 4.5, borderRightWidth: 4.5, borderTopWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: colors.gold },
-});
-
 // A chosen wine counts as "reviewed" once it carries any review content —
 // a tasting note, personal notes, or a score. Bare bottle picks (added via
 // List → "Add to Bottle Picks") have none of these and live only in You ·
@@ -127,14 +81,6 @@ function locationLine(wine: ChosenWine): string {
   // at the save sites — see ChosenWineModal etc.
   const parts = [wine.restaurant_name, normaliseCity(wine.city)].filter(Boolean);
   return parts.join(', ');
-}
-
-function formatListPrice(wine: ChosenWine): string | null {
-  if (wine.menu_price == null) return null;
-  const cur = (wine.currency ?? 'GBP').toUpperCase();
-  const map: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', NZD: 'NZ$', JPY: '¥', CHF: 'Fr', HKD: 'HK$', SGD: 'S$' };
-  const sym = map[cur] ?? `${cur} `;
-  return `${sym}${wine.menu_price}`;
 }
 
 function normKey(s: string | null | undefined): string {
@@ -164,11 +110,10 @@ type ReviewItem =
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
 
 export default function ChosenWinesScreen() {
-  const { chosenWines, isLoading, remove, dismissAwaiting, setFavourite } = useChosenWines();
+  const { chosenWines, isLoading, remove, dismissAwaiting } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
   const { wines: archivedWines } = useArchive();
   const qc = useQueryClient();
-  const { setImage, setWineDetails, setError } = useLabelStore();
   const attachPhoto = useAttachLabelPhoto();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   // Every review (restaurant / cellar / other) opens the same unified detail view.
@@ -259,25 +204,11 @@ export default function ChosenWinesScreen() {
   const [addSource, setAddSource] = useState<'restaurant' | 'other'>('other');
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [cellarPickerSearch, setCellarPickerSearch] = useState('');
-  // Bespoke "Other" filters (e.g. "BBR Tasting") — named tags the user creates
-  // and assigns to Other-wine reviews, then filters by. Held per-user in
-  // AsyncStorage (no server column): `otherTags` is the ordered tag list,
-  // `tagAssign` maps a chosen_wines review id → the tags on it. `tagFilter` is
-  // the active tag (only meaningful while the Other collection is selected).
-  const [otherTags, setOtherTags] = useState<string[]>([]);
-  const [tagAssign, setTagAssign] = useState<Record<string, string[]>>({});
-  const [tagFilter, setTagFilter] = useState<string>('all');
-  const [newTagOpen, setNewTagOpen] = useState(false);
-  const [newTagName, setNewTagName] = useState('');
   // Review id whose tag-assignment sheet is open (null = closed).
   const [assignForId, setAssignForId] = useState<string | null>(null);
   // The folder highlighted in the Add-to-Folder sheet, committed on Confirm.
   const [assignPick, setAssignPick] = useState<string | null>(null);
   useEffect(() => { if (assignForId) setAssignPick(null); }, [assignForId]);
-  // Remembers the review being tagged while the "New filter" sheet is open, so
-  // creating a tag mid-assign files it onto that review (only one modal shows at
-  // a time — we close the assign sheet, create, then reopen it).
-  const pendingAssignRef = useRef<string | null>(null);
 
   // Cellar wines that have ANY user-supplied review content count as a
   // "cellar review". Archived bottles are included too — a review added from an
@@ -385,74 +316,11 @@ export default function ChosenWinesScreen() {
   const { session } = useAuth();
   const promptKey = `vinster-bottle-pick-prompt-dismissed:${session?.user.id ?? 'anon'}`;
 
-  // Load this user's bespoke Other filters + assignments from local storage.
-  const tagsKey = `vinster-other-tags:${session?.user.id ?? 'anon'}`;
-  const assignKey = `vinster-other-tag-assign:${session?.user.id ?? 'anon'}`;
-  useEffect(() => {
-    let cancelled = false;
-    AsyncStorage.multiGet([tagsKey, assignKey])
-      .then((pairs) => {
-        if (cancelled) return;
-        const tagsRaw = pairs.find(([k]) => k === tagsKey)?.[1];
-        const assignRaw = pairs.find(([k]) => k === assignKey)?.[1];
-        if (tagsRaw) { try { const v = JSON.parse(tagsRaw); if (Array.isArray(v)) setOtherTags(v); } catch { /* ignore */ } }
-        if (assignRaw) { try { const v = JSON.parse(assignRaw); if (v && typeof v === 'object') setTagAssign(v); } catch { /* ignore */ } }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user.id]);
-
-  function persistTags(next: string[]) {
-    setOtherTags(next);
-    AsyncStorage.setItem(tagsKey, JSON.stringify(next)).catch(() => {});
-  }
-  function persistAssign(next: Record<string, string[]>) {
-    setTagAssign(next);
-    AsyncStorage.setItem(assignKey, JSON.stringify(next)).catch(() => {});
-  }
-  // Toggle a tag on/off for a given review id.
-  function toggleTagForReview(reviewId: string, tag: string) {
-    const current = tagAssign[reviewId] ?? [];
-    const next = current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag];
-    const map = { ...tagAssign };
-    if (next.length) map[reviewId] = next; else delete map[reviewId];
-    persistAssign(map);
-  }
-  // Create a bespoke Other filter. Trims, ignores blanks + case-insensitive dupes.
-  function createTag(name: string): string | null {
-    const clean = name.trim();
-    if (!clean) return null;
-    const existing = otherTags.find((t) => t.toLowerCase() === clean.toLowerCase());
-    if (existing) return existing;
-    persistTags([...otherTags, clean]);
-    return clean;
-  }
   // Toggle a review in/out of a bespoke Folder (LibraryFilter). This is the same
   // system the folder chips + filtering use, so an assignment is reflected there.
   function toggleReviewInFolder(reviewId: string, f: LibraryFilter) {
     const has = f.itemIds.includes(reviewId);
     setFilterItems.mutate({ filterId: f.id, itemIds: has ? f.itemIds.filter((x) => x !== reviewId) : [...f.itemIds, reviewId] });
-  }
-  // Confirm the "New folder" sheet. If it was opened mid-assign (from a review's
-  // "Add to Folder" sheet), create the folder with that review already in it and
-  // reopen the assign sheet; otherwise just create an empty folder.
-  function commitNewTag() {
-    const name = newTagName.trim();
-    const target = pendingAssignRef.current;
-    pendingAssignRef.current = null;
-    setNewTagOpen(false);
-    if (!name) return;
-    createFilter.mutate({ name, itemIds: target ? [target] : [] });
-    if (target) setAssignForId(target);
-  }
-  // Cancel the "New filter" sheet. If it was opened mid-assign, return to that
-  // review's assign sheet rather than dropping the user back to the list.
-  function cancelNewTag() {
-    const target = pendingAssignRef.current;
-    pendingAssignRef.current = null;
-    setNewTagOpen(false);
-    if (target) setAssignForId(target);
   }
   // "+ Import" — bring reviews in from a file. Vivino export or a general
   // spreadsheet of reviews; both must be CSV (xlsx text mangles on-device).
@@ -488,22 +356,11 @@ export default function ChosenWinesScreen() {
       ],
     });
   }
-  // Remove a bespoke filter entirely — drop it from the list and off every review.
-  function deleteTag(tag: string) {
-    persistTags(otherTags.filter((t) => t !== tag));
-    const map: Record<string, string[]> = {};
-    for (const [id, tags] of Object.entries(tagAssign)) {
-      const kept = tags.filter((t) => t !== tag);
-      if (kept.length) map[id] = kept;
-    }
-    persistAssign(map);
-    if (tagFilter === tag) setTagFilter('all');
-  }
   // The full list of wines awaiting review, snapshotted when the on-open prompt
   // fires. More than one (e.g. two wines from the same restaurant visit) → the
   // prompt lists them all, each a link into its review input card.
   const [reviewPrompt, setReviewPrompt] = useState<ChosenWine[] | null>(null);
-  const [dontShowPrompt, setDontShowPrompt] = useState(false);
+  const [] = useState(false);
   const promptShownRef = useRef(false);
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
@@ -667,41 +524,6 @@ export default function ChosenWinesScreen() {
     setReviewPrompt(null);
   }
 
-  // Canonical city for a review so every review type can feed the Location
-  // filter. Restaurant / off-list reviews carry a clean chosen_wines.city;
-  // cellar reviews keep a free-form review_location ("Restaurant, City" — or
-  // just a place), so parse the city out of it (falling back to the whole
-  // string when there's no comma).
-  function cityFor(item: ReviewItem): string {
-    if (item.source === 'cellar') {
-      const loc = (item.wine as CellarWine).review_location ?? '';
-      const { city } = splitLocationString(loc);
-      return normaliseCity(city || loc);
-    }
-    return normaliseCity((item.wine as ChosenWine).city);
-  }
-
-  // Cities surfaced by the Location chip — every city that appears on a shown
-  // review (bare, unreviewed picks live in Your Restaurants, so skip them),
-  // normalised + de-duplicated.
-  const availableCities = useMemo(() => {
-    // De-duplicate by canonical key so "Novello" and "Novello, Italy" collapse
-    // to one entry; keep the richest label (usually the one with the country).
-    const byKey = new Map<string, string>();
-    for (const it of items) {
-      if ((it.source === 'restaurant' || it.source === 'other') && !chosenHasReview(it.wine as ChosenWine)) continue;
-      const c = cityFor(it);
-      if (!c) continue;
-      const key = cityKey(c);
-      const prev = byKey.get(key);
-      if (!prev || c.length > prev.length) byKey.set(key, c);
-    }
-    return ['All', ...Array.from(byKey.values()).sort((a, b) => a.localeCompare(b))];
-    // items is a derived array — listing it as a dep is fine, useMemo
-    // will recompute when chosenWines / cellarReviews change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosenWines, cellarReviews]);
-
   // A not-yet-reviewed restaurant/other pick that should surface in Your Wine
   // Reviews as "Awaiting Review": has no review, its identity isn't already
   // reviewed elsewhere (phantom rows), and it hasn't been dismissed. Same rule
@@ -767,8 +589,6 @@ export default function ChosenWinesScreen() {
     // item.source (restaurant = Winelist / cellar / other), except an owned wine
     // always counts as Cellar (see collectionOf).
     if (typeFilter !== 'all' && collectionOf(it.wine.producer, it.wine.wine_name, it.wine.vintage, it.source) !== typeFilter) return false;
-    // Bespoke Other filter — only bites while the Other collection is active.
-    if (typeFilter === 'other' && tagFilter !== 'all' && !(tagAssign[it.wine.id] ?? []).includes(tagFilter)) return false;
     if (monthFilter !== 'all' && monthKey(it.date) !== monthFilter) return false;
     if (activeCustomId) {
       const f = customFilters.find((cf) => cf.id === activeCustomId);
@@ -905,7 +725,6 @@ export default function ChosenWinesScreen() {
     { value: 'other',      label: 'Other Wines' },
   ];
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'All';
-  const collectionLabel = COLLECTION_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All Wine Reviews';
   // Short value for the narrow Collection chip — the dropdown carries the full
   // "… Wines" labels.
   const collectionChipLabel = typeFilter === 'all' ? 'All'
@@ -1057,8 +876,6 @@ export default function ChosenWinesScreen() {
   // flight so we don't pay for layout work when nothing's queued.
   const reviewShareRef = useRef<View>(null);
   const [reviewSharing, setReviewSharing] = useState(false);
-  // Scroll-to for the "awaiting review" summary link → the awaiting section.
-  const listScrollRef = useRef<ScrollView>(null);
   const [reviewSharePayload, setReviewSharePayload] = useState<{
     producer: string | null;
     wineName: string;
@@ -1557,32 +1374,6 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Create a bespoke Other filter (e.g. "BBR Tasting"). */}
-      <Modal visible={newTagOpen} transparent animationType="fade" onRequestClose={cancelNewTag}>
-        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={cancelNewTag}>
-          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
-            <Text style={styles.chooserTitle}>New folder</Text>
-            <Text style={styles.chooserBody}>Name a bespoke folder for your Other wine reviews — a tasting, an event, a merchant. You'll then file reviews under it.</Text>
-            <TextInput
-              style={styles.pickerSearch}
-              value={newTagName}
-              onChangeText={setNewTagName}
-              placeholder="e.g. BBR Tasting"
-              placeholderTextColor={colors.textMuted}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={commitNewTag}
-            />
-            <TouchableOpacity style={styles.chooserBtn} onPress={commitNewTag} activeOpacity={0.85}>
-              <Text style={styles.chooserBtnText}>Create folder</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={cancelNewTag} style={styles.chooserCancel}>
-              <Text style={styles.chooserCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
       {/* Assign a review to bespoke filters — tick the tags it belongs to, or
           create a new one on the spot. */}
       <Modal visible={!!assignForId} transparent animationType="fade" onRequestClose={() => setAssignForId(null)}>
@@ -2016,21 +1807,7 @@ const styles = StyleSheet.create({
   promptClose: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 10, padding: 6 },
   promptCloseText: { fontFamily: fonts.bodyRegular, fontSize: 18, color: colors.textMuted, lineHeight: 20 },
   promptTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
-  promptBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
-  promptWine: { fontFamily: fonts.bodySemibold, color: colors.gold },
-  promptCheckRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg },
-  promptCheckbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  promptCheckboxOn: { backgroundColor: 'rgba(224,184,74,0.18)' },
-  promptCheckTick: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold },
-  promptCheckLabel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
-  promptActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.lg, marginTop: spacing.lg },
-  promptLater: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  promptReviewBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
-  promptReviewText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  // Restyled awaiting-review prompt: wine name, then Review Wine, then a plain
-  // "Don't show me this again" link (no tick box).
-  promptWineList: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.lg, lineHeight: 22 },
-  promptReviewBtnFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+
   // Sub-header + tappable wine rows for the awaiting-review prompt list.
   promptSubheader: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.md },
   promptWineRow: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderLight },
@@ -2038,34 +1815,16 @@ const styles = StyleSheet.create({
   promptWineMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   promptDontShow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
   promptDontShowText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
-  // Bottle Picks Awaiting Review section.
-  awaitingSection: { marginTop: spacing.xl },
-  awaitingHeader: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginHorizontal: spacing.xl, marginBottom: spacing.sm },
-  subHeader: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
-  // Centred collection selector (All / Restaurant / Cellar / Other Wine Reviews)
-  // that sits where the old "Wine Reviews" sub-header was — gold, with a chevron.
-  collectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
-  collectionHeaderText: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
-  collectionChevron: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold },
-  // Bespoke Other filter chips (pill row under the collection header).
-  tagScroll: { flexGrow: 0, flexShrink: 0 },
-  tagRow: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xs, gap: spacing.xs, alignItems: 'center' },
-  tagChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: 6, marginRight: spacing.xs },
-  tagChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.14)' },
-  tagChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted },
-  tagChipTextActive: { color: colors.gold },
-  tagChipNew: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: 6 },
-  tagChipNewText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
+
   // Cellar-wine picker (+ Add → Cellar Wine).
   pickerSearch: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)', marginBottom: spacing.sm },
   pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
   addAnywayWrap: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: spacing.xs },
   addAnywayLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
   pickerReviewed: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.gold, marginLeft: spacing.sm },
-  awaitingRow: { marginHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  awaitingName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
+
   awaitingMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 3 },
-  addLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, width: 50, textAlign: 'right' },
+
   // Stacked "+ Import" (top) / "+ Add Review" (below) on the header's right.
   headerActions: { alignItems: 'flex-end', gap: 6 },
   headerActionLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, textAlign: 'right' },
@@ -2083,23 +1842,13 @@ const styles = StyleSheet.create({
   // Larger thumbnail, matching the Label Library, with a top-right favourite star.
   reviewThumb: { width: 100, height: 130 },
   reviewThumbWrap: { width: 100, height: 130 },
-  reviewFavStar: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
-  reviewFavStarText: { fontSize: 14, color: colors.gold, lineHeight: 16 },
-  reviewFavStarTextOff: { color: 'rgba(255,255,255,0.75)' },
-  cardCompactRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
+
   cardCompactMeta: { marginTop: 2 },
   reviewStatsLine: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
   wineNameCompact: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 22 },
   regionText: { fontSize: 14, fontFamily: fonts.headingItalic, color: colors.gold, marginTop: 2 },
   grapeText: { fontSize: 13, fontFamily: fonts.headingItalic, color: colors.textMuted, marginTop: 1 },
-  // The user's own review score — white, matching the wine cards (critic scores
-  // are gold; the user's score is white).
-  scoreCompact: { fontSize: 18, fontFamily: fonts.bodyBold, color: '#FFFFFF' },
-  // Cluster sits as a column on the right: score (+ favourite star) at
-  // the top, the white share icon below it.
-  scoreCluster: { alignItems: 'flex-end', gap: spacing.xs },
-  scoreLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  favouriteStar: { fontSize: 18, color: colors.gold },
+
   metaText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   emptyFilter: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   // Summary + filter carousel — copied from Full Cellar List
@@ -2113,19 +1862,12 @@ const styles = StyleSheet.create({
   // Active state — the "awaiting only" toggle is on; underline + '✕' signal it.
   summaryLinkActive: { textDecorationLine: 'underline' },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
-  // Mic + Camera "Add" prompts above the filters.
-  addIconsRow: { flexDirection: 'row', gap: spacing.xl, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
-  iconsSeparator: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs },
-  addIconBtn: { width: 52, height: 52, borderRadius: 12, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   filterChipSort: { borderColor: colors.gold },
-  // Bespoke user-created filter chips (the "+ Add" row) — same look as the
-  // Label Library, with the trailing margin the built-in chips use.
-  customChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm, maxWidth: 160 },
-  customChipActive: { borderColor: colors.gold },
-  customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+
   customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm },
   customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
@@ -2162,8 +1904,7 @@ const styles = StyleSheet.create({
   chooserCancel: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: 4 },
   chooserCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   uploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
-  // Status read-out shown during background upload — treat as subtle/muted info text.
-  uploadingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
+
   deletingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
   // Hides the off-screen branded share card from the visible layout
   // while still keeping it mountable for react-native-view-shot to

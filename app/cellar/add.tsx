@@ -1,4 +1,4 @@
-import { normalisePriceText, parsePriceText } from '../../src/utils/priceInput';
+import { parsePriceText } from '../../src/utils/priceInput';
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';

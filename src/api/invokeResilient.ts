@@ -22,7 +22,7 @@ import { supabase } from './supabase';
 // Response attached, and retrying would double-charge AI calls and mask
 // genuine problems.
 
-export interface InvokeOptions {
+interface InvokeOptions {
   /** Abandon (and maybe retry) a single attempt after this many ms. */
   timeoutMs?: number;
   /** Number of *additional* attempts after the first. */

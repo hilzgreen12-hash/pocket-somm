@@ -11,7 +11,6 @@ import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
-import { WineIdentityHeader } from './WineIdentityHeader';
 import { ReviewCardHeader, ReviewedLineEditable } from './ReviewCardHeader';
 import { WineReviewFields } from './WineReviewFields';
 import { WineSearchInput } from './WineSearchInput';
@@ -23,7 +22,6 @@ import { uploadLabelImage } from '../api/labelPhotos';
 import { generateWineIntel } from '../services/pricing';
 import { fetchAutoLabelUri } from '../api/label';
 import { findExistingReview } from '../utils/reviewDedup';
-import { splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -691,22 +689,15 @@ const styles = StyleSheet.create({
   sheet: { flex: 1, backgroundColor: colors.background },
   backBtn: { position: 'absolute', top: 56, left: spacing.xl, zIndex: 10, padding: 4 },
   backBtnText: { fontFamily: fonts.bodyRegular, fontSize: 22, color: colors.gold },
-  favouriteBtn: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, padding: 4 },
-  favouriteStar: { fontSize: 30, color: colors.textMuted },
-  favouriteStarActive: { color: colors.gold },
+
   content: { padding: spacing.xl, paddingTop: 64, paddingBottom: 60 },
-  heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+
   // Pick-a-wine step title/subtitle — refined, on-brand (replaces the heavy 26px heading).
   pickTitle: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.4, marginBottom: 2 },
   pickSubtitle: { fontFamily: fonts.headingItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
-  subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
+
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
-  fieldLabel: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
-  input: {
-    borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm,
-    fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm,
-  },
+
   identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
   // Larger label thumbnail — tap to enlarge full-screen.
   identityThumb: { width: 112, height: 150, borderRadius: 8, backgroundColor: colors.surface },
@@ -730,29 +721,22 @@ const styles = StyleSheet.create({
   // "Scan again" — gold link, shown when the review was reached via scan/upload.
   scanAgainRow: { alignItems: 'center', paddingVertical: spacing.sm },
   scanAgainLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
-  cardHeader: { alignItems: 'center', marginBottom: spacing.sm },
-  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+
   headerThumb: { width: 96, height: 128, borderRadius: 5 },
   // Tappable "add photo" placeholder in the confirmed-card thumbnail slot.
   headerThumbAdd: { width: 96, height: 128, borderRadius: 5, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', gap: 4 },
   headerThumbAddIcon: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.gold },
   headerThumbAddText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
-  // "Add your location" — gold link in the date stamp when no location is set.
-  addLocationLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
+
   // Manual-entry "Confirm Wine" tick — outline, gold (no filled buttons).
   confirmIdentityBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
   confirmIdentityText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  headerTextCol: { flex: 1 },
-  headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
-  headerLineLeft: { textAlign: 'left' },
-  headerRegion: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: 2 },
-  editIdentityRow: { alignItems: 'center', paddingVertical: spacing.xs, marginBottom: spacing.xs },
-  editIdentityLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+
   // Edit (top) and the favourite star stacked at the top-right, right-aligned,
   // with a gap between them so the star never overlays the Edit link.
   cardTopRow: { alignItems: 'flex-end', marginBottom: spacing.xs, gap: spacing.sm },
   topEditText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
+
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   confirmTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
   findingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },

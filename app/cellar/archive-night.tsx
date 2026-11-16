@@ -23,7 +23,7 @@ import type { CellarWine } from '../../src/types/wine';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { MicButton } from '../../src/components/MicButton';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
-import { createManualRestaurantSession, deleteScanSession } from '../../src/api/restaurantSessions';
+import { deleteScanSession } from '../../src/api/restaurantSessions';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -40,11 +40,6 @@ export default function ArchiveNightScreen() {
   const uploadTriggeredRef = useRef(false);
 
   const [stage, setStage] = useState<Stage>('capture');
-  // Which path the user chose at the preview. Both detect the wines and reach the
-  // same "Tell Vinster About Your Lineup" form; only the Confirm action differs —
-  // 'review' archives the matched bottles + places all wines into Your Wine
-  // Reviews; 'later' just saves the lineup (with its wines) to the Library.
-  const [flowMode, setFlowMode] = useState<'review' | 'later'>('review');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -76,13 +71,13 @@ export default function ArchiveNightScreen() {
   // Whether the lineup photo made it into Your Lineup Library. Bottle archiving
   // is the critical action and must not be blocked by a photo failure, but we
   // shouldn't claim the photo saved when it didn't.
-  const [photoSaved, setPhotoSaved] = useState(true);
+  const [] = useState(true);
   // The saved lineup row (when the photo made it to the Library) — lets the
   // done screen attach a "memory" note to it. Plus the note draft + save state.
   const [savedLineup, setSavedLineup] = useState<LineupArchive | null>(null);
   const [note, setNote] = useState('');
   const [showInstruction, setShowInstruction] = useState(true);
-  const [savingNote, setSavingNote] = useState(false);
+  const [] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
   // Editable date + location "stamp" on the Night Archived overlay (editable
   // text, not boxed inputs). Seeded from the saved lineup row.
@@ -117,24 +112,9 @@ export default function ArchiveNightScreen() {
   // "Where did you enjoy these bottles?" — Private Location is just selectable
   // for now (no input flow yet); A Restaurant opens the full review modal on a
   // blank manual restaurant session, saved to Your Restaurants.
-  const [locationChoice, setLocationChoice] = useState<'private' | 'restaurant' | null>(null);
   const [restaurantSessionId, setRestaurantSessionId] = useState<string | null>(null);
-  const [openingRestaurant, setOpeningRestaurant] = useState(false);
+  const [] = useState(false);
   const restaurantSavedRef = useRef(false);
-
-  async function handleChooseRestaurant() {
-    if (!session?.user.id || openingRestaurant) return;
-    setOpeningRestaurant(true);
-    try {
-      const id = await createManualRestaurantSession(session.user.id);
-      restaurantSavedRef.current = false;
-      setRestaurantSessionId(id);
-    } catch (err) {
-      showAlert({ title: 'Could not start a review', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setOpeningRestaurant(false);
-    }
-  }
 
   // In-app camera capture → show the shot in the 'preview' stage, where the
   // user chooses Retake / Save to Lineup Library / Review Now.
@@ -170,76 +150,6 @@ export default function ArchiveNightScreen() {
       setStage('preview');
     } catch (err) {
       showAlert({ title: 'Could not open the photo', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
-  // Capture-first: the photo is saved to Your Lineup Library immediately, with
-  // wines=null (the "awaiting attention" state). Confirming which bottles came
-  // from the cellar and archiving them is deferred — the user tends to it later
-  // from the library, when they have time, rather than itemising 8 bottles mid-
-  // dinner. (The detect/match/confirm machinery below — analyze / confirmArchive
-  // — is preserved for that deferred tend flow.)
-  async function saveForLater(uri: string) {
-    if (!session?.user.id) {
-      showAlert({ title: 'Sign in needed', body: 'Sign in to save a lineup.' });
-      setStage('capture');
-      return;
-    }
-    setStage('archiving');
-    try {
-      const city = await captureCity();
-      const row = await saveLineupArchive(session.user.id, uri, null, { city });
-      setSavedLineup(row);
-      setArchivedCount(0);
-      qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
-      setStage('done');
-      showAlert({ title: 'Saved', body: 'Photo saved to your Lineup Library.' });
-    } catch (err) {
-      showAlert({ title: 'Could not save the lineup', body: err instanceof Error ? err.message : 'Please try again.' });
-      setStage('capture');
-    }
-  }
-
-  async function analyze(uri: string, mode: 'review' | 'later' = 'review') {
-    if (!(await ensureConnectionForUpload())) return;
-    setFlowMode(mode);
-    setStage('analyzing');
-    try {
-      const base64 = await prepareImageBase64(uri);
-      const { bottles } = await detectLineup(base64);
-      // Cap the lineup at 8 bottles.
-      const capped = (bottles ?? []).slice(0, 8);
-      const result = matchLineupToCellar(capped, wines);
-      setMatches(result.matched);
-      setUnmatched(result.unmatched);
-      // Default each removal count to what was detected (capped at owned qty).
-      const initial: Record<string, number> = {};
-      result.matched.forEach((m) => { initial[m.wine.id] = Math.min(m.count, m.wine.quantity); });
-      setCounts(initial);
-      // Every matched cellar wine starts UN-ticked — the user must explicitly
-      // confirm "archive this from your cellar" before any bottle is removed.
-      setExcluded(new Set(result.matched.map((m) => m.wine.id)));
-      setArchiveLocationByWine({});
-      if (mode === 'later') {
-        // Skip the confirm-bottles review step — go straight to the shared form
-        // over the photo. Wines are captured (matched + unmatched) but nothing is
-        // archived or reviewed; that happens if/when the user reviews later.
-        setStage('preview');
-        await openArchivePopup();
-      } else {
-        setStage('review');
-      }
-    } catch (err) {
-      // Show a clear, actionable blurb — not the raw edge-function error. Keep a
-      // genuine rate-limit message ("try again in a few minutes") intact.
-      const msg = err instanceof Error ? err.message : '';
-      showAlert({
-        title: 'Could not identify the wines',
-        body: /minute|too many|rate limit/i.test(msg)
-          ? msg
-          : 'Please double check the photo is clear and the front labels are facing forward, and use no more than 8 bottles per lineup.',
-      });
-      setStage('capture');
     }
   }
 
@@ -291,11 +201,6 @@ export default function ArchiveNightScreen() {
   >(null);
   const [pickerSearch, setPickerSearch] = useState('');
 
-  function openPicker(target: { kind: 'unmatched'; index: number } | { kind: 'matched'; wineId: string }) {
-    setPickerSearch('');
-    setPickerFor(target);
-  }
-
   function assignCellarWine(w: CellarWine) {
     const target = pickerFor;
     setPickerFor(null);
@@ -339,14 +244,6 @@ export default function ArchiveNightScreen() {
   const lineupWineCount = matches.length + unmatched.length;
   const lineupBottleCount =
     matches.reduce((s, m) => s + m.count, 0) + unmatched.reduce((s, b) => s + (b.quantity ?? 1), 0);
-
-  function toggleExcluded(wineId: string) {
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(wineId)) next.delete(wineId); else next.add(wineId);
-      return next;
-    });
-  }
 
   // Tapping a matched cellar wine's checkbox. UN-ticking is immediate. TICKING
   // means "archive this from my cellar", so it asks first — and, when the wine
@@ -425,7 +322,7 @@ export default function ArchiveNightScreen() {
       bottleSizeMl: editWineDraft.bottleSizeMl,
     } as DetectedBottle;
 
-    const { matched: mm, unmatched: uu } = matchLineupToCellar([bottle], wines);
+    const { matched: mm } = matchLineupToCellar([bottle], wines);
     setEditTarget(null);
 
     // Remove the edited wine from wherever it currently lives.
@@ -448,20 +345,6 @@ export default function ArchiveNightScreen() {
       setCounts((prev) => ({ ...prev, [nm.wine.id]: Math.min(nm.wine.quantity, (prev[nm.wine.id] ?? 0) + Math.max(1, priorCount)) }));
     } else {
       setUnmatched((prev) => [...prev, bottle]);
-    }
-  }
-
-  async function handleSaveNote() {
-    if (!savedLineup || savingNote || !note.trim()) return;
-    setSavingNote(true);
-    try {
-      await setLineupNote(savedLineup.id, note);
-      setNoteSaved(true);
-      if (session?.user.id) qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
-    } catch (err) {
-      showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingNote(false);
     }
   }
 
@@ -580,26 +463,22 @@ export default function ArchiveNightScreen() {
     }
     setPlacing(true);
     try {
-      // Review Now only: archive the matched cellar bottles NOW — atomic with
+      // Archive the matched cellar bottles NOW — atomic with
       // logging, so a cancelled popup never removes bottles without a record.
-      let winesArchived = 0;
-      if (flowMode === 'review') {
-        const willArchive = matches.filter((m) => !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0);
-        if (willArchive.length > 0 && !archivedDone) {
-          const ok = await archiveMatched();
-          if (!ok) return; // archive failed — alert shown; finally resets `placing`
-        }
-        winesArchived = willArchive.length;
+      const willArchive = matches.filter((m) => !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0);
+      if (willArchive.length > 0 && !archivedDone) {
+        const ok = await archiveMatched();
+        if (!ok) return; // archive failed — alert shown; finally resets `placing`
       }
-      // Save the lineup to the Library WITH its wines — BOTH paths capture the
-      // wines (only their "archived" flag differs).
+      const winesArchived = willArchive.length;
+      // Save the lineup to the Library WITH its wines.
       if (imageUri) {
         try {
           const lineupWines: LineupWine[] = [
             // An UN-ticked (excluded) match means "I own this but didn't bring
             // this bottle" — drop the cellar link so it stamps as Off Cellar,
             // not Yours.
-            ...matches.map((m) => ({ producer: m.wine.producer, wine_name: m.wine.wine_name, vintage: m.wine.vintage, cellar_wine_id: excluded.has(m.wine.id) ? null : m.wine.id, archived: flowMode === 'review' && !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0, count: m.count })),
+            ...matches.map((m) => ({ producer: m.wine.producer, wine_name: m.wine.wine_name, vintage: m.wine.vintage, cellar_wine_id: excluded.has(m.wine.id) ? null : m.wine.id, archived: !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0, count: m.count })),
             ...unmatched.map((b) => ({ producer: b.producer ?? null, wine_name: b.wineName, vintage: b.vintage, cellar_wine_id: null, archived: false, count: b.quantity ?? 1 })),
           ];
           const row = await saveLineupArchive(session.user.id, imageUri, archivedCount, { wines: lineupWines, city: c });
@@ -610,38 +489,34 @@ export default function ArchiveNightScreen() {
           console.warn('saveLineupArchive failed:', e);
         }
       }
-      // Review Now only: place every lineup wine into Your Wine Reviews awaiting
+      // Place every lineup wine into Your Wine Reviews awaiting
       // review (no score), referenced with the shared date/city/venue.
-      if (flowMode === 'review') {
-        for (const w of allLineupIdentities) {
-          const raw = w.vintage;
-          const vint = raw == null || raw === '' || !Number.isFinite(Number(raw)) ? null : Math.trunc(Number(raw));
-          await saveManualChosenWine(session.user.id, {
-            wineName: (w.wineName ?? w.producer ?? '').toString(),
-            producer: (w.producer ?? '').toString(),
-            region: '',
-            vintage: vint,
-            restaurantName: v,
-            city: c,
-            listPrice: null,
-            currency: 'GBP',
-            tastingNote: '',
-            otherObservations: '',
-            userScore: null,
-            isFavourite: false,
-            source: 'restaurant',
-            reviewDate: d,
-          });
-        }
-        qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+      for (const w of allLineupIdentities) {
+        const raw = w.vintage;
+        const vint = raw == null || raw === '' || !Number.isFinite(Number(raw)) ? null : Math.trunc(Number(raw));
+        await saveManualChosenWine(session.user.id, {
+          wineName: (w.wineName ?? w.producer ?? '').toString(),
+          producer: (w.producer ?? '').toString(),
+          region: '',
+          vintage: vint,
+          restaurantName: v,
+          city: c,
+          listPrice: null,
+          currency: 'GBP',
+          tastingNote: '',
+          otherObservations: '',
+          userScore: null,
+          isFavourite: false,
+          source: 'restaurant',
+          reviewDate: d,
+        });
       }
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
       qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
       setArchivePopupOpen(false);
       showAlert({
-        title: flowMode === 'review' ? 'Night archived' : 'Lineup saved',
-        body: flowMode === 'review'
-          ? `${winesArchived} wine${winesArchived === 1 ? '' : 's'} archived and all lineup wines placed in Your Wine Reviews awaiting review.`
-          : 'Your lineup and its wines are saved to Your Lineup Library — review the wines whenever you like.',
+        title: 'Night archived',
+        body: `${winesArchived} wine${winesArchived === 1 ? '' : 's'} archived and all lineup wines placed in Your Wine Reviews awaiting review.`,
         buttons: [{ text: 'OK', onPress: () => router.replace('/cellar/lineups') }],
       });
     } catch (err) {
@@ -1097,7 +972,7 @@ export default function ArchiveNightScreen() {
             if (restaurantSessionId && !restaurantSavedRef.current) void deleteScanSession(restaurantSessionId);
             setRestaurantSessionId(null);
           }}
-          onSaved={() => { restaurantSavedRef.current = true; setLocationChoice('restaurant'); setRestaurantSessionId(null); }}
+          onSaved={() => { restaurantSavedRef.current = true; setRestaurantSessionId(null); }}
         />
       ) : null}
     </View>
@@ -1121,7 +996,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl,
   },
   sideAction: { width: 80, alignItems: 'center' },
-  sideActionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+
   captureBtn: { width: 74, height: 74, borderRadius: 37, borderWidth: 4, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   captureBtnInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#FFFFFF' },
   previewActions: {
@@ -1138,20 +1013,16 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 60 },
   centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
-  lead: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', marginBottom: spacing.sm },
-  leadBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', marginBottom: spacing.md },
+
   hint: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
-  hintSmall: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4, marginBottom: spacing.md },
+
   preview: { width: '80%', height: 240, borderRadius: 12, backgroundColor: '#000' },
   previewSmall: { width: '100%', height: 160, borderRadius: 12, backgroundColor: '#000', marginBottom: spacing.md },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
-  // Skinny gold "Archive X Bottles" — Cellar-tab bubble proportions (thinner
-  // than the primary button), spanning the content width.
-  archiveBottlesBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
-  archiveBottlesText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+
   // Archive popup — header, editable shared fields, wine list.
   archivePopupTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.gold, marginBottom: spacing.md },
-  archivePopupSub: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginBottom: spacing.md },
+
   // Explanatory blurb under the header on the confirm-bottles screen.
   confirmBlurb: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, lineHeight: 19, textAlign: 'center', marginBottom: spacing.md },
   // "Your Note" label + mic sit on one row; the input sits below.
@@ -1166,34 +1037,17 @@ const styles = StyleSheet.create({
   primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   secondaryBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   secondaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
-  // Done-screen buttons — match the Cellar tab's Archive a Night / Cellar
-  // Archive buttons (full-width, white border, rounded 14).
-  doneBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  doneBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
-  doneTitle: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center' },
-  doneContent: { padding: spacing.xl, paddingTop: spacing.xl * 2, paddingBottom: 60, gap: spacing.md },
-  // Non-italic — the count summary + the "fun session" blurb read as plain copy.
-  // Count summary in gold; "Fun session!" + note prompt in white.
-  doneCount: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 20 },
-  doneBlurb: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 22, marginTop: spacing.sm, textAlign: 'center' },
+
   notePrompt: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, lineHeight: 20 },
   noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   noteIconsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   noteInputFull: { minHeight: 88, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text },
-  locationRow: { flexDirection: 'row', gap: spacing.sm },
-  locationBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  locationBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)' },
-  locationBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
-  locationBtnTextActive: { color: colors.gold },
-  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  noteInput: { flex: 1, minHeight: 88, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text },
-  // Save note — gold, but the SAME footprint as the View Cellar Archive / Done buttons.
-  saveNoteBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  saveNoteText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+
   // Night Archived overlay (bottom sheet).
   doneBackdrop: { flex: 1, backgroundColor: colors.background },
-  noteIcons: { alignItems: 'center', gap: spacing.sm, paddingTop: 4 },
+
   overlayRoot: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   overlaySheet: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '94%', paddingTop: spacing.sm },
   overlayContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 40, gap: spacing.sm },
@@ -1202,8 +1056,7 @@ const styles = StyleSheet.create({
   stampRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm, marginBottom: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   stampText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, textAlign: 'center', minWidth: 80, flexShrink: 1 },
   stampSep: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
-  overlaySaveBtn: { alignSelf: 'stretch', backgroundColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  overlaySaveText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16 },
+
   // Night Archived overlay Save — unfilled white bubble, white font.
   overlaySaveBtnWhite: { alignSelf: 'stretch', backgroundColor: 'transparent', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   overlaySaveTextWhite: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16 },
@@ -1213,8 +1066,7 @@ const styles = StyleSheet.create({
   // Edit-wine header + "from your cellar list" prompt.
   editWineHeader: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text, marginBottom: 4 },
   editFromCellar: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginBottom: spacing.sm },
-  overlaySecondaryBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
-  overlaySecondaryText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16 },
+
   overlayCancel: { alignSelf: 'center', paddingVertical: spacing.sm, marginTop: 2 },
   overlayCancelText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textDecorationLine: 'underline' },
   // "Please input the date and location" prompt.
@@ -1224,12 +1076,12 @@ const styles = StyleSheet.create({
   promptInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMuted: { opacity: 0.45 },
-  thumb: { width: 40, height: 52, borderRadius: 4 },
+
   rowText: { flex: 1 },
   rowName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
-  rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+
   unconfident: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.gold, marginTop: 2 },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+
   stepperInline: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   stepBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   stepBtnText: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.gold, lineHeight: 20 },
@@ -1243,10 +1095,7 @@ const styles = StyleSheet.create({
   editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   editFieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: spacing.md, marginBottom: 4 },
   editInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface },
-  unmatchedLine: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, lineHeight: 20 },
-  unmatchedRow: { paddingVertical: spacing.xs },
-  // Gold affordance link on lineup rows — opens the manual cellar picker.
-  matchLink: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
+
   // Manual cellar picker modal.
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: spacing.xl },
   pickerSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },

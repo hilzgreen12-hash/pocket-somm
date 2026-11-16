@@ -25,7 +25,7 @@ export async function homeCurrency(fromPreferences: string | null | undefined): 
 // unavailable, or the country has no mapped currency — the caller then keeps
 // the home currency. Shared by the wine-list scanner and the single-wine intel
 // flow so both detect "you're abroad" the same way.
-export async function detectLocalCurrency(): Promise<{ currency: string; country: string | null } | null> {
+async function detectLocalCurrency(): Promise<{ currency: string; country: string | null } | null> {
   try {
     const { status } = await Location.getForegroundPermissionsAsync();
     if (status !== 'granted') return null;
@@ -48,7 +48,7 @@ export async function detectLocalCurrency(): Promise<{ currency: string; country
 
 // The "use local currency?" confirm. Resolves to whichever currency the user
 // picks (local or their profile default).
-export function askUseLocalCurrency(local: string, profile: string, country: string | null): Promise<string> {
+function askUseLocalCurrency(local: string, profile: string, country: string | null): Promise<string> {
   const where = country ? `in ${country}` : `somewhere using ${local}`;
   return new Promise((resolve) => {
     showAlert({
@@ -99,8 +99,3 @@ export function peekIntelCurrency(fromPreferences: string | null | undefined): s
   return sessionChoice && sessionChoice.home === home ? sessionChoice.resolved : null;
 }
 
-// Forget the remembered choice — e.g. after a manual currency change in
-// settings, so the next lookup re-detects.
-export function resetIntelCurrencyChoice(): void {
-  sessionChoice = null;
-}

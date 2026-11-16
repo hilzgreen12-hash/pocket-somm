@@ -7,15 +7,6 @@ import type { CellarWine } from '../types/wine';
 import { estimatePurchasePriceOnAdd, type PurchaseEstimateMode } from '../services/purchaseEstimate';
 import { noteHappyMoment } from '../services/ratingPrompt';
 
-// Review fields that should trigger a community-feed publish when they
-// change. Keeping this list tight so generic edits (purchase price,
-// drinking-window tweaks, etc.) don't churn the feed.
-const REVIEW_FIELDS: ReadonlyArray<keyof CellarWine> = ['user_notes', 'review_score', 'review_location', 'review_date'];
-
-function touchesReview(updates: Partial<CellarWine>): boolean {
-  return REVIEW_FIELDS.some((k) => k in updates);
-}
-
 export function useCellar() {
   const { session } = useAuth();
   const userId = session?.user.id ?? '';

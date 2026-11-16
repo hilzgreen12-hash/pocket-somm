@@ -301,9 +301,7 @@ const styles = StyleSheet.create({
   backText: { fontFamily: fonts.bodyRegular, fontSize: 22, color: colors.gold },
   addBtn: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, padding: 4 },
   addText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  // Share sits directly below "+ Add Review".
-  shareBtn: { position: 'absolute', top: 84, right: spacing.xl, zIndex: 10, padding: 4, alignItems: 'flex-end' },
-  shareText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+
   // Foot-of-card Export — gold outline + gold font only (no fill), sized to match
   // the Cellar tab buttons (paddingVertical sm / paddingHorizontal md, 14pt).
   exportBtn: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
@@ -349,9 +347,8 @@ const styles = StyleSheet.create({
   score: { fontFamily: fonts.bodyBold, fontSize: 18, color: '#FFFFFF' },
   drink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
 
-  sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   sectionBody: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },
-  subSection: { marginTop: spacing.sm, marginBottom: spacing.xs },
+
   // Yellow link that opens the private-note popup, below the review copy.
   personalNoteLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', marginTop: spacing.sm, marginBottom: spacing.xs },
 

@@ -7,7 +7,7 @@ import { useLabelStore } from './labelStore';
 // A recently-generated Wine Intel result, kept for the Discover tab's "Recent
 // Scans" carousel. imageUri is the label photo captured at scan time (null for
 // searched/typed wines); ts drives recency ordering.
-export interface RecentIntel {
+interface RecentIntel {
   key: string;
   wine: WineDetailsComplete;
   intel: WineIntelligence;

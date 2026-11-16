@@ -1,28 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '../api/supabase';
 import { useAuth } from './useAuth';
-import { useScanStore } from '../stores/scanStore';
-import { uploadRestaurantPhoto } from '../api/labelPhotos';
 import type { ExtractedWine, RecommendationResponse } from '../types/wine';
 import { normaliseCity } from '../utils/city';
-
-// Crop the TOP landscape strip of a scanned wine list for its card thumbnail —
-// the top usually carries the restaurant name, which reads well at card size.
-async function cropWineListTop(uri: string): Promise<string> {
-  const meta = await ImageManipulator.manipulateAsync(uri, [], {});
-  const w = meta.width;
-  const h = meta.height;
-  const cropH = Math.min(h, Math.max(1, Math.round(w * 0.72))); // ~landscape strip
-  const out = await ImageManipulator.manipulateAsync(
-    uri,
-    [{ crop: { originX: 0, originY: 0, width: w, height: cropH } }, { resize: { width: 640 } }],
-    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-  );
-  return out.uri;
-}
 
 const STORAGE_KEY = 'vinster_scan_history';
 const MAX_LOCAL = 3;
@@ -37,7 +19,7 @@ export function scanHistoryKey(userId: string | null | undefined): string {
   return userId ? `${STORAGE_KEY}_${userId}` : STORAGE_KEY;
 }
 
-export interface ScanHistoryItem {
+interface ScanHistoryItem {
   id: string;
   savedAt: string;
   extractedWines: ExtractedWine[];

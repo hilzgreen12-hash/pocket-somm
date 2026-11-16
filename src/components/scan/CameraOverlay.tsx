@@ -1,5 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
-import { colors, spacing } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
 
 const { width } = Dimensions.get('window');
 const FRAME_WIDTH = width * 0.9;

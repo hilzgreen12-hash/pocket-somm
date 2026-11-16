@@ -3,7 +3,7 @@ import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet 
 import { colors, spacing } from '../constants/theme';
 import { fontsSpectral as fonts } from '../constants/fonts';
 
-export interface FilterItem {
+interface FilterItem {
   id: string;
   label: string;
   sublabel?: string;

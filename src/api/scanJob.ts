@@ -9,13 +9,13 @@ import type { ExtractedWine } from '../types/wine';
 // The server finishes the work in the background, so a dropped connection or a
 // backgrounded app never loses it — the next poll just collects the result.
 
-export interface ScanJobParams {
+interface ScanJobParams {
   scanPreferences: unknown; // ScanPreferences (wineTypes, budget, foodPairing, …)
   profile: unknown;         // profile filter fields (disliked/favourite, defaultBudget)
   currency: string;
 }
 
-export interface ScanJobResult {
+interface ScanJobResult {
   status: 'done' | 'error';
   wines: ExtractedWine[] | null;      // OCR-read list (for history/caching)
   // RAW recommend response — the caller runs finalizeRecommendation() on it to
@@ -43,7 +43,7 @@ const POLL_TIMEOUT_MS = 180000; // 3 min hard ceiling — well past a normal sca
 // after the server already started, the retry gets the SAME job back rather
 // than starting a second, paid one.
 // The list comes as photos (images), a web link (sourceUrl) or a shared PDF (pdfBase64).
-export type ScanInput = { images: string[] } | { sourceUrl: string } | { pdfBase64: string };
+type ScanInput = { images: string[] } | { sourceUrl: string } | { pdfBase64: string };
 
 export async function startScanJob(input: ScanInput, params: ScanJobParams, clientRef: string): Promise<StartedScanJob> {
   // Give big uploads time: 30s plus ~10s per 300 KB, up to 90s.

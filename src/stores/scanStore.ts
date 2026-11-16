@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { ExtractedWine, RecommendationResponse } from '../types/wine';
 
-export interface ScanPreferences {
+interface ScanPreferences {
   wineTypes: string[];
   styleProfiles: string[];
   budget: number | null;

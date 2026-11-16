@@ -8,10 +8,10 @@ import { useAuth } from '../hooks/useAuth';
 import { useCellar } from '../hooks/useCellar';
 import { fetchStorageLocations, fetchStorageLocationCases } from '../api/storageLocations';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine, deleteCellarWine } from '../api/cellar';
-import { getRacks, clearWineFromRacks, removeSlotsForWine } from '../api/racks';
+import { getRacks, clearWineFromRacks } from '../api/racks';
 import { getBins } from '../api/bins';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
-import { moveBottlesToLocation, releaseBottlesFromPlacements, fetchPlacementsForWine, fetchPlacementsForWines, placedCount, decrementPlacement, addLocationPlacement } from '../api/placements';
+import { moveBottlesToLocation, releaseBottlesFromPlacements, fetchPlacementsForWine, fetchPlacementsForWines, placedCount, addLocationPlacement } from '../api/placements';
 import { recommendFromCellar } from '../api/cellarRecommend';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
@@ -22,13 +22,12 @@ import { useSoundCorrect, setPriorityDictationHints } from '../hooks/useDictatio
 import { HomeVoiceModal } from './HomeVoiceModal';
 
 const MARK = require('../../assets/vinster-mark.png');
-import { colors, spacing } from '../constants/theme';
+import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import { findSameCellarWine } from '../utils/wineMatch';
 import { releaseHomeBottles as releaseHomeBottlesShared } from '../services/moveBottles';
 
 type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'archiveNote' | 'error' | 'find' | 'found' | 'addWhere';
-
 
 function wineLabel(w: CellarWine | undefined): string {
   if (!w) return 'this wine';
@@ -62,7 +61,6 @@ function distinctCandidateIds(ids: string[], wines: CellarWine[]): string[] {
   return out;
 }
 
-
 // A move whose DESTINATION is the Full Cellar List (i.e. unplace the bottles — take
 // them out of an alt cellar / rack and leave them loose in the cellar). This isn't a
 // storage location or a rack, so the parser can't resolve it as a destination; we
@@ -70,17 +68,6 @@ function distinctCandidateIds(ids: string[], wines: CellarWine[]): string[] {
 function mentionsCellarList(text: string): boolean {
   return /\b(full\s+)?cellar\s+list\b/i.test(text) || /\bunplace/i.test(text);
 }
-
-// Default intro copy + examples (the Cellar-tab, full-scope voice command).
-// A caller (e.g. a home-storage location screen) can override these to present
-// a scoped explainer — the underlying move/archive/add engine is unchanged.
-const DEFAULT_INTRO_TEXT = 'Use Quick Command to: Move wines between storage locations, Archive bottles, Add them to your cellar list to place later, permanently Delete bottles, or ask Vinster to recommend wines to drink based on your mood and occasion.';
-const DEFAULT_SUGGESTIONS = [
-  'Move my Lafite 1982 from my wine fridge to my small wine rack',
-  'Archive 3 bottles of Harlan 1990',
-  'Delete two bottles of Sassicaia 2007',
-  "It's cold and raining, I want a smooth red wine for the fireside.",
-];
 
 // Shared preset for the "Voice Command" entry on EVERY home-storage location
 // screen (racks, fridges, bins, alt cellars): move/archive only, scoped copy +
@@ -824,21 +811,6 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
     }
   }
 
-  // The confirm sentence for move / archive — always states the bottle count.
-  function confirmText(): string {
-    if (action === 'add') {
-      const a = result?.add;
-      const label = [a?.producer, a?.wineName, a?.vintage].filter(Boolean).join(' ') || 'this wine';
-      const n = Math.max(1, result?.quantity ?? 1);
-      return `Add ${n} ${n === 1 ? 'bottle' : 'bottles'} of ${label} to ${targetUnit?.name ?? targetLocation?.name ?? 'your cellar list'}?`;
-    }
-    const count = Math.min(chosenWine?.quantity ?? 1, Math.max(1, result?.quantity ?? (chosenWine?.quantity ?? 1)));
-    const bottles = `${count} ${count === 1 ? 'bottle' : 'bottles'}`;
-    if (action === 'move') return `Move ${bottles} of ${wineLabel(chosenWine)} to ${destName ?? 'the chosen location'}?`;
-    if (action === 'delete') return `Permanently delete ${bottles} of ${wineLabel(chosenWine)}? This can't be undone.`;
-    return `Archive ${bottles} of ${wineLabel(chosenWine)}?`;
-  }
-
   const candidateWines = (result?.candidates ?? []).map((id) => wines.find((w) => w.id === id)).filter(Boolean) as CellarWine[];
 
   // Storage screens (rack / fridge / bin / alt cellar) are scoped: no Add, and
@@ -854,7 +826,6 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
   async function releaseHomeBottles(wineId: string, n: number): Promise<number> {
     return releaseHomeBottlesShared(wineId, n, new Set(locations.filter((l) => l.is_external).map((l) => l.id)));
   }
-
 
   function restate() { setTranscript(''); setSentText(''); setPickIntro(null); setResult(null); setChosenWineId(null); setPhase('speak'); }
 
@@ -1252,42 +1223,3 @@ const qs = StyleSheet.create({
   done: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, textDecorationLine: 'underline' },
 });
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  title: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
-  // Intro paragraph atop the speak screen — the four commands, one sentence.
-  voiceHeader: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
-  introText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 22 },
-  modalDivider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
-  micRow: { alignItems: 'center', marginBottom: spacing.md },
-  // Transcript box — darker terracotta, matching the voice-note inputs in Reviews.
-  inputField: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, paddingHorizontal: spacing.md, minHeight: 64, marginBottom: spacing.xs },
-  inputText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22 },
-  inputPlaceholder: { color: colors.textSubtle },
-  editHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSubtle, textAlign: 'center', marginBottom: spacing.md },
-  // Suggested commands — white italic, quoted.
-  suggestions: { gap: spacing.sm, marginBottom: spacing.lg },
-  suggestion: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 20 },
-  primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  btnDisabled: { opacity: 0.5 },
-  cancelRow: { alignItems: 'center', paddingVertical: spacing.md },
-  cancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
-  centerBlock: { alignItems: 'center', paddingVertical: spacing.md, gap: spacing.sm },
-  parsingText: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, marginTop: spacing.sm },
-  confirmBody: { fontFamily: fonts.bodyRegular, fontSize: 17, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
-  pickRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  pickWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
-  pickRegion: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  // Success popup — "Moved"/"Archived" header, the wine, its region · vintage,
-  // the from→to (or count) detail, then a "View in <destination>" link.
-  successAction: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  successWine: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, textAlign: 'center', marginBottom: 2 },
-  successMeta: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
-  successDetail: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.md },
-  viewLinkRow: { alignItems: 'center', paddingVertical: spacing.sm, marginBottom: spacing.sm },
-  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  // Enlarged so "Another Command" isn't cramped.
-  successBtn: { paddingVertical: spacing.md, paddingHorizontal: spacing.xl },
-});

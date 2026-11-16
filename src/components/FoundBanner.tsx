@@ -15,7 +15,7 @@ const listeners = new Set<() => void>();
 const set = (b: Banner) => { banner = b; listeners.forEach((fn) => fn()); };
 
 export function showFoundBanner(text: string, pathname: string) { set({ text, pathname }); }
-export function hideFoundBanner() { set(null); }
+function hideFoundBanner() { set(null); }
 
 export function FoundBannerHost() {
   const b = useSyncExternalStore((fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; }, () => banner, () => banner);

@@ -34,7 +34,7 @@ export async function generatePairingIngredients(w: CellarWine): Promise<Pairing
 
 // "Wider market" for the Serve tab: three styles to buy for before/after this
 // wine (each with a reason and price range), when the cellar has nothing fit.
-export type MarketStyle = { style: string; reason: string; priceRange: string };
+type MarketStyle = { style: string; reason: string; priceRange: string };
 export async function suggestMarketStyles(w: CellarWine, slot: 'before' | 'after', suggested: string, currency: string): Promise<MarketStyle[]> {
   const data = await invokeResilient('wine-serving-suggestion', { ...identity(w), mode: 'market', slot, suggested, currency }) as { styles?: MarketStyle[]; error?: string };
   if (data?.error) throw new Error(data.error);
@@ -60,7 +60,7 @@ export async function generateVintageVerdict(w: CellarWine, input: {
   if (!data?.verdict && !data?.drinkNow && !data?.layDown) return null;
   return { verdict: data.verdict ?? null, drinkNow: data.drinkNow ?? null, layDown: data.layDown ?? null };
 }
-export type VintagePick = { vintages: number[]; reason: string };
+type VintagePick = { vintages: number[]; reason: string };
 export type VintageVerdictAI = { verdict: string | null; drinkNow: VintagePick | null; layDown: VintagePick | null };
 
 // Generate Vinster's Market & Vintage Comparison on demand. Returns null when
@@ -76,7 +76,7 @@ export async function generateMarketVintage(w: CellarWine, currency?: string | n
 
 // Vinster's rarity assessment (wine card Market tab). Null when the recognition
 // gate says Vinster doesn't genuinely know this wine.
-export type WineRarity = { level: number; label: string; text: string };
+type WineRarity = { level: number; label: string; text: string };
 export async function generateRarity(w: CellarWine): Promise<WineRarity | null> {
   const data = await invokeResilient('wine-market-vintage', { ...identity(w), mode: 'rarity' }) as
     { identified?: boolean; level?: number | null; label?: string | null; text?: string | null; error?: string };

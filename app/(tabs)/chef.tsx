@@ -123,7 +123,6 @@ export default function ChefTab() {
           folders rendered as boxes (see CookbookFoldersCarousel). */}
       <CookbookFoldersCarousel />
 
-
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMessage(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
@@ -147,28 +146,18 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   // 18pt either side of every separator, app-wide.
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: 18 },
-  // Voice Command — centred gold pill, matching the home-storage screens.
-  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: 18 },
-  voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+
   // First divider after the Voice Command button — 18 above/below to match Home.
   // Header separator: 18pt from the blurb's last line (it has 4 of its own) and 18pt below, as on Home.
   voiceDivider: { marginTop: 14, marginBottom: 18 },
-  // "Your Cookbook" header — matches Cellar / Review section headers.
-  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
-  // Section question prompts ("Chosen your bottle?", "Have a recipe & need
-  // a wine?") — Cormorant.
-  subheading: { fontFamily: fonts.headingBold, fontSize: 24, color: '#FFFFFF', letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.xs },
+
   // Top blurb under the Chef heading — italic blurb directly under the
   // tab title, kept Cormorant per user spec ("blurbs below the headers
   // on the tab screens"). Italics retained.
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
-  // One-line note pointing users to the You tab to tune their results —
-  // matches the topBlurb size/font exactly so the two read as one block.
-  prefsBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: 0, textAlign: 'center' },
-  prefsLink: { color: colors.gold, textDecorationLine: 'underline' },
-  // "View last result" link — body / link, Inter.
-  lastResultLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
+
   buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   // Button label — Cormorant. Matched to the other tab pages (14pt).
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
@@ -180,9 +169,4 @@ const styles = StyleSheet.create({
   modalButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   // Pop-up button — Cormorant.
   modalButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
-  // Pairing-chooser action buttons — one per flow, stacked.
-  modalChoiceBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  modalChoiceText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
-  modalCancel: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
-  modalCancelText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
 });

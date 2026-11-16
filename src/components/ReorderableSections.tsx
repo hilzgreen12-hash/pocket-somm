@@ -9,11 +9,11 @@ import { colors, spacing } from '../constants/theme';
 // beside a title and dragging. JS-thread Animated (like CoteDorMap) — there are
 // only a handful of sections, so no worklets needed.
 
-export type ReorderableSection = { key: string; title: string; content: ReactNode };
+type ReorderableSection = { key: string; title: string; content: ReactNode };
 
 // The page ScrollView, so a drag near the screen's top/bottom edge can scroll it.
 // Spread `scrollProps` onto that ScrollView and pass `host` to ReorderableSections.
-export type AutoScrollHost = {
+type AutoScrollHost = {
   ref: React.RefObject<ScrollView | null>;
   y: React.MutableRefObject<number>;
   maxY: () => number;

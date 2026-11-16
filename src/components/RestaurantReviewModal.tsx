@@ -20,15 +20,12 @@ import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { useCellar } from '../hooks/useCellar';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
-import type { ChosenWine } from '../types/wine';
-import { publishRestaurantSessionToCommunity } from '../services/communityPublish';
 import { StarRating } from './StarRating';
 import { WineSearchModal } from './WineSearchModal';
 import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
 import { RestaurantReviewShareCard } from './RestaurantReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
-import { COMMUNITY_ENABLED } from '../constants/features';
 import { showAlert } from './AppAlert';
 import { ensureConnectionForUpload } from '../utils/connectionGuard';
 import { MicButton } from './MicButton';
@@ -124,13 +121,13 @@ export function RestaurantReviewModal({
   const [atmosphere, setAtmosphere] = useState<number | null>(initialRatings?.atmosphere ?? null);
   const [glassware, setGlassware] = useState<number | null>(initialRatings?.glassware ?? null);
   const [value, setValue] = useState<number | null>(initialRatings?.value ?? null);
-  const [isFavourite, setIsFavourite] = useState(initialFavourite ?? false);
+  const [isFavourite] = useState(initialFavourite ?? false);
   // Visit date, editable as YYYY-MM-DD. Only writable when a raw capturedAt was
   // passed in (i.e. we know which timestamp to overwrite).
   const [dateValue, setDateValue] = useState(() => isoToYmd(capturedAt));
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [posting, setPosting] = useState(false);
+  const [] = useState(false);
   const shareCardRef = useRef<View>(null);
 
   // The scan_sessions patch this review writes. Kept in one place so the Save
@@ -499,18 +496,6 @@ export function RestaurantReviewModal({
     }
   }
 
-  function communityPayload() {
-    return {
-      id: sessionId,
-      restaurant_name: restaurantName || null,
-      restaurant_note: note.trim() || null,
-      rating_food: food,
-      rating_service: service,
-      rating_wine_list: wineList,
-      rating_overall: overall,
-    };
-  }
-
   async function persist() {
     const payload = buildPayload();
     // The Supabase client RESOLVES with { error } rather than throwing, so an
@@ -575,24 +560,6 @@ export function RestaurantReviewModal({
       return;
     }
     onClose();
-  }
-
-  async function handleShareToCommunity() {
-    Keyboard.dismiss();
-    if (posting) return;
-    setPosting(true);
-    try {
-      // Persist first so the published review matches what's on screen.
-      await persist();
-      await publishRestaurantSessionToCommunity(communityPayload());
-      qc.invalidateQueries({ queryKey: ['scan-archive'] });
-      qc.invalidateQueries({ queryKey: ['my-community-uploads'] });
-      showAlert({ title: 'Shared to community', body: 'Your restaurant review now appears in the Vinster community feed.' });
-    } catch (err) {
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setPosting(false);
-    }
   }
 
   async function handleShare() {
@@ -1068,8 +1035,7 @@ const styles = StyleSheet.create({
   topTitle: { position: 'absolute', top: 58, left: 0, right: 0, textAlign: 'center', fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, letterSpacing: 0.4 },
   topRight: { alignItems: 'flex-end', gap: 4 },
   topShareText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
-  favouriteStar: { fontSize: 26, color: colors.textMuted },
-  favouriteStarActive: { color: colors.gold },
+
   content: { padding: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
   // Large photo-of-the-night banner: bleeds to the screen edges and fills the
   // header area, with the restaurant identity overlaid on it.
@@ -1079,8 +1045,7 @@ const styles = StyleSheet.create({
   photoBannerScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.34)' },
   // Empty-state: the whole banner is a tap target to add a photo.
   photoBannerAdd: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  photoBannerAddIcon: { fontFamily: fonts.headingBold, fontSize: 34, color: colors.gold },
-  photoBannerAddText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+
   // Camera badge (top-right of the photo), matching the archived-lineup image.
   photoChangeBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18, minWidth: 34, height: 32, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   // Overlaid, editable identity anchored to the bottom of the banner.
@@ -1095,25 +1060,13 @@ const styles = StyleSheet.create({
   matchedLineup: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.sm },
   bannerMetaInput: { flexShrink: 1, fontFamily: fonts.bodyRegular, fontSize: 15, color: 'rgba(255,255,255,0.92)', paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   bannerDateInput: { flexShrink: 0, width: 118, fontStyle: 'normal', fontFamily: fonts.bodyRegular },
-  bannerMetaDot: { fontFamily: fonts.bodyRegular, fontSize: 15, color: 'rgba(255,255,255,0.7)', marginHorizontal: 6, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
+
   bannerMetaStatic: { fontFamily: fonts.bodyRegular, fontSize: 15, color: 'rgba(255,255,255,0.92)', textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
-  heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
+
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  // Restaurant + Place inputs share one row at the top of the card.
-  identityRow: { flexDirection: 'row', gap: spacing.sm },
-  identityCol: { flex: 1 },
-  // Vinster's auto-attached bottle pick(s), sitting under the date.
-  bottlePickBlock: { marginTop: spacing.xs, marginBottom: spacing.sm },
-  // Read-only restaurant identity stamp.
-  stamp: { marginBottom: spacing.lg },
-  stampNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  stampPin: { fontSize: 20 },
-  stampName: { flex: 1, fontFamily: fonts.headingBold, fontSize: 24, color: colors.text },
-  stampMeta: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs },
+
   sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, marginBottom: spacing.sm },
-  // Sub-heading for each bottle bucket (List / Off-List).
-  bottleGroupLabel: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3, marginTop: spacing.sm, marginBottom: spacing.xs },
+
   fieldLabel: {
     fontFamily: fonts.bodySemibold,
     fontSize: 16,
@@ -1144,38 +1097,23 @@ const styles = StyleSheet.create({
   noteReadonlyWrap: { marginBottom: spacing.lg },
   noteReadonly: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
   noteReadonlyEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, lineHeight: 22 },
-  ratingsBlock: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    gap: spacing.sm,
-  },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  ratingLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+
   wineBlock: { marginBottom: spacing.lg, gap: spacing.sm },
   wineRow: { gap: 2 },
-  wineLineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  broughtTag: { fontFamily: fonts.bodySemibold, fontSize: 10.5, color: colors.gold, letterSpacing: 0.4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, overflow: 'hidden' },
-  // "From List" — same bubble treatment as "brought", for wines chosen off the
-  // restaurant's list.
-  fromListTag: { fontFamily: fonts.bodySemibold, fontSize: 10.5, color: colors.gold, letterSpacing: 0.4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, overflow: 'hidden' },
+
   broughtToggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
   broughtCheckbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   broughtCheckboxOn: { backgroundColor: 'rgba(224,184,74,0.18)' },
   broughtCheckTick: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold },
-  broughtToggleTextWrap: { flex: 1 },
+
   broughtToggleLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
-  broughtToggleHint: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  // Wine reference — gold italic, matching the wine reference style elsewhere.
-  wineLine: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, lineHeight: 21 },
+
   // Wine name in white; the origin prefix beside it stays gold.
   wineNameWhite: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 21 },
   wineScoreInline: { fontFamily: fonts.bodySemibold, color: colors.gold },
   // Origin prefix ("Brought:" / "List Pick:") — gold, semibold to stand apart.
   wineOrigin: { fontFamily: fonts.bodySemibold, color: colors.gold },
-  wineReviewLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 2 },
+
   // "Add a Bottle" — dashed gold affordance under the bottle list.
   addBottleBtn: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
   addBottleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
@@ -1183,18 +1121,7 @@ const styles = StyleSheet.create({
   ratingsGrid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: spacing.xs, marginBottom: spacing.md },
   ratingItem: { width: '47%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   ratingItemLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted },
-  // "(coming soon)" line beneath "Share to Community".
-  comingSoonText: { fontFamily: fonts.bodyRegular, fontSize: 12, color: '#FFFFFF', textAlign: 'center', marginTop: 2, opacity: 0.85 },
-  shareRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  shareBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  shareBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', textAlign: 'center' },
+
   btnDisabled: { opacity: 0.5 },
   saveButton: {
     borderWidth: 1,
@@ -1205,8 +1132,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  cancelButton: { alignItems: 'center', padding: spacing.sm },
-  cancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+
   // Off-screen wrapper so the branded share card can be snapshotted while
   // staying out of the visible layout (off-screen position only — no opacity).
   shareCardWrap: { position: 'absolute', left: -10000, top: 0 },

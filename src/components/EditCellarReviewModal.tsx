@@ -1,8 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import {
-  Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard, Share,
-} from 'react-native';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, Keyboard, Share } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../utils/shareCard';
@@ -14,17 +11,13 @@ import { LabelThumb } from './LabelThumb';
 import { ReviewCardHeader, ReviewedLineEditable } from './ReviewCardHeader';
 import { WineReviewShareCard } from './WineReviewShareCard';
 import { getCachedLabelUri } from '../api/labelImageCache';
-import { publishCommunityReview } from '../api/community';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
-import { normaliseCity } from '../utils/city';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { showAlert } from './AppAlert';
 import { buildEntry, entriesOf, latestEntry, flatMirror } from '../utils/cellarReview';
 import { missingReviewFields } from '../utils/reviewDedup';
-import { MicButton } from './MicButton';
 import { WineReviewFields } from './WineReviewFields';
-import { WineIdentityHeader } from './WineIdentityHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
@@ -70,7 +63,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
   const [saved, setSaved] = useState(false);
   // In edit mode, the id of the entry being edited in place (else null = append).
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [posting, setPosting] = useState(false);
+  const [] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareLabelUri, setShareLabelUri] = useState<string | null>(null);
 
@@ -229,39 +222,6 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
       }
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handlePostToCommunity() {
-    if (!wine || posting) return;
-    if (!session?.user.id) { showAlert({ title: 'Sign in required', body: 'You need an account to share to the community.' }); return; }
-    Keyboard.dismiss();
-    setPosting(true);
-    try {
-      await persist();
-      const title = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' · ').trim() || wine.wine_name || 'Wine review';
-      const subtitle = [wine.region, wine.grape_variety].filter(Boolean).join(' · ') || null;
-      const parsedScore = score.trim() ? Math.round(Number(score.trim())) : null;
-      await publishCommunityReview(
-        {
-          category: 'wine', source_table: 'cellar_wines', source_id: wine.id,
-          title, subtitle, rating: Number.isFinite(parsedScore as number) ? parsedScore : null,
-          body: reviewNote.trim() || personalNotes.trim() || null,
-          metadata: {
-            producer: wine.producer ?? null, region: wine.region ?? null, vintage: wine.vintage ?? null,
-            grape_variety: wine.grape_variety ?? null, critic_score: wine.critic_score ?? null,
-            review_date: reviewDate.trim() || null,
-          },
-        },
-        (session.user.email ?? '').split('@')[0] || null,
-      );
-      showAlert({ title: 'Shared to community', body: 'Your wine review now appears in the Vinster community feed.' });
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      const already = detail.toLowerCase().includes('duplicate') || detail.toLowerCase().includes('unique');
-      showAlert({ title: already ? 'Already shared' : 'Could not share', body: already ? "You've already shared this review." : detail });
-    } finally {
-      setPosting(false);
     }
   }
 
@@ -424,49 +384,13 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   topRight: { alignItems: 'flex-end', gap: 2 },
   topShareText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  topEditText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  header: { alignItems: 'center', marginBottom: spacing.sm },
-  headerWithThumb: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+
   headerThumb: { width: 96, height: 128, borderRadius: 5 },
-  headerTextCol: { flex: 1 },
-  headerLineLeft: { textAlign: 'left' },
-  regionLeft: { textAlign: 'left' },
-  stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
-  stampLineLeft: { textAlign: 'left' },
-  // Editable date · location stamp (gold), replacing the old read-only line.
-  stampEdit: { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 6 },
-  stampEditCenter: { justifyContent: 'center' },
-  stampDateInput: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, minWidth: 96 },
-  stampSep: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
-  stampLocInput: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, flexShrink: 1, flexGrow: 1, minWidth: 120 },
-  editScroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },
-  editSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  editLabel: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs, marginTop: spacing.sm },
-  editInput: { backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text },
-  editThumbRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
-  editThumb: { width: 72, height: 96 },
-  editPhotoBtns: { flex: 1, gap: spacing.sm },
-  editPhotoBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
-  editPhotoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
-  headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
-  region: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
-  grape: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
+
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.sm },
-  statCell: { width: '50%', paddingVertical: spacing.sm, paddingRight: spacing.sm },
-  statLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 },
-  statInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  fieldLabel: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.6 },
-  sectionTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.sm },
-  dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
-  noteInput: { minHeight: 90 },
-  shareRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  shareBtn: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  shareBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', textAlign: 'center' },
+
   btnDisabled: { opacity: 0.5 },
-  saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
-  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
+
   deleteButton: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
   deleteText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },

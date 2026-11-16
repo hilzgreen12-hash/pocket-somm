@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
@@ -12,15 +11,14 @@ import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { buildRecipeHtml } from '../../src/utils/recipeHtml';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
-import { RecipeShareCard, RECIPE_SHARE_QR_URL } from '../../src/components/RecipeShareCard';
+import { RecipeShareCard } from '../../src/components/RecipeShareCard';
 import { PairMasthead } from '../../src/components/PairMasthead';
 import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
-import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
-import type { Pairing, WineDetailsComplete } from '../../src/types/wine';
+import type { Pairing } from '../../src/types/wine';
 
 function PairingCard({
   pairing,
@@ -175,9 +173,8 @@ export default function ChefResultsScreen() {
   const { fromHistory, sessionId, savedAt, city, from, wineId, backTo } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; savedAt?: string; city?: string; from?: string; wineId?: string; backTo?: string }>();
   const isFromHistory = fromHistory === 'true';
   const isFromCellar = from === 'cellar' && !!wineId;
-  const { wineDetailsConfirmed, pairings: freshPairings, filters, reset, setPairings, setError } = useLabelStore();
+  const { wineDetailsConfirmed, pairings: freshPairings, filters, setPairings, setError } = useLabelStore();
   const { session } = useAuth();
-  const qc = useQueryClient();
   const { sessions: labelSessions, isLoading: labelLoading, save: saveLabelSession, updateNotes } = useChefLabelHistory();
 
   // When the user is viewing a saved cookbook entry, surface the
@@ -664,54 +661,43 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm },
   backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  // Page title — matches "Pairing to a Recipe" on the sibling results page.
-  pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
+
   stampRow: { alignItems: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, gap: 2 },
   stampDate: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   stampLocation: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   errorText: { color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 16 },
   linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
-  header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerLine: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.5 },
-  region: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.xs },
+
   section: { padding: spacing.xl },
-  sectionTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md },
+
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },
   dishName: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
-  // Header row hosting dishName + the quick "+ SHARE" link in the corner.
-  cardHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+
   cardShareLink: { paddingHorizontal: spacing.xs, paddingVertical: 2 },
   cardShareLinkText: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, letterSpacing: 1.5, textTransform: 'uppercase' },
   chefInspiration: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', marginBottom: spacing.xs },
   recipeMetaInline: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: 4, letterSpacing: 0.3 },
   pairingNotes: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
-  toggle: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: spacing.sm },
+
   // Quick Save shown as a centred link above the main View Full Recipe button.
   tapHint: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: 4, marginBottom: spacing.xs, textAlign: 'center', letterSpacing: 0.3 },
   recipe: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
   cardSaveButton: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
-  cardSaveButtonDisabled: { opacity: 0.6 },
+
   cardSaveButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, letterSpacing: 0.3 },
-  cardShareButton: { marginTop: spacing.md, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
-  cardShareButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, letterSpacing: 0.3 },
+
   shareCardWrap: { position: 'absolute', top: 100000, left: 0, opacity: 0 },
   cardSavedBlock: { alignItems: 'center', marginTop: spacing.md, gap: 4 },
   cardSavedLabel: { color: colors.gold, fontFamily: fonts.bodySemibold, fontSize: 14, letterSpacing: 0.5 },
   cardViewArchiveLink: { color: colors.gold, fontFamily: fonts.bodyItalic, fontSize: 14, textDecorationLine: 'underline' },
   recipeIntro: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 20, marginBottom: spacing.md },
-  notesCard: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginTop: spacing.md, marginBottom: spacing.md },
-  notesHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: spacing.sm, gap: spacing.sm },
-  notesTitle: { fontSize: 16, fontFamily: fonts.headingBold, color: colors.text },
-  notesDate: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5 },
-  notesBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 22, marginBottom: spacing.sm },
-  notesInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.background, minHeight: 100, textAlignVertical: 'top' },
-  notesActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
+
   notesCancel: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   notesSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md },
   notesSaveBtnDisabled: { opacity: 0.6 },
   notesSaveBtnText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
-  notesEditLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, alignSelf: 'flex-start' },
+
   recipeSection: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   recipeItem: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 20, marginBottom: 4 },
   regenLink: { alignItems: 'center', paddingVertical: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm },

@@ -26,7 +26,7 @@ function chosenHasReview(w: ChosenWine): boolean {
   );
 }
 
-export interface WineConnections {
+interface WineConnections {
   labels: LibraryLabel[];
   cellarWines: CellarWine[];       // matching cellar bottles
   restaurantPicks: ChosenWine[];   // matching chosen_wines (restaurant / other), reviewed or awaiting
@@ -39,7 +39,7 @@ export interface WineConnections {
   hasAny: boolean;                 // any connection at all
 }
 
-export const EMPTY_CONNECTIONS: WineConnections = {
+const EMPTY_CONNECTIONS: WineConnections = {
   labels: [], cellarWines: [], restaurantPicks: [], reviewedChosen: [], reviewedCellar: [],
   averageScore: null, reviewCount: 0, lastReviewedIso: null, vintageMismatch: false, hasAny: false,
 };
