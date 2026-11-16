@@ -43,8 +43,8 @@ const WineRecommendationSchema = z.object({
   name: z.string(),
   producer: z.string(),
   region: z.string(),
-  appellation: z.string().optional(),
-  grape: z.string().optional(),
+  appellation: z.string().nullish().transform((v) => v ?? undefined),
+  grape: z.string().nullish().transform((v) => v ?? undefined),
   vintage: z.number().nullable(),
   // NB: price + currency are deliberately NOT read from the model. Vinster does
   // not accept a model-supplied price — the list price is real data, set from

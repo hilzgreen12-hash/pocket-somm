@@ -353,8 +353,22 @@ Deno.serve(async (req) => {
             const va = w?.vintageAssessment ?? {};
             const dw = w?.drinkingWindow ?? {};
             const ra = w?.rarityAssessment ?? {};
+            // Fields older apps accept as text-or-absent, never empty (null):
+            // drop them when missing.
+            const optText = (k: string) => (typeof w?.[k] === 'string' ? { [k]: w[k] } : {});
+            const optNullableText = (k: string) => (typeof w?.[k] === 'string' ? { [k]: w[k] } : { [k]: null });
+            const { appellation: _ap, grape: _gr, ...restW } = w ?? {};
             return {
-              ...w,
+              ...restW,
+              ...optText('appellation'),
+              ...optText('grape'),
+              ...optNullableText('criticScoreNote'),
+              ...optNullableText('valueNote'),
+              ...optNullableText('standoutNote'),
+              ...optNullableText('outsidePreferences'),
+              ...optNullableText('repeatNote'),
+              topPickReasons: Array.isArray(w?.topPickReasons) ? w.topPickReasons.filter((t: unknown) => typeof t === 'string') : null,
+              rationale: typeof w?.rationale === 'string' ? w.rationale : null,
               name: str(w?.name), producer: str(w?.producer), region: str(w?.region),
               vintage: num(w?.vintage),
               criticScore: score != null && score >= 0 && score <= 100 ? score : 0,
