@@ -814,7 +814,10 @@ export default function ResultsScreen() {
     );
   }
 
-  const noVintages = recommendation.wines.every((w) => !w.vintage);
+  // "No vintages on this list" is about the LIST, not the three picks (three
+  // non-vintage Champagnes don't mean the list has no years).
+  const listWines = extractedWines?.length ? extractedWines : recommendation.wines;
+  const noVintages = listWines.every((w) => !w.vintage);
   // Highest critic score across the picks — used to compute the fallback
   // Critic Score note ("Highest of the picks…") before the recommend
   // function is redeployed with an AI-written criticScoreNote.
@@ -1095,9 +1098,11 @@ export default function ResultsScreen() {
           const valueText = wsE && wsE.avgPrice != null
             ? wsValueLine(wine.menuPrice, wsE.avgPrice, currencySymbol(wsE.currency))
             : (wine.valueNote ?? null);
+          // With no vintage printed, the vintage note says little, but the
+          // drinking-window guidance ("the year isn't listed, but…") still helps.
           const vintageText = !noVintages && wine.vintageAssessment
             ? [wine.vintageAssessment.notes, wine.drinkingWindow?.notes].filter(Boolean).join(' ')
-            : null;
+            : (wine.drinkingWindow?.notes || null);
           const producerText = wine.rarityAssessment?.notes ?? null;
           // Top pick only — one synthesis line. Falls back to joining the
           // legacy topPickReasons until standoutNote ships.

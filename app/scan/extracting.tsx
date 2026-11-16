@@ -5,7 +5,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useScanStore } from '../../src/stores/scanStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { prepareScanImageBase64 } from '../../src/services/ocr';
+import { prepareScanTiles } from '../../src/services/ocr';
 import { finalizeRecommendation } from '../../src/services/recommender';
 import { startScanJob, pollScanJob, logScanClientError, type StartedScanJob } from '../../src/api/scanJob';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -14,15 +14,22 @@ import { isNetworkError } from '../../src/api/invokeResilient';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
-import { detectLocalCurrency, askUseLocalCurrency } from '../../src/utils/localCurrency';
+import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { noteHappyMoment } from '../../src/services/ratingPrompt';
+
+// The "reading your wine list" screen. It prepares the photos (or the chosen
+// online list), starts the scan on the server (scan-start), polls until the
+// picks are ready, then hands them to the results screen. On failure it shows
+// "The Problem:" with a reference code; Try Again returns to Home to start over.
+//
+//   prepare photos → currency → start job → poll → finalise picks → results
 
 type Stage = 'reading' | 'recommending' | 'error';
 
 export default function ExtractingScreen() {
   useKeepAwake();
   const { imageUri, imageUris, imageSource, onlineSource, preferences, setExtractedWines, setRecommendation, setError } = useScanStore();
-  const { preferences: userProfile } = usePreferences();
+  const { preferences: userProfile, prefsLoading } = usePreferences();
   const [stage, setStage] = useState<Stage>('reading');
   const [errorDetail, setErrorDetail] = useState('');
   // Small print on the error screen: a reference code (the job's, or one made
@@ -43,15 +50,21 @@ export default function ExtractingScreen() {
     logScanClientError({ ref, stage: stepRef.current, message: reason, source, guest: !session });
   }
 
+  // Start once, after the saved preferences have loaded — otherwise dislikes and
+  // the default currency/budget could be silently missing from the scan.
+  const started = useRef(false);
+  const tokenRef = useRef({ active: true });
+  useEffect(() => () => { tokenRef.current.active = false; }, []);
   useEffect(() => {
+    if (started.current || prefsLoading) return;
+    started.current = true;
     if (!imageUri && !imageUris && !onlineSource) {
       router.dismissTo('/scan/wine-list');
       return;
     }
-    const token = { active: true };
-    run(token);
-    return () => { token.active = false; };
-  }, []);
+    run(tokenRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsLoading]);
 
   async function run(token: { active: boolean }) {
     try {
@@ -65,7 +78,8 @@ export default function ExtractingScreen() {
       const uris = onlineSource ? [] : (imageUris ?? (imageUri ? [imageUri] : []));
       const images: string[] = [];
       for (const u of uris) {
-        try { images.push(await prepareScanImageBase64(u, imageSource)); }
+        // A tall photo becomes 2–4 overlapping tiles so small print stays sharp.
+        try { images.push(...await prepareScanTiles(u, imageSource)); }
         catch { /* skip an unreadable image; the batch continues */ }
       }
       if (!token.active) return;
@@ -81,14 +95,11 @@ export default function ExtractingScreen() {
       // so home users are never asked. Done up front so the background job runs
       // uninterrupted.
       const profileCurrency = (userProfile?.defaultCurrency ?? 'GBP').toUpperCase();
-      let scanCurrency = profileCurrency;
-      // A list found online isn't where the phone is — no local-currency prompt.
-      const detected = onlineSource ? null : await detectLocalCurrency();
+      // Abroad, ask once per app session whether to use the local currency (the
+      // answer is remembered). A list found online isn't where the phone is, so
+      // it always uses the home currency.
+      const scanCurrency = onlineSource ? profileCurrency : await resolveIntelCurrency(profileCurrency);
       if (!token.active) return;
-      if (detected && detected.currency !== profileCurrency) {
-        scanCurrency = await askUseLocalCurrency(detected.currency, profileCurrency, detected.country);
-        if (!token.active) return;
-      }
 
       // Step 3: start the async job (returns in <1s), then poll for the result.
       // The colour "no {colour} wines" check and the preference pre-filters now
@@ -146,11 +157,11 @@ export default function ExtractingScreen() {
       router.push('/scan/results');
       noteHappyMoment('wine-list-scan');
       // Some photos couldn't be read: the picks are real, but from part of the list.
-      if (outcome.photosFailed && outcome.photosSent && outcome.photosFailed > 0) {
-        const n = outcome.photosFailed;
+      // (Photos are sent as tiles, so this is "part of the list", not a count.)
+      if (outcome.photosFailed && outcome.photosFailed > 0) {
         setTimeout(() => showAlert({
-          title: `${n} of ${outcome.photosSent} photos couldn't be read`,
-          body: `Your picks come from the other ${outcome.photosSent! - n === 1 ? 'photo' : 'photos'}. For the full list, retake ${n === 1 ? 'that page' : 'those pages'} — straight on, well lit, and in focus.`,
+          title: "Part of the list couldn't be read",
+          body: 'Your picks come from the rest of it. For the full list next time, take each page straight on, well lit and in focus.',
         }), 600);
       }
     } catch (err) {
@@ -203,7 +214,7 @@ export default function ExtractingScreen() {
   return (
     <SearchProgress
       title={stage === 'reading' ? (onlineSource ? 'Reading the wine list online…' : 'Reading your wine list…') : 'Finding your perfect match…'}
-      subtitle={onlineSource ? 'Vinster needs up to two minutes for your result' : 'Vinster needs up to a minute for your result'}
+      subtitle={onlineSource ? 'Usually under a minute — longer lists can take up to two' : 'Usually under a minute'}
       body="Vinster is assessing the wine list for its 3 top picks based on critic scores, value for money, and vintage quality/drinkability, all set against your preferences"
       durationMs={onlineSource ? 120000 : 70000}
     />

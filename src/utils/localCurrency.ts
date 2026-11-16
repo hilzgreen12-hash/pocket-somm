@@ -10,7 +10,12 @@ export async function detectLocalCurrency(): Promise<{ currency: string; country
   try {
     const { status } = await Location.getForegroundPermissionsAsync();
     if (status !== 'granted') return null;
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
+    // Never hold up a scan for GPS (indoors it can take a long time): give up
+    // after 4s and keep the home currency.
+    const pos = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('location timeout')), 4000)),
+    ]);
     const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
     const iso = geo?.isoCountryCode?.toUpperCase();
     if (!iso) return null;

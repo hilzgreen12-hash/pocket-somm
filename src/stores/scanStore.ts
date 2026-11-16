@@ -40,6 +40,11 @@ interface ScanState {
   // read the list?" when it next comes into view, to start again from scratch.
   restartListChoice: boolean;
   setRestartListChoice: (v: boolean) => void;
+  // Camera pages already taken in a multi-page capture ("Add Another Page");
+  // the current page is imageUri until the user is done.
+  cameraPages: string[];
+  addCameraPage: (uri: string) => void;
+  clearCameraPages: () => void;
 
   setImage: (uri: string, source?: 'camera' | 'upload') => void;
   setImageUris: (uris: string[], source?: 'camera' | 'upload') => void;
@@ -80,6 +85,9 @@ export const useScanStore = create<ScanState>((set) => ({
   needsReset: false,
   restartListChoice: false,
   setRestartListChoice: (v) => set({ restartListChoice: v }),
+  cameraPages: [],
+  addCameraPage: (uri) => set((s) => ({ cameraPages: [...s.cameraPages, uri] })),
+  clearCameraPages: () => set({ cameraPages: [] }),
 
   setImage: (uri, source = 'camera') => set({ imageUri: uri, imageUris: null, imageSource: source, onlineSource: null, extractedWines: null, recommendation: null, error: null }),
   setImageUris: (uris, source = 'camera') => set({ imageUris: uris, imageUri: null, imageSource: source, onlineSource: null, extractedWines: null, recommendation: null, error: null }),
@@ -89,5 +97,5 @@ export const useScanStore = create<ScanState>((set) => ({
   setError: (message) => set({ error: message }),
   setPreferences: (prefs) => set((s) => ({ preferences: { ...s.preferences, ...prefs } })),
   clearNeedsReset: () => set({ needsReset: false }),
-  reset: () => set({ imageUri: null, imageUris: null, imageSource: 'camera', onlineSource: null, extractedWines: null, recommendation: null, error: null, preferences: DEFAULT_PREFERENCES, needsReset: true }),
+  reset: () => set({ imageUri: null, imageUris: null, imageSource: 'camera', onlineSource: null, cameraPages: [], extractedWines: null, recommendation: null, error: null, preferences: DEFAULT_PREFERENCES, needsReset: true }),
 }));

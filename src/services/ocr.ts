@@ -1,81 +1,72 @@
 import * as ImageManipulator from 'expo-image-manipulator';
-import { z } from 'zod';
-import { callOCR } from '../api/claude';
-import type { ExtractedWine } from '../types/wine';
 
-const ExtractedWineSchema = z.object({
-  name: z.string(),
-  producer: z.string().nullish().transform((v) => v ?? ''),
-  region: z.string().nullish().transform((v) => v ?? ''),
-  appellation: z.string().nullish(),
-  grape: z.string().nullish(),
-  colour: z.string().nullish(),
-  vintage: z.number().nullable().catch(null),
-  menuPrice: z.number().nullable().catch(null),
-  currency: z.string().default('GBP'),
-});
+// Preparing wine-list photos for the scan.
+//
+// The phone only prepares the images; reading them happens on the server
+// (scan-start → ocr). Each photo is resized, compressed and — when it's tall —
+// cut into overlapping sections ("tiles"):
+//
+// - The reading model shrinks any image whose long side is much past ~1,500px,
+//   so a tall camera photo (about 1280 × 2770) or a long scrolling screenshot
+//   lost its small print. Tiles keep every section close to square, so the text
+//   stays at full size.
+// - Tiles overlap by ~12%, so every line of the list is whole in at least one
+//   tile; the reader ignores lines cut off at a tile's edge, and the server
+//   de-duplicates the wines seen in two tiles.
 
-const OCRResponseSchema = z.object({
-  wines: z.array(ExtractedWineSchema),
-});
+type Source = 'camera' | 'upload';
 
-// Exported for the async scan path (scanJob): the client prepares the base64
-// here, then hands it to scan-start, which does the OCR server-side.
-export async function prepareScanImageBase64(uri: string, source: 'camera' | 'upload' = 'camera'): Promise<string> {
-  return prepareImage(uri, source);
-}
+// Camera photos are large and often sent over mobile data, so they're kept
+// lighter. Uploaded screenshots are already clean, compact images, so they keep
+// more detail and are never scaled up (that softens the text).
+const SETTINGS: Record<Source, { maxWidth: number; quality: number }> = {
+  camera: { maxWidth: 1280, quality: 0.75 },
+  upload: { maxWidth: 1600, quality: 0.9 },
+};
 
-async function prepareImage(uri: string, source: 'camera' | 'upload' = 'camera'): Promise<string> {
-  console.log('[OCR] Preparing image:', uri, 'source:', source);
-  // Camera photos are huge (multi-MB) and often taken on cellular, so we keep
-  // them at a small/cheap target (1280 / 0.72) so the heaviest payload in the
-  // app survives a weak signal.
-  //
-  // Uploaded screenshots are the opposite: already compact, clean digital
-  // images, usually picked over WiFi. Downscaling and hard-compressing them
-  // (the old behaviour applied the SAME 1280 / 0.72 to everything) smears the
-  // dense menu text and trips the OCR. So for uploads we keep far more detail —
-  // a much gentler JPEG quality, only shrink when genuinely large, and NEVER
-  // upscale (upscaling a screenshot then re-encoding softens the very text we
-  // need read).
-  const isUpload = source === 'upload';
-  const maxWidth = isUpload ? 1600 : 1280;
-  const quality = isUpload ? 0.9 : 0.72;
+const TILE_ASPECT = 1.15;   // target height ÷ width of each tile
+const TILE_OVERLAP = 0.12;  // share of a tile repeated in the next one
+const MAX_TILES = 4;        // per photo — a very long screenshot still gets 4 readable sections
 
-  // Probe the source width so uploads only resize DOWN. Camera photos always
-  // exceed 1280, so they still resize as before. If the probe fails, fall back
-  // to applying the cap so we never accidentally ship an enormous image.
-  let needsResize = true;
+// One photo → one or more base64 JPEG tiles, ready for scan-start.
+export async function prepareScanTiles(uri: string, source: Source = 'camera'): Promise<string[]> {
+  const { maxWidth, quality } = SETTINGS[source];
+  const save = { compress: quality, format: ImageManipulator.SaveFormat.JPEG, base64: true } as const;
+
+  // Size the photo: only ever scale DOWN, to the width limit.
+  let width = 0;
+  let height = 0;
   try {
     const probe = await ImageManipulator.manipulateAsync(uri, [], {});
-    needsResize = probe.width > maxWidth;
-  } catch {
-    needsResize = true;
+    width = probe.width;
+    height = probe.height;
+  } catch { /* unknown size — resized to the limit below */ }
+  const scale = width > maxWidth || !width ? maxWidth / (width || maxWidth) : 1;
+  const w = Math.round((width || maxWidth) * scale);
+  const h = Math.round((height || maxWidth) * scale);
+  const resize = scale < 1 || !width ? [{ resize: { width: maxWidth } }] : [];
+
+  const count = Math.min(MAX_TILES, Math.max(1, Math.ceil(h / w / TILE_ASPECT)));
+  if (count === 1 || !width || !height) {
+    const one = await ImageManipulator.manipulateAsync(uri, resize, save);
+    if (!one.base64) throw new Error('Failed to encode image');
+    return [one.base64];
   }
 
-  const manipulated = await ImageManipulator.manipulateAsync(
-    uri,
-    needsResize ? [{ resize: { width: maxWidth } }] : [],
-    { compress: quality, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-  );
-  if (!manipulated.base64) throw new Error('Failed to encode image as base64');
-  console.log('[OCR] Image prepared, base64 length:', manipulated.base64.length);
-  return manipulated.base64;
-}
-
-export async function extractWineList(imageUri: string, opts?: { source?: 'camera' | 'upload' }): Promise<ExtractedWine[]> {
-  console.log('[OCR] Starting extraction');
-  const imageBase64 = await prepareImage(imageUri, opts?.source ?? 'camera');
-  console.log('[OCR] Calling Edge Function');
-  const raw = await callOCR(imageBase64);
-  console.log('[OCR] Raw response:', JSON.stringify(raw).slice(0, 200));
-  const parsed = OCRResponseSchema.safeParse(raw);
-  if (!parsed.success) {
-    console.error('[OCR] Parse error:', parsed.error.message);
-    console.error('[OCR] Raw that failed:', JSON.stringify(raw));
-    throw new Error(`Could not parse wine list from image. Please try a clearer photo.\n\nDetail: ${parsed.error.message}`);
+  // Resize once, then cut overlapping horizontal bands from the result.
+  const sized = await ImageManipulator.manipulateAsync(uri, resize, { compress: 1, format: ImageManipulator.SaveFormat.JPEG });
+  const tileH = Math.min(sized.height, Math.round(sized.height / (count - (count - 1) * TILE_OVERLAP)));
+  const step = (sized.height - tileH) / (count - 1);
+  const tiles: string[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const originY = Math.round(i * step);
+    const band = await ImageManipulator.manipulateAsync(
+      sized.uri,
+      [{ crop: { originX: 0, originY, width: sized.width, height: Math.min(tileH, sized.height - originY) } }],
+      save,
+    );
+    if (band.base64) tiles.push(band.base64);
   }
-  console.log('[OCR] Wines found:', parsed.data.wines.length);
-  return parsed.data.wines;
+  if (!tiles.length) throw new Error('Failed to encode image');
+  return tiles;
 }
-

@@ -11,8 +11,7 @@ import { supabase } from './supabase';
 // consumes that stream, treats a gap in traffic (not a slow total) as a dropped
 // connection, and retries the transport.
 //
-// This is the function-name-parameterised twin of ocrStream.ts — same idle
-// timeout, retry count, NetworkError tagging and final-frame parse. The final
+// Idle timeout, retry count, NetworkError tagging and a final-frame parse. The final
 // result arrives as a single SSE `data:` frame carrying either the function's
 // normal payload or { error, message }. Heartbeats are SSE comment lines
 // (": ...") and are ignored. If streaming isn't available on the device we

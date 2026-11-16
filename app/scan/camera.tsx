@@ -10,6 +10,7 @@ import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraO
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
+import { Ionicons } from '@expo/vector-icons';
 
 type Dims = { width: number; height: number };
 
@@ -69,7 +70,11 @@ export default function CameraScreen() {
   // so the user can't accidentally tap through it and shoot a blurry
   // photo. Per-mount state (not AsyncStorage) so it shows every time
   // the user opens Scan Wine List.
-  const [steadyOpen, setSteadyOpen] = useState(true);
+  // The "Steady!" reminder before the first page only, not each extra page.
+  const cameraPages = useScanStore((st) => st.cameraPages);
+  const [steadyOpen, setSteadyOpen] = useState(cameraPages.length === 0);
+  // Torch for dim restaurants.
+  const [torchOn, setTorchOn] = useState(false);
 
   if (!permission) return <View style={styles.container} />;
 
@@ -115,10 +120,24 @@ export default function CameraScreen() {
         style={StyleSheet.absoluteFill}
         facing="back"
         autofocus={autofocus}
+        enableTorch={torchOn}
         focusable
         onTouchEnd={handleTap}
       />
-      <CameraOverlay onCapture={handleCapture} onFrameLayout={setFrameRect} />
+      <CameraOverlay
+        onCapture={handleCapture}
+        onFrameLayout={setFrameRect}
+        hint={cameraPages.length ? `Page ${cameraPages.length + 1} — frame the next section of the list` : undefined}
+      />
+      <TouchableOpacity
+        style={styles.torch}
+        onPress={() => setTorchOn((v) => !v)}
+        accessibilityRole="button"
+        accessibilityLabel={torchOn ? 'Turn the torch off' : 'Turn the torch on'}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Ionicons name={torchOn ? 'flashlight' : 'flashlight-outline'} size={26} color={torchOn ? colors.gold : '#FFFFFF'} />
+      </TouchableOpacity>
 
       {/* Steady-reminder overlay — blocks any interaction with the
           camera (including the capture button beneath it) until the
@@ -158,6 +177,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  torch: { position: 'absolute', top: 60, right: spacing.xl, padding: spacing.sm, borderRadius: 24, backgroundColor: 'rgba(0,0,0,0.45)' },
   // Steady-reminder modal — terracotta sheet on dim scrim, matching the
   // app's modal pattern (see chef.tsx modalOverlay/modalSheet). Single
   // gold OK button is the only way out, so the user actively

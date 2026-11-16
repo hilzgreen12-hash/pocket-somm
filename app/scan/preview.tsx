@@ -5,8 +5,13 @@ import { router } from 'expo-router';
 import { useScanStore } from '../../src/stores/scanStore';
 import { colors, spacing, typography } from '../../src/constants/theme';
 
+// Pages per camera scan (each becomes up to a few tiles; scan-start caps images).
+const MAX_PAGES = 4;
+
 export default function PreviewScreen() {
-  const { imageUri } = useScanStore();
+  const { imageUri, imageSource, cameraPages, addCameraPage, setImageUris, clearCameraPages } = useScanStore();
+  const fromCamera = imageSource === 'camera';
+  const pageNumber = cameraPages.length + 1;
 
   // Pinch-to-zoom + pan so the user can actually read the uploaded wine list
   // and confirm it captured correctly. Mirrors the rack full-screen zoom.
@@ -92,10 +97,23 @@ export default function PreviewScreen() {
   // One tap only — a double tap used to start two (paid) scans.
   const confirmed = useRef(false);
   function handleConfirm() {
-    if (confirmed.current) return;
+    if (confirmed.current || !imageUri) return;
     confirmed.current = true;
     leaving.current = true;
+    // Several camera pages → send them all as one list.
+    if (cameraPages.length) {
+      setImageUris([...cameraPages, imageUri], 'camera');
+      clearCameraPages();
+    }
     router.push('/scan/extracting');
+  }
+
+  // Keep this page and go back to the camera for the next section of the list.
+  function handleAddPage() {
+    if (!imageUri || confirmed.current) return;
+    addCameraPage(imageUri);
+    leaving.current = true;
+    if (router.canGoBack()) router.back();
   }
 
   // After every hook (an early return above them broke React's hook order and
@@ -104,7 +122,7 @@ export default function PreviewScreen() {
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <Text style={styles.header}>Does this look clear?</Text>
+      <Text style={styles.header}>{fromCamera && cameraPages.length ? `Page ${pageNumber} — does this look clear?` : 'Does this look clear?'}</Text>
       <Text style={styles.subheader}>Pinch to zoom (or double-tap) and check the wine list text is readable</Text>
 
       <GestureDetector gesture={zoomGesture}>
@@ -125,14 +143,22 @@ export default function PreviewScreen() {
           <Text style={styles.retakeText}>Retake</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
-          <Text style={styles.confirmText}>Use This Photo</Text>
+          <Text style={styles.confirmText}>{cameraPages.length ? `Read ${pageNumber} Pages` : 'Use This Photo'}</Text>
         </TouchableOpacity>
       </View>
+      {/* A list longer than one photo: take it a section at a time. */}
+      {fromCamera && pageNumber < MAX_PAGES ? (
+        <TouchableOpacity onPress={handleAddPage} style={styles.addPage} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.addPageText}>+ Add Another Page</Text>
+        </TouchableOpacity>
+      ) : null}
     </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  addPage: { alignSelf: 'center', marginTop: spacing.md },
+  addPageText: { fontSize: 15, fontWeight: '600', color: colors.gold, textDecorationLine: 'underline' },
   container: {
     flex: 1,
     backgroundColor: colors.background,

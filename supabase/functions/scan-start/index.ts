@@ -33,8 +33,13 @@ const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 // Guest (no account) wine-list scans: limited per device address, counted from
 // their own scan_jobs rows (the per-user rate-limit table needs an account).
-const GUEST_HOURLY_LIMIT = 6;
-const GUEST_DAILY_LIMIT = 15;
+const GUEST_HOURLY_LIMIT = 10;   // allows for restaurant Wi-Fi shared by several guests
+const GUEST_DAILY_LIMIT = 25;
+
+// Photos per scan, and the size of each (base64 characters ≈ 0.75 bytes each).
+// The app sends a page as up to 3 overlapping tiles, so 12 covers ~4 pages.
+const MAX_IMAGES = 12;
+const MAX_IMAGE_CHARS = 4_000_000;
 
 // A running job not updated for this long is treated as stalled.
 const STALLED_AFTER_MS = 240_000;
@@ -101,12 +106,12 @@ function preFilterWines(wines: ExtractedWine[], prefs: ProfileFilters | null | u
   let filtered = wines;
   if (prefs.dislikedRegions?.length) {
     filtered = filtered.filter((w) => !prefs.dislikedRegions!.some((r) =>
-      w.region?.toLowerCase().includes(r.toLowerCase()) ||
-      (w.appellation ?? '').toLowerCase().includes(r.toLowerCase())));
+      foldAccents(w.region).includes(foldAccents(r)) ||
+      foldAccents(w.appellation).includes(foldAccents(r))));
   }
   if (prefs.dislikedGrapes?.length) {
     filtered = filtered.filter((w) => !prefs.dislikedGrapes!.some((g) =>
-      (w.grape ?? '').toLowerCase().includes(g.toLowerCase())));
+      foldAccents(w.grape).includes(foldAccents(g))));
   }
   // NB: do NOT apply prefs.defaultBudget as a hard ceiling here. It's only the
   // DEFAULT for the per-scan budget slider; the authoritative ceiling is the
@@ -114,11 +119,11 @@ function preFilterWines(wines: ExtractedWine[], prefs: ProfileFilters | null | u
   // effective ceiling min(profileDefault, scanBudget), so raising the scan slider
   // above the saved default still silently excluded wines.
   const isFavourite = (w: ExtractedWine) =>
-    prefs.favouriteRegions?.some((r) => w.region?.toLowerCase().includes(r.toLowerCase())) ||
-    prefs.favouriteGrapes?.some((g) => (w.grape ?? '').toLowerCase().includes(g.toLowerCase()));
+    prefs.favouriteRegions?.some((r) => foldAccents(w.region).includes(foldAccents(r))) ||
+    prefs.favouriteGrapes?.some((g) => foldAccents(w.grape).includes(foldAccents(g)));
   const favourited = filtered.filter(isFavourite);
   const others = filtered.filter((w) => !isFavourite(w));
-  return [...favourited.slice(0, 80), ...spread(others, Math.max(0, 80 - favourited.length))];
+  return [...spread(favourited, 80), ...spread(others, Math.max(0, 80 - favourited.length))];
 }
 
 // Up to n wines taken evenly across the whole list (keeping list order), so a
@@ -530,6 +535,9 @@ Deno.serve(async (req) => {
 
     if (!images.length && !sourceUrl) {
       return json({ error: 'images required' }, 400);
+    }
+    if (images.length > MAX_IMAGES || images.some((b) => typeof b !== 'string' || b.length > MAX_IMAGE_CHARS)) {
+      return json({ error: 'too_many_images', message: 'That is more of the list than Vinster can read at once — send up to 4 pages, one photo each.' }, 400);
     }
 
     let pollToken: string | null = null;

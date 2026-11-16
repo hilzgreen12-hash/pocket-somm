@@ -132,7 +132,9 @@ export default function WineListScreen() {
       setWineTypes([]);
       setStyleProfiles([]);
       setBudget(savedPreferences?.defaultBudget ?? null);
+      setBudgetMin(null);
       setFoodPairing('');
+      setPreferredCountry('');
       clearNeedsReset();
     }
   }, [needsReset]);
@@ -197,7 +199,7 @@ export default function WineListScreen() {
   }
 
   function handleScan() {
-    const go = () => { setPreferences(buildPreferences()); router.push('/scan/camera'); };
+    const go = () => { setPreferences(buildPreferences()); useScanStore.getState().clearCameraPages(); router.push('/scan/camera'); };
     if (maybeShowSignInPrompt(go)) return;
     go();
   }
@@ -211,6 +213,8 @@ export default function WineListScreen() {
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           allowsMultipleSelection: true,
+          // Up to 4 pages (each may be sent as a few tiles; see prepareScanTiles).
+          selectionLimit: 4,
           quality: 1,
         });
         if (!result.canceled && result.assets.length > 0) {

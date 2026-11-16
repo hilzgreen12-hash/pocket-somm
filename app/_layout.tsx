@@ -179,7 +179,8 @@ export default function RootLayout() {
             <Stack.Screen name="scan/preview" />
             <Stack.Screen name="scan/find-online" />
             <Stack.Screen name="compare" />
-            <Stack.Screen name="scan/extracting" />
+            {/* No swipe-back mid-scan: leaving would abandon a scan that's still running (and paid for). */}
+            <Stack.Screen name="scan/extracting" options={{ gestureEnabled: false }} />
             <Stack.Screen name="scan/results" />
             <Stack.Screen name="label/camera" />
             <Stack.Screen name="label/confirm" />
