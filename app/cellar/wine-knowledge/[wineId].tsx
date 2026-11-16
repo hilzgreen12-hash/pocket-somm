@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCellar, useWishList } from '../../../src/hooks/useCellar';
+import { useCellar } from '../../../src/hooks/useCellar';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { getWineKnowledge } from '../../../src/api/label';
 import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
@@ -17,9 +17,8 @@ export default function WineKnowledgeScreen() {
     wineId: string; producer?: string; region?: string; wineName?: string; vintage?: string; grape?: string;
   }>();
   const { wines, updateWine } = useCellar();
-  const { wines: wishlistWines } = useWishList();
   const { session } = useAuth();
-  const cellarWine = wines.find((w) => w.id === params.wineId) ?? wishlistWines.find((w) => w.id === params.wineId) ?? null;
+  const cellarWine = wines.find((w) => w.id === params.wineId) ?? null;
 
   const info = {
     producer: cellarWine?.producer ?? params.producer ?? '',

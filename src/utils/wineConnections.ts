@@ -28,7 +28,7 @@ function chosenHasReview(w: ChosenWine): boolean {
 
 export interface WineConnections {
   labels: LibraryLabel[];
-  cellarWines: CellarWine[];       // matching cellar bottles (owned or wishlist)
+  cellarWines: CellarWine[];       // matching cellar bottles
   restaurantPicks: ChosenWine[];   // matching chosen_wines (restaurant / other), reviewed or awaiting
   reviewedChosen: ChosenWine[];    // subset of chosen_wines that carry a review
   reviewedCellar: CellarWine[];    // matching cellar bottles that carry review_entries

@@ -176,11 +176,6 @@ export default function ResultsScreen() {
   // index → real Wine-Searcher data for that pick (populated a beat after the
   // cards render, so results never wait on the API).
   const [wsByIndex, setWsByIndex] = useState<Record<number, WsEnrich>>({});
-  // Per-recommendation map: index → wishlist row id. Used to toggle
-  // a wine on/off the wish list from the results screen — if there's
-  // a row id stored, the same button removes it; otherwise it adds
-  // and stashes the new id. Lets a user undo an accidental tap
-  // without leaving the screen.
   const { save: saveChosen, update: updateChosen, chosenWines, remove: removeChosen } = useChosenWines();
   // "Add a restaurant first" prompt — the List-Bottle button can't save without
   // a restaurant name, so we collect it (+ location) inline before proceeding.
@@ -1669,7 +1664,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
-  // Two-button row — Review Wine + Add to Wish List, side by side.
+  // Two-button row, side by side.
   detailActionsRow: {
     flexDirection: 'row',
     gap: spacing.sm,

@@ -12,7 +12,7 @@ import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
-import { useCellar, useArchive, useWishList } from '../../src/hooks/useCellar';
+import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
 import { DrinkingWindowSheet } from '../../src/components/winecard/DrinkingWindowSheet';
@@ -135,16 +135,10 @@ export default function CellarWineDetail() {
   // this card is swapped for a Post Review to Community CTA so the user
   // can share what they just wrote with other Vinster users.
   const cameFromReviews = from === 'reviews';
-  // Coming in from the Wish List screen — surfaces an Add to Cellar
-  // affordance and hides cellar-only actions (Add bottles, Archive,
-  // Removal History) that don't make sense for a wine the user
-  // hasn't bought yet.
-  const cameFromWishlist = from === 'wishlist';
   const { session } = useAuth();
   const { wines, updateWine, isLoading: cellarLoading } = useCellar();
   // Serve before/after picks come only from bottles kept at home.
   const { wines: homeWines } = useHomeCellarWines();
-  const { wines: wishlistWines, isLoading: wishlistLoading, deleteWine: deleteWishlistWine } = useWishList();
   const { racks, isLoading: racksLoading } = useRacks();
   const { data: allBins = [] } = useQuery({
     queryKey: ['bins', session?.user.id],
@@ -156,14 +150,11 @@ export default function CellarWineDetail() {
   const { setPendingWineId, setPendingAddMode } = useRackStore();
   const qc = useQueryClient();
   const { wines: archivedWines, isLoading: archiveLoading } = useArchive();
-  // Unified lookup — the card now serves cellar, wishlist and archive
-  // rows out of the same screen. Mode flags below drive the
-  // affordance differences.
+  // Unified lookup — the card serves cellar and archive rows out of the same
+  // screen; isArchived drives the differences.
   const wine = wines.find((w) => w.id === wineId)
-    ?? wishlistWines.find((w) => w.id === wineId)
     ?? archivedWines.find((w) => w.id === wineId);
   const isArchived = !!wine?.archived_at;
-  const isWishlist = !!wine?.is_wishlist;
 
 
   const rackIds = racks.map((r) => r.id);
@@ -334,7 +325,7 @@ export default function CellarWineDetail() {
   // window while the cache refetches the freshly-generated values.
   const [autoGenFailed, setAutoGenFailed] = useState(false);
   useEffect(() => {
-    if (!wine || isWishlist || isArchived || refreshingValue) return;
+    if (!wine || isArchived || refreshingValue) return;
     // Re-generate when the score/value is missing, OR when the Inside Line is
     // blank or still the jokey placeholder — so a wine whose note was written
     // before the prompt was strengthened re-runs and gets a real line (a famous
@@ -356,7 +347,7 @@ export default function CellarWineDetail() {
         .finally(() => setAutoGenerating(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wine?.id, wine?.critic_score, wine?.estimated_value, wine?.grape_variety, wine?.insider_note, isWishlist, isArchived]);
+  }, [wine?.id, wine?.critic_score, wine?.estimated_value, wine?.grape_variety, wine?.insider_note, isArchived]);
 
   // After an auto-generate attempt, if Vinster still couldn't produce any intel
   // (no critic score and no value), it's almost always because the wine name is
@@ -390,9 +381,8 @@ export default function CellarWineDetail() {
   useFocusEffect(
     useCallback(() => {
       // Archived wines DO link — a common flow is to review a bottle then archive
-      // it, and the review must still show on the archived card. Only wishlist
-      // wines (not yet owned/drunk) are excluded.
-      if (!wine || isWishlist) return;
+      // it, and the review must still show on the archived card.
+      if (!wine) return;
       if (entriesOf(wine).length > 0) return; // already has its own review
       if (autoLinkBusy.current) return;
       autoLinkBusy.current = true;
@@ -417,7 +407,7 @@ export default function CellarWineDetail() {
         finally { autoLinkBusy.current = false; }
       })();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [wine?.id, isWishlist, isArchived, session?.user.id]),
+    }, [wine?.id, isArchived, session?.user.id]),
   );
 
   // Vinster's Note — collapsed by default now (was always visible).
@@ -495,7 +485,7 @@ export default function CellarWineDetail() {
     return Array.from(byKey.values());
   }, [producerRange]);
   useEffect(() => {
-    if (!wine || isWishlist || isArchived) return;
+    if (!wine || isArchived) return;
     const hasIntel = wine.critic_score != null || wine.estimated_value != null;
     if (!hasIntel || !wine.producer?.trim()) return;
     if (producerRangeTriedRef.current === wine.id) return;
@@ -510,7 +500,7 @@ export default function CellarWineDetail() {
       finally { setProducerRangeLoading(false); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wine?.id, wine?.critic_score, wine?.estimated_value, isWishlist, isArchived]);
+  }, [wine?.id, wine?.critic_score, wine?.estimated_value, isArchived]);
 
   // Add or replace this wine's framed label photo. Take a fresh photo or
   // pick one from the library, then upload + persist the path. Best-effort
@@ -648,7 +638,7 @@ export default function CellarWineDetail() {
     if (!wine) return;
     const key = `${wine.id}:${cardTab}`;
     if (tabLoadedRef.current === key) return;
-    if (cardTab === 'market' && !isArchived && !isWishlist) {
+    if (cardTab === 'market' && !isArchived) {
       tabLoadedRef.current = key;
       const saved = wine.market_vintage_note;
       if (vintageRows == null && saved?.rows) {
@@ -664,7 +654,7 @@ export default function CellarWineDetail() {
       } else if (vintageRows == null && !generatingMarket) {
         void handleGenerateMarket();
       }
-    } else if (cardTab === 'somm' && !isArchived && !isWishlist) {
+    } else if (cardTab === 'somm' && !isArchived) {
       tabLoadedRef.current = key;
       if (!wine.serving_suggestion && !generatingServing) void handleGenerateServing();
     }
@@ -689,7 +679,7 @@ export default function CellarWineDetail() {
   // "Wine not found" fallback — otherwise the user sees a flash of that
   // message right after a wine is added (the navigation lands before the
   // cellar refetch resolves).
-  if (!wine && (cellarLoading || archiveLoading || wishlistLoading)) {
+  if (!wine && (cellarLoading || archiveLoading)) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.gold} size="large" />
@@ -713,7 +703,7 @@ export default function CellarWineDetail() {
   // the finished card — never it assembling. (Shown from load → through gen;
   // hides once enriched, or if generation fails.)
   const ungeneratedNow = wine.critic_score == null && wine.estimated_value == null && !wine.grape_variety;
-  if (!isWishlist && !isArchived && (autoGenerating || (ungeneratedNow && autoGenRef.current !== wine.id))) {
+  if (!isArchived && (autoGenerating || (ungeneratedNow && autoGenRef.current !== wine.id))) {
     return (
       <SearchProgress
         title="Vinster is generating Wine Intel"
@@ -1966,39 +1956,6 @@ export default function CellarWineDetail() {
     return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
   }
 
-  // Wishlist-only delete. Confirms first, then removes the wishlist row
-  // and routes back to the Wish List. Reuses the justDeleted toast +
-  // auto-navigate pattern used by the cellar hard-delete above.
-  function handleDeleteFromWishlist() {
-    if (!wine) return;
-    showAlert({
-      title: 'Remove from wish list?',
-      body: 'This will remove the wine from your wish list. You can add it again any time.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            setRemoving(true);
-            try {
-              await deleteWishlistWine.mutateAsync(wine.id);
-              setJustDeleted(true);
-              setTimeout(() => {
-                if (router.canGoBack()) router.back();
-                else router.replace('/cellar/list');
-              }, 1400);
-            } catch {
-              showAlert({ title: 'Could not remove', body: 'Please try again.' });
-            } finally {
-              setRemoving(false);
-            }
-          },
-        },
-      ],
-    });
-  }
-
   // From an archived wine card, the review flow should return the user back
   // HERE (backTo) with a "saved to Your Wine Reviews" confirmation, rather than
   // stranding them on the reviews list.
@@ -2109,8 +2066,8 @@ export default function CellarWineDetail() {
   const tabList: { id: 'overview' | 'market' | 'somm' | 'cellar'; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'market', label: 'Market' },
-    ...(!isWishlist ? [{ id: 'cellar' as const, label: 'Cellar' }] : []),
-    ...(!isArchived && !isWishlist ? [{ id: 'somm' as const, label: 'Serve' }] : []),
+    { id: 'cellar' as const, label: 'Cellar' },
+    ...(!isArchived ? [{ id: 'somm' as const, label: 'Serve' }] : []),
   ];
   const activeTab = tabList.some((t) => t.id === cardTab) ? cardTab : 'overview';
   const cardCurrency = preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP';
@@ -2134,9 +2091,9 @@ export default function CellarWineDetail() {
   const vsMarket = pp && ev != null && sameCurrency ? { pct: Math.round(((ev - pp) / pp) * 100), diff: ev - pp } : null;
   const verdict = vintageRows ? vintageVerdict(vintageRows, wine.vintage, fmtMoney) : null;
   const cellarEntries = buildCellarEntries();
-  // An archived (or wish-list) row's quantity is bottles drunk / wanted, not
+  // An archived row's quantity is bottles drunk, not
   // bottles at home — so it never counts as "not yet placed" cellar stock.
-  const unplacedHere = isArchived || isWishlist ? 0 : Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
+  const unplacedHere = isArchived ? 0 : Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
   const serving = wine.serving_suggestion ?? null;
   const beforePick = pickFromCellar(serving?.aperitif?.style, homeWines, wine.id);
   const afterPick = pickFromCellar(serving?.digestif?.style, homeWines, wine.id);
@@ -2258,7 +2215,7 @@ export default function CellarWineDetail() {
         busy={uploadingPhoto}
         title={[wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ')}
         subtitle={[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}
-        chip={isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : ''}
+        chip={isArchived ? 'Archived Wine' : ''}
         onBack={() => router.back()}
         onPhotoPress={() => (wine.label_image_path ? setPhotoViewerOpen(true) : handleAddPhoto())}
         onPhotoLongPress={() => (wine.label_image_path ? handlePhotoMenu() : handleAddPhoto())}
@@ -2284,9 +2241,7 @@ export default function CellarWineDetail() {
       {activeTab === 'overview' ? (
         <>
         <View style={styles.wcFacts}>
-          {!isWishlist ? (
-            <TouchableOpacity style={styles.wcFact} onPress={() => setCardTab('cellar')} activeOpacity={0.7}><Text style={styles.wcFactLabel}>Bottles</Text><Text style={styles.wcFactValue}>{bottlesInCellar}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text></TouchableOpacity>
-          ) : null}
+          <TouchableOpacity style={styles.wcFact} onPress={() => setCardTab('cellar')} activeOpacity={0.7}><Text style={styles.wcFactLabel}>Bottles</Text><Text style={styles.wcFactValue}>{bottlesInCellar}×{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text></TouchableOpacity>
           {wine.critic_score != null ? (
             <TouchableOpacity style={styles.wcFact} onPress={() => showAlert({ title: 'How Vinster scored this', body: wine.critic_score_note?.trim() || "Vinster's score distils critic consensus and Wine-Searcher's aggregate rating for this wine into a single 100-point mark." })} activeOpacity={0.7}>
               <Text style={styles.wcFactLabel}>Critic</Text><Text style={styles.wcFactValue}>{wine.critic_score}</Text>
@@ -2322,7 +2277,7 @@ export default function CellarWineDetail() {
         {activeTab === 'overview' ? (
           <>
             {(() => {
-              const lines = isWishlist ? [] : historyLines();
+              const lines = historyLines();
               if (!lines.length) return null;
               return (
                 <View style={styles.wcHistory}>
@@ -2384,22 +2339,20 @@ export default function CellarWineDetail() {
               <View style={styles.wcNote}><Text style={styles.wcLabel}>Why no critic score?</Text><Text style={styles.wcNoteText}>{wine.critic_score_note}</Text></View>
             ) : null}
 
-            {!isWishlist ? (
-              <View style={styles.wcCard}>
-                <Text style={styles.wcH2}>Vinster's Review</Text>
-                {wine.tasting_notes ? (
-                  <Text style={styles.wcBodyText}>{wine.tasting_notes}</Text>
-                ) : refreshingValue ? (
-                  <Text style={styles.wcSmall}>Generating Vinster's review…</Text>
-                ) : (
-                  <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
-                    <Text style={styles.generateNoteBtnText}>Generate</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : null}
+            <View style={styles.wcCard}>
+              <Text style={styles.wcH2}>Vinster's Review</Text>
+              {wine.tasting_notes ? (
+                <Text style={styles.wcBodyText}>{wine.tasting_notes}</Text>
+              ) : refreshingValue ? (
+                <Text style={styles.wcSmall}>Generating Vinster's review…</Text>
+              ) : (
+                <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
+                  <Text style={styles.generateNoteBtnText}>Generate</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-            {!isWishlist && (hasRealInsiderNote(wine.insider_note) || !isArchived) ? (
+            {(hasRealInsiderNote(wine.insider_note) || !isArchived) ? (
               <View style={[styles.wcCard, styles.wcInside]}>
                 <Text style={styles.insiderTitle}>The Inside Line</Text>
                 <Text style={styles.insiderBody}>{hasRealInsiderNote(wine.insider_note) ? wine.insider_note?.trim() : 'Generating…'}</Text>
@@ -2411,7 +2364,7 @@ export default function CellarWineDetail() {
               </View>
             ) : null}
 
-            {!isWishlist && (producerRangeLoading || rangeWines.length > 0) ? (
+            {(producerRangeLoading || rangeWines.length > 0) ? (
               <View style={styles.wcCard}>
                 <Text style={styles.insiderTitle}>The {wine.producer} Range</Text>
                 {rangeWines.some((rw) => !rw.isThis) ? <Text style={styles.rangeHint}>Tap a wine for its inside line</Text> : null}
@@ -2446,37 +2399,35 @@ export default function CellarWineDetail() {
         {activeTab === 'market' ? (
           <>
             <View style={styles.wcTwoUp}>
-              {!isWishlist ? (
-                <View style={[styles.wcCard, styles.wcHalf]}>
-                  <Text style={styles.wcLabel}>Purchase Price</Text>
-                  {editingPrice ? (
-                    <>
-                      <TextInput style={styles.statInput} value={purchasePriceDraft} onChangeText={setPurchasePriceDraft} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textMuted} autoFocus />
-                      <View style={styles.statActions}>
-                        <TouchableOpacity onPress={() => { setEditingPrice(false); setPurchasePriceDraft(wine.purchase_price != null ? String(wine.purchase_price) : ''); }}>
-                          <Text style={styles.statCancel}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={handleSavePrice} disabled={savingPrice}>
-                          <Text style={[styles.statAction, savingPrice && { opacity: 0.5 }]}>{savingPrice ? '…' : 'Save'}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  ) : pp != null ? (
-                    <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}>
-                      <Text style={styles.wcValue}>{formatCurrency(pp, wine.purchase_price_currency, { decimals: 0 })}</Text>
-                      <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Estimated Market Value' : 'Entered by you'}</Text>
-                      {wine.purchase_price_estimated && wine.estimated_value_source ? (
-                        <Text style={styles.wcSmall}>{wine.estimated_value_source === 'wine-searcher' ? 'Wine-Searcher' : 'Vinster estimate'}</Text>
-                      ) : null}
-                      {/* Estimate → the day the wine was cellared; a price the user entered → the day they entered it. */}
-                      {(wine.purchase_price_estimated ? cellaredOn : (wine.purchase_price_at ?? cellaredOn)) ? <Text style={styles.wcSmall}>{fmtDay(wine.purchase_price_estimated ? cellaredOn : (wine.purchase_price_at ?? cellaredOn))}</Text> : null}
-                      <Text style={styles.wcLinkSmall}>Edit</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}><Text style={styles.statAction}>+ Add Price</Text></TouchableOpacity>
-                  )}
-                </View>
-              ) : null}
+              <View style={[styles.wcCard, styles.wcHalf]}>
+                <Text style={styles.wcLabel}>Purchase Price</Text>
+                {editingPrice ? (
+                  <>
+                    <TextInput style={styles.statInput} value={purchasePriceDraft} onChangeText={setPurchasePriceDraft} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.textMuted} autoFocus />
+                    <View style={styles.statActions}>
+                      <TouchableOpacity onPress={() => { setEditingPrice(false); setPurchasePriceDraft(wine.purchase_price != null ? String(wine.purchase_price) : ''); }}>
+                        <Text style={styles.statCancel}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={handleSavePrice} disabled={savingPrice}>
+                        <Text style={[styles.statAction, savingPrice && { opacity: 0.5 }]}>{savingPrice ? '…' : 'Save'}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : pp != null ? (
+                  <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}>
+                    <Text style={styles.wcValue}>{formatCurrency(pp, wine.purchase_price_currency, { decimals: 0 })}</Text>
+                    <Text style={styles.wcSmall}>{wine.purchase_price_estimated ? 'Estimated Market Value' : 'Entered by you'}</Text>
+                    {wine.purchase_price_estimated && wine.estimated_value_source ? (
+                      <Text style={styles.wcSmall}>{wine.estimated_value_source === 'wine-searcher' ? 'Wine-Searcher' : 'Vinster estimate'}</Text>
+                    ) : null}
+                    {/* Estimate → the day the wine was cellared; a price the user entered → the day they entered it. */}
+                    {(wine.purchase_price_estimated ? cellaredOn : (wine.purchase_price_at ?? cellaredOn)) ? <Text style={styles.wcSmall}>{fmtDay(wine.purchase_price_estimated ? cellaredOn : (wine.purchase_price_at ?? cellaredOn))}</Text> : null}
+                    <Text style={styles.wcLinkSmall}>Edit</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}><Text style={styles.statAction}>+ Add Price</Text></TouchableOpacity>
+                )}
+              </View>
               <TouchableOpacity style={[styles.wcCard, styles.wcHalf]} onPress={() => handleRefreshEstimate()} disabled={refreshingValue} activeOpacity={refreshingValue ? 1 : 0.7}>
                 <Text style={styles.wcLabel}>Estimated Value</Text>
                 {refreshingValue ? (
@@ -2509,7 +2460,7 @@ export default function CellarWineDetail() {
               </View>
             ) : null}
 
-            {!isWishlist && !isArchived ? (
+            {!isArchived ? (
               <View style={styles.wcCard}>
                 <Text style={styles.wcH2}>Vinster's Market & Vintage Comparison</Text>
                 {generatingMarket ? (
@@ -2649,33 +2600,29 @@ export default function CellarWineDetail() {
         {activeTab === 'cellar' ? (
           <>
             {cellaredOn ? <Text style={styles.wcCellared}>Cellared {new Date(cellaredOn).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Text> : null}
-            {!isWishlist ? (
-              <View style={styles.wcCellarNoteRow}>
-                {noteText.trim() ? <Text style={styles.wcCellarNoteLabel}>Cellar Note: </Text> : null}
-                <TextInput
-                  style={styles.wcCellarNoteInput}
-                  value={noteText}
-                  onChangeText={(t) => { noteDirtyRef.current = true; setNoteText(t.slice(0, Math.max(35, (wine.cellar_note ?? '').length))); }}
-                  onBlur={() => void saveInlineCellarNote()}
-                  onSubmitEditing={() => Keyboard.dismiss()}
-                  placeholder="Add Cellar Note"
-                  placeholderTextColor={colors.gold}
-                  maxLength={Math.max(35, (wine.cellar_note ?? '').length)}
-                  returnKeyType="done"
-                  blurOnSubmit
-                  accessibilityLabel="Cellar Note"
-                />
-              </View>
-            ) : null}
+            <View style={styles.wcCellarNoteRow}>
+              {noteText.trim() ? <Text style={styles.wcCellarNoteLabel}>Cellar Note: </Text> : null}
+              <TextInput
+                style={styles.wcCellarNoteInput}
+                value={noteText}
+                onChangeText={(t) => { noteDirtyRef.current = true; setNoteText(t.slice(0, Math.max(35, (wine.cellar_note ?? '').length))); }}
+                onBlur={() => void saveInlineCellarNote()}
+                onSubmitEditing={() => Keyboard.dismiss()}
+                placeholder="Add Cellar Note"
+                placeholderTextColor={colors.gold}
+                maxLength={Math.max(35, (wine.cellar_note ?? '').length)}
+                returnKeyType="done"
+                blurOnSubmit
+                accessibilityLabel="Cellar Note"
+              />
+            </View>
 
             {/* Long-term storage temperature: the same steady 12–13°C suits every
                 wine (serving temperature, on the Serve tab, is per wine). */}
-            {!isWishlist ? (
-              <View style={styles.wcVsBar}>
-                <Text style={styles.wcLabel}>Recommended Cellar Temperature</Text>
-                <Text style={styles.wcVsValue}>12–13°C <Text style={styles.wcVsDiff}>(54–55°F)</Text></Text>
-              </View>
-            ) : null}
+            <View style={styles.wcVsBar}>
+              <Text style={styles.wcLabel}>Recommended Cellar Temperature</Text>
+              <Text style={styles.wcVsValue}>12–13°C <Text style={styles.wcVsDiff}>(54–55°F)</Text></Text>
+            </View>
 
             <View style={styles.wcCard}>
               <Text style={styles.wcLabel}>Bottles in My Cellar</Text>
@@ -2718,16 +2665,16 @@ export default function CellarWineDetail() {
               {cellarEntries.length === 0 && !isArchived ? (
                 <TouchableOpacity onPress={handleAddToLocation}><Text style={[styles.statAction, styles.cellarCommand]}>Add to Location →</Text></TouchableOpacity>
               ) : null}
-              {!isArchived && !isWishlist ? (
+              {!isArchived ? (
                 <TouchableOpacity onPress={() => setAddPickerOpen(true)} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Add Bottles →</Text></TouchableOpacity>
               ) : null}
-              {bottlesInCellar > 0 && !isArchived && !isWishlist ? (
+              {bottlesInCellar > 0 && !isArchived ? (
                 <TouchableOpacity onPress={openMovePicker} disabled={moving} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>{moving ? 'Moving…' : 'Move Bottles →'}</Text></TouchableOpacity>
               ) : null}
               {bottlesInCellar > 0 && !isArchived ? (
                 <TouchableOpacity onPress={handleRemoveBottlesEntry} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Archive Bottles →</Text></TouchableOpacity>
               ) : null}
-              {!isArchived && !isWishlist ? (
+              {!isArchived ? (
                 // Opens the same "delete from your records" confirmation.
                 <TouchableOpacity onPress={() => setRemoveStep('confirm')} disabled={removing} activeOpacity={0.7}><Text style={[styles.statAction, styles.cellarCommand]}>Delete Wine →</Text></TouchableOpacity>
               ) : null}
@@ -2764,18 +2711,8 @@ export default function CellarWineDetail() {
         ) : null}
 
         {/* ================= ACTIONS ================= */}
-        {isWishlist ? (
-          <>
-            <TouchableOpacity style={[styles.chefBtn, { borderColor: colors.gold }]} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/cellar/list'); }} activeOpacity={0.7}>
-              <Text style={[styles.chefBtnText, { color: colors.gold }]}>Add to Cellar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.chefBtn, { borderColor: colors.gold }]} onPress={handleDeleteFromWishlist} disabled={removing} activeOpacity={0.7}>
-              <Text style={[styles.chefBtnText, { color: colors.gold }]}>Delete from Wish List</Text>
-            </TouchableOpacity>
-          </>
-        ) : null}
 
-        {!isArchived && !isWishlist && cameFromReviews ? (
+        {!isArchived && cameFromReviews ? (
           <TouchableOpacity style={[styles.chefBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted) && styles.chefBtnDisabled]} onPress={handlePostToCommunity} disabled={!COMMUNITY_ENABLED || postingReview || reviewPosted} activeOpacity={0.7}>
             <Text style={styles.chefBtnText}>{!COMMUNITY_ENABLED ? 'Share Review To Community (coming soon)' : reviewPosted ? '✓ Shared to Community' : postingReview ? 'Sharing…' : 'Share Review To Community'}</Text>
           </TouchableOpacity>
@@ -2856,7 +2793,7 @@ export default function CellarWineDetail() {
 
       <NoIntelPrompt
         visible={
-          !!wine && !isWishlist && !isArchived && !autoGenerating && !refreshingValue &&
+          !!wine && !isArchived && !autoGenerating && !refreshingValue &&
           autoGenRef.current === wine.id && autoGenFailed && wine.critic_score == null && wine.estimated_value == null &&
           !noIntelDismissed
         }
@@ -3601,9 +3538,6 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   // "Your Review" gets a larger subheader treatment vs other section titles.
   reviewSectionTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text },
-  // A line above the Your Review block on wishlist cards (sits between the
-  // Estimated Value stats and the review section).
-  reviewDivider: { height: 1, backgroundColor: colors.border, marginTop: spacing.sm },
   // Cormorant — edit link reads as a button
   editLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Inter — tasting notes body

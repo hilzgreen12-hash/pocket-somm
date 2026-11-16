@@ -21,7 +21,7 @@ import { useAutoLabel } from '../../src/hooks/useAutoLabel';
 import { useLabels } from '../../src/hooks/useLabels';
 import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
 import { captureCity } from '../../src/utils/captureCity';
-import { useCellar, useWishList, useArchive } from '../../src/hooks/useCellar';
+import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
 import { DrinkingWindowSheet } from '../../src/components/winecard/DrinkingWindowSheet';
@@ -124,7 +124,6 @@ export default function LabelResultsScreen() {
   // A caller (e.g. a lineup wine) that KNOWS the identity — never disambiguate.
   const identityConfirmed = confirmed === '1';
   const isUploadFlow = via === 'upload';
-  const isWishlistFlow = context === 'wishlist';
   // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
   // a review, so the action area collapses to a single "Review this Wine"
   // and the back + post-save routing land on /wines/chosen.
@@ -155,7 +154,6 @@ export default function LabelResultsScreen() {
   const { wines, addWine, updateWine } = useCellar();
   // Serve before/after picks come only from bottles kept at home.
   const { wines: homeWines } = useHomeCellarWines();
-  const { addWine: addToWishList } = useWishList();
   const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
   const { create: createLabel, remove: removeLabel, labels } = useLabels();
   const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId, pendingCaseId, setPendingCaseId } = useRackStore();
@@ -964,7 +962,6 @@ export default function LabelResultsScreen() {
   }
 
   const [addingToCellar, setAddingToCellar] = useState(false);
-  const [addingToWishList, setAddingToWishList] = useState(false);
   const [addingReview, setAddingReview] = useState(false);
   const [selectedRackId, setSelectedRackId] = useState<string | null>(null);
   // Bespoke cellar Location (rack_id NULL custom filter) chosen as the
@@ -995,7 +992,7 @@ export default function LabelResultsScreen() {
   const [editImageUri, setEditImageUri] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   // Review-without-adding form state — captured in a Modal and saved to
-  // chosen_wines without touching cellar or wishlist inventory.
+  // chosen_wines without touching cellar inventory.
   const [reviewNote, setReviewNote] = useState('');
   const [reviewRestaurant, setReviewRestaurant] = useState('');
   const [reviewCity, setReviewCity] = useState('');
@@ -1529,38 +1526,6 @@ export default function LabelResultsScreen() {
       purchase_price_estimated: validPrice != null && !purchasePriceUserEdited,
       bottle_size_ml: bottleSizeMl,
     };
-  }
-
-  async function handleAddToWishList() {
-    if (!session?.user.id) { setSignInPromptVisible(true); return; }
-    setSaving(true);
-    try {
-      await addToWishList.mutateAsync({ ...buildWinePayload(session.user.id), is_wishlist: true });
-      setAddingToWishList(false);
-      // Include the vintage in the confirmation so the user sees the
-      // full identity of what just landed ("Château Margaux 2013",
-      // not "Château Margaux"). Falls back to whichever pieces are
-      // populated when scan-label couldn't pull a vintage.
-      const confirmLabel = [wine.producer, wine.wineName, wine.vintage]
-        .filter((s) => s && String(s).trim().length > 0)
-        .join(' ');
-      showAlert({
-        title: 'Added to Wish List',
-        body: `${confirmLabel || (wine.wineName ?? wine.producer ?? 'This wine')} has been saved to your wish list.`,
-        // When the user came in via the wish-list flow they're expecting to
-        // land back on the wish list, not the wine card. Route there from OK.
-        buttons: isWishlistFlow
-          ? [{ text: 'OK', onPress: () => { if (router.canGoBack()) router.back(); else router.replace('/cellar/list'); } }]
-          : undefined,
-      });
-    } catch (err) {
-      // Surface the underlying error rather than the generic message so
-      // RLS / FK / schema failures are visible.
-      const detail = err instanceof Error ? err.message : String(err);
-      showAlert({ title: 'Could not save to wish list', body: detail });
-    } finally {
-      setSaving(false);
-    }
   }
 
   // Single place that handles all post-save routing — used by both the new-
@@ -2284,7 +2249,6 @@ export default function LabelResultsScreen() {
   function intelGoBack() {
     router.dismissTo(
       backTo ? (decodeURIComponent(backTo) as any)
-      : isWishlistFlow ? '/cellar/list'
       : isReviewsFlow ? '/wines/chosen'
       : isLineupFlow ? '/cellar/scan-lineup'
       : isIntelOnlyFlow ? '/(tabs)/scan'
@@ -2645,7 +2609,6 @@ export default function LabelResultsScreen() {
         style={styles.backRow}
         onPress={() => router.dismissTo(
           backTo ? (decodeURIComponent(backTo) as any)
-          : isWishlistFlow ? '/cellar/list'
           : isReviewsFlow ? '/wines/chosen'
           : isLineupFlow ? '/cellar/scan-lineup'
           // Wine Intel is launched from the Scan tab now, so return there by
@@ -3095,27 +3058,7 @@ export default function LabelResultsScreen() {
         </View>
       )}
 
-      {isWishlistFlow ? (
-        // User entered the flow via "Add to Wish List" — they've already
-        // decided this wine is going to the wish list. Skip the dual-button
-        // decision and offer a single confirm.
-        <>
-          <View style={styles.singleActionRow}>
-            <TouchableOpacity
-              style={[styles.singleActionButton, saving && { opacity: 0.6 }]}
-              onPress={handleAddToWishList}
-              disabled={saving}
-            >
-              <Text style={styles.singleActionButtonText}>
-                {saving ? 'Adding…' : 'Confirm Add to Wish List'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.discardButton} onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/cellar/list'); }}>
-            <Text style={styles.discardText}>Cancel</Text>
-          </TouchableOpacity>
-        </>
-      ) : isReviewsFlow ? (
+      {isReviewsFlow ? (
         // User entered via Your Wine Reviews "+ Add" → Scan / Upload. The
         // intent is to capture a review, not park inventory — show only
         // the Review action.
@@ -3144,8 +3087,8 @@ export default function LabelResultsScreen() {
         <>
           {/* This is the dedicated Add-to-Cellar flow (Cellar → Add Wine),
               a committed action — so only the primary Add to Cellar button
-              shows. Wish List and review-only capture have their own entry
-              points and aren't offered here. */}
+              shows. Review-only capture has its own entry point and isn't
+              offered here. */}
           <View style={styles.actionStack}>
             <TouchableOpacity
               style={styles.primaryAddBtn}
@@ -3166,31 +3109,6 @@ export default function LabelResultsScreen() {
           </TouchableOpacity>
         </>
       )}
-
-      <Modal visible={addingToWishList} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add to Wish List</Text>
-            <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
-
-            <Text style={styles.modalLabel}>Bottle size</Text>
-            <View style={styles.bottleSizeWrap}>
-              <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.button, saving && styles.buttonDisabled]}
-              onPress={handleAddToWishList}
-              disabled={saving}
-            >
-              <Text style={styles.buttonText}>{saving ? 'Saving…' : 'Save to Wish List'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setAddingToWishList(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       <Modal visible={addingReview} transparent animationType="slide" onRequestClose={() => !saving && setAddingReview(false)}>
         <View style={styles.modalOverlay}>

@@ -24,7 +24,7 @@ import { classifyLabelRead, alertBadLabelPhoto, alertLabelFailure, askReadAsList
 
 export default function LabelCameraScreen() {
   const { context, backTo } = useLocalSearchParams<{ context?: string; backTo?: string }>();
-  // Forward any context (wishlist / reviews / …) + an optional backTo (where the
+  // Forward any context (reviews / lineup / …) + an optional backTo (where the
   // intel screen's Back should land, e.g. the Label Library) to downstream label
   // screens so the back button + post-save routing know where to land.
   const contextQuery = context ? `?context=${context}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` : '';

@@ -32,7 +32,7 @@ export default function WelcomeTab() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Cellar</Text>
-        <Text style={styles.sectionDesc}>Build and manage your personal wine collection. Scan labels to log bottles, track your stock, and maintain a wish list of wines you'd like to try.</Text>
+        <Text style={styles.sectionDesc}>Build and manage your personal wine collection. Scan labels to log bottles and track your stock.</Text>
       </View>
 
       <View style={styles.divider} />

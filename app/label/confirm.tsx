@@ -70,7 +70,7 @@ export default function LabelConfirmScreen() {
   // and returns to the Scan screen — "Scan Again" (reopen camera) only belongs
   // to the camera flow.
   const isUpload = via === 'upload';
-  // Forward any context (wishlist / reviews / …) so /label/results knows
+  // Forward any context (reviews / lineup / …) so /label/results knows
   // which flow we're in for back routing and which action set to show.
   const contextQuery = context ? `?context=${context}${via ? `&via=${via}` : ''}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` : '';
   // Reached straight from Cellar → Add Wine → Manual Input: no scan
@@ -388,7 +388,7 @@ export default function LabelConfirmScreen() {
         router.replace(`/label/results${contextQuery}&fresh=1&gen=1${isManual ? '&noRecent=1' : ''}`);
         return;
       }
-      // Non-intel adds (cellar / wishlist) keep the home default and generate now.
+      // Non-intel adds (cellar) keep the home default and generate now.
       const intelCurrency = preferences?.defaultCurrency ?? 'GBP';
       const [intel] = await Promise.all([
         generateWineIntel(confirmed, intelCurrency),

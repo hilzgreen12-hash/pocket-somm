@@ -319,7 +319,7 @@ export default function RackGridScreen() {
     // swiping to another rack.
     setHighlightedWineId(highlight ?? null);
     // Don't reset moving/pending placement state — those are global
-    // workflows (Wish List → place in rack) that should survive a
+    // workflows (e.g. placing a wine in a rack) that should survive a
     // sideways navigation.
   }, [rackId, highlight]);
 
@@ -2507,8 +2507,7 @@ export default function RackGridScreen() {
         )}
         {pendingWineId && (() => {
           // Surface the actual wine name so the user can't lose track of
-          // which bottle they're placing — common pain when coming in from
-          // the Wish List and then tapping into a rack.
+          // which bottle they're placing.
           const pendingWine = wines.find((w) => w.id === pendingWineId);
           const headerLine = pendingWine
             ? [pendingWine.producer, pendingWine.wine_name, pendingWine.vintage].filter(Boolean).join(' · ')

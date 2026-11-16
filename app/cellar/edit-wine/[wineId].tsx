@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator 
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCellar, useWishList } from '../../../src/hooks/useCellar';
+import { useCellar } from '../../../src/hooks/useCellar';
 import { useAttachLabelPhoto } from '../../../src/hooks/useAttachLabelPhoto';
 import { usePreferences } from '../../../src/hooks/usePreferences';
 import { valueWine } from '../../../src/services/pricing';
@@ -26,10 +26,9 @@ export default function EditWineScreen() {
   const { wineId } = useLocalSearchParams<{ wineId: string }>();
   const qc = useQueryClient();
   const { wines } = useCellar();
-  const { wines: wishlist } = useWishList();
   const { preferences } = usePreferences();
   const attachPhoto = useAttachLabelPhoto();
-  const listed = wines.find((w) => w.id === wineId) ?? wishlist.find((w) => w.id === wineId) ?? null;
+  const listed = wines.find((w) => w.id === wineId) ?? null;
   // Archived wines aren't in either list (e.g. editing from a review), so load
   // the row directly when it isn't found there.
   const { data: fetched } = useQuery({
@@ -131,7 +130,7 @@ export default function EditWineScreen() {
       bottleSizeMl !== (wine.bottle_size_ml ?? 750);
     const countOrSpiritChanged =
       isSpirit !== !!wine.is_spirit ||
-      (!wine.is_wishlist && (parseInt(quantity, 10) || 0) !== (wine.quantity ?? 0));
+      (parseInt(quantity, 10) || 0) !== (wine.quantity ?? 0);
     const shouldRevalue = detailsChanged || !countOrSpiritChanged;
     setSaving(true);
     try {
@@ -145,11 +144,9 @@ export default function EditWineScreen() {
         style: style.trim() || null,
         is_spirit: isSpirit,
       };
-      // Bottles held — a wishlist wine isn't owned, so it has no count to edit.
-      if (!wine.is_wishlist) {
-        const qty = parseInt(quantity, 10);
-        if (Number.isFinite(qty) && qty >= 0) updates.quantity = qty;
-      }
+      // Bottles held.
+      const qty = parseInt(quantity, 10);
+      if (Number.isFinite(qty) && qty >= 0) updates.quantity = qty;
 
       // "Save & Update Wine Intel" re-derives value + intel from the details the
       // user just confirmed — feeding Claude the grape + colour so it pins the
@@ -207,7 +204,6 @@ export default function EditWineScreen() {
       await updateCellarWine(wine.id, updates);
       // The wine's identity shows in every surface it's placed in — refresh them all.
       qc.invalidateQueries({ queryKey: ['cellar'] });
-      qc.invalidateQueries({ queryKey: ['wishlist'] });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['bin-cells'] });
@@ -288,21 +284,20 @@ export default function EditWineScreen() {
           <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
 
           {/* Bottles held — the count shown as "Bottles in My Cellar" on the
-              wine card. Not shown for a wishlist wine (not owned yet). */}
-          {!wine.is_wishlist ? (
-            <>
-              <Text style={styles.label}>Bottles in Your Cellar</Text>
-              <Text style={styles.qtyHelper}>How many bottles of this wine you hold.</Text>
-              <TextInput
-                style={styles.input}
-                value={quantity}
-                onChangeText={(t) => setQuantity(t.replace(/[^0-9]/g, '').slice(0, 4))}
-                keyboardType="number-pad"
-                placeholder="e.g. 6"
-                placeholderTextColor={colors.textMuted}
-              />
-            </>
-          ) : null}
+              wine card. */}
+          <>
+            <Text style={styles.label}>Bottles in Your Cellar</Text>
+            <Text style={styles.qtyHelper}>How many bottles of this wine you hold.</Text>
+            <TextInput
+              style={styles.input}
+              value={quantity}
+              onChangeText={(t) => setQuantity(t.replace(/[^0-9]/g, '').slice(0, 4))}
+              keyboardType="number-pad"
+              placeholder="e.g. 6"
+              placeholderTextColor={colors.textMuted}
+            />
+          </>
+        
 
           <Text style={styles.label}>Style</Text>
           <TextInput style={styles.input} value={style} onChangeText={setStyle} placeholder="e.g. Red, White, Rosé, Sparkling, Fortified" placeholderTextColor={colors.textMuted} autoCapitalize="words" />
