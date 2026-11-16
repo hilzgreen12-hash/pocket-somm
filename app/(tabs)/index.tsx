@@ -516,7 +516,7 @@ export default function ScanLandingScreen() {
                       >
                         <Image source={SD_INTEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
                       </TouchableOpacity>
-                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Search & Scan</Text>
+                      <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Label Scan & Search</Text>
                       <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Generate Wine Intel</Text>
                     </View>
 
