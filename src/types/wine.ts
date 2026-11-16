@@ -669,7 +669,11 @@ export interface PricingData {
   minPrice: number | null;
   maxPrice: number | null;
   currency: string;
+  // Wine-Searcher's score for THIS vintage (null when it only has an average).
   criticScore: number | null;
+  // Its average across the wine's vintages — guidance only, never shown as
+  // this vintage's score.
+  allVintageScore?: number | null;
   region?: string | null;
   grape?: string | null;
   wsWineId?: string | null;

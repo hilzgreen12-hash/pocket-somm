@@ -501,6 +501,8 @@ export async function getWineIntelligence(
   // Optional Wine-Searcher aggregated score. When supplied it anchors the
   // Vinster criticScore (the "north star" model) instead of a from-scratch estimate.
   wsScore?: number | null,
+  // 'all-vintage' when wsScore is the wine's average across vintages.
+  wsScoreScope?: 'vintage' | 'all-vintage',
 ): Promise<WineIntelligence> {
   const data = await invokeFunction('wine-intelligence', {
     producer: wine.producer,
@@ -511,6 +513,7 @@ export async function getWineIntelligence(
     grape: wine.grape ?? null,
     currency,
     wsScore: wsScore ?? null,
+    wsScoreScope: wsScoreScope ?? null,
   }) as WineIntelligence;
   return data;
 }

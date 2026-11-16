@@ -160,3 +160,16 @@ export function wineQueryAltName(
   const alt = !p ? n : !n ? p : `${p} ${n}`;
   return alt && alt.toLowerCase() !== plain.toLowerCase() ? alt : null;
 }
+
+// A typed vintage as Vinster stores it: a plausible 4-digit year, or 'NV' for
+// "NV" / "non vintage". Anything else (blank, "19", "2O19") → null, so the
+// caller asks again instead of guessing.
+export function normaliseVintage(input: string | null | undefined): string | null {
+  const t = (input ?? '').trim();
+  if (/^(nv|non[\s-]?vintage)$/i.test(t)) return 'NV';
+  if (/^\d{4}$/.test(t)) {
+    const y = Number(t);
+    if (y >= 1800 && y <= new Date().getFullYear() + 1) return t;
+  }
+  return null;
+}

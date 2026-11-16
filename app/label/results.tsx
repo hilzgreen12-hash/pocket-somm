@@ -30,7 +30,7 @@ import { WineCardHero } from '../../src/components/winecard/WineCardHero';
 import { wc } from '../../src/components/winecard/wcStyles';
 import { vintageVerdict, pickFromCellar, ordinal, type CellarPick } from '../../src/utils/wineCardInsights';
 import { entriesOf } from '../../src/utils/cellarReview';
-import { wineQueryName, wineQueryAltName } from '../../src/utils/wineIdentity';
+import { wineQueryName, wineQueryAltName, wineNameKey, normaliseVintage } from '../../src/utils/wineIdentity';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { patchChosenWine } from '../../src/api/chosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
@@ -44,7 +44,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
+import { fetchPricing, generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, type VintageComparisonRow, verifyOnWineSearcher } from '../../src/services/pricing';
 import { generateServingSuggestion, generateRarity, generateVintageVerdict, generateMarketVintage, generatePairingIngredients, type VintageVerdictAI, type PairingIngredient } from '../../src/api/wineExtras';
 import { PairingIngredientsCard } from '../../src/components/winecard/PairingIngredientsCard';
 import { GenerateRecipesCard, ServingGlance, ComplementaryPairings, CellarPickRow } from '../../src/components/winecard/ServeSections';
@@ -339,6 +339,19 @@ export default function LabelResultsScreen() {
   const servingTriedRef = useRef(false);
   const [intelIngredients, setIntelIngredients] = useState<PairingIngredient[] | null>(null);
   const [ingredientsLoading, setIngredientsLoading] = useState(false);
+  // Everything on the card that's built for ONE wine, cleared whenever the card
+  // switches to another (Upload Again, "Not this wine?", Edit Wine, a new
+  // vintage) — so the Market and Serve tabs never describe the previous wine.
+  function resetPerWineState() {
+    producerRangeTriedRef.current = false; setProducerRange(null);
+    vintagesTriedRef.current = false; setVintageRows(null); setVintagesExpanded(false);
+    intelRarityTriedRef.current = false; setIntelRarity(null);
+    servingTriedRef.current = false; setServing(null); setServingExpanded(false);
+    setIntelIngredients(null);
+    setIntelMarketNote(null); setIntelMarketUnknown(false);
+    intelVerdictKeyRef.current = null; setIntelVerdict(null);
+  }
+
   async function toggleServing() {
     const next = !servingExpanded;
     setServingExpanded(next);
@@ -405,13 +418,8 @@ export default function LabelResultsScreen() {
       setCandidates([]);
       setCandidatesOpen(false);
       setNoIntelDismissed(false);
-      // New wine → re-map the producer range for it.
-      producerRangeTriedRef.current = false;
-      setProducerRange(null);
-      // New wine → the vintage-comparison table must regenerate for it.
-      vintagesTriedRef.current = false;
-      setVintageRows(null);
-      setVintagesExpanded(false);
+      // New wine → nothing from the previous one may linger.
+      resetPerWineState();
       // (Label Library retired — scanned labels are no longer saved to a library;
       // the user saves the wine to Your Wine Reviews from the intel card instead.)
     } catch (e) {
@@ -516,12 +524,8 @@ export default function LabelResultsScreen() {
       // The user has already confirmed the wine — don't re-prompt the post-card
       // "which wine is this?" disambiguation for the same result.
       candidatesTriedRef.current = true;
-      // Re-map the producer range for the (possibly corrected) producer.
-      producerRangeTriedRef.current = false;
-      setProducerRange(null);
-      vintagesTriedRef.current = false;
-      setVintageRows(null);
-      setVintagesExpanded(false);
+      // A corrected wine (or vintage) — clear everything built for the old one.
+      resetPerWineState();
       setAwaitingConfirm(false);
     } catch (e) {
       if (isWineNotFound(e)) { setAwaitingConfirm(false); setNotFound(true); }
@@ -554,13 +558,16 @@ export default function LabelResultsScreen() {
   async function saveEditWine() {
     if (savingEdit) return;
     if (!editProducer.trim() && !editWineName.trim()) { showAlert({ title: 'Wine details needed', body: 'Add at least a producer or a wine name.' }); return; }
+    // A vintage is a 4-digit year or NV — a blank isn't quietly taken as NV.
+    const editedVintage = normaliseVintage(editVintage);
+    if (!editedVintage) { showAlert({ title: 'Enter a 4-digit year or NV', body: 'e.g. 2018, or NV for a non-vintage wine.' }); return; }
     setSavingEdit(true);
     try {
       const confirmed: WineDetailsComplete = {
         producer: editProducer.trim(),
         region: editRegion.trim(),
         wineName: editWineName.trim() || null,
-        vintage: editVintage.trim() || 'NV',
+        vintage: editedVintage,
         style: editStyle.trim() || null,
         grape: editGrape.trim() || null,
         bottleSizeMl: editBottleSizeMl,
@@ -572,9 +579,8 @@ export default function LabelResultsScreen() {
       useLastIntelStore.getState().setLast(confirmed, generated);
       setBottleSizeMl(editBottleSizeMl);
       if (editImageUri) setImageUri(editImageUri);
-      // Re-map the producer range + vintage table for the corrected wine.
-      producerRangeTriedRef.current = false; setProducerRange(null);
-      vintagesTriedRef.current = false; setVintageRows(null); setVintagesExpanded(false);
+      // The corrected wine gets its own range, vintage table, market and serving.
+      resetPerWineState();
       setEditWineOpen(false);
     } catch {
       showAlert({ title: 'Could not get intel', body: 'Please try again.' });
@@ -644,13 +650,7 @@ export default function LabelResultsScreen() {
       setWineDetailsConfirmed(confirmed);
       // Verify-first again: a confident re-read goes straight to the card; an
       // unconfirmed one stays on the confirm screen with fresh matches.
-      const queryName = [confirmed.producer, confirmed.wineName].filter(Boolean).join(' ').trim() || (confirmed.wineName ?? '');
-      const vintageNum = confirmed.vintage && confirmed.vintage !== 'NV' ? Number(confirmed.vintage) : null;
-      let verified = false;
-      try {
-        const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, userCurrency);
-        verified = pricing.source === 'wine-searcher' && pricing.matched !== false;
-      } catch { verified = false; }
+      const verified = await verifyOnWineSearcher(confirmed, userCurrency);
       if (verified) {
         const intel = await generateWineIntel(confirmed, userCurrency);
         setIntelligence(intel);
@@ -772,6 +772,13 @@ export default function LabelResultsScreen() {
     if (!isIntelOnlyFlow || awaitingConfirm || !wineDetailsConfirmed?.producer?.trim()) return;
     producerRangeTriedRef.current = true;
     setProducerRangeLoading(true);
+    // The wine this range is for — if the card has moved on to another wine by
+    // the time it arrives, it's dropped rather than attached to the new one.
+    const forWine = wineNameKey(wineDetailsConfirmed.producer, wineDetailsConfirmed.wineName);
+    const stillThisWine = () => {
+      const now = useLabelStore.getState().wineDetailsConfirmed;
+      return !!now && wineNameKey(now.producer, now.wineName) === forWine;
+    };
     (async () => {
       try {
         const r = await fetchProducerRange({
@@ -780,7 +787,7 @@ export default function LabelResultsScreen() {
           wineName: wineDetailsConfirmed.wineName,
           vintage: wineDetailsConfirmed.vintage,
         });
-        if (r.wines.length > 0) {
+        if (r.wines.length > 0 && stillThisWine()) {
           setProducerRange(r);
           // Fold the range into the intel snapshot so it's saved with the label
           // and reused next time instead of regenerating. Persist to the label

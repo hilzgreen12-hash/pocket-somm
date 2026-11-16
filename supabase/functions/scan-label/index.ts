@@ -42,7 +42,7 @@ const LABEL_SCAN_PROMPT = `You are a wine expert analyzing a wine label photogra
 
 1. producer: The winery, estate, family, or maker — the entity that produced the wine, read from the label. CRITICAL — NO FAMOUS-PRODUCER SUBSTITUTION: never replace the printed producer with a different, more famous, or better-known maker. If the label reads "Casanova di Neri", the producer is "Casanova di Neri" — NOT Biondi Santi or any other better-known house from the same appellation. A well-known APPELLATION on the label (e.g. "Brunello di Montalcino", "Barolo", "Chablis") is NOT a producer and must never pull your answer toward the region's most famous estate. The producer is the SAME across every bottle that maker releases (e.g. "Mullineux" produces Schist, Iron, and Granite cuvées; "Penfolds" produces Grange, Bin 28, etc.) and is usually a family/estate name, château, domaine, or winery brand printed as the maker's signature.
 
-   COMPLETE TRUNCATED / CUT-OFF NAMES — do NOT leave a name half-written. Photos often crop or cut off part of a name. Use your wine knowledge together with the OTHER visible elements on the label (the producer, the cuvée, the region, the rest of the wording) to write each maker's FULL, correct name — never leave a personal name as a bare initial or a word cut short. For example, a second maker shown as "Nuno F", "Nuno F…", or "Nuno Fr" whose full name you can confidently identify from the rest of the label must be written out in full (e.g. "Nuno Franco"). This is COMPLETING the same maker's name — which is required — and is completely different from SUBSTITUTING a different or more famous estate, which remains forbidden. COLLABORATION LABELS: some wines are made by two or more makers shown joined by "+", "&", "x", or "and" (e.g. "António Maçanita + Nuno Franco") — name every maker in full, keeping the order and the join printed on the label. If a name is cut off and you genuinely cannot identify how it completes, keep the legible part and set confidence to "low" rather than inventing a name — but never present a bare initial as if it were the finished name.
+   COMPLETE TRUNCATED / CUT-OFF NAMES — do NOT leave a name half-written. Photos often crop or cut off part of a name. Use your wine knowledge together with the OTHER visible elements on the label (the producer, the cuvée, the region, the rest of the wording) to write each maker's FULL, correct name — never leave a personal name as a bare initial or a word cut short. For example, a second maker shown as "Nuno F", "Nuno F…", or "Nuno Fr" whose full name you can confidently identify from the rest of the label must be written out in full (e.g. "Nuno Franco"). This is COMPLETING the same maker's name — which is required — and is completely different from SUBSTITUTING a different or more famous estate, which remains forbidden. COLLABORATION LABELS: some wines are made by two or more makers shown joined by "+", "&", "x", or "and" (e.g. "António Maçanita + Nuno Franco") — name every maker in full, keeping the order and the join printed on the label. If a name is cut off and you genuinely cannot identify how it completes, keep the legible part and set confidence to "low" rather than inventing a name — but never present a bare initial as if it were the finished name. WHENEVER you completed any part of a name that wasn't fully printed, set "completed": true (and confidence to "low"), so the app asks the user to confirm the bottling.
 
 2. region: The FULL origin, consistently formatted for EVERY wine — appellation/sub-region, then the broader region, then the country (e.g. "Barbaresco, Piedmont, Italy", "Margaux, Bordeaux", "Swartland, South Africa", "Rías Baixas, Galicia, Spain"). Infer it from the producer/appellation when it isn't fully printed; don't leave it as a bare appellation. BORDEAUX & BURGUNDY — STRICT FORMAT: for a Bordeaux wine give the appellation (plus cru/classification ONLY if printed, e.g. "Pauillac", "Saint-Julien", "Pomerol") then "Bordeaux", and NEVER append "France" — e.g. "Pauillac, Bordeaux" (not "Pauillac, Bordeaux, France"). For a Burgundy wine give the appellation and any sub-appellation/cru then "Burgundy" (English, never "Bourgogne"), and NEVER "France" — e.g. "Chablis, Montée de Tonnerre 1er Cru, Burgundy". Never repeat the same appellation twice, and never duplicate the appellation into the wine name. MONTALCINO — STRICT: "Brunello di Montalcino", "Brunello di Montalcino Riserva" and "Rosso di Montalcino" are WINE NAMES (the appellation/typology), NOT the region. For any of these the region is ALWAYS "Montalcino, Tuscany, Italy" — put the Brunello/Rosso wording in wineName, never in region.
 
@@ -62,9 +62,11 @@ const LABEL_SCAN_PROMPT = `You are a wine expert analyzing a wine label photogra
 
 9. imageType: what the image shows — "label" for a wine bottle or its label (the usual case), "list" for a restaurant wine list, menu or price list showing SEVERAL different wines with prices, or "other" for anything else. A screenshot of a wine list or a photo of a menu page is "list" even if one wine name stands out.
 
-Return ONLY a valid JSON object with exactly these nine keys. Set producer / region / wineName / vintage / grape / bottleSizeMl to null if you cannot confidently identify them from the label (style and confidence are never null). Do not include any explanation or markdown — only the raw JSON.
+10. completed: true if you completed any producer or cuvée name that was cut off or only partly legible (see above), otherwise false.
 
-Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "grape": "Syrah", "bottleSizeMl": 750, "confidence": "high", "imageType": "label"}`;
+Return ONLY a valid JSON object with exactly these ten keys. Set producer / region / wineName / vintage / grape / bottleSizeMl to null if you cannot confidently identify them from the label (style and confidence are never null). Do not include any explanation or markdown — only the raw JSON.
+
+Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "grape": "Syrah", "bottleSizeMl": 750, "confidence": "high", "imageType": "label", "completed": false}`;
 
 Deno.serve(async (req) => {
   try {
@@ -91,7 +93,9 @@ Deno.serve(async (req) => {
       }],
     });
 
-    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
+    // The first TEXT block — a reply can lead with a non-text block.
+    const block = response.content.find((b) => b.type === 'text');
+    const text = block?.type === 'text' ? block.text : '';
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (!match) throw new Error(`No JSON found in response: ${text.slice(0, 200)}`);
@@ -113,11 +117,11 @@ Deno.serve(async (req) => {
       style = await inferStyle(parsed.producer, parsed.region, parsed.wineName, parsed.vintage);
     }
 
-    // Sparkling wines (Champagne, cava, prosecco…) are overwhelmingly
-    // non-vintage. If the label carried no readable vintage, default to "NV"
-    // rather than leaving it blank — the user can still change it on Confirm.
+    // Vintage as read. A sparkling wine with no year on the FRONT label is often
+    // a vintage wine with the year on the neck or back, so it's left blank (the
+    // app asks) rather than assumed NV; NV only when the label says so.
     const rawVintage = typeof parsed.vintage === 'string' ? parsed.vintage.trim() : parsed.vintage;
-    const vintage = (!rawVintage && style === 'Sparkling') ? 'NV' : (rawVintage || null);
+    const vintage = rawVintage ? String(rawVintage) : null;
 
     return new Response(JSON.stringify({
       producer: parsed.producer ?? null,
@@ -130,7 +134,9 @@ Deno.serve(async (req) => {
       // 'low' when the read is uncertain or the producer makes a series of
       // similar bottlings — the Confirm screen then auto-offers a bottling
       // picker. Anything but an explicit "low" is treated as high confidence.
-      confidence: parsed.confidence === 'low' ? 'low' : 'high',
+      // 'low' for an uncertain read, a range of similar bottlings, or a name the
+      // reader had to complete — the app then asks the user to confirm.
+      confidence: parsed.confidence === 'low' || parsed.completed === true ? 'low' : 'high',
       // Lets a shared screenshot of a wine LIST go to the list scan instead of
       // being read as one label.
       imageType: parsed.imageType === 'list' || parsed.imageType === 'other' ? parsed.imageType : 'label',

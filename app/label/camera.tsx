@@ -12,7 +12,7 @@ import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraO
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { prepareImageBase64 } from '../../src/api/label';
 import { scanLabel } from '../../src/api/label';
-import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
+import { generateWineIntel, verifyOnWineSearcher } from '../../src/services/pricing';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -166,13 +166,7 @@ export default function LabelCameraScreen() {
       // read (often a misspelt producer or a missed cuvée) routes to the confirm
       // step first, so the user fixes the identity before Vinster builds a card
       // for the wrong — or fictional — wine.
-      const queryName = [confirmed.producer, confirmed.wineName].filter(Boolean).join(' ').trim() || (confirmed.wineName ?? '');
-      const vintageNum = confirmed.vintage && confirmed.vintage !== 'NV' ? Number(confirmed.vintage) : null;
-      let verified = false;
-      try {
-        const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, currency);
-        verified = pricing.source === 'wine-searcher' && pricing.matched !== false;
-      } catch { verified = false; }
+      const verified = await verifyOnWineSearcher(confirmed, currency);
 
       if (!verified) {
         // Don't generate a guessed card yet — let the user confirm the wine first.

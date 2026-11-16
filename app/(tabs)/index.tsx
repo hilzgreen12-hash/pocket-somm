@@ -31,10 +31,10 @@ import { File, Paths } from 'expo-file-system';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { tidyWineRegion } from '../../src/utils/regionFormat';
-import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
+import { generateWineIntel, verifyOnWineSearcher } from '../../src/services/pricing';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
-import { wineNameKey } from '../../src/utils/wineIdentity';
+import { wineNameKey, normaliseVintage } from '../../src/utils/wineIdentity';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
@@ -298,6 +298,13 @@ export default function ScanLandingScreen() {
     return { id: latest.id, date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }) };
   }
 
+  // "Confirm Vintage": a 4-digit year or NV only — a blank or "19" isn't sent on.
+  function submitVintageDraft() {
+    const v = normaliseVintage(vintageDraft);
+    if (!v) { showAlert({ title: 'Enter a 4-digit year or NV', body: 'e.g. 2018, or NV for a non-vintage wine.' }); return; }
+    void generateSelectedIntel(v);
+  }
+
   async function generateSelectedIntel(vintage: string, wineArg?: WineSearchResult | null) {
     const wine = wineArg ?? vintageWine;
     if (!wine) return;
@@ -396,13 +403,7 @@ export default function ScanLandingScreen() {
       };
       setWineDetailsConfirmed(confirmed);
       const currency = await resolveIntelCurrency(preferences?.defaultCurrency);
-      const queryName = [confirmed.producer, confirmed.wineName].filter(Boolean).join(' ').trim() || (confirmed.wineName ?? '');
-      const vintageNum = confirmed.vintage && confirmed.vintage !== 'NV' ? Number(confirmed.vintage) : null;
-      let verified = false;
-      try {
-        const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, currency);
-        verified = pricing.source === 'wine-searcher' && pricing.matched !== false;
-      } catch { verified = false; }
+      const verified = await verifyOnWineSearcher(confirmed, currency);
 
       if (!verified) {
         setIntelligence(null);
@@ -667,9 +668,9 @@ export default function ScanLandingScreen() {
               autoCorrect={false}
               maxLength={12}
               autoFocus
-              onSubmitEditing={() => generateSelectedIntel(/^(nv|non[\s-]?vintage)$/i.test(vintageDraft.trim()) ? 'NV' : vintageDraft)}
+              onSubmitEditing={submitVintageDraft}
             />
-            <TouchableOpacity style={styles.vintageBtn} onPress={() => generateSelectedIntel(/^(nv|non[\s-]?vintage)$/i.test(vintageDraft.trim()) ? 'NV' : vintageDraft)} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.vintageBtn} onPress={submitVintageDraft} activeOpacity={0.8}>
               <Text style={styles.vintageBtnText}>Generate Intel</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setVintageWine(null)} style={styles.vintageCancel}>

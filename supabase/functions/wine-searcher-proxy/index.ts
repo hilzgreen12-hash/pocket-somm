@@ -181,7 +181,9 @@ async function lookupWineSearcher(name: string, vintageValue: string | null, cur
         wineName: tag(xml, 'wine-name'),
       };
     }
-    if (returnCode === '7') { transient = 'API access suspended'; continue; } // transient suspension — retry
+    // Suspended / daily limit reached: retrying the same minute can't succeed and
+    // would spend nothing but time — report it as "down" straight away.
+    if (returnCode === '7') throw new Error('Wine-Searcher API access suspended');
     return null; // genuine no-match
   }
   // Every attempt failed transiently. Signal it (throw, don't return null) so
@@ -190,9 +192,34 @@ async function lookupWineSearcher(name: string, vintageValue: string | null, cur
   throw new Error(`Wine-Searcher ${transient}`);
 }
 
+// One cache entry per wine however the name is written (case, accents, spaces).
+function cacheName(name: string): string {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// Wine-Searcher matches loosely; a misread label can come back as a DIFFERENT
+// wine. Accept a match only when its name shares a distinctive word with the
+// query (generic words like "Château" or "Estate" don't count). No returned
+// name → accept, as before.
+const GENERIC_WORDS = new Set(['chateau', 'domaine', 'domaines', 'estate', 'estates', 'winery', 'wines', 'wine', 'vineyards', 'vineyard', 'cellars', 'tenuta', 'bodega', 'bodegas', 'cantina', 'weingut', 'maison', 'quinta', 'casa', 'clos', 'cuvee', 'reserve', 'grand', 'blanc', 'rouge', 'rose', 'brut', 'cru', 'classe', 'premier']);
+function distinctiveWords(t: string | null | undefined): string[] {
+  return cacheName(t ?? '').split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !GENERIC_WORDS.has(w));
+}
+function sameWine(query: string, wsName: string | null | undefined): boolean {
+  if (!wsName) return true;
+  const ws = new Set(distinctiveWords(wsName));
+  const own = distinctiveWords(query);
+  return own.length === 0 || own.some((w) => ws.has(w));
+}
+
+// How long "no listing for this wine" is remembered (a hit keeps CACHE_TTL_DAYS).
+const MISS_TTL_DAYS = 7;
+
 Deno.serve(async (req) => {
   try {
-    const { wineName: rawWineName, vintage, currency } = await req.json();
+    // exactOnly: just this vintage — no all-vintage broadening (the per-vintage
+    // comparison table only uses exact rows, so the broaden was wasted credits).
+    const { wineName: rawWineName, vintage, currency, exactOnly } = await req.json();
 
     if (!rawWineName) {
       return new Response(JSON.stringify({ error: 'wineName required' }), { status: 400 });
@@ -209,21 +236,32 @@ Deno.serve(async (req) => {
     const vintageParam = vintage ?? 'NV';
     // This endpoint returns one fixed currency per account (no currency
     // param), so the same wine+vintage is a single cache entry.
-    const wineKey = `${wineName}_${vintageParam}`;
+    const wineKey = `${cacheName(wineName)}_${vintageParam}`;
+    // Rows written before keys were normalised, read as a fallback.
+    const legacyKey = `${wineName}_${vintageParam}`;
 
     // USD→user-currency rate, applied to the (USD) prices on the way out.
     const fxRate = await getUsdRate(cur);
 
     // 1) Cache hit within TTL → serve immediately.
-    const { data: cached } = await supabase
+    const { data: rows } = await supabase
       .from('pricing_cache')
       .select('*')
-      .eq('wine_key', wineKey)
-      .single();
+      .in('wine_key', legacyKey === wineKey ? [wineKey] : [wineKey, legacyKey]);
+    const cached = rows?.find((r) => r.wine_key === wineKey) ?? rows?.[0] ?? null;
 
     if (cached) {
       const ageDays = (Date.now() - new Date(cached.fetched_at).getTime()) / 86_400_000;
-      if (ageDays < CACHE_TTL_DAYS) {
+      // 'miss' = nothing at all; 'miss-exact' = nothing for this exact vintage
+      // (an exactOnly lookup) — a normal lookup still tries all vintages then.
+      const isMiss = cached.price_scope === 'miss' || cached.price_scope === 'miss-exact';
+      const missApplies = cached.price_scope === 'miss' || (cached.price_scope === 'miss-exact' && !!exactOnly);
+      // A remembered miss: no lookup spent re-confirming it for a week.
+      if (missApplies && ageDays < MISS_TTL_DAYS) {
+        return new Response(JSON.stringify(UNAVAILABLE), { headers: { 'Content-Type': 'application/json' } });
+      }
+      if (!isMiss && ageDays < CACHE_TTL_DAYS) {
+        const allVintage = cached.price_scope === 'all-vintage';
         return new Response(
           JSON.stringify({
             matched: cached.market_price_avg != null || cached.critic_score != null || cached.ws_wine_id != null,
@@ -231,7 +269,9 @@ Deno.serve(async (req) => {
             averageMarketPrice: convert(cached.market_price_avg, fxRate),
             minPrice: convert(cached.market_price_min, fxRate),
             maxPrice: convert(cached.market_price_max, fxRate),
-            criticScore: cached.critic_score,
+            // A score from the all-vintage fallback isn't this vintage's score.
+            criticScore: allVintage ? null : cached.critic_score,
+            allVintageScore: allVintage ? cached.critic_score : null,
             currency: cur,
             // Carry the anchor identity through cache hits too.
             wsWineId: cached.ws_wine_id ?? null,
@@ -270,13 +310,16 @@ Deno.serve(async (req) => {
     // Broaden to the all-vintage average when the exact vintage EITHER didn't
     // match OR matched but carries no market price (some vintages list a score
     // but no live price). Keep the exact match's score/anchor when it had them.
-    if (hasRealVintage && (!result || result.averageMarketPrice == null)) {
+    // The exact vintage's own score; an all-vintage score is kept separately.
+    let allVintageScore: number | null = null;
+    if (hasRealVintage && !exactOnly && (!result || result.averageMarketPrice == null)) {
       try {
         const allV = await lookupWineSearcher(wineName, null, cur);
         if (allV && (allV.averageMarketPrice != null || !result)) {
+          allVintageScore = allV.criticScore;
           result = result
-            ? { ...allV, criticScore: result.criticScore ?? allV.criticScore, wsWineId: result.wsWineId ?? allV.wsWineId, wineName: result.wineName ?? allV.wineName }
-            : allV;
+            ? { ...allV, criticScore: result.criticScore, wsWineId: result.wsWineId ?? allV.wsWineId, wineName: result.wineName ?? allV.wineName }
+            : { ...allV, criticScore: null };
           priceScope = 'all-vintage';
         }
       } catch (e) {
@@ -285,9 +328,23 @@ Deno.serve(async (req) => {
       }
     }
 
+    // A "match" that names a different wine is no match at all.
+    if (result && !sameWine(wineName, result.wineName)) {
+      console.log(`[wine-searcher-proxy] rejected mismatch: query="${wineName}" ws="${result.wineName}"`);
+      result = null;
+      allVintageScore = null;
+    }
+
     // Genuine no-match (or both queries down after retries) → the client falls
-    // back to a labelled Vinster estimate, so a price is still shown.
+    // back to a labelled Vinster estimate, so a price is still shown. A genuine
+    // miss is remembered (price_scope 'miss') so it isn't re-paid for a week.
     if (!result) {
+      if (!down) {
+        await supabase.from('pricing_cache').upsert({
+          wine_key: wineKey, market_price_avg: null, market_price_min: null, market_price_max: null,
+          critic_score: null, currency: cur, price_scope: exactOnly && hasRealVintage ? 'miss-exact' : 'miss', fetched_at: new Date().toISOString(),
+        });
+      }
       return new Response(JSON.stringify(down ? { ...UNAVAILABLE, down: true } : UNAVAILABLE), {
         headers: { 'Content-Type': 'application/json' },
       });
@@ -303,7 +360,9 @@ Deno.serve(async (req) => {
       market_price_avg: result.averageMarketPrice,
       market_price_min: result.minPrice,
       market_price_max: result.maxPrice,
-      critic_score: result.criticScore,
+      // all-vintage rows carry the all-vintage score; a cache hit returns it as
+      // allVintageScore, never as this vintage's score.
+      critic_score: priceScope === 'all-vintage' ? (result.criticScore ?? allVintageScore) : result.criticScore,
       currency: result.currency,
       // Whether this figure is exact-vintage or the all-vintage fallback, so a
       // cache hit can label it the same way the fresh response does.
@@ -347,6 +406,7 @@ Deno.serve(async (req) => {
       minPrice: convert(result.minPrice, fxRate),
       maxPrice: convert(result.maxPrice, fxRate),
       criticScore: result.criticScore,
+      allVintageScore,
       currency: cur,
       region: result.region,
       grape: result.grape,
