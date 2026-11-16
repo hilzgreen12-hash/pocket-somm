@@ -95,7 +95,7 @@ Return only the raw JSON — no markdown, no explanation.`;
       : null;
     const recordedGuidance = recorded && (recorded.critic_score != null || recorded.drink_from != null)
       ? `\n\nVINSTER'S RECORD for this wine and vintage (from earlier lookups, IF this is the same wine):${
-          recorded.critic_score != null ? ` critic score ${recorded.critic_score}/100 (${recorded.score_source === 'wine-searcher' ? "critics' consensus for this vintage" : "Vinster's earlier estimate"});` : ''}${
+          recorded.critic_score != null ? ` critic score ${recorded.critic_score}/100 (${recorded.score_note ?? "Vinster's earlier estimate"});` : ''}${
           recorded.drink_from != null ? ` drinking window ${recorded.drink_from}–${recorded.drink_to ?? '?'};` : ''
         } Keep your answer consistent with this record unless you have a specific, well-founded reason to differ. A Wine-Searcher anchor above, if given, takes precedence for the score.`
       : '';
@@ -211,6 +211,7 @@ Return only the raw JSON — no markdown, no explanation.`;
       const canonProducer = parsed.canonicalProducer ?? String(producer).trim();
       const canonWine = parsed.canonicalProducer ? parsed.canonicalWineName : (wineName ? String(wineName).trim() : null);
       const wsVintageScore = wsScoreNum != null && !anchorAllVintage;
+      const wsAverage = wsScoreNum != null && anchorAllVintage ? wsScoreNum : null;
       const save = (async () => {
         await recordIdentifiedWine({
           producer: canonProducer,
@@ -220,7 +221,8 @@ Return only the raw JSON — no markdown, no explanation.`;
           style: styleValue,
           vintage: vKey,
           criticScore: wsVintageScore ? wsScoreNum : parsed.criticScore,
-          scoreSource: wsVintageScore ? 'wine-searcher' : 'vinster',
+          scoreSource: wsVintageScore ? 'wine-searcher' : wsAverage != null ? 'all-vintage-guided' : 'vinster',
+          allVintageAverage: wsAverage,
           drinkFrom: parsed.drinkingWindowFrom,
           drinkTo: parsed.drinkingWindowTo,
         });

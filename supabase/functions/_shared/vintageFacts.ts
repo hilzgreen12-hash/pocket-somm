@@ -99,9 +99,29 @@ export function vintageKey(v: unknown): string | null {
   return /^\d{4}$/.test(s) ? s : null;
 }
 
+// How a recorded score was arrived at, most to least grounded.
+export type ScoreSource = 'wine-searcher' | 'all-vintage-guided' | 'vinster';
+const SOURCE_RANK: Record<ScoreSource, number> = { 'wine-searcher': 3, 'all-vintage-guided': 2, vinster: 1 };
+
+// The plain-English note stored with the score — the same story the card tells
+// when the user taps Critic Score.
+export function scoreNote(source: ScoreSource, vintage: string, allVintageAverage: number | null): string {
+  const of = vintage === 'NV' ? 'this non-vintage wine' : `the ${vintage} vintage`;
+  if (source === 'wine-searcher') {
+    return `Critics' consensus for ${of}, from Wine-Searcher's aggregate of published critic scores.`;
+  }
+  if (source === 'all-vintage-guided') {
+    return `Critics' scores for ${of} weren't available, so Vinster's score was guided by the average of critics' scores across this wine's vintages${
+      allVintageAverage != null ? ` (${allVintageAverage}/100 on Wine-Searcher)` : ''}, adjusted for how ${vintage === 'NV' ? 'it' : vintage} compares.`;
+  }
+  return `No published critic score was found for ${of}; this is Vinster's own estimate of where critics would place it.`;
+}
+
 export interface VintageFacts {
   critic_score: number | null;
-  score_source: 'wine-searcher' | 'vinster' | null;
+  score_source: ScoreSource | null;
+  score_note: string | null;
+  score_as_of: string | null;
   drink_from: number | null;
   drink_to: number | null;
   lookups: number;
@@ -111,7 +131,7 @@ export async function readVintageFacts(key: string, vintage: string): Promise<Vi
   try {
     const { data } = await admin
       .from('wine_vintage_facts')
-      .select('critic_score, score_source, drink_from, drink_to, lookups')
+      .select('critic_score, score_source, score_note, score_as_of, drink_from, drink_to, lookups')
       .eq('search_key', key).eq('vintage', vintage)
       .maybeSingle();
     return (data as VintageFacts | null) ?? null;
@@ -130,7 +150,8 @@ export async function recordIdentifiedWine(w: {
   style: string | null;
   vintage: string | null;
   criticScore: number | null;
-  scoreSource: 'wine-searcher' | 'vinster';
+  scoreSource: ScoreSource;
+  allVintageAverage: number | null;  // the Wine-Searcher average, when it guided the score
   drinkFrom: number | null;
   drinkTo: number | null;
 }): Promise<void> {
@@ -161,11 +182,25 @@ export async function recordIdentifiedWine(w: {
     console.error('vintageFacts: catalogue insert failed', e instanceof Error ? e.message : e);
   }
 
-  // 2. This vintage's score and window. A Wine-Searcher score already on record
-  //    is kept rather than replaced by an estimate.
+  // 2. This vintage's score and window, and how the score was arrived at.
+  //    - A score from a better-grounded source is never replaced by a weaker one
+  //      (critics' vintage score > guided by the all-vintage average > estimate).
+  //    - When a lookup comes back with the score already on record (often
+  //      because the record guided it), the original source, note and date
+  //      stand — the lookup count shows how often it's been confirmed.
   if (!w.vintage) return;
-  const keepWs = previous?.score_source === 'wine-searcher' && !fromWs;
-  const score = keepWs ? previous!.critic_score : int(w.criticScore);
+  const fresh = int(w.criticScore);
+  const freshValid = fresh != null && fresh >= 50 && fresh <= 100;
+  const prevScore = previous?.critic_score ?? null;
+  const prevSource = previous?.score_source ?? null;
+  const keepPrevious = prevScore != null && prevSource != null && (
+    !freshValid || fresh === prevScore || SOURCE_RANK[prevSource] > SOURCE_RANK[w.scoreSource]
+  );
+  const scoreFields = keepPrevious
+    ? { critic_score: prevScore, score_source: prevSource, score_note: previous!.score_note, score_as_of: previous!.score_as_of }
+    : freshValid
+      ? { critic_score: fresh, score_source: w.scoreSource, score_note: scoreNote(w.scoreSource, w.vintage, int(w.allVintageAverage)), score_as_of: now.slice(0, 10) }
+      : { critic_score: null, score_source: null, score_note: null, score_as_of: null };
   const from = int(w.drinkFrom);
   const to = int(w.drinkTo);
   try {
@@ -174,8 +209,7 @@ export async function recordIdentifiedWine(w: {
       vintage: w.vintage,
       producer: w.producer,
       wine_name: w.wineName,
-      critic_score: score != null && score >= 50 && score <= 100 ? score : null,
-      score_source: score == null ? null : keepWs ? 'wine-searcher' : w.scoreSource,
+      ...scoreFields,
       drink_from: from != null && from >= 1800 ? from : null,
       drink_to: to != null && to >= 1800 ? to : null,
       lookups: (previous?.lookups ?? 0) + 1,
