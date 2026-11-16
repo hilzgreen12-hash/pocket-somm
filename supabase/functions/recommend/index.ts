@@ -48,6 +48,9 @@ If the diner has listed regions or grape varieties to avoid, exclude all wines f
 SOFT PREFERENCE — FAVOURITE REGIONS AND GRAPES:
 If the diner has listed favourite regions or grape varieties, weight these positively in your ranking. All else being equal, a wine from a favourite region or grape should rank above one that isn't. This is a preference, not a hard filter — do not exclude wines that don't match if they are significantly better quality or value.
 
+NEVER RETURN AN EMPTY LIST WHEN WINES QUALIFY:
+Only the HARD rules (colour, budget, region/grape exclusions) can rule a wine out. Style profiles, food pairing, preferred country and favourites are SOFT — they decide the ORDER, never whether there are picks. If at least one wine on the list passes the hard rules, you MUST recommend up to 3 of them (the closest fits), even when none is a perfect match for the stated style or food. When a pick departs from the requested style, say so plainly in its standoutNote (e.g. "Crisper than the rich style you asked for, but the best white within budget here.").
+
 SCORING PRIORITY — after applying the hard rules above, rank by:
 
 1. CRITIC SCORE (apply first)

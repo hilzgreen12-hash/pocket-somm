@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
         // list isn't cut to its first 80 (often all sparkling/white) first.
         const winesForRecommend = preFilterWines(applyScanFilters(wines, scanPreferences, currency), profile);
 
-        const rec = await callFn('recommend', {
+        let rec = await callFn('recommend', {
           wines: winesForRecommend,
           wineTypes: scanPreferences.wineTypes,
           styleProfiles: scanPreferences.styleProfiles,
@@ -300,7 +300,36 @@ Deno.serve(async (req) => {
           stream: false,
         }, authHeader, guest);
 
-        const recWines = Array.isArray(rec?.wines) ? rec.wines : [];
+        let recWines = Array.isArray(rec?.wines) ? rec.wines : [];
+        // Safety net: wines passed the colour/budget filters but no picks came
+        // back — ask once more without the soft preferences (style, food,
+        // country), so a list that HAS suitable wines never ends in an error.
+        if (!recWines.length && winesForRecommend.length) {
+          console.warn('[scan-start] empty picks with', winesForRecommend.length, 'qualifying wines — retrying without soft preferences', jobId);
+          try {
+            const retry = await callFn('recommend', {
+              wines: winesForRecommend,
+              wineTypes: scanPreferences.wineTypes,
+              styleProfiles: [],
+              budget: scanPreferences.budget,
+              budgetMin: scanPreferences.budgetMin,
+              foodPairing: '',
+              preferredCountry: '',
+              favouriteRegions: scanPreferences.favouriteRegions,
+              favouriteGrapes: scanPreferences.favouriteGrapes,
+              dislikedRegions: scanPreferences.dislikedRegions,
+              dislikedGrapes: scanPreferences.dislikedGrapes,
+              profileWineTypes: [],
+              profileStyleProfiles: [],
+              currency,
+              stream: false,
+            }, authHeader, guest);
+            const again = Array.isArray(retry?.wines) ? retry.wines : [];
+            if (again.length) { rec = retry; recWines = again; }
+          } catch (e) {
+            console.error('[scan-start] soft-preference retry failed:', jobId, e instanceof Error ? e.message : String(e));
+          }
+        }
         if (!recWines.length) {
           await patch({ status: 'error', extracted_wines: wines,
             error: 'No wines on this list matched your preferences. Try widening your budget or clearing a filter, then scan again.' });
