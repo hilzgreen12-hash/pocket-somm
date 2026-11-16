@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { catalogKey, vintageKey, readVintageFacts, recordIdentifiedWine } from '../_shared/vintageFacts.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -86,12 +87,24 @@ INSIDER NOTE — this is the "sommelier best friend" line, the payoff of the who
 
 Return only the raw JSON — no markdown, no explanation.`;
 
+    // What Vinster has already recorded for this vintage (wine_vintage_facts) —
+    // guidance so repeat lookups stay consistent and build on earlier findings.
+    const vKey = vintageKey(vintage);
+    const inputKey = producer ? catalogKey(String(producer), wineName ? String(wineName) : null) : '';
+    const recorded = inputKey && vKey ? await readVintageFacts(inputKey, vKey) : null;
+    const recordedGuidance = recorded && (recorded.critic_score != null || recorded.drink_from != null)
+      ? `\n\nVINSTER'S RECORD for this wine and vintage (from earlier lookups, IF this is the same wine):${
+          recorded.critic_score != null ? ` critic score ${recorded.critic_score}/100 (${recorded.score_source === 'wine-searcher' ? "critics' consensus for this vintage" : "Vinster's earlier estimate"});` : ''}${
+          recorded.drink_from != null ? ` drinking window ${recorded.drink_from}–${recorded.drink_to ?? '?'};` : ''
+        } Keep your answer consistent with this record unless you have a specific, well-founded reason to differ. A Wine-Searcher anchor above, if given, takes precedence for the score.`
+      : '';
+
     // VARIABLE per-request content: the specific wine identity plus the
     // WS-score-anchoring guidance (both change every call).
     const userContent = `Provide intelligence on this wine:
 - Producer: ${producer}
 - Region: ${region}${wineNameStr}
-- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}${scoreGuidance}`;
+- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}${scoreGuidance}${recordedGuidance}`;
 
     // Up to 2 attempts. Claude is non-deterministic, so an occasional response
     // that leads with a non-text block, wraps the JSON in prose/markdown, or gets
@@ -188,6 +201,34 @@ Return only the raw JSON — no markdown, no explanation.`;
       typeof parsed.insiderNote === 'string' && parsed.insiderNote.trim()
         ? parsed.insiderNote.trim()
         : "Congratulations, you've discovered a wine that even deep AI can't. Humans win, Cheers!";
+
+    // Fill Vinster's own database: add the wine to the catalogue if it's new,
+    // and record this vintage's score and drinking window. Identified wines only
+    // (the gate above returned already for anything else); spirits aren't wines.
+    // Runs after the response is sent, so it never slows the card.
+    if (parsed.isSpirit !== true && producer) {
+      const canonProducer = parsed.canonicalProducer ?? String(producer).trim();
+      const canonWine = parsed.canonicalProducer ? parsed.canonicalWineName : (wineName ? String(wineName).trim() : null);
+      const wsVintageScore = wsScoreNum != null && !anchorAllVintage;
+      const save = (async () => {
+        const key = catalogKey(canonProducer, canonWine);
+        const previous = !vKey ? null : key === inputKey ? recorded : await readVintageFacts(key, vKey);
+        await recordIdentifiedWine({
+          producer: canonProducer,
+          wineName: canonWine,
+          region: typeof region === 'string' && region.trim() ? region.trim() : null,
+          grape: typeof parsed.grapeVariety === 'string' && parsed.grapeVariety.trim() ? parsed.grapeVariety.trim() : grapeValue,
+          style: styleValue,
+          vintage: vKey,
+          criticScore: wsVintageScore ? wsScoreNum : parsed.criticScore,
+          scoreSource: wsVintageScore ? 'wine-searcher' : 'vinster',
+          drinkFrom: parsed.drinkingWindowFrom,
+          drinkTo: parsed.drinkingWindowTo,
+          previous,
+        });
+      })();
+      try { (globalThis as any).EdgeRuntime?.waitUntil?.(save); } catch { await save; }
+    }
 
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' },
