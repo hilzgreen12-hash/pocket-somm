@@ -170,7 +170,15 @@ export default function ExtractingScreen() {
         {errorRef ? (
           <Text style={styles.errorRef} selectable>Ref {errorRef.ref} · {errorRef.reason.slice(0, 160)}</Text>
         ) : null}
-        <TouchableOpacity style={styles.retryButton} onPress={() => router.dismissTo(onlineSource ? '/scan/find-online' : '/scan/wine-list')}>
+        {/* Start again from the beginning: back to Home, with "How should
+            Vinster read the list?" open (no half-remembered route or photo). */}
+        <TouchableOpacity style={styles.retryButton} onPress={() => {
+          const st = useScanStore.getState();
+          st.reset();
+          st.setRestartListChoice(true);
+          router.dismissAll();
+          router.navigate('/(tabs)' as any);
+        }}>
           <Text style={styles.retryText}>Try Again</Text>
         </TouchableOpacity>
       </ScrollView>

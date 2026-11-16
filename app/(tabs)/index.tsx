@@ -133,6 +133,12 @@ export default function ScanLandingScreen() {
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   useFocusEffect(useCallback(() => {
     if (!welcomeShownThisSession) { welcomeShownThisSession = true; setWelcomeOpen(true); }
+    // Back from a failed wine-list scan's Try Again: reopen the list chooser.
+    if (useScanStore.getState().restartListChoice) {
+      useScanStore.getState().setRestartListChoice(false);
+      setTimeout(() => openWineListChoice(), 400);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
 
   // Soft gate: guest sees the prompt but may Continue (scanning is guest-open).

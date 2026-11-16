@@ -36,6 +36,10 @@ interface ScanState {
   error: string | null;
   preferences: ScanPreferences;
   needsReset: boolean;
+  // Set by Try Again on the scan error screen: Home opens "How should Vinster
+  // read the list?" when it next comes into view, to start again from scratch.
+  restartListChoice: boolean;
+  setRestartListChoice: (v: boolean) => void;
 
   setImage: (uri: string, source?: 'camera' | 'upload') => void;
   setImageUris: (uris: string[], source?: 'camera' | 'upload') => void;
@@ -74,6 +78,8 @@ export const useScanStore = create<ScanState>((set) => ({
   error: null,
   preferences: DEFAULT_PREFERENCES,
   needsReset: false,
+  restartListChoice: false,
+  setRestartListChoice: (v) => set({ restartListChoice: v }),
 
   setImage: (uri, source = 'camera') => set({ imageUri: uri, imageUris: null, imageSource: source, onlineSource: null, extractedWines: null, recommendation: null, error: null }),
   setImageUris: (uris, source = 'camera') => set({ imageUris: uris, imageUri: null, imageSource: source, onlineSource: null, extractedWines: null, recommendation: null, error: null }),
