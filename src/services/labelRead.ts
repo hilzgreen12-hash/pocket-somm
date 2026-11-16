@@ -1,5 +1,6 @@
 import { showAlert } from '../components/AppAlert';
 import { isNetworkError } from '../api/invokeResilient';
+import { handleGuestLimit } from './guestLimit';
 import { isWineNotFound } from './pricing';
 import type { WineDetails } from '../types/wine';
 
@@ -33,6 +34,7 @@ export function alertBadLabelPhoto(kind: 'not-wine' | 'unreadable', extra?: Extr
 
 // A read or card that failed: say what actually went wrong.
 export function alertLabelFailure(err: unknown, extra?: Extra) {
+  if (handleGuestLimit(err)) return;
   const msg = err instanceof Error ? err.message : '';
   if (isWineNotFound(err)) {
     ask("Vinster couldn't find this wine", 'The label may have been misread. Please try another photo, or search for the wine.', extra);

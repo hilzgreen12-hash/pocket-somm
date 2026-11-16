@@ -1,13 +1,16 @@
-import { createClient } from 'npm:@supabase/supabase-js';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js';
+import { guestDeviceKey, guestNetworkKey } from './guest.ts';
 
 /**
  * Usage limits for the paid (AI / Wine-Searcher) edge functions — a spend
  * control, not an authorization check.
  *
  * - Signed-in users: counted per account (function_call_log, mig 031).
- * - Guests (the app's public key, no account): counted per device address,
- *   stored only as a one-way hash (guest_call_log, mig 132). Restaurant Wi-Fi
- *   can put several guests behind one address, so the same generous limits apply.
+ * - Guests (the app's public key, no account): counted per PHONE with the
+ *   tighter `guestLimits` (enough for their two scans a day), and per network
+ *   address with the normal limits as an abuse backstop — restaurant Wi-Fi puts
+ *   many guests behind one address. Older app versions send no phone id and are
+ *   counted per network only. Stored as one-way hashes (guest_call_log, mig 132).
  * - Calls made by scan-start on a user's behalf (x-vinster-internal) are not
  *   counted again: scan-start limits the scan itself.
  *
@@ -22,6 +25,7 @@ export async function checkRateLimit(
   functionName: string,
   hourlyLimit: number,
   dailyLimit: number,
+  guestLimits?: { hourly: number; daily: number },
 ): Promise<Response | null> {
   try {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -47,12 +51,7 @@ export async function checkRateLimit(
           p_hourly_limit: hourlyLimit,
           p_daily_limit: dailyLimit,
         })
-      : await adminClient.rpc('check_and_log_guest_call', {
-          p_guest_key: await guestKey(req),
-          p_function_name: functionName,
-          p_hourly_limit: hourlyLimit,
-          p_daily_limit: dailyLimit,
-        });
+      : await guestAllowed(adminClient, req, functionName, hourlyLimit, dailyLimit, guestLimits);
 
     if (rlError) {
       console.error(`[${functionName}] rate-limit RPC failed (failing open):`, rlError);
@@ -76,9 +75,23 @@ export async function checkRateLimit(
   }
 }
 
-// A guest's device address as a one-way hash (same scheme as scan-start).
-async function guestKey(req: Request): Promise<string> {
-  const ip = (req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`vinster-guest:${ip}`));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+// A guest passes when their phone is within `guestLimits` AND their network
+// within the normal limits. Returns the RPC's { data, error } shape.
+async function guestAllowed(
+  admin: SupabaseClient,
+  req: Request,
+  functionName: string,
+  hourlyLimit: number,
+  dailyLimit: number,
+  guestLimits?: { hourly: number; daily: number },
+): Promise<{ data: boolean | null; error: { message: string } | null }> {
+  const check = (key: string, hourly: number, daily: number) => admin.rpc('check_and_log_guest_call', {
+    p_guest_key: key, p_function_name: functionName, p_hourly_limit: hourly, p_daily_limit: daily,
+  });
+  const device = guestLimits ? await guestDeviceKey(req) : null;
+  if (device) {
+    const byPhone = await check(device, guestLimits!.hourly, guestLimits!.daily);
+    if (byPhone.error || byPhone.data === false) return byPhone;
+  }
+  return await check(await guestNetworkKey(req), hourlyLimit, dailyLimit);
 }

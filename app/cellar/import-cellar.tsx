@@ -25,6 +25,7 @@ import { formatCurrency } from '../../src/constants/currency';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
+import { per75From } from '../../src/utils/bottleValue';
 
 type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'location' | 'adding' | 'done' | 'reviews-done';
 
@@ -594,7 +595,8 @@ export default function ImportCellarScreen() {
           user_notes: null,
           // Market/current value from the import doc (when the sheet had one) →
           // the wine's estimated value, so Cellar Stats reflect it without a lookup.
-          estimated_value: w.marketPricePerBottle ?? null,
+          // Imported values are for the bottle as listed; Vinster keeps values per 75cl.
+          estimated_value: w.marketPricePerBottle != null ? per75From(w.marketPricePerBottle, w.bottleSizeMl) : null,
           estimated_value_currency: w.marketPricePerBottle != null ? (w.currency ?? defaultCurrency) : null,
           estimated_value_at: w.marketPricePerBottle != null ? new Date().toISOString() : null,
           estimated_value_source: w.marketPricePerBottle != null ? 'imported' : null,

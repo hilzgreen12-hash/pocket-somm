@@ -38,6 +38,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
 import { groupWinesByIdentity } from '../../src/utils/wineMatch';
+import { PER_75CL, bottleValue } from '../../src/utils/bottleValue';
 
 type SortMode =
   | 'recent'
@@ -873,8 +874,8 @@ export default function FullCellarListScreen() {
 
   const sorted = [...shownWines].sort((a, b) => {
     switch (sortMode) {
-      case 'est_desc':   return Number(b.estimated_value ?? -1) - Number(a.estimated_value ?? -1);
-      case 'est_asc':    return Number(a.estimated_value ?? Infinity) - Number(b.estimated_value ?? Infinity);
+      case 'est_desc':   return (bottleValue(b) ?? -1) - (bottleValue(a) ?? -1);
+      case 'est_asc':    return (bottleValue(a) ?? Infinity) - (bottleValue(b) ?? Infinity);
       case 'purch_desc': return Number(b.purchase_price ?? -1) - Number(a.purchase_price ?? -1);
       case 'purch_asc':  return Number(a.purchase_price ?? Infinity) - Number(b.purchase_price ?? Infinity);
       case 'critic_desc': return (b.critic_score ?? -1) - (a.critic_score ?? -1);
@@ -1284,7 +1285,7 @@ export default function FullCellarListScreen() {
         >
           {sorted.map((w) => {
             const valueText = w.estimated_value != null
-              ? formatCurrency(Number(w.estimated_value), w.estimated_value_currency, { decimals: 0 })
+              ? `${formatCurrency(Number(w.estimated_value), w.estimated_value_currency, { decimals: 0 })}${PER_75CL}`
               : null;
             const isSelected = selectedIds.has(w.id);
             return (

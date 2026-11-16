@@ -25,6 +25,7 @@ import { DrinkingWindowSheet } from '../../src/components/winecard/DrinkingWindo
 import { findSameCellarWine, sameWineIdentity } from '../../src/utils/wineMatch';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
 import { wc } from '../../src/components/winecard/wcStyles';
+import { PER_75CL, priceForSize } from '../../src/utils/bottleValue';
 import { vintageVerdict, pickFromCellar, ordinal, type CellarPick } from '../../src/utils/wineCardInsights';
 import { entriesOf } from '../../src/utils/cellarReview';
 import { wineQueryName, wineQueryAltName, wineNameKey, normaliseVintage } from '../../src/utils/wineIdentity';
@@ -201,6 +202,8 @@ export default function LabelResultsScreen() {
   // user sees the card shell instantly; we generate on this screen and swirl the
   // score/price/window + Inside Line until it lands. genError surfaces a retry.
   const [genError, setGenError] = useState(false);
+  // Re-running a card whose Wine-Searcher lookup couldn't get through.
+  const [wsRetrying, setWsRetrying] = useState(false);
   // Vinster couldn't confirm the wine exists (identity gate) — no card is built.
   const [notFound, setNotFound] = useState(false);
   const genStartedRef = useRef(false);
@@ -375,8 +378,10 @@ export default function LabelResultsScreen() {
     if (identityConfirmed || fresh !== '1' || awaitingConfirm) return;
     // Offer disambiguation whenever Wine-Searcher couldn't verify the wine — the
     // score/value are then Vinster estimates, and the label reading may be off
-    // (a missed cuvée). A verified real record means no need to ask.
-    if (intelligence.verified) return;
+    // (a missed cuvée). A verified real record means no need to ask — and nor
+    // does a lookup that never reached Wine-Searcher: the read may well be right,
+    // so the card says Wine-Searcher couldn't be checked instead.
+    if (intelligence.verified || intelligence.wsUnavailable) return;
     candidatesTriedRef.current = true;
     (async () => {
       try {
@@ -922,14 +927,6 @@ export default function LabelResultsScreen() {
     return `across your ${rackNames.slice(0, -1).join(', ')} and ${rackNames[rackNames.length - 1]} racks`;
   }
 
-  // Pre-fill the purchase price with Vinster's estimate (now real Wine-Searcher
-  // market data when matched) so the field starts populated in every add flow —
-  // not just when the Add-to-Cellar button's onPress happens to fire first.
-  useEffect(() => {
-    const est = intelligence?.estimatedValue;
-    if (est != null) setPurchasePrice((prev) => prev || String(est));
-  }, [intelligence?.estimatedValue]);
-
   // Some add flows skip full Wine Intel (notably add-to-location under Other
   // Home Storage), so `intelligence` is null and the price never pre-filled.
   // Fetch a real Wine-Searcher market price directly so the Estimated Purchase
@@ -954,7 +951,6 @@ export default function LabelResultsScreen() {
         // 1) Wine-Searcher — real market price.
         const p = await fetchPricing(queryName, vint, userCurrency);
         if (p.source === 'wine-searcher' && p.matched !== false && p.averageMarketPrice != null) {
-          setPurchasePrice((prev) => prev || String(p.averageMarketPrice));
           setPrefetchedValue({ value: p.averageMarketPrice, source: 'wine-searcher' });
           return;
         }
@@ -967,12 +963,19 @@ export default function LabelResultsScreen() {
           null,
         );
         if (intel.estimatedValue != null) {
-          setPurchasePrice((prev) => prev || String(Math.round(intel.estimatedValue as number)));
           setPrefetchedValue({ value: intel.estimatedValue, source: 'vinster' });
         }
       } catch { /* leave blank on failure */ }
     })();
   }, [isAddFlow, wineDetailsConfirmed, intelligence?.estimatedValue, userCurrency]);
+
+  // The estimate is a 75cl price, so the purchase price starts at that price
+  // scaled to the bottle size chosen on the add card (a magnum starts at two
+  // bottles' worth), and follows the size until the user types their own.
+  const per75Estimate = intelligence?.estimatedValue ?? prefetchedValue?.value ?? null;
+  useEffect(() => {
+    if (per75Estimate != null && !purchasePriceUserEdited) setPurchasePrice(String(priceForSize(per75Estimate, bottleSizeMl)));
+  }, [per75Estimate, bottleSizeMl, purchasePriceUserEdited]);
 
   // Add flow has no intel card — drop the user straight onto the Add-to-Cellar
   // confirmation (size / quantity / orientation / location).
@@ -1835,6 +1838,9 @@ export default function LabelResultsScreen() {
       body = `This is the critics' consensus for ${thisVintage}, from Wine-Searcher's aggregate of published critic scores.`;
     } else if (intel.criticScoreBasis === 'all-vintage') {
       body = `Critics' scores for ${thisVintage} aren't available, so this score is guided by the AVERAGE of critics' scores across this wine's vintages, adjusted for how ${v ?? 'this vintage'} compares. A score for one specific vintage can differ a good deal from that average.`;
+    } else if (intel.criticScoreBasis === 'vinster' && intel.wsUnavailable) {
+      showWsUnavailable('How Vinster scored this', "Wine-Searcher couldn't be checked just now, so this score is Vinster's own estimate rather than the critics' consensus.");
+      return;
     } else if (intel.criticScoreBasis === 'vinster') {
       body = intel.criticScoreNote?.trim()
         || `No published critic score was found for ${thisVintage}, so this is Vinster's own estimate of where critics would place it — a guide, not a published score.`;
@@ -1844,8 +1850,28 @@ export default function LabelResultsScreen() {
     }
     showAlert({ title: 'How Vinster scored this', body });
   }
+  // A lookup that never reached Wine-Searcher: say so, and offer to try again.
+  async function retryWineSearcher() {
+    if (wsRetrying) return;
+    setWsRetrying(true);
+    try { await runGenerate(); } finally { setWsRetrying(false); }
+  }
+  function showWsUnavailable(title: string, body: string) {
+    showAlert({
+      title,
+      body: `${body} Try again in a little while for the live Wine-Searcher figures.`,
+      buttons: [
+        { text: 'Close', style: 'cancel' },
+        { text: 'Try again', onPress: () => { void retryWineSearcher(); } },
+      ],
+    });
+  }
   function openValueInfo() {
     let body: string;
+    if (intel.valueSource !== 'wine-searcher' && intel.wsUnavailable) {
+      showWsUnavailable('Where this value comes from', "Wine-Searcher couldn't be checked just now, so this value is Vinster's own estimate.");
+      return;
+    }
     if (intel.valueSource === 'wine-searcher') {
       body = intel.estimatedValueLow != null && intel.estimatedValueHigh != null && intel.estimatedValueLow !== intel.estimatedValueHigh
         ? `Wine-Searcher values range from ${formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–${formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}${intel.priceScope === 'all-vintage' ? ', across all vintages (no price for this exact vintage).' : '.'}`
@@ -2138,7 +2164,7 @@ export default function LabelResultsScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={wc.Fact} onPress={openValueInfo} disabled={intelLoading || intel.estimatedValue == null} activeOpacity={0.7}>
                 <Text style={wc.FactLabel}>Value</Text>
-                {intelLoading ? <ActivityIndicator size="small" color={colors.gold} /> : <Text style={[wc.FactValue, { color: colors.gold }]}>{intel.estimatedValue != null ? fmt(intel.estimatedValue) : '—'}</Text>}
+                {intelLoading ? <ActivityIndicator size="small" color={colors.gold} /> : <Text style={[wc.FactValue, { color: colors.gold }]}>{intel.estimatedValue != null ? <>{fmt(intel.estimatedValue)}<Text style={wc.FactSub}>{PER_75CL}</Text></> : '—'}</Text>}
               </TouchableOpacity>
               <TouchableOpacity style={[wc.Fact, wc.FactLast]} onPress={openWindowInfo} disabled={intelLoading || intel.isSpirit || (!windowYears && intel.drinkingWindowStatus === 'unknown')} activeOpacity={0.7}>
                 <Text style={wc.FactLabel}>Window</Text>
@@ -2152,7 +2178,15 @@ export default function LabelResultsScreen() {
                 )}
               </TouchableOpacity>
             </View>
-            <Text style={styles.statBarHint}>Tap any stat to see how Vinster worked it out</Text>
+            {intel.wsUnavailable && !intelLoading ? (
+              <TouchableOpacity onPress={retryWineSearcher} disabled={wsRetrying} activeOpacity={0.7}>
+                <Text style={[styles.statBarHint, { color: colors.gold }]}>
+                  {wsRetrying ? 'Checking Wine-Searcher…' : "Wine-Searcher couldn't be checked just now, so these are Vinster's estimates. Tap to try again."}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.statBarHint}>Tap any stat to see how Vinster worked it out</Text>
+            )}
 
             <View style={wc.Body}>
               {lines.length ? (
@@ -2240,7 +2274,7 @@ export default function LabelResultsScreen() {
               <TouchableOpacity
                 style={wc.outlineBtn}
                 onPress={() => {
-                  if (!purchasePrice && intel.estimatedValue != null) setPurchasePrice(String(intel.estimatedValue));
+                  if (!purchasePrice && intel.estimatedValue != null) setPurchasePrice(String(priceForSize(intel.estimatedValue, bottleSizeMl)));
                   setAddingToCellar(true);
                 }}
                 activeOpacity={0.85}
@@ -2262,7 +2296,7 @@ export default function LabelResultsScreen() {
             <View style={[wc.Card, { gap: 2, paddingVertical: 10 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
                 <Text style={wc.Label}>Estimated Market Value</Text>
-                <Text style={wc.VsValue}>{intel.estimatedValue != null ? fmt(intel.estimatedValue) : '—'}</Text>
+                <Text style={wc.VsValue}>{intel.estimatedValue != null ? <>{fmt(intel.estimatedValue)}<Text style={wc.Small}>{PER_75CL}</Text></> : '—'}</Text>
               </View>
               {intel.estimatedValue != null ? (
                 <Text style={wc.Small} numberOfLines={1}>
@@ -2912,7 +2946,7 @@ export default function LabelResultsScreen() {
               onPress={() => {
                 // Seed the price field with Vinster's estimate so the user
                 // adjusts for accuracy rather than entering from scratch.
-                if (!purchasePrice && intel.estimatedValue != null) setPurchasePrice(String(intel.estimatedValue));
+                if (!purchasePrice && intel.estimatedValue != null) setPurchasePrice(String(priceForSize(intel.estimatedValue, bottleSizeMl)));
                 setAddingToCellar(true);
               }}
               activeOpacity={0.8}

@@ -3,6 +3,9 @@ import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
+// Per guest phone, per hour and per day: room for finding their two lists online.
+const GUEST_LIMITS = { hourly: 4, daily: 4 };
+
 // Find Online — read a restaurant's wine list from the web.
 //
 //   { action: 'search', restaurant, city? }
@@ -54,8 +57,14 @@ const WINE_FIELDS = `For each wine return a JSON object with these fields:
   vintage, a bin number, a bottle size (75cl, Magnum) or an ABV as the price.
   When a wine shows several prices (glass / carafe / half / bottle / magnum),
   use the 75cl bottle — never a glass, never a magnum.
-- format: "bottle" (75cl, usual), "half", "magnum" or "glass" — the size the
-  price is for. (string)
+- format: the size the price is for — one of "bottle" (75cl, usual), "half",
+  "500ml", "litre", "magnum" (1.5L), "3L", "4.5L", "6L", "9L", "12L", "15L" or
+  "glass". Use the printed volume when there is one; otherwise Double Magnum or
+  Jeroboam → "3L", Rehoboam → "4.5L", Methuselah or Imperial → "6L",
+  Salmanazar → "9L", Balthazar → "12L", Nebuchadnezzar → "15L". A wine listed
+  on its OWN line in a larger size (a "Magnums" section, or a separate
+  "… Magnum" row) is its own entry with that price and format, even when the
+  same wine also appears as a 75cl bottle. (string)
 - currency: 3-letter code of the prices on this list (£ GBP, € EUR, $ USD, CHF…).
   If no symbol is printed, infer it from the language and place names; only
   if there's nothing to go on, use the fallback currency given below.
@@ -570,7 +579,7 @@ Deno.serve(async (req) => {
       if (!(await signedInUser(req))) {
         return json({ results: [], error: 'Create a free account to search for wine lists online — or share the list\'s link to Vinster from your browser.' }, 401);
       }
-      const limited = await checkRateLimit(req, 'find-wine-list-search', 20, 60);
+      const limited = await checkRateLimit(req, 'find-wine-list-search', 20, 60, GUEST_LIMITS);
       if (limited) return limited;
       if (!SERPER_API_KEY) return json({ results: [], error: 'Search is not configured.' });
       const restaurant = String(body.restaurant ?? '').trim().slice(0, 120);
@@ -584,7 +593,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'read') {
-      const limited = await checkRateLimit(req, 'find-wine-list-read', 15, 40);
+      const limited = await checkRateLimit(req, 'find-wine-list-read', 15, 40, GUEST_LIMITS);
       if (limited) return limited;
       const url = String(body.url ?? '');
       const currency = typeof body.currency === 'string' && /^[A-Z]{3}$/.test(body.currency) ? body.currency : 'GBP';
@@ -604,7 +613,7 @@ Deno.serve(async (req) => {
 
     // A PDF wine list shared straight into Vinster (not a link): read its pages.
     if (action === 'readPdf') {
-      const limited = await checkRateLimit(req, 'find-wine-list-read', 15, 40);
+      const limited = await checkRateLimit(req, 'find-wine-list-read', 15, 40, GUEST_LIMITS);
       if (limited) return limited;
       const b64 = typeof body.pdfBase64 === 'string' ? body.pdfBase64 : '';
       const currency = typeof body.currency === 'string' && /^[A-Z]{3}$/.test(body.currency) ? body.currency : 'GBP';

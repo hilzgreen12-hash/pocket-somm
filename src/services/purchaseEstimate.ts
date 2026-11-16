@@ -2,6 +2,7 @@ import { updateCellarWine } from '../api/cellar';
 import { fetchPricing, valueWine } from './pricing';
 import { wineQueryName } from '../utils/wineIdentity';
 import type { CellarWine, WineDetailsComplete } from '../types/wine';
+import { priceForSize } from '../utils/bottleValue';
 
 // When a wine is added without a purchase price, Vinster fills one in with the
 // market value on the day it was added (marked as an estimate, dated the day it
@@ -24,7 +25,7 @@ export async function estimatePurchasePriceOnAdd(saved: CellarWine, currency: st
   // Intel came with the add → its market value is that day's value.
   if (saved.estimated_value != null) {
     await updateCellarWine(saved.id, {
-      purchase_price: Number(saved.estimated_value),
+      purchase_price: priceForSize(Number(saved.estimated_value), saved.bottle_size_ml),
       purchase_price_currency: saved.estimated_value_currency ?? currency,
       purchase_price_estimated: true,
       purchase_price_at: at,
@@ -54,7 +55,8 @@ export async function estimatePurchasePriceOnAdd(saved: CellarWine, currency: st
   if (value == null) return false;
 
   await updateCellarWine(saved.id, {
-    purchase_price: value,
+    // The market value is a 75cl price; what this bottle cost scales with its size.
+    purchase_price: priceForSize(value, saved.bottle_size_ml),
     purchase_price_currency: valueCurrency,
     purchase_price_estimated: true,
     purchase_price_at: at,

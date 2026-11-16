@@ -14,6 +14,9 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
+// Per guest phone, per hour and per day: room for the occasional producer-range lookup on their two scans.
+const GUEST_LIMITS = { hourly: 4, daily: 4 };
+
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 // Cache the generated lineup by (producer + wine) so the SAME wine's intel card
@@ -46,7 +49,7 @@ Deno.serve(async (req) => {
     } catch (e) { console.warn('[producer-range] cache read failed (continuing):', e); }
 
     // Saved results above are free; only new (paid) work counts towards the limit.
-    const limited = await checkRateLimit(req, 'producer-range', 30, 100);
+    const limited = await checkRateLimit(req, 'producer-range', 30, 100, GUEST_LIMITS);
     if (limited) return limited;
 
     // Catalog-first: pull this producer's REAL cuvées from Vinster's own

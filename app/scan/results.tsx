@@ -10,6 +10,7 @@ import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
+import { bottleFormatLabel, bottlesIn } from '../../src/utils/bottleFormat';
 import { captureRef } from 'react-native-view-shot';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory, cacheScanLocally, updateLocalScan, saveScanRecommendation } from '../../src/hooks/useScanHistory';
@@ -54,11 +55,13 @@ interface WsEnrich {
 }
 
 // Value-for-money line built from the real market average vs the list price.
-// Both are in the same currency (we query WS in the wine's menu currency).
-function wsValueLine(menuPrice: number | null, avgPrice: number, sym: string): string {
+// Both are in the same currency (we query WS in the wine's menu currency). The
+// market average is for a 75cl bottle, so a magnum or half bottle is compared
+// per bottle's worth.
+function wsValueLine(menuPrice: number | null, avgPrice: number, sym: string, bottles = 1): string {
   const avg = `${sym}${Math.round(avgPrice)}`;
   if (menuPrice == null || menuPrice <= 0) return `Market average ${avg} (Wine-Searcher).`;
-  const ratio = menuPrice / avgPrice;
+  const ratio = menuPrice / bottles / avgPrice;
   const verdict = ratio <= 1.5 ? 'strong value'
     : ratio <= 2 ? 'fair value'
     : ratio <= 2.5 ? 'full but defensible'
@@ -1075,6 +1078,8 @@ export default function ResultsScreen() {
             : (wsE?.avgPrice != null ? Math.round(wsE.avgPrice) : null);
           const priceIsEstimate = wine.menuPrice == null && priceValue != null;
           const priceCurrency = wine.currency || wsE?.currency || userPrefs?.defaultCurrency;
+          // The list price is for a magnum, half bottle etc. — say which.
+          const priceSize = wine.menuPrice != null ? bottleFormatLabel(wine.format) : null;
           const criticScoreText = wsE && wsE.criticScore != null
             ? `${wsE.criticScore} points · Wine-Searcher`
             : (wine.criticScoreNote
@@ -1088,7 +1093,7 @@ export default function ResultsScreen() {
           // do we fall back to Vinster's own market estimate (framed as an
           // estimate in the copy), so an obscure bottle still gets a verdict.
           const valueText = wsE && wsE.avgPrice != null
-            ? wsValueLine(wine.menuPrice, wsE.avgPrice, currencySymbol(wsE.currency))
+            ? wsValueLine(wine.menuPrice, wsE.avgPrice, currencySymbol(wsE.currency), bottlesIn(wine.format))
             : (wine.valueNote ?? null);
           // With no vintage printed, the vintage note says little, but the
           // drinking-window guidance ("the year isn't listed, but…") still helps.
@@ -1162,6 +1167,7 @@ export default function ResultsScreen() {
                         {currencySymbol(priceCurrency)}{priceValue}
                         {/* No menu price was read for this pick — this is the shop price. */}
                         {priceIsEstimate ? <Text style={styles.priceEstimateTag}> market avg</Text> : null}
+                        {priceSize ? <Text style={styles.priceEstimateTag}> {priceSize}</Text> : null}
                       </Text>
                     )}
                     {priceValue != null && headlineScore != null && (

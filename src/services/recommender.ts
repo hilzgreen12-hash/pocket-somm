@@ -132,20 +132,32 @@ const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/
 // old exact-`norm` compare turned "château" into "ch teau" and lost the price on
 // 2 of 3 picks. Progressive tiers, unambiguous-only so we never attach a wrong
 // price: full identity + vintage → full identity → name + vintage → name.
+// A grape or blend as an order-free key: "Sauvignon Blanc - Assyrtiko" and
+// "Assyrtiko/Sauvignon Blanc" are the same blend.
+const grapeKey = (g: string | null | undefined) =>
+  (g ?? '').split(/[\/,&+–-]|\band\b/).map(norm).filter(Boolean).sort().join('|');
+
 // One row from several matches, only when it's clear which: a single hit; or,
 // for a wine listed more than once (by the glass and by the bottle), the single
-// full-bottle row; or rows that all carry the same price. Otherwise none — the
-// price is left unknown rather than guessed.
-function unambiguous(hits: ExtractedWine[]): ExtractedWine | null {
+// full-bottle row; or rows that all carry the same price; or — for two wines
+// sharing a name, like an estate's white and red both listed as "Alpha Estate" —
+// the single row with the pick's grape. Otherwise none: the price is left
+// unknown rather than guessed.
+function unambiguous(hits: ExtractedWine[], grape?: string | null): ExtractedWine | null {
   if (hits.length === 1) return hits[0];
   if (hits.length === 0) return null;
   const bottles = hits.filter((e) => !e.format || e.format === 'bottle');
   if (bottles.length === 1) return bottles[0];
   if (bottles.length > 1 && new Set(bottles.map((e) => e.menuPrice)).size === 1) return bottles[0];
+  const g = grapeKey(grape);
+  if (g && bottles.length > 1) {
+    const sameGrape = bottles.filter((e) => grapeKey(e.grape) === g);
+    if (sameGrape.length === 1) return sameGrape[0];
+  }
   return null;
 }
 
-function matchExtracted(rec: { producer: string; name: string; vintage: number | null }, list: ExtractedWine[]): ExtractedWine | null {
+function matchExtracted(rec: { producer: string; name: string; vintage: number | null; grape?: string | null }, list: ExtractedWine[]): ExtractedWine | null {
   const rKey = wineNameKey(rec.producer, rec.name);
   const rNameKey = wineNameKey(null, rec.name);
   const rv = rec.vintage;
@@ -157,7 +169,7 @@ function matchExtracted(rec: { producer: string; name: string; vintage: number |
     (e) => !!rNameKey && wineNameKey(null, e.name) === rNameKey,
   ];
   for (const pred of cands) {
-    const hit = unambiguous(list.filter(pred));
+    const hit = unambiguous(list.filter(pred), rec.grape);
     if (hit) return hit;
   }
   // Final safe fallback: token-SUBSET match. The model sometimes restates a pick's
@@ -243,6 +255,7 @@ export function finalizeRecommendation(
       repeatNote,
       menuPrice: match ? match.menuPrice : null,
       currency: match?.currency || scanCurrency,
+      format: match?.format ?? null,
     };
   });
   return { ...parsed.data, wines };

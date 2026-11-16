@@ -1,4 +1,5 @@
 import { normalisePriceText } from '../../src/utils/priceInput';
+import { PER_75CL, bottleValue, priceForSize } from '../../src/utils/bottleValue';
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share, ScrollView } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -1508,22 +1509,27 @@ export default function CellarWineDetail() {
         return 'ambiguous';
       }
 
+      // Wine-Searcher couldn't be asked: never swap a value the wine already has
+      // for Vinster's stand-in estimate — keep it and say so.
+      const keepValue = !!v.wsUnavailable && wine.estimated_value != null;
       await updateWine.mutateAsync({
         id: wine.id,
         updates: {
-          estimated_value: v.estimatedValue,
-          estimated_value_currency: v.currency,
-          estimated_value_at: new Date().toISOString(),
-          estimated_value_source: v.valueSource,
-          // The Wine-Searcher offer spread the headline value averages.
-          estimated_value_low: v.estimatedValueLow ?? null,
-          estimated_value_high: v.estimatedValueHigh ?? null,
-          // Exact-vintage vs all-vintage fallback, so the value's sub-label and
-          // the market note below stay accurate after this refetch.
-          estimated_value_scope: v.priceScope ?? null,
-          // Keep the (WS-anchored) critic score fresh on refresh too.
-          critic_score: v.criticScore,
-          critic_score_note: v.criticScoreNote,
+          ...(keepValue ? {} : {
+            estimated_value: v.estimatedValue,
+            estimated_value_currency: v.currency,
+            estimated_value_at: new Date().toISOString(),
+            estimated_value_source: v.valueSource,
+            // The Wine-Searcher offer spread the headline value averages.
+            estimated_value_low: v.estimatedValueLow ?? null,
+            estimated_value_high: v.estimatedValueHigh ?? null,
+            // Exact-vintage vs all-vintage fallback, so the value's sub-label and
+            // the market note below stay accurate after this refetch.
+            estimated_value_scope: v.priceScope ?? null,
+            // Keep the (WS-anchored) critic score fresh on refresh too.
+            critic_score: v.criticScore,
+            critic_score_note: v.criticScoreNote,
+          }),
           // Canonical identity anchor when Wine-Searcher matched.
           ...(v.wsWineId ? { ws_wine_id: v.wsWineId, ws_wine_name: v.wsWineName ?? null } : {}),
           // valueWine() also returns Vinster's tasting note + drinking window
@@ -1541,12 +1547,20 @@ export default function CellarWineDetail() {
           ...(opts?.style ? { style: opts.style } : {}),
           // Seed an estimated purchase price from the market value when the user
           // hasn't entered one — never clobber a real price they've recorded.
-          purchase_price: wine.purchase_price ?? v.estimatedValue ?? null,
+          purchase_price: wine.purchase_price ?? (v.estimatedValue != null ? priceForSize(v.estimatedValue, wine.bottle_size_ml) : null),
           purchase_price_currency: wine.purchase_price != null ? wine.purchase_price_currency : (v.currency ?? null),
           // A seeded price is Vinster's estimate, dated the day the wine was cellared.
           ...(wine.purchase_price == null && v.estimatedValue != null ? { purchase_price_estimated: true, purchase_price_at: wine.date_received ?? wine.created_at } : {}),
         },
       });
+      if (v.wsUnavailable) {
+        showAlert({
+          title: "Wine-Searcher couldn't be checked",
+          body: keepValue
+            ? "Wine-Searcher couldn't be checked just now, so this wine's value hasn't been changed. Please try again in a little while."
+            : "Wine-Searcher couldn't be checked just now, so this value is Vinster's own estimate. Try again in a little while for the live Wine-Searcher price.",
+        });
+      }
       // Whether intel actually came back — used to decide if the "couldn't
       // generate" prompt is warranted (vs a false flash while the cache
       // refetches the freshly-saved values).
@@ -1667,7 +1681,7 @@ export default function CellarWineDetail() {
       ? `${wine.drinking_window_from}–${wine.drinking_window_to}`
       : null;
     const estimatedValue = wine.estimated_value != null
-      ? formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })
+      ? `${formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}${PER_75CL}`
       : null;
     // Resolve the stored label photo to a local uri up front so the off-screen
     // card includes it in the captured PNG.
@@ -1820,7 +1834,9 @@ export default function CellarWineDetail() {
   const pp = wine.purchase_price != null ? Number(wine.purchase_price) : null;
   const ev = wine.estimated_value != null ? Number(wine.estimated_value) : null;
   const sameCurrency = (wine.purchase_price_currency ?? cardCurrency) === (wine.estimated_value_currency ?? cardCurrency);
-  const vsMarket = pp && ev != null && sameCurrency ? { pct: Math.round(((ev - pp) / pp) * 100), diff: ev - pp } : null;
+  // The purchase price is for this bottle at its size; the value is per 75cl.
+  const evBottle = bottleValue(wine);
+  const vsMarket = pp && evBottle != null && sameCurrency ? { pct: Math.round(((evBottle - pp) / pp) * 100), diff: evBottle - pp } : null;
   const verdict = vintageRows ? vintageVerdict(vintageRows, wine.vintage, fmtMoney) : null;
   const cellarEntries = buildCellarEntries();
   // An archived row's quantity is bottles drunk, not
@@ -1985,7 +2001,7 @@ export default function CellarWineDetail() {
           )}
           {ev != null ? (
             <TouchableOpacity style={styles.wcFact} onPress={openCardValueInfo} activeOpacity={0.7}>
-              <Text style={styles.wcFactLabel}>Value</Text><Text style={[styles.wcFactValue, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}</Text>
+              <Text style={styles.wcFactLabel}>Value</Text><Text style={[styles.wcFactValue, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={styles.wcFactSub}>{PER_75CL}</Text></Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.wcFact}><Text style={styles.wcFactLabel}>Value</Text>
@@ -2165,7 +2181,7 @@ export default function CellarWineDetail() {
                   <Text style={[styles.wcValue, styles.statValueMuted]}>Estimating…</Text>
                 ) : ev != null ? (
                   <>
-                    <Text style={[styles.wcValue, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={styles.estimateUpdateLink}> (update)</Text></Text>
+                    <Text style={[styles.wcValue, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={styles.wcSmall}>{PER_75CL}</Text><Text style={styles.estimateUpdateLink}> (update)</Text></Text>
                     {wine.estimated_value_low != null && wine.estimated_value_high != null ? (
                       <Text style={styles.wcSmall}>Range {formatCurrency(Number(wine.estimated_value_low), wine.estimated_value_currency, { decimals: 0 })}–{formatCurrency(Number(wine.estimated_value_high), wine.estimated_value_currency, { decimals: 0 })}</Text>
                     ) : null}

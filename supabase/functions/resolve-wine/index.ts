@@ -2,6 +2,9 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
+// Per guest phone, per hour and per day: room for the occasional name fix on their two scans.
+const GUEST_LIMITS = { hourly: 4, daily: 4 };
+
 // Live "which real wine did they mean?" lookup — the last resort before Vinster
 // says it couldn't find a wine. Called only when Wine Intel's identity gate
 // didn't recognise a name AND Wine-Searcher had no listing (typically a misheard
@@ -38,7 +41,7 @@ const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'resolve-wine', HOURLY_LIMIT, DAILY_LIMIT);
+    const limited = await checkRateLimit(req, 'resolve-wine', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
     if (limited) return limited;
 
     const { producer, wineName, region, vintage } = await req.json().catch(() => ({}));

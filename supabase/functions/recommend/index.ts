@@ -248,11 +248,23 @@ Deno.serve(async (req) => {
       'sweet-fortified': 'sweet (dessert) or fortified',
     };
 
-    const colourLine = wineTypes?.length
-      ? `HARD RULE — COLOUR: Only recommend ${wineTypes.map((t: string) => colourLabels[t] ?? t).join(' or ')} wines. Exclude all other colours absolutely.`
-      : profileWineTypes?.length
-        ? `SOFT PREFERENCE — COLOUR: The diner generally prefers ${profileWineTypes.map((t: string) => colourLabels[t] ?? t).join(' and ')} wines. Weight these positively in your ranking but do not exclude other colours if they score significantly higher on critic score, vintage, or value.`
+    // "Natural / Low Intervention" arrives among the wine types but is a way of
+    // making wine, not a colour — it gets its own line below, never the colour rule.
+    const isColour = (t: string) => t in colourLabels;
+    const colours: string[] = (wineTypes ?? []).filter(isColour);
+    const profileColours: string[] = (profileWineTypes ?? []).filter(isColour);
+    const wantsNatural = (wineTypes ?? []).includes('natural');
+    const likesNatural = !wantsNatural && (profileWineTypes ?? []).includes('natural');
+
+    const colourLine = colours.length
+      ? `HARD RULE — COLOUR: Only recommend ${colours.map((t) => colourLabels[t]).join(' or ')} wines. Exclude all other colours absolutely.`
+      : profileColours.length
+        ? `SOFT PREFERENCE — COLOUR: The diner generally prefers ${profileColours.map((t) => colourLabels[t]).join(' and ')} wines. Weight these positively in your ranking but do not exclude other colours if they score significantly higher on critic score, vintage, or value.`
         : 'No colour restriction — recommend the best option regardless of colour.';
+
+    const naturalLine = wantsNatural || likesNatural
+      ? `${wantsNatural ? 'STRONG PREFERENCE' : 'SOFT PREFERENCE'} — NATURAL / LOW INTERVENTION: The diner ${wantsNatural ? 'has asked for' : 'generally likes'} natural or low-intervention wine. Favour wines the list marks as natural, organic, biodynamic, skin-contact or minimal-sulphur, and producers genuinely known for that way of working. Only call a wine natural, organic or biodynamic when the list says so or the producer is well known for it — never assume it from colour, region or obscurity. ${wantsNatural ? 'If no wine on the list clearly fits, pick the closest honest options and say plainly in the summary that the list doesn\'t mark any natural wines.' : 'Do not exclude other wines.'}`
+      : '';
 
     const budgetLine = budget
       ? `HARD RULE — BUDGET (MAX): The diner's maximum budget is ${sym}${budget} per bottle (currency: ${cur}). Exclude every wine priced above ${sym}${budget} on the menu. Each wine's menu price is in its own listed currency (its "currency" field); when that isn't ${cur}, convert it approximately to ${cur} before comparing. This is absolute.`
@@ -291,7 +303,7 @@ The top-level "summary" MUST open by explicitly acknowledging that the diner ask
 Today's date: ${today} — use this as the anchor when assessing every wine's drinking-window status (Too Young / Approaching / Peak / Fading / Past Peak). Do not rely on training-data assumptions about the current year.
 
 Diner preferences:
-- Colour: ${wineTypes?.length ? wineTypes.join(', ') : profileWineTypes?.length ? `${profileWineTypes.join(', ')} (soft preference — do not exclude other colours)` : 'No preference'}
+- Colour: ${colours.length ? colours.join(', ') : profileColours.length ? `${profileColours.join(', ')} (soft preference — do not exclude other colours)` : 'No preference'}
 - Style profiles: ${mergedStyleProfiles.length ? mergedStyleProfiles.join(', ') : 'No preference — prioritise quality and value'}
 - Budget: ${budgetMin ? `${sym}${budgetMin} (min) to ` : ''}up to ${sym}${budget ?? 'unlimited'} per bottle on the menu (${cur})
 - Food pairing: ${foodPairing || 'Not specified'}
@@ -302,6 +314,7 @@ Diner preferences:
 - Grapes to avoid (EXCLUDE): ${dislikedGrapes?.length ? dislikedGrapes.join(', ') : 'None'}
 
 ${colourLine}
+${naturalLine}
 ${budgetLine}
 ${budgetMinLine}
 ${dislikedRegionsLine}

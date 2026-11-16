@@ -48,8 +48,10 @@ export async function prepareImageBase64(uri: string): Promise<string> {
   return manipulated.base64;
 }
 
-export async function scanLabel(base64Image: string): Promise<WineDetails> {
-  const data = await invokeFunction('scan-label', { base64Image }) as WineDetails;
+// `purpose: 'pair'` marks a read for Pair ("I've got a wine, find me a recipe"),
+// which a guest's scan allowance doesn't count — the pairing itself does.
+export async function scanLabel(base64Image: string, purpose?: 'pair'): Promise<WineDetails> {
+  const data = await invokeFunction('scan-label', purpose ? { base64Image, purpose } : { base64Image }) as WineDetails;
   return reconcileScannedIdentity(data);
 }
 

@@ -1,6 +1,9 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
+// Per guest phone, per hour and per day: room for the market and rarity notes on their two scans.
+const GUEST_LIMITS = { hourly: 6, daily: 6 };
+
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 const HOURLY_LIMIT = 90;
@@ -133,7 +136,7 @@ function lookupWineName(producer: unknown, wineName: unknown, region: unknown): 
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'wine-market-vintage', HOURLY_LIMIT, DAILY_LIMIT);
+    const limited = await checkRateLimit(req, 'wine-market-vintage', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
     if (limited) return limited;
 
     const body = await req.json();

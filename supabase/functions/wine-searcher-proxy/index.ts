@@ -19,6 +19,10 @@
 
 import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { getUsdRate } from '../_shared/fx.ts';
+
+// Per guest phone, per hour and per day: room for two scans' price checks, including the vintage comparison.
+const GUEST_LIMITS = { hourly: 45, daily: 45 };
 
 const WINE_SEARCHER_API_KEY = Deno.env.get('WINE_SEARCHER_API_KEY')!;
 // Full request URL template, overridable via secret so the exact endpoint can
@@ -51,52 +55,10 @@ function num(xml: string, name: string): number | null {
 }
 
 // --- Currency conversion -----------------------------------------------------
-// Wine-Searcher's account returns prices in USD. We convert to the user's
-// selected currency using ECB rates (frankfurter.app, no key), cached in the
-// fx_rates table and refreshed at most once a day. pricing_cache always stores
-// the native USD value, so a single WS fetch serves every currency.
-const FX_TARGETS = ['GBP', 'EUR', 'AUD', 'CAD', 'NZD', 'JPY', 'CHF', 'HKD', 'SGD']; // USD = base
-const FX_TTL_MS = 24 * 60 * 60 * 1000;
-
-// Returns "1 USD = <rate> <target>". USD → 1. Falls back to a stale cached rate,
-// then to 1 (USD passthrough), so an FX outage never breaks the price path.
-async function getUsdRate(target: string): Promise<number> {
-  const t = (target ?? 'USD').toUpperCase();
-  if (t === 'USD') return 1;
-
-  const { data: row } = await supabase
-    .from('fx_rates')
-    .select('rate, fetched_at')
-    .eq('currency', t)
-    .single();
-  if (row && Date.now() - new Date(row.fetched_at).getTime() < FX_TTL_MS) {
-    return Number(row.rate);
-  }
-
-  try {
-    const res = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${FX_TARGETS.join(',')}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (res.ok) {
-      const body = await res.json();
-      const rates = body?.rates ?? {};
-      const now = new Date().toISOString();
-      const upserts = Object.entries(rates)
-        .filter(([, r]) => typeof r === 'number' && Number.isFinite(r))
-        .map(([currency, rate]) => ({ currency, rate, fetched_at: now }));
-      upserts.push({ currency: 'USD', rate: 1, fetched_at: now });
-      if (upserts.length) await supabase.from('fx_rates').upsert(upserts);
-      const fresh = rates[t];
-      if (typeof fresh === 'number' && Number.isFinite(fresh)) return fresh;
-    }
-  } catch (e) {
-    console.error('[wine-searcher-proxy] FX refresh failed:', e);
-  }
-
-  // Upstream FX unavailable — use the stale cached rate if we have one.
-  if (row && Number.isFinite(Number(row.rate))) return Number(row.rate);
-  return 1;
-}
+// Wine-Searcher's account returns prices in USD; they're converted to the
+// user's currency with the shared daily rates (_shared/fx.ts). pricing_cache
+// always stores the native USD value, so a single WS fetch serves every
+// currency. With no rate at all, prices pass through as USD rather than fail.
 
 // Convert a native-USD value to the target currency (2dp). Accepts numeric or
 // numeric-string (pricing_cache numerics can arrive as strings).
@@ -242,7 +204,7 @@ Deno.serve(async (req) => {
     const legacyKey = `${wineName}_${vintageParam}`;
 
     // USD→user-currency rate, applied to the (USD) prices on the way out.
-    const fxRate = await getUsdRate(cur);
+    const fxRate = (await getUsdRate(supabase, cur)) ?? 1;
 
     // 1) Cache hit within TTL → serve immediately.
     const { data: rows } = await supabase
@@ -299,7 +261,10 @@ Deno.serve(async (req) => {
     // Saved answers above are free; a real lookup counts towards the usage limit,
     // which stops one account (or guest) using up the app's 100 daily lookups.
     // Over the limit, the app sees the usual "Wine-Searcher unavailable" answer.
-    if (await checkRateLimit(req, 'wine-searcher-proxy', 40, 60)) {
+    // The vintage comparison table (exactOnly, up to 9 lookups a wine) stops
+    // earlier, so the last of the allowance is always kept for a wine's own price.
+    const [hourly, daily] = exactOnly ? [30, 45] : [40, 60];
+    if (await checkRateLimit(req, 'wine-searcher-proxy', hourly, daily, GUEST_LIMITS)) {
       return new Response(JSON.stringify({ ...UNAVAILABLE, down: true }), { headers: { 'Content-Type': 'application/json' } });
     }
 

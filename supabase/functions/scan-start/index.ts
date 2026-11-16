@@ -1,4 +1,6 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js';
+import { conversionRate } from '../_shared/fx.ts';
+import { guestAllowanceLeft, guestDeviceKey, guestLimitResponse, guestNetworkKey, recordGuestUse } from '../_shared/guest.ts';
 
 // scan-start — the wine-list scan, from photos (or a web link) to three picks.
 //
@@ -31,9 +33,11 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Guest (no account) wine-list scans: limited per device address, counted from
-// their own scan_jobs rows (the per-user rate-limit table needs an account).
-const GUEST_HOURLY_LIMIT = 10;   // allows for restaurant Wi-Fi shared by several guests
+// Guest (no account) wine-list scans per NETWORK address — an abuse backstop,
+// counted from scan_jobs rows. Generous, as restaurant Wi-Fi puts many guests
+// behind one address; each guest's own two scans a day are counted per phone
+// (_shared/guest.ts).
+const GUEST_HOURLY_LIMIT = 10;
 const GUEST_DAILY_LIMIT = 25;
 
 // Photos per scan, and the size of each (base64 characters ≈ 0.75 bytes each).
@@ -45,11 +49,6 @@ const MAX_PDF_CHARS = 14_000_000;   // ≈10 MB PDF
 // A running job not updated for this long is treated as stalled.
 const STALLED_AFTER_MS = 240_000;
 
-async function sha256Hex(text: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -58,7 +57,12 @@ interface ExtractedWine {
   name: string; producer: string; region: string;
   appellation?: string | null; grape?: string | null; colour?: string | null;
   vintage: number | null; menuPrice: number | null; currency: string;
+  format?: string | null; // the size menuPrice is for — see FORMATS
 }
+
+// Sizes the readers report a price for. Anything else they send is dropped
+// (left unknown) rather than guessed.
+const FORMATS = new Set(['glass', 'half', '500ml', 'bottle', 'litre', 'magnum', '3L', '4.5L', '6L', '9L', '12L', '15L']);
 
 // ---- List filters: colour check, preferences, the 80-wine sample -------------
 
@@ -70,15 +74,17 @@ const COLOUR_TOKENS: Record<string, string[]> = {
   red: ['red'], white: ['white'], rose: ['rose'], sparkling: ['sparkling'],
   // Dessert wines are read as "sweet" (Sauternes, Tokaji) and Port/Sherry as
   // "fortified"; both answer a "sweet or fortified" request.
-  'sweet-fortified': ['fortified', 'sweet'], natural: [],
+  'sweet-fortified': ['fortified', 'sweet'],
 };
+// The wine types that are colours. "Natural / Low Intervention" is a way of
+// making wine, not a colour: recommend weighs it, the colour filter ignores it.
+function colourTypes(types: string[] | undefined): string[] {
+  return (types ?? []).filter((t) => t in COLOUR_TOKENS);
+}
 function colourMatches(colour: string | null | undefined, wineTypes: string[]): boolean {
   if (!colour) return false;
   const c = foldAccents(colour);
   return wineTypes.some((t) => (COLOUR_TOKENS[t] ?? []).some((tok) => c.includes(tok)));
-}
-function detectableColour(t: string): boolean {
-  return (COLOUR_TOKENS[t] ?? []).length > 0;
 }
 const COLOUR_LABEL: Record<string, string> = {
   red: 'red', white: 'white', rose: 'rosé', sparkling: 'sparkling', 'sweet-fortified': 'sweet or fortified',
@@ -91,7 +97,6 @@ function describeColours(types: string[]): string {
 }
 function confidentNoColourMatch(wines: ExtractedWine[], types: string[]): boolean {
   if (!types.length || !wines.length) return false;
-  if (!types.every(detectableColour)) return false;
   const positive = wines.some((w) => w.colour && colourMatches(w.colour, types));
   if (positive) return false;
   const classified = wines.filter((w) => !!w.colour).length;
@@ -143,18 +148,30 @@ interface ScanPrefs {
   favouriteRegions?: string[]; favouriteGrapes?: string[]; dislikedRegions?: string[]; dislikedGrapes?: string[];
   profileWineTypes?: string[]; profileStyleProfiles?: string[];
 }
-function applyScanFilters(wines: ExtractedWine[], preferences: ScanPrefs | null | undefined, userCurrency = 'GBP'): ExtractedWine[] {
+// For each currency on the list, the multiplier into the user's currency
+// (null when no rate is known).
+async function ratesToUserCurrency(admin: SupabaseClient, wines: ExtractedWine[], userCurrency: string): Promise<Map<string, number | null>> {
+  const currencies = [...new Set(wines.map((w) => (w.currency || userCurrency).toUpperCase()))];
+  const rates = await Promise.all(currencies.map((c) => conversionRate(admin, c, userCurrency)));
+  return new Map(currencies.map((c, i) => [c, rates[i]]));
+}
+
+function applyScanFilters(wines: ExtractedWine[], preferences: ScanPrefs | null | undefined, userCurrency: string, rates: Map<string, number | null>): ExtractedWine[] {
   if (!preferences) return wines;
   let out = wines;
-  // The budget is in the user's currency; only hard-filter prices listed in that
-  // same currency (a €150 bottle isn't "over £100" by number alone — recommend
-  // weighs other currencies approximately).
-  const sameCur = (w: ExtractedWine) => !w.currency || w.currency.toUpperCase() === userCurrency.toUpperCase();
+  // The budget is in the user's currency, so a price on a foreign list is
+  // converted before comparing (€150 is over a £120 budget). A price with no
+  // known rate is left for recommend to judge rather than filtered on a guess.
+  const inUserCurrency = (w: ExtractedWine): number | null => {
+    if (w.menuPrice == null) return null;
+    const rate = rates.get((w.currency || userCurrency).toUpperCase());
+    return rate == null ? null : w.menuPrice * rate;
+  };
   const budget = preferences.budget;
-  if (budget) out = out.filter((w) => w.menuPrice == null || !sameCur(w) || w.menuPrice <= budget);
+  if (budget) out = out.filter((w) => { const p = inUserCurrency(w); return p == null || p <= budget; });
   const budgetMin = preferences.budgetMin;
-  if (budgetMin) out = out.filter((w) => w.menuPrice == null || !sameCur(w) || w.menuPrice >= budgetMin);
-  const types = preferences.wineTypes ?? [];
+  if (budgetMin) out = out.filter((w) => { const p = inUserCurrency(w); return p == null || p >= budgetMin; });
+  const types = colourTypes(preferences.wineTypes);
   if (types.length) {
     const byColour = out.filter((w) => !w.colour || colourMatches(w.colour, types));
     if (byColour.length) out = byColour;
@@ -226,6 +243,7 @@ function cleanWine(w: any): ExtractedWine | null {
     vintage: vintage != null && vintage >= 1900 && vintage <= 2100 ? Math.round(vintage) : null,
     menuPrice: toNum(w.menuPrice),
     currency: cur,
+    format: typeof w.format === 'string' && FORMATS.has(w.format.trim()) ? w.format.trim() : null,
   };
 }
 
@@ -255,7 +273,7 @@ function mergePages(perPhoto: ExtractedWine[][]): ExtractedWine[] {
   const seen = new Set<string>();
   const out: ExtractedWine[] = [];
   for (const w of perPhoto.flat()) {
-    const key = `${fold(w.name)}|${fold(w.producer)}|${w.vintage ?? (w.menuPrice != null ? `nv${w.menuPrice}` : 'nv')}`;
+    const key = `${fold(w.name)}|${fold(w.producer)}|${w.vintage ?? (w.menuPrice != null ? `nv${w.menuPrice}` : 'nv')}|${w.format ?? 'bottle'}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(w);
@@ -372,7 +390,7 @@ async function runScanJob(job: ScanJob): Promise<void> {
     stage = 'picking';
 
     // "No {colour} wines on this list" — deterministic, before recommend.
-    const requestedColours = scanPreferences.wineTypes ?? [];
+    const requestedColours = colourTypes(scanPreferences.wineTypes);
     if (requestedColours.length && confidentNoColourMatch(wines, requestedColours)) {
       await patch({ status: 'error', extracted_wines: wines,
         params: { ...params, failure: 'pick:no_colour' },
@@ -382,7 +400,8 @@ async function runScanJob(job: ScanJob): Promise<void> {
 
     // Preference filters (colour, budget) BEFORE the 80-wine cap, so a long
     // list isn't cut to its first 80 (often all sparkling/white) first.
-    const winesForRecommend = preFilterWines(applyScanFilters(wines, scanPreferences, currency), profile);
+    const rates = await ratesToUserCurrency(admin, wines, currency);
+    const winesForRecommend = preFilterWines(applyScanFilters(wines, scanPreferences, currency, rates), profile);
     log('filtered', { forRecommend: winesForRecommend.length });
 
     const recBody = {
@@ -444,6 +463,8 @@ async function runScanJob(job: ScanJob): Promise<void> {
     // How many photos couldn't be read, so the app can say so beside the picks.
     const photos = fromWeb ? {} : { photosSent: images.length, photosFailed: failures.length };
     await patch({ status: 'done', extracted_wines: wines, result: rec, params: { ...params, ...photos } });
+    // A guest's scan counts against their two a day only once it has succeeded.
+    if (guest && params.guestDeviceKey) await recordGuestUse(admin, params.guestDeviceKey, 'scan');
     log('done', { picks: rec.wines.length });
   } catch (err) {
     const fe = err instanceof FnError ? err : null;
@@ -547,10 +568,29 @@ Deno.serve(async (req) => {
       return json({ error: 'too_many_images', message: 'That is more of the list than Vinster can read at once — send up to 4 pages, one photo each.' }, 400);
     }
 
+    const guestKey = guest ? await guestNetworkKey(req) : null;
+
+    // A retried upload (the phone timed out but the first request got through)
+    // must not start a second, paid scan: the same clientRef returns the same
+    // job. Checked before the guest limits, so a retry is never refused.
+    const clientRef = typeof body.clientRef === 'string' ? body.clientRef.slice(0, 64) : '';
+    if (clientRef) {
+      let q = admin.from('scan_jobs').select('id, params').eq('params->>clientRef', clientRef)
+        .gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString()).limit(1);
+      q = guest ? q.is('user_id', null).eq('params->>guestKey', guestKey) : q.eq('user_id', user!.id);
+      const { data: existing } = await q;
+      if (existing?.length) return json({ jobId: existing[0].id, pollToken: existing[0].params?.pollToken ?? null });
+      params.clientRef = clientRef;
+    }
+
     let pollToken: string | null = null;
     if (guest) {
-      const ip = (req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown';
-      const guestKey = (await sha256Hex(`vinster-guest:${ip}`)).slice(0, 32);
+      // A guest's two scans a day are counted per phone (app versions that send
+      // its id); a scan only counts once it succeeds (see runScanJob).
+      const deviceKey = await guestDeviceKey(req);
+      if (deviceKey && (await guestAllowanceLeft(admin, deviceKey, 'scan')) <= 0) return guestLimitResponse('scan');
+      // Per-network backstop against abuse — generous, as restaurant Wi-Fi puts
+      // many guests behind one address.
       const since = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
       const count = async (h: number) => {
         const { count: c } = await admin.from('scan_jobs').select('id', { count: 'exact', head: true })
@@ -562,19 +602,8 @@ Deno.serve(async (req) => {
       }
       pollToken = crypto.randomUUID();
       params.guestKey = guestKey;
+      if (deviceKey) params.guestDeviceKey = deviceKey;
       params.pollToken = pollToken;
-    }
-
-    // A retried upload (the phone timed out but the first request got through)
-    // must not start a second, paid scan: the same clientRef returns the same job.
-    const clientRef = typeof body.clientRef === 'string' ? body.clientRef.slice(0, 64) : '';
-    if (clientRef) {
-      let q = admin.from('scan_jobs').select('id, params').eq('params->>clientRef', clientRef)
-        .gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString()).limit(1);
-      q = guest ? q.is('user_id', null).eq('params->>guestKey', params.guestKey) : q.eq('user_id', user!.id);
-      const { data: existing } = await q;
-      if (existing?.length) return json({ jobId: existing[0].id, pollToken: existing[0].params?.pollToken ?? null });
-      params.clientRef = clientRef;
     }
 
     const { data: job, error: insertError } = await admin

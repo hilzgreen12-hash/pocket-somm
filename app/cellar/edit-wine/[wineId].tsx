@@ -14,6 +14,7 @@ import { LabelThumb } from '../../../src/components/LabelThumb';
 import { BottleSizePicker } from '../../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
+import { priceForSize } from '../../../src/utils/bottleValue';
 
 // THE edit screen for an EXISTING cellar wine — the single surface reached from
 // both edit pathways (the wine card's identity block and the Full Cellar List
@@ -126,12 +127,14 @@ export default function EditWineScreen() {
       region.trim() !== (wine.region ?? '').trim() ||
       grape.trim() !== (wine.grape_variety ?? '').trim() ||
       vintage.trim() !== (wine.vintage ?? '').trim() ||
-      style.trim() !== (wine.style ?? '').trim() ||
-      bottleSizeMl !== (wine.bottle_size_ml ?? 750);
-    const countOrSpiritChanged =
+      style.trim() !== (wine.style ?? '').trim();
+    // Bottle size doesn't change the wine either: its value is kept per 75cl and
+    // scaled to the size wherever it's shown, so a size change needs no lookup.
+    const countSizeOrSpiritChanged =
       isSpirit !== !!wine.is_spirit ||
-      (parseInt(quantity, 10) || 0) !== (wine.quantity ?? 0);
-    const shouldRevalue = detailsChanged || !countOrSpiritChanged;
+      (parseInt(quantity, 10) || 0) !== (wine.quantity ?? 0) ||
+      bottleSizeMl !== (wine.bottle_size_ml ?? 750);
+    const shouldRevalue = detailsChanged || !countSizeOrSpiritChanged;
     setSaving(true);
     try {
       const updates: Record<string, unknown> = {
@@ -154,10 +157,14 @@ export default function EditWineScreen() {
       // Syrah). It runs whenever ANY wine detail was touched, so correcting
       // grape/colour alone refreshes the intel and a wine saved with the wrong
       // intel can be fixed by simply re-saving. The one case it's skipped is an
-      // edit that ONLY moved the bottle count or the spirit flag — neither can
-      // change the intel, and this screen is now the bottle-count editor too, so
-      // a count change shouldn't cost a Claude lookup. Wrapped in try/catch so a
-      // failed lookup still keeps the edit.
+      // edit that ONLY moved the bottle count, bottle size or spirit flag — none
+      // can change the intel, so they shouldn't cost a Claude lookup. Wrapped in
+      // try/catch so a failed lookup still keeps the edit.
+      if (!shouldRevalue && wine.purchase_price_estimated && wine.estimated_value != null) {
+        // An auto-estimated purchase price follows a size change (a magnum is
+        // two bottles' worth); a price the user typed is never touched.
+        updates.purchase_price = priceForSize(Number(wine.estimated_value), bottleSizeMl);
+      }
       if (shouldRevalue) {
         try {
           const currency = (preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP').toUpperCase();
@@ -165,16 +172,22 @@ export default function EditWineScreen() {
             { producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || 'NV', grape: grape.trim() || null, style: style.trim() || null } as any,
             currency,
           );
+          // Wine-Searcher couldn't be asked: when the wine and vintage are
+          // unchanged, keep the existing value rather than a stand-in estimate.
+          const sameBottle = !identityChanged && vintage.trim() === (wine.vintage ?? '').trim();
+          const keepValue = !!v.wsUnavailable && sameBottle && wine.estimated_value != null;
           Object.assign(updates, {
-            estimated_value: v.estimatedValue,
-            estimated_value_currency: v.currency,
-            estimated_value_at: v.estimatedValue != null ? new Date().toISOString() : null,
-            estimated_value_source: v.estimatedValue != null ? v.valueSource : null,
-            estimated_value_low: v.estimatedValueLow ?? null,
-            estimated_value_high: v.estimatedValueHigh ?? null,
-            estimated_value_scope: v.priceScope ?? null,
-            critic_score: v.criticScore,
-            critic_score_note: v.criticScoreNote,
+            ...(keepValue ? {} : {
+              estimated_value: v.estimatedValue,
+              estimated_value_currency: v.currency,
+              estimated_value_at: v.estimatedValue != null ? new Date().toISOString() : null,
+              estimated_value_source: v.estimatedValue != null ? v.valueSource : null,
+              estimated_value_low: v.estimatedValueLow ?? null,
+              estimated_value_high: v.estimatedValueHigh ?? null,
+              estimated_value_scope: v.priceScope ?? null,
+              critic_score: v.criticScore,
+              critic_score_note: v.criticScoreNote,
+            }),
             tasting_notes: v.tastingNotes,
             drinking_window_from: v.drinkingWindowFrom,
             drinking_window_to: v.drinkingWindowTo,
@@ -186,9 +199,9 @@ export default function EditWineScreen() {
             ws_wine_name: v.wsWineName ?? null,
             // If the recorded purchase price was an auto-estimate (never a figure
             // the user typed), refresh it to the new wine's value too.
-            ...(wine.purchase_price_estimated ? { purchase_price: v.estimatedValue, purchase_price_currency: v.currency } : {}),
+            ...(wine.purchase_price_estimated && !keepValue ? { purchase_price: v.estimatedValue != null ? priceForSize(v.estimatedValue, bottleSizeMl) : null, purchase_price_currency: v.currency } : {}),
           });
-          if (wine.purchase_price_estimated) void stampPurchasePriceDate(wine.id);
+          if (wine.purchase_price_estimated && !keepValue) void stampPurchasePriceDate(wine.id);
         } catch { /* keep the identity edit even if the revalue lookup fails */ }
       }
 

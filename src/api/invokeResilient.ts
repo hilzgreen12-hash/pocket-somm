@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { deviceId } from '../utils/deviceId';
 
 // Resilient wrapper around supabase.functions.invoke.
 //
@@ -65,19 +66,44 @@ function isTransient(err: unknown): boolean {
   return name === 'FunctionsFetchError' || name === 'TimeoutError' || name === 'TypeError';
 }
 
-async function friendlyMessage(name: string, err: unknown): Promise<string> {
+// The server's error code ("guest_scan_limit", "rate_limit_exceeded", …) and a
+// readable message.
+async function readError(name: string, err: unknown): Promise<{ message: string; code: string | null }> {
   const ctx = (err as { context?: Response } | null)?.context;
   if (ctx && typeof ctx.json === 'function') {
     try {
       const body = await ctx.json();
-      if (body?.message) return body.message;
-      if (body?.error) return `${name} error: ${body.error}`;
+      const code = typeof body?.error === 'string' ? body.error : null;
+      if (body?.message) return { message: body.message, code };
+      if (code) return { message: `${name} error: ${code}`, code };
     } catch {
       /* body wasn't JSON — fall through */
     }
   }
   const msg = (err as { message?: string } | null)?.message;
-  return `${name}: ${msg ?? 'request failed'}`;
+  return { message: `${name}: ${msg ?? 'request failed'}`, code: null };
+}
+
+// A guest has used today's allowance (two scans, or one pairing) — the screen
+// offers sign-in. The server's error code becomes the thrown error's name.
+const GUEST_LIMIT_ERRORS: Record<string, string> = {
+  guest_scan_limit: 'GuestScanLimitError',
+  guest_pair_limit: 'GuestPairLimitError',
+};
+export function guestLimitErrorName(code: string | null): string | null {
+  return (code && GUEST_LIMIT_ERRORS[code]) || null;
+}
+export function isGuestScanLimit(err: unknown): boolean {
+  return (err as { name?: string } | null)?.name === 'GuestScanLimitError';
+}
+export function isGuestPairLimit(err: unknown): boolean {
+  return (err as { name?: string } | null)?.name === 'GuestPairLimitError';
+}
+
+// This phone's anonymous id, so the server can count a guest's allowance per phone.
+export async function deviceHeader(): Promise<Record<string, string>> {
+  const id = await deviceId();
+  return id ? { 'x-vinster-device': id } : {};
 }
 
 function delay(ms: number): Promise<void> {
@@ -96,14 +122,17 @@ export async function invokeResilient(
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const { data, error } = await withTimeout(
-        supabase.functions.invoke(name, { body: body as Record<string, unknown> }),
+        supabase.functions.invoke(name, { body: body as Record<string, unknown>, headers: await deviceHeader() }),
         timeoutMs,
         name,
       );
       if (error) {
         // Server answered with non-2xx → real app error, don't retry.
         if (!isTransient(error)) {
-          throw new Error(await friendlyMessage(name, error));
+          const { message, code } = await readError(name, error);
+          const appErr = new Error(message);
+          appErr.name = guestLimitErrorName(code) ?? appErr.name;
+          throw appErr;
         }
         lastError = error; // transient → fall through to retry
       } else {
@@ -130,7 +159,7 @@ export async function invokeResilient(
 
   // Every attempt was a transport failure/timeout — tag it so the UI can show
   // a connection-specific message rather than the generic "couldn't read it".
-  const err = new Error(await friendlyMessage(name, lastError));
+  const err = new Error((await readError(name, lastError)).message);
   err.name = 'NetworkError';
   throw err;
 }

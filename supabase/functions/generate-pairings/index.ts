@@ -1,5 +1,10 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { guestAllowanceLeft, guestLimitResponse, guestPhone, recordGuestUse } from '../_shared/guest.ts';
+
+// Per guest phone, per hour and per day: room for their one pairing plus a retry.
+const GUEST_LIMITS = { hourly: 3, daily: 3 };
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -247,8 +252,12 @@ Deno.serve(async (req) => {
   try {
     // Highest-cost function in the project: 8192 max_tokens on Sonnet, held
     // open as an SSE stream for ~65s. Gate before doing any work.
-    const limited = await checkRateLimit(req, 'generate-pairings', PAIRINGS_HOURLY_LIMIT, PAIRINGS_DAILY_LIMIT);
+    const limited = await checkRateLimit(req, 'generate-pairings', PAIRINGS_HOURLY_LIMIT, PAIRINGS_DAILY_LIMIT, GUEST_LIMITS);
     if (limited) return limited;
+    // A guest's one pairing a day (either Pair flow); counted once it succeeds.
+    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const guest = await guestPhone(req);
+    if (guest && (await guestAllowanceLeft(admin, guest, 'pair')) <= 0) return guestLimitResponse('pair');
 
     const { wine, filters, excludeChefs, additionalRequest, stream } = await req.json();
     const excludeChefsList = Array.isArray(excludeChefs)
@@ -277,6 +286,7 @@ Deno.serve(async (req) => {
       const response = await client.messages.create(params);
       const text = response.content.find((b) => b.type === 'text')?.text ?? '';
       const pairings = extractPairings(text);
+      if (guest) await recordGuestUse(admin, guest, 'pair');
       return new Response(JSON.stringify({ pairings }), {
         headers: { 'Content-Type': 'application/json' },
       });
@@ -307,6 +317,7 @@ Deno.serve(async (req) => {
             }
           }
           const pairings = extractPairings(full);
+          if (guest) await recordGuestUse(admin, guest, 'pair');
           send(`data: ${JSON.stringify({ pairings })}\n\n`);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

@@ -1,5 +1,6 @@
 import { fetch as streamingFetch } from 'expo/fetch';
 import { supabase } from './supabase';
+import { deviceHeader, guestLimitErrorName } from './invokeResilient';
 
 // Streaming client for the generate-pairings edge function.
 //
@@ -63,6 +64,7 @@ async function streamOnce(requestBody: Record<string, unknown>): Promise<unknown
         Authorization: `Bearer ${token}`,
         apikey: SUPABASE_ANON_KEY,
         Accept: 'text/event-stream',
+        ...(await deviceHeader()),
       },
       body: JSON.stringify({ ...requestBody, stream: true }),
       signal: controller.signal,
@@ -76,6 +78,15 @@ async function streamOnce(requestBody: Record<string, unknown>): Promise<unknown
     if (idleTimer) clearTimeout(idleTimer);
     let detail = '';
     try { detail = await res.text(); } catch { /* ignore */ }
+    // A guest who has used today's pairing: carry the server's message and code.
+    let body: { error?: string; message?: string } | null = null;
+    try { body = JSON.parse(detail); } catch { /* not JSON */ }
+    const limitName = guestLimitErrorName(body?.error ?? null);
+    if (limitName) {
+      const err = new Error(body?.message ?? 'guest limit');
+      err.name = limitName;
+      throw err;
+    }
     // Non-2xx from the platform/gateway — a real error, not a retryable drop.
     throw new Error(`generate-pairings ${res.status}: ${detail.slice(0, 200)}`);
   }

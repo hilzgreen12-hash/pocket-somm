@@ -9,6 +9,7 @@ import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
+import { PER_75CL, bottleValue } from '../utils/bottleValue';
 
 function symbolFor(code: string): string {
   return CURRENCIES.find((c) => c.code === code.toUpperCase())?.symbol ?? code;
@@ -56,8 +57,10 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
     const from = seedFieldRef.current ?? fieldRef.current;
     const init: Record<string, string> = {};
     for (const w of winesRef.current) {
-      const cur = from === 'purchase_price' ? w.purchase_price : w.estimated_value;
-      if (cur != null) init[w.id] = String(cur);
+      // A value seeding a purchase price is sized to the bottle (values are per 75cl).
+      const scaled = from === 'estimated_value' && fieldRef.current === 'purchase_price';
+      const cur = scaled ? bottleValue(w) : from === 'purchase_price' ? w.purchase_price : w.estimated_value;
+      if (cur != null) init[w.id] = String(scaled ? Math.round(cur) : cur);
     }
     setValues(init);
     // Re-seed when the value type switches (e.g. "Input Current Values" from the
@@ -150,6 +153,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
                     placeholderTextColor={colors.textMuted}
                     keyboardType="decimal-pad"
                   />
+                  {field === 'estimated_value' ? <Text style={styles.sym}>{PER_75CL}</Text> : null}
                 </View>
               </View>
             ))}

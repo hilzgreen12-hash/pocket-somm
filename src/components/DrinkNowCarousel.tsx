@@ -14,6 +14,7 @@ import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import { mostRepresentedRegions, baseRegionGroup } from '../utils/wineRegionGroup';
 import { formatCurrency } from '../constants/currency';
+import { bottleValue, holdingValue } from '../utils/bottleValue';
 
 // Example cards shown when the cellar has nothing to surface yet.
 const CELLAR_EXAMPLES: PlaceholderCard[] = [
@@ -163,10 +164,10 @@ export function DrinkNowCarousel() {
   for (const w of owned) {
     if (w.estimated_value == null) continue;
     const code = (w.estimated_value_currency ?? 'GBP').toUpperCase();
-    valueByCurrency[code] = (valueByCurrency[code] ?? 0) + Number(w.estimated_value) * (w.quantity ?? 0);
+    valueByCurrency[code] = (valueByCurrency[code] ?? 0) + (holdingValue(w) ?? 0);
   }
   const valueText = Object.entries(valueByCurrency).map(([code, amt]) => formatCurrency(amt, code, { decimals: 2 })).join(' · ');
-  const valuable = [...owned].filter((w) => w.estimated_value != null).sort((a, b) => Number(b.estimated_value) - Number(a.estimated_value));
+  const valuable = [...owned].filter((w) => w.estimated_value != null).sort((a, b) => (bottleValue(b) ?? 0) - (bottleValue(a) ?? 0));
   const statsPicture = valuable.length ? valuable : owned;
   // Bottle Count picture: the best-stocked wines.
   const byBottles = [...owned].sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0));

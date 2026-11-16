@@ -11,7 +11,7 @@ export interface ExtractedWine {
   menuPrice: number | null;
   currency: string;
   // The size menuPrice is for, when the reader could tell: 'bottle' (75cl),
-  // 'half', 'magnum' or 'glass'. Lets a wine listed twice (by the glass and by
+  // 'half', '500ml', 'litre', 'magnum', '3L' … '15L' or 'glass'. Lets a wine listed twice (by the glass and by
   // the bottle) still get its bottle price.
   format?: string | null;
 }
@@ -42,6 +42,8 @@ export interface WineRecommendation {
   vintage: number | null;
   menuPrice: number | null;
   currency: string;
+  // The size menuPrice is for, from the matched list row (see ExtractedWine.format).
+  format?: string | null;
   // "Vinster's Review" — fetched on demand (chevron), so absent on fresh scans
   // until requested; still present on older cached scans.
   rationale?: string | null;
@@ -216,6 +218,10 @@ export interface WineIntelligence {
   // real listing — the card labels them "Estimated by Vinster" and the weak-
   // intel disambiguation ("which wine is this?") is offered.
   verified?: boolean;
+  // True when Wine-Searcher couldn't be asked at all (outage, or the lookup
+  // allowance used up) — distinct from "no listing". The card says so instead
+  // of asking the user to re-confirm the wine.
+  wsUnavailable?: boolean;
   // Wine-Searcher's stable wine id (+ canonical name) when it matched this wine.
   // The canonical identity anchor — persisted onto the saved record so every
   // record of the same wine shares one real, registry-backed id.

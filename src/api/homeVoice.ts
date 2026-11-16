@@ -1,5 +1,6 @@
 import { invokeResilient } from './invokeResilient';
 import type { CellarWine } from '../types/wine';
+import { bottleValue } from '../utils/bottleValue';
 
 // The guided Home Voice Command's two server calls (edge function home-voice).
 // The app gathers the answers screen by screen; these run once at the end.
@@ -40,7 +41,8 @@ export async function chooseFromCellar(input: {
       region: w.region,
       style: w.style,
       grape: w.grape_variety,
-      value: w.estimated_value,
+      // Worth of one of these bottles at its own size (estimated_value is per 75cl).
+      value: bottleValue(w),
       currency: w.estimated_value_currency,
       windowFrom: w.drinking_window_from,
       windowTo: w.drinking_window_to,

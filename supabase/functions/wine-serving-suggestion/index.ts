@@ -2,6 +2,9 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { HOUSE_RULES } from '../_shared/houseRules.ts';
 
+// Per guest phone, per hour and per day: room for the Serve tab on their two scans.
+const GUEST_LIMITS = { hourly: 4, daily: 4 };
+
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 const HOURLY_LIMIT = 90;
@@ -92,7 +95,7 @@ function isDrink(name: string, grape?: string): boolean {
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'wine-serving-suggestion', HOURLY_LIMIT, DAILY_LIMIT);
+    const limited = await checkRateLimit(req, 'wine-serving-suggestion', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
     if (limited) return limited;
 
     const body = await req.json();

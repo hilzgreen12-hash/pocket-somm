@@ -19,6 +19,7 @@ import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { WineValueEditorModal } from '../../src/components/WineValueEditorModal';
 import type { CellarWine } from '../../src/types/wine';
+import { holdingValue } from '../../src/utils/bottleValue';
 
 const CONCURRENCY = 3;
 
@@ -67,7 +68,7 @@ export default function CellarStatsScreen() {
     }
     if (w.estimated_value != null) {
       const code = (w.estimated_value_currency ?? 'GBP').toUpperCase();
-      valueByCurrency[code] = (valueByCurrency[code] ?? 0) + Number(w.estimated_value) * w.quantity;
+      valueByCurrency[code] = (valueByCurrency[code] ?? 0) + (holdingValue(w) ?? 0);
     }
   }
   const purchaseTotal = fmtMultiCurrency(purchaseByCurrency);
@@ -549,7 +550,7 @@ export default function CellarStatsScreen() {
                 wines: winesEstimatedPurchase, altAction: undefined };
             case 'estimate':
               return { field: 'estimated_value' as const, title: 'Update Estimated Values',
-                subtitle: "Enter your own estimated value per bottle for the wines Vinster couldn't price.",
+                subtitle: "Enter your own estimated value per 75cl for the wines Vinster couldn't price — larger and smaller bottles are scaled to their size.",
                 wines: winesUnvaluable,
                 altAction: { label: 'Input Purchase Values', onPress: () => setValueEditor('estimate-purchase') } };
             case 'estimate-purchase':

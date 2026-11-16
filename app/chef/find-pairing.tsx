@@ -19,6 +19,7 @@ import { useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { WINE_REGIONS } from '../../src/constants/wineRegions';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
+import { handleGuestLimit } from '../../src/services/guestLimit';
 
 export default function FindPairingScreen() {
   useKeepAwake();
@@ -163,7 +164,8 @@ export default function FindPairingScreen() {
       }
 
       router.push('/chef/pairing-results');
-    } catch {
+    } catch (err) {
+      if (handleGuestLimit(err)) return;
       showAlert({ title: 'Error', body: 'Could not find a pairing. Please try again.' });
     } finally {
       setLoading(false);

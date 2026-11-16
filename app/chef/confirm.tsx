@@ -10,6 +10,7 @@ import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { WineDetailsComplete } from '../../src/types/wine';
+import { handleGuestLimit } from '../../src/services/guestLimit';
 
 export default function ChefConfirmScreen() {
   useKeepAwake();
@@ -58,9 +59,10 @@ export default function ChefConfirmScreen() {
       setPairings(pairings);
       router.replace('/chef/results');
     } catch (err) {
+      setLoading(false);
+      if (handleGuestLimit(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
       showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });
-      setLoading(false);
     }
   }
 

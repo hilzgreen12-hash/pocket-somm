@@ -41,8 +41,16 @@ const WINE_FIELDS = `For each wine return a JSON object with these fields:
   one that is clearly a full bottle (never a glass, never a magnum). Only when
   a wine is offered in no 75cl bottle, return the price that is listed and say
   which in "format".
-- format: the size the price is for — "bottle" (75cl, the usual case), "half"
-  (37.5cl), "magnum" (1.5L) or "glass" (only sold by the glass). (string)
+- format: the size the price is for — one of "bottle" (75cl, the usual case),
+  "half" (37.5cl), "500ml", "litre", "magnum" (1.5L), "3L", "4.5L", "6L", "9L",
+  "12L", "15L" or "glass" (only sold by the glass). Use the volume printed on
+  the list when there is one; otherwise go by the bottle's name: Double Magnum
+  or Jeroboam → "3L", Rehoboam → "4.5L", Methuselah or Imperial → "6L",
+  Salmanazar → "9L", Balthazar → "12L", Nebuchadnezzar → "15L". (string)
+  A wine offered ONLY in a larger size, or listed on its OWN separate line in a
+  larger size (e.g. a "Magnums" section, or "Dom Pérignon 2009 Magnum" as its
+  own row), is its own entry with that size's price and format — keep it even
+  when the same wine also appears as a 75cl bottle.
 - currency: the 3-letter currency code of the prices ON THIS LIST (string).
   Use a printed symbol or code if there is one (£ GBP, € EUR, $ USD, CHF, …).
   If NO symbol is printed anywhere, infer it from the list itself — its

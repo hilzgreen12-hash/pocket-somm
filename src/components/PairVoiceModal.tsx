@@ -20,6 +20,7 @@ import {
 } from './chat/ChatKit';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+import { PER_75CL } from '../utils/bottleValue';
 
 // "Ask Vinster" on the Pair tab — a guided chat (design: the Voice Command Pair
 // canvas, locked 2026-11-04). Three conversations:
@@ -39,7 +40,7 @@ function cellarPrice(w: CellarWine): string | null {
   const sym = currencySymbol(w.estimated_value_currency ?? 'GBP');
   const range = w.estimated_value_low != null && w.estimated_value_high != null
     ? ` · Range ${sym}${Math.round(w.estimated_value_low)}–${sym}${Math.round(w.estimated_value_high)}` : '';
-  return `${sym}${Math.round(w.estimated_value)}${range} · ${(w.estimated_value_source ?? '').toLowerCase().includes('searcher') ? 'Wine-Searcher' : 'Vinster estimate'}`;
+  return `${sym}${Math.round(w.estimated_value)}${PER_75CL}${range} · ${(w.estimated_value_source ?? '').toLowerCase().includes('searcher') ? 'Wine-Searcher' : 'Vinster estimate'}`;
 }
 
 const norm = (s?: string | null) => (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');

@@ -17,6 +17,7 @@ import { fonts } from '../../src/constants/fonts';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { noteHappyMoment } from '../../src/services/ratingPrompt';
 import { File } from 'expo-file-system';
+import { handleGuestLimit } from '../../src/services/guestLimit';
 
 // The "reading your wine list" screen. It prepares the photos (or the chosen
 // online list), starts the scan on the server (scan-start), polls until the
@@ -171,6 +172,11 @@ export default function ExtractingScreen() {
     } catch (err) {
       if (!token.active) return;
       if (err instanceof Error && err.message === 'cancelled') return;
+      // A guest who has used their two scans: offer sign-in, back on the form.
+      if (handleGuestLimit(err)) {
+        router.back();
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       const isRateLimit = /minute|too many|rate limit/i.test(message);
       const friendly = isNetworkError(err)

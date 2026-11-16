@@ -19,6 +19,7 @@ import { fonts } from '../../src/constants/fonts';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import type { Pairing } from '../../src/types/wine';
+import { handleGuestLimit } from '../../src/services/guestLimit';
 
 function PairingCard({
   pairing,
@@ -385,6 +386,7 @@ export default function ChefResultsScreen() {
         return Array.from(merged);
       });
     } catch (err) {
+      if (handleGuestLimit(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
       showAlert({ title: 'Could not regenerate', body: 'Please try again in a moment.' });
     } finally {

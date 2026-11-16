@@ -9,7 +9,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AppBottomBar } from '../src/components/AppBottomBar';
 import { FoundBannerHost } from '../src/components/FoundBanner';
-import { WsIdBackfillRunner } from '../src/components/WsIdBackfillRunner';
 import { ScanCloudBackfillRunner } from '../src/components/ScanCloudBackfillRunner';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '../src/hooks/useAuth';
@@ -238,7 +237,6 @@ export default function RootLayout() {
           <FoundBannerHost />
           </View>
           <AppBottomBar />
-          <WsIdBackfillRunner />
           <ScanCloudBackfillRunner />
           </View>
           <StatusBar style="light" />

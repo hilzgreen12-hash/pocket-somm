@@ -1,11 +1,15 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { guestAllowanceLeft, guestLimitResponse, guestPhone, recordGuestUse } from '../_shared/guest.ts';
 import { HOUSE_RULES } from '../_shared/houseRules.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 const PAIRING_HOURLY_LIMIT = 60;
 const PAIRING_DAILY_LIMIT = 250;
+// Per guest phone, per hour and per day: room for their one pairing plus a retry.
+const GUEST_LIMITS = { hourly: 3, daily: 3 };
 
 function symbolFor(code?: string | null): string {
   const map: Record<string, string> = {
@@ -175,8 +179,12 @@ Return raw JSON only. No markdown. No explanation.`;
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'food-wine-pairing', PAIRING_HOURLY_LIMIT, PAIRING_DAILY_LIMIT);
+    const limited = await checkRateLimit(req, 'food-wine-pairing', PAIRING_HOURLY_LIMIT, PAIRING_DAILY_LIMIT, GUEST_LIMITS);
     if (limited) return limited;
+    // A guest's one pairing a day (either Pair flow); counted once it succeeds.
+    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    const guest = await guestPhone(req);
+    if (guest && (await guestAllowanceLeft(admin, guest, 'pair')) <= 0) return guestLimitResponse('pair');
 
     const { dish, mode, cellarWines, userPreferences, stylePreference, budget } = await req.json();
 
@@ -209,6 +217,7 @@ Deno.serve(async (req) => {
     if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
 
     const parsed = JSON.parse(match[0]);
+    if (guest) await recordGuestUse(admin, guest, 'pair');
     return new Response(JSON.stringify({ mode, ...parsed }), {
       headers: { 'Content-Type': 'application/json' },
     });

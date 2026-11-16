@@ -18,6 +18,7 @@ import { generatePairings, prepareImageBase64, scanLabel } from '../../src/api/l
 import type { CellarWine } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
+import { handleGuestLimit } from '../../src/services/guestLimit';
 
 const DIETARY_OPTIONS = ['None', 'Vegetarian', 'Vegan', 'Pescatarian', 'Other'];
 const ALLERGY_OPTIONS = ['None', 'Nut Free', 'Dairy Free', 'Gluten Free', 'Other'];
@@ -175,6 +176,7 @@ export default function ReviewRequirementsScreen() {
       // we no longer persist eagerly here.
       router.replace(`/chef/results${resultsQuery}`);
     } catch (err) {
+      if (handleGuestLimit(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
       showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });
     } finally {
@@ -202,7 +204,7 @@ export default function ReviewRequirementsScreen() {
     try {
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
-      const details = await scanLabel(base64);
+      const details = await scanLabel(base64, 'pair');
       setWineDetails(details);
       router.push('/chef/confirm');
     } catch (err) {
@@ -243,6 +245,7 @@ export default function ReviewRequirementsScreen() {
       setFilters(filters as unknown as Record<string, unknown>);
       router.replace('/chef/results');
     } catch (err) {
+      if (handleGuestLimit(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
       showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });
     } finally {

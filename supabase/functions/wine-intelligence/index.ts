@@ -3,6 +3,9 @@ import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine }
 import { intelCacheKey, readIntelCache, saveIntelCache } from '../_shared/intelCache.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
+// Per guest phone, per hour and per day: room for two label scans plus a few picks opened from a list scan.
+const GUEST_LIMITS = { hourly: 8, daily: 8 };
+
 // Usage limits per account (or guest device) for NEW generations; saved results
 // don't count. Covers scans, searches, compares and reopens.
 const HOURLY_LIMIT = 40;
@@ -113,7 +116,7 @@ Return only the raw JSON — no markdown, no explanation.`;
     }
 
     // New generation from here on — this is what the usage limit counts.
-    const limited = await checkRateLimit(req, 'wine-intelligence', HOURLY_LIMIT, DAILY_LIMIT);
+    const limited = await checkRateLimit(req, 'wine-intelligence', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
     if (limited) return limited;
 
     const recorded = catalogKey && vKey ? await readVintageFacts(catalogKey, vKey) : null;

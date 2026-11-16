@@ -88,12 +88,18 @@ export async function fetchPricing(
   }
 }
 
+// True when Wine-Searcher couldn't be asked at all (outage, or the lookup
+// allowance used up) rather than answering "no listing".
+export function isDown(p: PricingData): boolean {
+  return !!(p as PricingData & { down?: boolean }).down;
+}
+
 // Plain name first; on a clean miss, the appellation fallback (see
 // wineQueryAltName). Returns the pricing and the name that matched.
 export async function fetchPricingWithAlt(queryName: string, altName: string | null, vintage: number | null, currency: string): Promise<{ pricing: PricingData; name: string }> {
   const first = await fetchPricing(queryName, vintage, currency);
   const matched = first.source === 'wine-searcher' && first.matched !== false;
-  if (matched || !altName || (first as PricingData & { down?: boolean }).down) return { pricing: first, name: queryName };
+  if (matched || !altName || isDown(first)) return { pricing: first, name: queryName };
   const alt = await fetchPricing(altName, vintage, currency);
   return alt.source === 'wine-searcher' && alt.matched !== false ? { pricing: alt, name: altName } : { pricing: first, name: queryName };
 }
@@ -109,7 +115,7 @@ export async function verifyOnWineSearcher(d: WineDetailsComplete, currency: str
   const vintage = d.vintage && d.vintage !== 'NV' && Number.isFinite(Number(d.vintage)) ? Number(d.vintage) : null;
   try {
     const { pricing } = await fetchPricingWithAlt(queryName, wineQueryAltName(d.producer, d.wineName, d.region), vintage, currency);
-    if ((pricing as PricingData & { down?: boolean }).down) return true;
+    if (isDown(pricing)) return true;
     return pricing.source === 'wine-searcher' && pricing.matched !== false;
   } catch {
     return true;
@@ -154,7 +160,7 @@ export async function fetchVintageComparison(
     const batch = years.slice(i, i + BATCH);
     const results = await Promise.all(batch.map(async (y) => {
       const p = await fetchPricing(queryName, y, currency, { exactOnly: true });
-      if ((p as PricingData & { down?: boolean }).down) unavailable++;
+      if (isDown(p)) unavailable++;
       const exactHit = p.matched !== false && p.priceScope !== 'all-vintage' && (p.averageMarketPrice != null || p.criticScore != null);
       return exactHit ? { vintage: y, score: p.criticScore ?? null, price: p.averageMarketPrice ?? null } : null;
     }));
@@ -207,6 +213,8 @@ interface WineValuation {
   wsWineName?: string | null;
   // 'vintage' | 'all-vintage' when the value is a real WS price; null otherwise.
   priceScope?: 'vintage' | 'all-vintage' | null;
+  // Wine-Searcher couldn't be asked, so the value is a stand-in Vinster estimate.
+  wsUnavailable?: boolean;
 }
 
 export async function valueWine(
@@ -260,6 +268,7 @@ export async function valueWine(
     wsWineName: wsMatched ? (pricing.wsWineName ?? null) : null,
     // Only meaningful when the headline value is the real WS price.
     priceScope: useWs ? (pricing.priceScope ?? 'vintage') : null,
+    wsUnavailable: !wsMatched && isDown(pricing),
   };
 }
 
@@ -374,6 +383,10 @@ export async function generateWineIntel(
     // Verified = Wine-Searcher found a real record. When false, the score/value
     // are Vinster estimates (labelled as such) and disambiguation is offered.
     verified: wsMatched,
+    // Wine-Searcher couldn't be asked (outage, or the lookup allowance is used
+    // up) — not the same as "no listing", so the card says so and doesn't ask
+    // the user to re-confirm a wine that may well be read correctly.
+    wsUnavailable: !wsMatched && isDown(pricing),
     // Canonical identity anchor — only when Wine-Searcher actually matched.
     wsWineId: wsMatched ? (pricing.wsWineId ?? null) : null,
     wsWineName: wsMatched ? (pricing.wsWineName ?? null) : null,
