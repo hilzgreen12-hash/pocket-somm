@@ -162,7 +162,10 @@ export default function ExtractingScreen() {
   if (stage === 'error') {
     return (
       <ScrollView contentContainerStyle={styles.errorContainer}>
-        <Text style={styles.errorTitle}>Please try again!</Text>
+        <Text style={styles.errorTitle}>Please Try Again!</Text>
+        {/* "The Problem:" tells the user this is real feedback about their scan,
+            not a generic failure. */}
+        <Text style={styles.errorLabel}>The Problem:</Text>
         <Text style={styles.errorBody}>{errorDetail}</Text>
         {errorRef ? (
           <Text style={styles.errorRef} selectable>Ref {errorRef.ref} · {errorRef.reason.slice(0, 160)}</Text>
@@ -235,19 +238,28 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     backgroundColor: colors.background,
   },
+  // Header — large and white.
   errorTitle: {
-    fontSize: 20,
+    fontSize: 34,
     fontFamily: fonts.headingBold,
-    color: colors.text,
-    marginBottom: spacing.md,
+    color: '#FFFFFF',
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
-  errorBody: {
-    fontSize: 20,
-    fontFamily: fonts.bodyRegular,
-    color: colors.textMuted,
+  // "The Problem:" and the description beneath it, both gold.
+  errorLabel: {
+    fontSize: 18,
+    fontFamily: fonts.bodySemibold,
+    color: colors.gold,
     textAlign: 'center',
-    lineHeight: 28,
+    marginBottom: spacing.xs,
+  },
+  errorBody: {
+    fontSize: 18,
+    fontFamily: fonts.bodyRegular,
+    color: colors.gold,
+    textAlign: 'center',
+    lineHeight: 26,
     marginBottom: spacing.xl,
   },
   // Reference code + real reason, small and quiet beneath the message.
