@@ -19,22 +19,8 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { WineDetailsComplete } from '../../src/types/wine';
+import { classifyLabelRead, alertBadLabelPhoto, alertLabelFailure, askReadAsList } from '../../src/services/labelRead';
 
-// "This looks like a wine list" — resolves true to read it as a list, false to
-// carry on with the label.
-function askReadAsList(): Promise<boolean> {
-  return new Promise((resolve) => {
-    showAlert({
-      title: 'This looks like a wine list',
-      body: "Read it as a wine list for Vinster's top three picks?",
-      dismissable: false,
-      buttons: [
-        { text: 'Read Wine List', onPress: () => resolve(true) },
-        { text: "No, it's a label", style: 'cancel', onPress: () => resolve(false) },
-      ],
-    });
-  });
-}
 
 export default function LabelCameraScreen() {
   const { context, backTo } = useLocalSearchParams<{ context?: string; backTo?: string }>();
@@ -52,7 +38,7 @@ export default function LabelCameraScreen() {
   // Overlay caption while the still is on screen: OCR first, then (intel flow)
   // the wine-intel lookup, so the user sees why the wait continues.
   const [status, setStatus] = useState('Reading the label…');
-  const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError } = useLabelStore();
+  const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence } = useLabelStore();
   const { preferences } = usePreferences();
 
   // Drop the still-photo preview when the screen regains focus (e.g. user
@@ -61,6 +47,12 @@ export default function LabelCameraScreen() {
 
   if (!permission) return <View style={styles.container} />;
   if (!permission.granted) return <PermissionScreen onRequest={requestPermission} />;
+
+  // Outside Wine Intel (adding to the cellar, a review…), a failed read can fall
+  // back to typing the wine in; Wine Intel just retakes the photo.
+  const enterManually = context === 'intel'
+    ? undefined
+    : { text: 'Enter Manually', onPress: () => router.replace(`/label/confirm${contextQuery}`) };
 
   async function handleCapture() {
     if (capturingRef.current) return;
@@ -125,10 +117,18 @@ export default function LabelCameraScreen() {
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
       const details = await scanLabel(base64);
+      const kind = classifyLabelRead(details);
       // Photographed a wine LIST with the label camera: offer the list scan.
-      if (details.imageType === 'list' && (await askReadAsList())) {
+      if (kind === 'list' && (await askReadAsList())) {
         useScanStore.getState().setImage(uri, 'camera');
         router.replace('/scan/wine-list?shared=1' as any);
+        return;
+      }
+      // Not a label, or nothing readable: say so and let the user retake it
+      // (or, outside Wine Intel, type the wine in).
+      if (kind === 'not-wine' || kind === 'unreadable') {
+        setPreviewUri(null);
+        alertBadLabelPhoto(kind, enterManually);
         return;
       }
       setWineDetails(details);
@@ -141,8 +141,9 @@ export default function LabelCameraScreen() {
         router.replace(`/label/confirm${contextQuery}`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to scan label');
-      router.replace(`/label/confirm${contextQuery}`);
+      // Server or connection trouble — say which, and stay on the camera.
+      setPreviewUri(null);
+      alertLabelFailure(err, enterManually);
     }
     } catch (err) {
       console.error('[LabelCamera] Capture failed:', err);
@@ -190,7 +191,9 @@ export default function LabelCameraScreen() {
       setIntelligence(null);
       router.replace(`/label/results${contextQuery}&fresh=1&gen=1`);
     } catch {
-      router.replace(`/label/confirm${contextQuery}`);
+      // Couldn't check the wine — let the user confirm it (not a blank form).
+      setIntelligence(null);
+      router.replace(`/label/results${contextQuery}&fresh=1&confirm=1`);
     }
   }
 

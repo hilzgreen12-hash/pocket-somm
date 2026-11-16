@@ -49,7 +49,7 @@ import { generateServingSuggestion, generateRarity, generateVintageVerdict, gene
 import { PairingIngredientsCard } from '../../src/components/winecard/PairingIngredientsCard';
 import { GenerateRecipesCard, ServingGlance, ComplementaryPairings, CellarPickRow } from '../../src/components/winecard/ServeSections';
 import type { WineServingSuggestion } from '../../src/types/wine';
-import { peekIntelCurrency } from '../../src/utils/localCurrency';
+import { peekIntelCurrency, homeCurrency as fetchHomeCurrency } from '../../src/utils/localCurrency';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { updateLabelIntel } from '../../src/api/labels';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
@@ -62,7 +62,10 @@ import { regionWithCountry } from '../../src/utils/wineOrigin';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
-import type { WineDetailsComplete } from '../../src/types/wine';
+import type { WineDetails, WineDetailsComplete } from '../../src/types/wine';
+import { useScanStore } from '../../src/stores/scanStore';
+import { SignInPromptModal } from '../../src/components/SignInPromptModal';
+import { classifyLabelRead, alertBadLabelPhoto, alertLabelFailure, askReadAsList } from '../../src/services/labelRead';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
@@ -250,7 +253,11 @@ export default function LabelResultsScreen() {
     setGenError(false);
     setNotFound(false);
     try {
-      const generated = await generateWineIntel(details, userCurrency);
+      // Generation can start before preferences load (it runs on arrival):
+      // use this session's currency choice, else the profile's — never a guess.
+      const currency = peekIntelCurrency(preferences?.defaultCurrency)
+        ?? (await fetchHomeCurrency(preferences?.defaultCurrency));
+      const generated = await generateWineIntel(details, currency);
       // Show the wine's correct spelling when Vinster recognised a garbled name.
       const named = withCanonicalName(details, generated);
       if (named !== details) setWineDetailsConfirmed(named);
@@ -263,7 +270,7 @@ export default function LabelResultsScreen() {
       if (isWineNotFound(e)) setNotFound(true);
       else setGenError(true);
     }
-  }, [wineDetailsConfirmed, userCurrency, noRecent, setIntelligence, labelId]);
+  }, [wineDetailsConfirmed, preferences?.defaultCurrency, noRecent, setIntelligence, labelId]);
   useEffect(() => {
     if (!isIntelOnlyFlow || gen !== '1' || intelligence || awaitingConfirm || !wineDetailsConfirmed || genStartedRef.current) return;
     // Hold generation on a fresh scan that couldn't read a vintage — the prompt
@@ -280,6 +287,12 @@ export default function LabelResultsScreen() {
   const [selectedConfirm, setSelectedConfirm] = useState(0);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmGenerating, setConfirmGenerating] = useState(false);
+  // Guests can view the card but saving needs an account: the save buttons open
+  // the sign-in prompt instead of silently doing nothing.
+  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
+  // The last build from the confirm step failed: show the confirm list (its
+  // Confirm button retries) rather than the "Generating" screen forever.
+  const [confirmFailed, setConfirmFailed] = useState(false);
   const confirmTriedRef = useRef(false);
   // Once we've auto-skipped a one-option confirm we don't do it again (until the
   // confirm is re-entered fresh). Reset wherever confirmTriedRef is reset.
@@ -381,6 +394,25 @@ export default function LabelResultsScreen() {
   const [vintageInput, setVintageInput] = useState('');
   const vintagePromptedRef = useRef(false);
 
+  // A newly read photo: carry on only if it's a wine label. A wine list offers
+  // the list scan; anything else says what's wrong with the photo.
+  async function acceptLabelRead(details: WineDetails, uri: string): Promise<boolean> {
+    const kind = classifyLabelRead(details);
+    if (kind === 'list') {
+      if (await askReadAsList()) {
+        useScanStore.getState().setImage(uri, 'upload');
+        router.push('/scan/wine-list?shared=1' as any);
+        return false;
+      }
+      return true;
+    }
+    if (kind === 'not-wine' || kind === 'unreadable') {
+      alertBadLabelPhoto(kind);
+      return false;
+    }
+    return true;
+  }
+
   // "Upload Again" — re-pick a label and regenerate intel in place (the upload
   // flow's equivalent of the camera's "Scan Again"). Stays on this screen; the
   // store update re-renders the card with the new wine.
@@ -397,6 +429,7 @@ export default function LabelResultsScreen() {
       // Read the new label FIRST — only swap the on-screen photo once the read
       // succeeds, so a failed re-read never leaves the new photo over the old wine.
       const details = await scanLabel(base64);
+      if (!(await acceptLabelRead(details, uri))) return;
       setImage(uri, base64);
       setWineDetails(details);
       const confirmed: WineDetailsComplete = {
@@ -423,8 +456,7 @@ export default function LabelResultsScreen() {
       // (Label Library retired — scanned labels are no longer saved to a library;
       // the user saves the wine to Your Wine Reviews from the intel card instead.)
     } catch (e) {
-      if (isWineNotFound(e)) showAlert({ title: "Vinster couldn't find this wine", body: 'The label may have been misread. Please try another photo, or search for the wine.' });
-      else showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
+      alertLabelFailure(e);
     } finally {
       setReReading(false);
     }
@@ -527,6 +559,7 @@ export default function LabelResultsScreen() {
       return;
     }
     setConfirmGenerating(true);
+    setConfirmFailed(false);
     try {
       const generated = await generateWineIntel(identity, userCurrency);
       const named = withCanonicalName(identity, generated);
@@ -541,7 +574,10 @@ export default function LabelResultsScreen() {
       setAwaitingConfirm(false);
     } catch (e) {
       if (isWineNotFound(e)) { setAwaitingConfirm(false); setNotFound(true); }
-      else showAlert({ title: 'Could not get intel', body: 'Please try again.' });
+      else {
+        setConfirmFailed(true);
+        showAlert({ title: 'Could not get intel', body: 'Please try again.' });
+      }
     } finally {
       setConfirmGenerating(false);
     }
@@ -647,6 +683,7 @@ export default function LabelResultsScreen() {
     try {
       const base64 = await prepareImageBase64(uri);
       const details = await scanLabel(base64);
+      if (!(await acceptLabelRead(details, uri))) return;
       setImage(uri, base64);
       setWineDetails(details);
       const confirmed: WineDetailsComplete = {
@@ -676,8 +713,7 @@ export default function LabelResultsScreen() {
         setAwaitingConfirm(true);
       }
     } catch (e) {
-      if (isWineNotFound(e)) showAlert({ title: "Vinster couldn't find this wine", body: 'The label may have been misread. Please try another photo, or search for the wine.' });
-      else showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
+      alertLabelFailure(e);
     } finally {
       setReReading(false);
     }
@@ -1244,7 +1280,9 @@ export default function LabelResultsScreen() {
             <Text style={styles.linkText}>Try again</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity onPress={() => router.replace('/label/camera')}>
+          // Back to the camera in the SAME flow this screen was opened for (Wine
+          // Intel, cellar add…) — a bare /label/camera dropped into the cellar flow.
+          <TouchableOpacity onPress={() => router.replace(`/label/camera${context ? `?context=${context}` : ''}` as any)}>
             <Text style={styles.linkText}>Scan a label</Text>
           </TouchableOpacity>
         )}
@@ -1272,7 +1310,7 @@ export default function LabelResultsScreen() {
     // The read is unambiguous (no alternative bottlings) — the auto-skip effect is
     // about to build intel directly, so show the building loader instead of a
     // pointless one-row list.
-    const willAutoSkip = !intelligence && !confirmLoading && confirmExtraOptions.length === 0;
+    const willAutoSkip = !intelligence && !confirmLoading && !confirmFailed && confirmExtraOptions.length === 0;
     // Generating Wine Intel — a dedicated full-screen loader: header, a larger
     // label thumbnail, then the Vinster % counter (no rotating line / blurb).
     if (confirmGenerating || willAutoSkip) {
@@ -1494,7 +1532,7 @@ export default function LabelResultsScreen() {
   }
 
   async function handleAddToWishList() {
-    if (!session?.user.id) return;
+    if (!session?.user.id) { setSignInPromptVisible(true); return; }
     setSaving(true);
     try {
       await addToWishList.mutateAsync({ ...buildWinePayload(session.user.id), is_wishlist: true });
@@ -1779,7 +1817,7 @@ export default function LabelResultsScreen() {
   }
 
   async function handleSaveReview() {
-    if (!session?.user.id) return;
+    if (!session?.user.id) { setSignInPromptVisible(true); return; }
     // If this wine already has a review, prompt to update / add a dated
     // tasting / create new — same guard the List + manual-add flows use,
     // so scanning or uploading a label for a wine you've reviewed before
@@ -1905,7 +1943,7 @@ export default function LabelResultsScreen() {
   }
 
   async function handleAddToCellar() {
-    if (!session?.user.id) return;
+    if (!session?.user.id) { setSignInPromptVisible(true); return; }
     // A new case must be named — Vinster no longer silently saves it as "Case".
     // Skipped when filing into an already-chosen case (pendingCaseId) or an
     // existing case, both of which carry their own name.
@@ -2083,6 +2121,7 @@ export default function LabelResultsScreen() {
   // (opens the +Add review pre-filled) or later (files it as an awaiting pick).
   function handleSaveToReviews() {
     if (!wine) return;
+    if (!session?.user.id) { setSignInPromptVisible(true); return; }
     // A review already exists for this wine → go straight to its review card
     // (Add/View), skipping the "review now / later" prompt.
     const existingReview = findExistingReview(chosenWines, {
@@ -2565,6 +2604,14 @@ export default function LabelResultsScreen() {
 
   return (
     <>
+    <SignInPromptModal
+      visible={signInPromptVisible}
+      allowContinue={false}
+      onDismiss={() => setSignInPromptVisible(false)}
+      onSignIn={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
+      onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
+      onContinue={() => setSignInPromptVisible(false)}
+    />
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       {isIntelOnlyFlow ? (
         <WineCardHero

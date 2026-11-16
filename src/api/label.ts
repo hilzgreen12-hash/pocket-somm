@@ -17,10 +17,31 @@ async function invokeFunction(name: string, body: unknown): Promise<unknown> {
   return invokeResilient(name, body);
 }
 
+// The longest side the label reader sees at full detail — anything larger is
+// shrunk by the AI itself, losing small print.
+const LABEL_MAX_SIDE = 1568;
+
+// A label photo, sized for reading: the longest side brought down to
+// LABEL_MAX_SIDE, never enlarged (enlarging a small image only blurs it). The
+// old fixed 1200px width enlarged small images and left tall screenshots so tall
+// that the reader shrank them again.
 export async function prepareImageBase64(uri: string): Promise<string> {
+  let width = 0;
+  let height = 0;
+  try {
+    const probe = await ImageManipulator.manipulateAsync(uri, [], {});
+    width = probe.width;
+    height = probe.height;
+  } catch { /* unknown size — resized to the limit below */ }
+  const longSide = Math.max(width, height);
+  const resize = !longSide
+    ? [{ resize: { width: 1200 } }]
+    : longSide > LABEL_MAX_SIDE
+      ? [{ resize: width >= height ? { width: LABEL_MAX_SIDE } : { height: LABEL_MAX_SIDE } }]
+      : [];
   const manipulated = await ImageManipulator.manipulateAsync(
     uri,
-    [{ resize: { width: 1200 } }],
+    resize,
     { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true }
   );
   if (!manipulated.base64) throw new Error('Failed to encode image');

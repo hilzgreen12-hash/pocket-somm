@@ -35,6 +35,7 @@ import { generateWineIntel, verifyOnWineSearcher } from '../../src/services/pric
 import { useCellar } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { wineNameKey, normaliseVintage } from '../../src/utils/wineIdentity';
+import { classifyLabelRead, alertBadLabelPhoto, alertLabelFailure } from '../../src/services/labelRead';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
@@ -108,7 +109,7 @@ export default function ScanLandingScreen() {
   // Math.max(55, height * 0.095) with no per-tab nudges.
   const paddingTop = Math.max(55, height * 0.095);
   const username = (session?.user.user_metadata?.display_name ?? '').trim();
-  const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError, reset: resetLabelStore } = useLabelStore();
+  const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, reset: resetLabelStore } = useLabelStore();
   const { setExtractedWines, setRecommendation } = useScanStore();
   const { preferences } = usePreferences();
   // The user's cellar — search results say when they already own the wine.
@@ -383,11 +384,18 @@ export default function ScanLandingScreen() {
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
       const details = await scanLabel(base64);
+      const kind = classifyLabelRead(details);
       // A wine LIST (a shared screenshot of a menu, say), not a label: send it to
       // the list scan — Wine List Preferences, then Read Wine List.
-      if (details.imageType === 'list') {
+      if (kind === 'list') {
         setScanningLabel(false);
         openSharedWineList({ imageUri: uri });
+        return;
+      }
+      // Not a label, or nothing readable: say so (don't build a card from it).
+      if (kind === 'not-wine' || kind === 'unreadable') {
+        setScanningLabel(false);
+        alertBadLabelPhoto(kind);
         return;
       }
       setWineDetails(details);
@@ -418,9 +426,9 @@ export default function ScanLandingScreen() {
       setScanningLabel(false);
       router.push(`/label/results?context=intel&via=upload&fresh=1&gen=1&backTo=${backTo}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to scan label');
+      // Server or connection trouble — say which (never a blank form).
       setScanningLabel(false);
-      router.push(`/label/confirm?context=intel&via=upload&backTo=${backTo}`);
+      alertLabelFailure(err);
     }
   }
 

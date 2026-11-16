@@ -7,6 +7,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { normaliseVintage } from '../../src/utils/wineIdentity';
 import { generatePairings, fetchAutoLabelUri, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
@@ -271,12 +272,20 @@ export default function LabelConfirmScreen() {
   }
 
   async function handleConfirm() {
-    if (!producer.trim() || !region.trim()) {
-      showAlert({ title: 'Missing details', body: 'Producer and region are required.' });
+    // Wine Intel works the region out itself, so only the cellar / review flows
+    // (which store it) insist on one.
+    const regionNeeded = context !== 'intel';
+    if (!producer.trim() || (regionNeeded && !region.trim())) {
+      showAlert({
+        title: 'Missing details',
+        body: regionNeeded ? 'Producer and region are required.' : 'Please enter the producer.',
+      });
       return;
     }
-    if (!vintage.trim()) {
-      showAlert({ title: 'Missing vintage', body: 'Please enter a vintage year or NV.' });
+    // A 4-digit year or NV — "19" or "2O19" isn't sent on as a vintage.
+    const confirmedVintage = normaliseVintage(vintage);
+    if (!confirmedVintage) {
+      showAlert({ title: 'Enter a 4-digit year or NV', body: 'e.g. 2018, or NV for a non-vintage wine.' });
       return;
     }
 
@@ -284,7 +293,7 @@ export default function LabelConfirmScreen() {
       producer: producer.trim(),
       region: region.trim(),
       wineName: wineName.trim() || null,
-      vintage: vintage.trim(),
+      vintage: confirmedVintage,
       style: style.trim() || null,
       grape: grape.trim() || wineDetails?.grape || null,
       // Pass any bottle size the scanner read off the label straight
