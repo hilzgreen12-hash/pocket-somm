@@ -470,14 +470,72 @@ async function search(restaurant: string, city: string) {
   const cityDomains = new Set(
     cityLc ? scored.filter((r) => `${r.title} ${r.snippet} ${r.url}`.toLowerCase().includes(cityLc)).map((r) => r.domain) : [],
   );
-  const results = scored
+  const candidates = scored
     .filter((r) => r.hits === bestHits)
     .filter((r) => cityDomains.size === 0 || cityDomains.has(r.domain))
     .sort((a, b) => b.score - a.score)
-    .filter((r) => (seen.has(r.url) ? false : (seen.add(r.url), true)))
-    .slice(0, 6)
-    .map(({ score: _s, hits: _h, ...r }) => r);
-  return results;
+    .filter((r) => { const k = urlKey(r.url); return seen.has(k) ? false : (seen.add(k), true); });
+
+  // Only actual wine lists: the title or address must say so. Homepages,
+  // restaurant pages and private-dining brochures are dropped.
+  // (Separators in addresses — "soho_wine.pdf", "wine-list" — count as spaces.)
+  const lists = candidates.filter((r) => WINE_LIST_SIGNAL.test(`${r.title} ${new URL(r.url).pathname}`.replace(/[_\-./]+/g, ' ')));
+  // Nothing that looks like a list → offer the restaurant's own site (at most
+  // two pages) so Vinster can look for the list there when it reads it.
+  const chosen = lists.length ? latestEditions(lists) : candidates.slice(0, 2);
+  return chosen.slice(0, 6).map(({ score: _s, hits: _h, ...r }) => r);
+}
+
+// Words that mark a result as a wine (or drinks) list, in the languages lists
+// are usually written in.
+const WINE_LIST_SIGNAL = /\b(wine|wines|vin|vins|vino|vinos|vini|wein|weine|drinks?|cellar|cave|carta|bevande|boissons|getr[aä]nke)\b|wine-?list|winelist|carte-des-vins|carta-de?-vinos/i;
+
+// The same page under different addresses (http/https, www, trailing slash,
+// tracking parameters) counts once.
+function urlKey(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.hostname.replace(/^www\./, '')}${u.pathname.replace(/\/+$/, '')}`.toLowerCase();
+  } catch { return url.toLowerCase(); }
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// A date in a list's address or title ("wine-list-9th-October-2024.pdf",
+// "Wine-list-April-24th-2025", "/2024/10/"), as a sortable number + label.
+function editionDate(r: { url: string; title: string }): { sort: number; label: string } | null {
+  const t = decodeURIComponent(`${r.url} ${r.title}`).toLowerCase();
+  const year = t.match(/\b(20[1-3]\d)\b/g)?.map(Number).pop();
+  if (!year) return null;
+  const named = t.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/g)?.pop();
+  const mIdx = named ? MONTHS.indexOf(named.slice(0, 3)) : -1;
+  const month = mIdx >= 0 ? mIdx + 1 : Number(t.match(new RegExp(`${year}[-/_.](\\d{1,2})\\b`))?.[1] ?? 0);
+  return { sort: year * 100 + (month >= 1 && month <= 12 ? month : 0), label: month >= 1 && month <= 12 ? `${MONTH_NAMES[month - 1]} ${year}` : String(year) };
+}
+
+// A restaurant often has several dated copies of the same list online. Keep
+// only the newest of each (same site + same title), and put its date in the
+// title so the diner can see how current it is.
+function latestEditions<T extends { url: string; title: string; domain: string }>(results: T[]): T[] {
+  const groups = new Map<string, T[]>();
+  for (const r of results) {
+    // Same site + same title once the site's own name ("… - quovadissoho.co.uk")
+    // and the word "pdf" are taken out.
+    const siteWords = new Set(r.domain.toLowerCase().split('.'));
+    const titleWords = r.title.toLowerCase().replace(/[^a-z]+/g, ' ').trim().split(' ').filter((w) => w && w !== 'pdf' && !siteWords.has(w));
+    const k = `${r.domain}|${titleWords.join(' ')}`;
+    groups.set(k, [...(groups.get(k) ?? []), r]);
+  }
+  const out: T[] = [];
+  for (const g of groups.values()) {
+    const dated = g.map((r) => ({ r, d: editionDate(r) }));
+    const best = dated.filter((x) => x.d).sort((a, b) => b.d!.sort - a.d!.sort)[0] ?? dated[0];
+    const title = best.d && !best.r.title.includes(best.d.label) ? `${best.r.title.replace(/\s*[-–|]\s*[a-z0-9.-]+\.[a-z]{2,}$/i, '')} — ${best.d.label}` : best.r.title;
+    out.push({ ...best.r, title: title.charAt(0).toUpperCase() + title.slice(1) });
+  }
+  // Keep the original ranking order.
+  return results.filter((r) => out.some((o) => o.url === r.url)).map((r) => out.find((o) => o.url === r.url)!);
 }
 
 // ---- Handler ---------------------------------------------------------------------
