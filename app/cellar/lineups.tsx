@@ -1,19 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { LineupThumb } from '../../src/components/LineupThumb';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
-import * as ImagePicker from 'expo-image-picker';
-import { captureRef } from 'react-native-view-shot';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
-import { listLineupArchives, lineupSignedUrl, setLineupNote, saveLineupArchive, deleteLineupArchive, type LineupArchive } from '../../src/api/lineups';
-import { MicButton } from '../../src/components/MicButton';
-import { LineupShareCard } from '../../src/components/LineupShareCard';
-import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
-import { captureCity } from '../../src/utils/captureCity';
+import { listLineupArchives, deleteLineupArchive, lineupBottleTotal, type LineupArchive } from '../../src/api/lineups';
 import { cityKey } from '../../src/utils/city';
 import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
@@ -26,19 +17,9 @@ function monthKey(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
-// A single lineup tile — resolves a fresh signed URL for its photo on mount.
-// Total bottles in a lineup — ALL of them (matched cellar bottles + off-cellar
-// ones), summed from the confirmed wines. The stored bottle_count reflects only
-// the bottles archived to the cellar, so it undercounts; fall back to it only
-// when the lineup has no confirmed wines yet.
-function lineupBottleTotal(l: LineupArchive): number {
-  if (l.wines && l.wines.length) return l.wines.reduce((s, w) => s + (w.count ?? 1), 0);
-  return l.bottle_count ?? 0;
-}
-
+// One lineup row: thumbnail left, date · city / venue / note right.
 function LineupTile({ item, size, onPress, onLongPress }: { item: LineupArchive; size: number; onPress: () => void; onLongPress: () => void }) {
   const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-  // Full-width row (thumbnail left, details right) mirroring the Label Library.
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.7}>
       <View style={{ width: size, height: Math.round(size * 0.78) }}>
@@ -71,10 +52,7 @@ export default function LineupLibraryScreen() {
   const [monthFilter, setMonthFilter] = useState<string>('All');
   const [openDropdown, setOpenDropdown] = useState<'city' | 'month' | null>(null);
 
-  // "+ Add" a lineup straight from a photo — no cellar match, no bottle count,
-  // just the picture. Once saved it behaves exactly like an Archive-a-Night
-  // lineup (favourite, note, share).
-  const [addOpen, setAddOpen] = useState(false);
+  // Add + → photograph a lineup now, or upload one (both via Archive a Night).
   function chooseLineupSource() {
     showAlert({
       title: 'Add a Lineup',
@@ -84,27 +62,6 @@ export default function LineupLibraryScreen() {
         { text: 'Cancel', style: 'cancel' },
       ],
     });
-  }
-  const [adding, setAdding] = useState(false);
-  async function addLineupFrom(source: 'camera' | 'library') {
-    setAddOpen(false);
-    if (!userId) return;
-    if (source === 'library' && !(await ensureMediaPermission('library'))) return;
-    try {
-      const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
-      const result = source === 'camera'
-        ? await ImagePicker.launchCameraAsync(opts)
-        : await ImagePicker.launchImageLibraryAsync(opts);
-      if (result.canceled || !result.assets.length) return;
-      setAdding(true);
-      const city = await captureCity();
-      await saveLineupArchive(userId, result.assets[0].uri, null, { city });
-      qc.invalidateQueries({ queryKey: ['lineup-archives', userId] });
-    } catch (err) {
-      showAlert({ title: source === 'camera' ? 'Could not open camera' : 'Could not add the photo', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setAdding(false);
-    }
   }
 
   // Bespoke user-created filters.
@@ -185,11 +142,14 @@ export default function LineupLibraryScreen() {
     }
   }
   // Items offered in the create/edit sheet — every lineup, by date.
-  const filterItems = useMemo(() => lineups.map((l) => ({
-    id: l.id,
-    label: new Date(l.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-    sublabel: l.bottle_count ? `${l.bottle_count} bottle${l.bottle_count === 1 ? '' : 's'}` : undefined,
-  })), [lineups]);
+  const filterItems = useMemo(() => lineups.map((l) => {
+    const bottles = lineupBottleTotal(l);
+    return {
+      id: l.id,
+      label: new Date(l.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      sublabel: bottles ? `${bottles} bottle${bottles === 1 ? '' : 's'}` : undefined,
+    };
+  }), [lineups]);
 
   // Long-press a tile to delete the lineup (photo + record).
   function confirmDeleteLineup(item: LineupArchive) {
@@ -215,70 +175,6 @@ export default function LineupLibraryScreen() {
     });
   }
 
-  // Note "letter" — view / record / type a memory note for a lineup.
-  const [noteTarget, setNoteTarget] = useState<LineupArchive | null>(null);
-  const [noteDraft, setNoteDraft] = useState('');
-  const [savingNote, setSavingNote] = useState(false);
-  async function saveNote() {
-    if (!noteTarget || savingNote) return;
-    setSavingNote(true);
-    try {
-      await setLineupNote(noteTarget.id, noteDraft);
-      qc.invalidateQueries({ queryKey: ['lineup-archives', userId] });
-      setNoteTarget(null);
-    } catch (err) {
-      showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingNote(false);
-    }
-  }
-
-  // Share the lineup as a branded image (photo + date stamp + note). Resolves a
-  // fresh signed URL, mounts the off-screen card, and snapshots it once the
-  // photo has loaded (captureAndShareLineup, fired by the card's onImageReady).
-  const [shareData, setShareData] = useState<{ url: string; title?: string | null; date: string; note: string; location?: string | null } | null>(null);
-  const [sharingNote, setSharingNote] = useState(false);
-  const shareCardRef = useRef<View>(null);
-  const capturedRef = useRef(false);
-
-  async function handleShareNote() {
-    if (!noteTarget || sharingNote) return;
-    setSharingNote(true);
-    try {
-      const url = await lineupSignedUrl(noteTarget.image_path);
-      if (!url) throw new Error('Could not load the lineup photo.');
-      capturedRef.current = false;
-      setShareData({
-        url,
-        title: noteTarget.name ?? null,
-        date: new Date(noteTarget.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
-        note: noteDraft.trim() || (noteTarget.note ?? ''),
-        location: noteTarget.city ?? null,
-      });
-    } catch (err) {
-      setSharingNote(false);
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
-  async function captureAndShareLineup() {
-    if (capturedRef.current || !shareCardRef.current) return;
-    capturedRef.current = true;
-    try {
-      await new Promise((r) => setTimeout(r, 150)); // let the photo settle after load
-      if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
-        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine lineup') });
-      }
-    } catch (err) {
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSharingNote(false);
-      setShareData(null);
-      capturedRef.current = false;
-    }
-  }
-
   const cityLabel = cityFilter === 'All' ? 'All cities' : cityFilter;
   const monthLabel = monthFilter === 'All' ? 'All dates' : monthFilter;
 
@@ -288,17 +184,13 @@ export default function LineupLibraryScreen() {
     ? { title: 'Date', options: monthOptions, selected: monthFilter, onSelect: (v: string) => setMonthFilter(v) }
     : null;
 
-  // Whole-library tally shown in gold under the header, mirroring the Full
-  // Library summary — count ALL bottles across lineups (matched + off-cellar),
-  // not just the cellar bottles that were archived.
+  // Tally for the lineups currently shown (respects the filters).
   const lineupBottles = filtered.reduce((sum, l) => sum + lineupBottleTotal(l), 0);
 
-  // Lineups captured but not yet confirmed/actioned. `wines == null` means the
-  // photo was saved (Archive a Night / + Add) without its bottles being
-  // detected, matched and confirmed yet — the deferred "tend to it later"
-  // state. Counted across the WHOLE library (not the active filter) so the
-  // nudge reflects the real backlog, mirroring "wines awaiting review".
-  const awaitingLineups = lineups.filter((l) => l.wines == null);
+  // Lineups with no wines yet (saved with no bottles read) — they need
+  // "Identify wines". Counted across the WHOLE library, not the active filter,
+  // so the nudge reflects the real backlog, like "wines awaiting review".
+  const awaitingLineups = lineups.filter((l) => !l.wines?.length);
 
   return (
     <View style={styles.container}>
@@ -307,7 +199,6 @@ export default function LineupLibraryScreen() {
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Lineup Library</Text>
-        {/* Add + → photograph a lineup now, or upload one (Archive a Night). */}
         <TouchableOpacity onPress={chooseLineupSource} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.addLink}>Add +</Text>
         </TouchableOpacity>
@@ -420,60 +311,6 @@ export default function LineupLibraryScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* The "letter" — opens with the night's note. View it, or record / type
-          one if it's empty. */}
-      <Modal visible={!!noteTarget} transparent animationType="fade" onRequestClose={() => setNoteTarget(null)}>
-        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
-          <View style={styles.letterSheet}>
-            <Text style={styles.letterFlap}>✉︎</Text>
-            <Text style={styles.letterTitle}>A note from your night</Text>
-            {noteTarget ? (
-              <Text style={styles.letterDate}>
-                {new Date(noteTarget.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-              </Text>
-            ) : null}
-            <View style={styles.letterInputRow}>
-              <TextInput
-                style={styles.letterInput}
-                value={noteDraft}
-                onChangeText={setNoteDraft}
-                placeholder="Tap the mic to speak, or type your memories of the night…"
-                placeholderTextColor={colors.textMuted}
-                multiline
-                textAlignVertical="top"
-              />
-              <MicButton value={noteDraft} onChangeText={setNoteDraft} domain="note" serverCorrect />
-            </View>
-            <View style={styles.letterActions}>
-              <TouchableOpacity onPress={() => setNoteTarget(null)}>
-                <Text style={styles.letterCancel}>Close</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleShareNote} disabled={sharingNote}>
-                <Text style={[styles.letterShare, sharingNote && { color: colors.textMuted }]}>{sharingNote ? 'Preparing…' : 'Export'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.letterSaveBtn} onPress={saveNote} disabled={savingNote}>
-                <Text style={styles.letterSaveText}>{savingNote ? 'Saving…' : 'Save note'}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Off-screen branded lineup card, mounted only while a share is in flight. */}
-      {shareData ? (
-        <View style={styles.shareCardWrap} pointerEvents="none">
-          <LineupShareCard
-            ref={shareCardRef}
-            imageUrl={shareData.url}
-            title={shareData.title}
-            date={shareData.date}
-            location={shareData.location}
-            note={shareData.note}
-            onImageReady={captureAndShareLineup}
-          />
-        </View>
-      ) : null}
-
       <LibraryFilterModal
         visible={filterModalOpen}
         title={editingFilter ? 'Edit filter' : 'New filter'}
@@ -486,31 +323,6 @@ export default function LineupLibraryScreen() {
         onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
       />
 
-      {/* Add a lineup straight from a photo — scan (camera) or upload. */}
-      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Add a lineup</Text>
-            <Text style={styles.addBody}>Photograph a bottle lineup or upload one from your library. It saves to Your Lineup Library with today’s date, ready to note and share.</Text>
-            <TouchableOpacity style={styles.addBtn} onPress={() => addLineupFrom('camera')} activeOpacity={0.85}>
-              <Text style={styles.addBtnText}>Take a Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.addBtn, { marginTop: spacing.sm }]} onPress={() => addLineupFrom('library')} activeOpacity={0.85}>
-              <Text style={styles.addBtnText}>Upload a Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setAddOpen(false)} style={styles.modalCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {adding && (
-        <View style={styles.savingOverlay} pointerEvents="auto">
-          <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.savingText}>Saving your lineup…</Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -567,25 +379,4 @@ const styles = StyleSheet.create({
   modalOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  // "Add a lineup" chooser — mirrors the Cellar List add-wine sheet.
-  addBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
-  addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
-  addBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  savingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
-  savingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
-
-  // The note "letter" — a cream card with a gold flap glyph at the top.
-  letterSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg, width: '100%', alignSelf: 'center', marginHorizontal: spacing.xl },
-  letterFlap: { fontSize: 28, color: colors.gold, textAlign: 'center', marginBottom: spacing.xs },
-  letterTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center' },
-  letterDate: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: 2, marginBottom: spacing.md },
-  letterInputRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  letterInput: { flex: 1, minHeight: 100, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text },
-  letterActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.lg, marginTop: spacing.md },
-  letterCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  letterShare: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  // Off-screen position only (no opacity:0 — that degrades the Android snapshot).
-  shareCardWrap: { position: 'absolute', left: -10000, top: 0 },
-  letterSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
-  letterSaveText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
 });

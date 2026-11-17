@@ -5,6 +5,7 @@ import { supabase } from '../api/supabase';
 import { useAuth } from './useAuth';
 import type { ExtractedWine, RecommendationResponse } from '../types/wine';
 import { normaliseCity } from '../utils/city';
+import { deleteScanSession } from '../api/restaurantSessions';
 
 const STORAGE_KEY = 'vinster_scan_history';
 const MAX_LOCAL = 3;
@@ -30,7 +31,10 @@ interface ScanHistoryItem {
   sessionId?: string;
 }
 
-export interface ScanArchiveItem {
+// A scan_sessions row as the Review tab sees it. Every wine-list scan has one;
+// it shows as a restaurant visit once the user names, rates or adds to it (see
+// isRestaurantVisit). Visits added by hand are rows with no scan.
+export interface RestaurantVisit {
   id: string;
   capturedAt: string;
   extractedWines: ExtractedWine[];
@@ -115,7 +119,7 @@ export function useScanHistory() {
     queryFn: () => readLocal(session?.user.id ?? null),
   });
 
-  const { data: archive = [], isLoading: archiveLoading, error: archiveError } = useQuery<ScanArchiveItem[]>({
+  const { data: archive = [], isLoading: archiveLoading, error: archiveError, refetch: refetchArchive } = useQuery<RestaurantVisit[]>({
     queryKey: ['scan-archive', session?.user.id],
     enabled: !!session,
     // Always refetch when the archive screen opens — invalidation alone
@@ -299,20 +303,20 @@ export function useScanHistory() {
     },
   });
 
-  const removeArchiveItem = useMutation({
+  // Delete a visit (its scan_sessions row and photo). Its wines stay in Your
+  // Wine Reviews, unlinked — hence the chosen-wines refresh.
+  const deleteVisit = useMutation({
     mutationFn: async (id: string) => {
       if (!session) throw new Error('Sign in required');
-      const { error } = await supabase.from('scan_sessions').delete().eq('id', id);
-      if (error) throw error;
+      await deleteScanSession(id);
     },
-    // Optimistically drop the row from the archive list so a long-press delete
-    // removes it instantly instead of lagging on the network round-trip.
+    // Optimistically drop the row so a long-press delete is instant.
     onMutate: async (id: string) => {
       const key = ['scan-archive', session?.user.id];
       await qc.cancelQueries({ queryKey: key });
       const previous = qc.getQueryData(key);
-      qc.setQueryData(key, (old: any) =>
-        Array.isArray(old) ? old.filter((it: any) => it.id !== id) : old,
+      qc.setQueryData(key, (old: RestaurantVisit[] | undefined) =>
+        Array.isArray(old) ? old.filter((it) => it.id !== id) : old,
       );
       return { previous, key };
     },
@@ -322,8 +326,9 @@ export function useScanHistory() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       qc.invalidateQueries({ queryKey: ['scan-sessions'] });
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
     },
   });
 
-  return { history, archive, archiveLoading, archiveError, autoSave, removeArchiveItem };
+  return { history, archive, archiveLoading, archiveError, refetchArchive, autoSave, deleteVisit };
 }

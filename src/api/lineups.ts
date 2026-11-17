@@ -6,9 +6,10 @@ import { evictCachedLabel } from './labelImageCache';
 // covers the lineups/ subfolder). Records live in public.lineup_archives.
 const BUCKET = 'wine-labels';
 
-// One bottle in an archived lineup (migration 065). cellar_wine_id is set when
-// the bottle matched the user's cellar; archived = it was archived in this
-// session (i.e. it was theirs and they confirmed it).
+// One wine in a saved lineup (migration 065). producer / wine_name / vintage are
+// what Vinster read off the label (or the user corrected). cellar_wine_id links
+// it to the same wine + vintage in the cellar, when there is one; archived =
+// this row's bottles have been moved from the cellar into the cellar archive.
 export interface LineupWine {
   producer: string | null;
   wine_name: string;
@@ -16,8 +17,6 @@ export interface LineupWine {
   cellar_wine_id: string | null;
   archived: boolean;
   count: number;
-  // Ticked by the user in the lineup review to confirm the read is correct.
-  confirmed?: boolean;
 }
 
 export interface LineupArchive {
@@ -63,60 +62,70 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-// Upload the lineup photo and create the archive record in one go. Returns the
-// inserted row. The photo path is {userId}/lineups/{key}.jpg.
-//
-// Upload-FIRST with a client-minted key, then a single insert that already
-// carries the real image_path. The previous insert('pending')->upload->update
-// dance relied on an UPDATE succeeding, but lineup_archives had no UPDATE RLS
-// policy (added in migration 059), so the update silently no-op'd and every row
-// was stranded at image_path='pending' — the Library showed no photo. A single
-// insert needs only the INSERT policy, so this path no longer depends on UPDATE.
-export async function saveLineupArchive(
-  userId: string,
-  localUri: string,
-  bottleCount: number | null = null,
-  opts?: { wines?: LineupWine[] | null; city?: string | null },
-): Promise<LineupArchive> {
+// Total bottles in a lineup, summed from its wines. bottle_count is the same
+// figure stored alongside; it's only the fallback for a lineup with no wines.
+export function lineupBottleTotal(l: Pick<LineupArchive, 'wines' | 'bottle_count'>): number {
+  if (l.wines?.length) return l.wines.reduce((n, w) => n + (w.count ?? 1), 0);
+  return l.bottle_count ?? 0;
+}
+
+// Resize + upload a lineup photo to {userId}/lineups/{key}.jpg; returns the path.
+async function uploadLineupPhoto(userId: string, localUri: string): Promise<string> {
   const processed = await manipulateAsync(localUri, [{ resize: { width: 1200 } }], {
     compress: 0.7, format: SaveFormat.JPEG, base64: true,
   });
   if (!processed.base64) throw new Error('Image processing returned no data');
-
   // Client-minted, collision-resistant key (no uuid lib in the app bundle).
   const key = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const path = `${userId}/lineups/${key}.jpg`;
   const bytes = base64ToBytes(processed.base64);
-  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
+  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
     contentType: 'image/jpeg', upsert: true,
   });
-  if (upErr) throw upErr;
+  if (error) throw error;
+  return path;
+}
 
-  const { data: row, error: insErr } = await supabase
+// Best-effort removal of a lineup photo from Storage and the local cache.
+async function removeLineupPhoto(path: string | null | undefined): Promise<void> {
+  if (!path) return;
+  try { await supabase.storage.from(BUCKET).remove([path]); } catch { /* best effort */ }
+  evictCachedLabel(path);
+}
+
+// Save a new lineup: upload the photo FIRST, then a single insert carrying the
+// real image_path — the row never exists without its photo, and the write
+// needs only the INSERT policy.
+export async function saveLineupArchive(
+  userId: string,
+  localUri: string,
+  opts: { wines: LineupWine[]; city?: string | null },
+): Promise<LineupArchive> {
+  const path = await uploadLineupPhoto(userId, localUri);
+  const { data: row, error } = await supabase
     .from('lineup_archives')
-    .insert({ user_id: userId, image_path: path, bottle_count: bottleCount, wines: opts?.wines ?? null, city: opts?.city ?? null })
+    .insert({
+      user_id: userId,
+      image_path: path,
+      bottle_count: lineupBottleTotal({ wines: opts.wines, bottle_count: null }),
+      wines: opts.wines,
+      city: opts.city ?? null,
+    })
     .select()
     .single();
-  if (insErr) throw insErr;
-
+  if (error) throw error;
   return row as LineupArchive;
 }
 
-// Replace a lineup's photo — upload a new image and repoint image_path.
+// Replace a lineup's photo: upload the new one, repoint image_path, then tidy
+// away the old file.
 export async function replaceLineupImage(userId: string, id: string, localUri: string): Promise<string> {
-  const processed = await manipulateAsync(localUri, [{ resize: { width: 1200 } }], {
-    compress: 0.7, format: SaveFormat.JPEG, base64: true,
-  });
-  if (!processed.base64) throw new Error('Image processing returned no data');
-  const key = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  const path = `${userId}/lineups/${key}.jpg`;
-  const bytes = base64ToBytes(processed.base64);
-  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
-    contentType: 'image/jpeg', upsert: true,
-  });
-  if (upErr) throw upErr;
+  const { data: old } = await supabase.from('lineup_archives').select('image_path').eq('id', id).maybeSingle();
+  const path = await uploadLineupPhoto(userId, localUri);
   const { error } = await supabase.from('lineup_archives').update({ image_path: path }).eq('id', id);
   if (error) throw error;
+  const oldPath = (old as { image_path?: string | null } | null)?.image_path;
+  if (oldPath && oldPath !== path) await removeLineupPhoto(oldPath);
   return path;
 }
 
@@ -164,12 +173,12 @@ export async function setLineupRestaurant(id: string, sessionId: string | null):
   if (error) throw error;
 }
 
-// Persist the identified/confirmed wines on a lineup (the `wines` jsonb column,
-// migration 065). Used by the "Identify wines" flow on the lineup info screen.
+// Persist a lineup's wines (the `wines` jsonb column, migration 065), keeping
+// bottle_count in step.
 export async function setLineupWines(id: string, wines: LineupWine[]): Promise<void> {
   const { error } = await supabase
     .from('lineup_archives')
-    .update({ wines, bottle_count: wines.reduce((n, w) => n + (w.count ?? 1), 0) })
+    .update({ wines, bottle_count: lineupBottleTotal({ wines, bottle_count: null }) })
     .eq('id', id);
   if (error) throw error;
 }
@@ -196,11 +205,7 @@ export async function deleteLineupArchive(id: string): Promise<void> {
   if (!data || data.length === 0) {
     throw new Error('That lineup could not be deleted — please pull to refresh (you may need to sign in again).');
   }
-  const path = (row as { image_path?: string | null } | null)?.image_path;
-  if (path) {
-    try { await supabase.storage.from(BUCKET).remove([path]); } catch { /* best-effort cleanup */ }
-    evictCachedLabel(path); // drop the local cached copy too
-  }
+  await removeLineupPhoto((row as { image_path?: string | null } | null)?.image_path);
 }
 
 export async function lineupSignedUrl(path: string | null | undefined, expiresIn = 3600): Promise<string | null> {

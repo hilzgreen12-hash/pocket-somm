@@ -22,6 +22,8 @@ import { uploadLabelImage } from '../api/labelPhotos';
 import { generateWineIntel } from '../services/pricing';
 import { fetchAutoLabelUri } from '../api/label';
 import { findExistingReview } from '../utils/reviewDedup';
+import { chosenHasReview, chosenGroupId } from '../utils/reviewModel';
+import { todayYmd, ymdToIso } from '../utils/reviewDate';
 import { captureCity } from '../utils/captureCity';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -45,8 +47,8 @@ interface Props {
   // chosen_wines.label_image_path so the review card shows the label photo —
   // exactly like a cellar wine card. Null for Manual Input.
   labelImageUri?: string | null;
-  // Set when the identity is ALREADY confirmed (e.g. adding a review from Your
-  // Label Library). We then present a review CARD — wine name as an editable
+  // Set when the identity is ALREADY confirmed (a known wine: Wine Intel, a
+  // lineup, or a card's "+ Add Review"). We then present a review CARD — wine name as an editable
   // header, an editable date, and the label thumbnail — instead of the blank
   // manual-entry form. `labelImagePath` is the label's existing stored photo
   // (reused on save, no re-upload) so the review carries the same thumbnail.
@@ -98,8 +100,11 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [findingLabel, setFindingLabel] = useState(false);
-  // Drinking date defaults to today; editable in the identity sheet.
-  const [reviewDate, setReviewDate] = useState(() => new Date().toISOString().split('T')[0]);
+  // Drinking date defaults to today; editable on the card and identity sheet.
+  const [reviewDate, setReviewDate] = useState(todayYmd);
+  // Whether the user changed the date — a restaurant pick being reviewed keeps
+  // its visit date unless they did.
+  const [dateEdited, setDateEdited] = useState(false);
   const [style, setStyle] = useState('');
   // Confirmed-identity card: name/region + date·location stamp, edited via a
   // separate identity sheet (mirrors the cellar review card).
@@ -224,9 +229,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       // re-enter it when reviewing a restaurant wine after the fact.
       setListPrice(initial?.listPrice != null ? String(initial.listPrice) : '');
       setUserScore(null); setDrinkingWindow(''); setIsFavourite(false); setSaved(false); setDirty(false);
-      // Default the review date to when the label was scanned (e.g. reviewing a
-      // wine from the Label Library), falling back to today. Still editable.
-      setReviewDate((initial?.date && /^\d{4}-\d{2}-\d{2}$/.test(initial.date)) ? initial.date : new Date().toISOString().split('T')[0]);
+      // Default the review date to the one the caller passed (e.g. a lineup's
+      // date), falling back to today. Still editable.
+      setReviewDate((initial?.date && /^\d{4}-\d{2}-\d{2}$/.test(initial.date)) ? initial.date : todayYmd());
+      setDateEdited(false);
       setStyle(''); setEditImageUri(null); setIdentityEditOpen(false);
       setIdentityConfirmed(false); setJustFilled(false); setSearchPicked(false);
       setEstimatedValue(null); setEstimatedValueAt(null); setEstimating(false);
@@ -284,15 +290,9 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     }
     const existing = findExistingReview(chosenWines, { producer, wineName, vintage });
     if (existing) {
-      // A bottle pick added from the list starts as an empty row (no note,
-      // score or observations). Reviewing it just fills that row in — the FIRST
-      // review, not an edit of a prior one. Mirrors ChosenWineModal.
-      const hasContent = !!(
-        (existing.tasting_note ?? '').trim() ||
-        existing.user_score != null ||
-        (existing.other_observations ?? '').trim()
-      );
-      if (!hasContent) {
+      // A bottle pick added from the list starts as an empty row. Reviewing it
+      // just fills that row in — the FIRST review, not an edit of a prior one.
+      if (!chosenHasReview(existing)) {
         await doSave('update', existing);
         return;
       }
@@ -324,57 +324,26 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     const city = locCity.trim();
     try {
       if (mode === 'update' && existing) {
-        // Bare, unreviewed bottle pick — fill its first review in place (this
-        // stamps reviewed_at and starts the 24h window).
-        const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
+        // A bare, unreviewed pick — its first review is filled in place.
         await update.mutateAsync({
           id: existing.id,
-          input: { restaurantName, city, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, ...identity },
+          input: { restaurantName, city, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, userDrinkingWindow: dw },
         });
-        if (dw !== null) {
-          await patchChosenWine(existing.id, { user_drinking_window: dw });
-          qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
-        }
-        if (estimatedValue != null) {
-          try { await patchChosenWine(existing.id, { estimated_value: estimatedValue, estimated_value_currency: currency, estimated_value_at: estimatedValueAt }); } catch { /* non-fatal */ }
-        }
+        await saveExtras(existing, { fillingPick: true });
       } else {
-        // create OR append. "Add to this review" (append) = a NEW dated entry
-        // that joins the existing review's card via its review_group_id.
+        // A new review, or ("append") a new dated entry joining an existing
+        // review's card through its review_group_id.
         const row = await saveManual.mutateAsync({
           wineName, producer, region, vintage: vintageNum,
           restaurantName, city, listPrice: price, currency,
           tastingNote, otherObservations, userScore, isFavourite,
           reviewDate: reviewDate.trim() || null,
           userDrinkingWindow: dw,
-          // Collection tag from the "Add a Wine Review" chooser: 'restaurant'
-          // (drunk at a restaurant) or 'other' (a tasting, event, or at home).
-          source,
-          ...(mode === 'append' ? { reviewGroupId: addToGroupId ?? existing?.review_group_id ?? existing?.id ?? null } : {}),
+          // An added entry stays in the review's original collection.
+          source: mode === 'append' && existing ? existing.source : source,
+          ...(mode === 'append' ? { reviewGroupId: addToGroupId ?? (existing ? chosenGroupId(existing) : null) } : {}),
         });
-        // Persist any style the user set via the identity sheet.
-        if (style.trim() && row?.id) {
-          try { await patchChosenWine(row.id, { style: style.trim() }); } catch { /* non-fatal */ }
-        }
-        // Persist a generated Estimated Value onto the new row.
-        if (estimatedValue != null && row?.id) {
-          try { await patchChosenWine(row.id, { estimated_value: estimatedValue, estimated_value_currency: currency, estimated_value_at: estimatedValueAt }); } catch { /* non-fatal */ }
-        }
-        // Attach the label photo — a photo picked in the identity sheet wins,
-        // else the scanned one. Best-effort: a failed upload never blocks save.
-        const photoUri = editImageUri ?? labelImageUri;
-        if (photoUri && row?.id) {
-          try {
-            const path = await uploadLabelImage(session.user.id, photoUri, row.id);
-            await patchChosenWine(row.id, { label_image_path: path });
-            qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
-          } catch { /* non-fatal — review saved without a photo */ }
-        } else if (labelImagePath && row?.id) {
-          try {
-            await patchChosenWine(row.id, { label_image_path: labelImagePath });
-            qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
-          } catch { /* non-fatal — review saved without a photo */ }
-        }
+        await saveExtras(row, { fillingPick: false });
       }
       onSaved();
       setSaved(true);
@@ -383,11 +352,41 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     }
   }
 
+  // What the insert/update inputs don't carry: the style and a generated
+  // estimated value set on this form, the label photo, and — when filling in an
+  // existing pick — the drinking date. Best-effort: the review is already saved.
+  async function saveExtras(row: ChosenWine, { fillingPick }: { fillingPick: boolean }) {
+    if (!session) return;
+    const patch: Parameters<typeof patchChosenWine>[1] = {};
+    if (style.trim()) patch.style = style.trim();
+    if (estimatedValue != null) {
+      patch.estimated_value = estimatedValue;
+      patch.estimated_value_currency = currency;
+      patch.estimated_value_at = estimatedValueAt;
+    }
+    // A restaurant pick keeps its visit date unless the user changed it.
+    const reviewIso = ymdToIso(reviewDate);
+    if (fillingPick && reviewIso && (!row.scan_session_id || dateEdited)) patch.chosen_at = reviewIso;
+    // A photo taken/picked here wins; otherwise reuse the confirmed label's
+    // stored photo — never replacing one the row already has.
+    const photoUri = editImageUri ?? labelImageUri;
+    try {
+      if (photoUri) patch.label_image_path = await uploadLabelImage(session.user.id, photoUri, row.id);
+      else if (labelImagePath && !row.label_image_path) patch.label_image_path = labelImagePath;
+    } catch { /* the review stands without a photo */ }
+    if (Object.keys(patch).length === 0) return;
+    try {
+      await patchChosenWine(row.id, patch);
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+    } catch { /* non-fatal */ }
+  }
+
   // Clear the "saved" state whenever the user edits a field again, and mark the
   // review dirty so backing out prompts to save.
   function edited<T>(setter: (v: T) => void) {
     return (v: T) => { setter(v); setDirty(true); if (saved) setSaved(false); };
   }
+  const editDate = edited((v: string) => { setReviewDate(v); setDateEdited(true); });
 
   // Guard against silently losing an in-progress review (the reported bug: a
   // half-written review vanished after leaving the page). If anything's been
@@ -420,8 +419,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           </TouchableOpacity>
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
             {showCard ? (
-              // Review CARD — the wine is confirmed (from Your Label Library, or
-              // via the manual "Confirm Wine" tick). Mirrors the cellar review
+              // Review CARD — the wine is confirmed (passed in as known, or via
+              // the manual "Confirm Wine" tick). Mirrors the cellar review
               // card: thumbnail + name/region + date·location stamp, with a
               // top-right "Edit" opening a full identity/photo sheet.
               <>
@@ -465,7 +464,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                 />
 
                 <View style={styles.divider} />
-                <ReviewedLineEditable date={reviewDate} onDate={edited(setReviewDate)} city={locCity} onCity={edited(setLocCity)} venue={locName} onVenue={edited(setLocName)} currency={currency} />
+                <ReviewedLineEditable date={reviewDate} onDate={editDate} city={locCity} onCity={edited(setLocCity)} venue={locName} onVenue={edited(setLocName)} currency={currency} />
               </>
             ) : (
               <>
@@ -593,11 +592,6 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               personalNotes={otherObservations}
               onPersonalNotes={edited(setOtherObservations)}
               city={locCity}
-              onCity={edited(setLocCity)}
-              locationName={locName}
-              onLocationName={edited(setLocName)}
-              showLocation={false}
-              requireCity
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={edited(setDrinkingWindow)}
               saving={saveManual.isPending || update.isPending}
@@ -653,7 +647,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                 <TextInput style={styles.editInput} value={locCity} onChangeText={edited(setLocCity)} placeholder="City" placeholderTextColor={colors.textSubtle} />
 
                 <Text style={styles.editLabel}>Date</Text>
-                <DateInput style={styles.editInput} valueIso={reviewDate} onChangeIso={edited(setReviewDate)} currency={currency} placeholderTextColor={colors.textSubtle} />
+                <DateInput style={styles.editInput} valueIso={reviewDate} onChangeIso={editDate} currency={currency} placeholderTextColor={colors.textSubtle} />
 
                 <Text style={styles.editLabel}>Photo</Text>
                 <View style={styles.editThumbRow}>

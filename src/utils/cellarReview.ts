@@ -1,10 +1,10 @@
 import * as Crypto from 'expo-crypto';
 import type { ReviewEntry, CellarWine } from '../types/wine';
 
-// A cellar bottle's review is an append-only list of dated entries (migration
-// 080), stored on cellar_wines.review_entries. Storage order is newest-last; the
-// helpers below present newest-first for display. The flat review_* fields on
-// the row mirror the LATEST entry so existing surfaces keep working unchanged.
+// A cellar bottle's review is a list of dated entries (migration 080), stored
+// on cellar_wines.review_entries in the order they were written. The flat
+// review_* fields on the row mirror the LATEST entry for the surfaces that
+// still read them (card quick-stats, community posts).
 
 interface ReviewEntryInput {
   note: string;
@@ -32,9 +32,20 @@ export function entriesOf(wine: CellarWine | null | undefined): ReviewEntry[] {
   return wine && Array.isArray(wine.review_entries) ? wine.review_entries : [];
 }
 
-// Newest first, for display.
+// Comparable timestamp for a drinking date. Bare yyyy-mm-dd dates are read at
+// local noon so they sort alongside full ISO timestamps on the same day.
+export function drinkingDateTime(date: string | null | undefined): number {
+  if (!date) return 0;
+  const t = new Date(/^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T12:00:00` : date).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+// Newest first: by drinking date, then by when the entry was written (so two
+// tastings on the same day keep the order they were added).
 export function byRecency(entries: ReviewEntry[]): ReviewEntry[] {
-  return [...entries].sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+  return [...entries].sort((a, b) =>
+    drinkingDateTime(b.date) - drinkingDateTime(a.date)
+    || new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
 }
 
 export function latestEntry(entries: ReviewEntry[]): ReviewEntry | null {
@@ -42,8 +53,7 @@ export function latestEntry(entries: ReviewEntry[]): ReviewEntry | null {
 }
 
 // The flat review_* patch that mirrors the latest entry onto the cellar_wines
-// row so existing displays (Your Wine Reviews derivation, card quick-stats,
-// community posts, identity-mirror sync) keep reading the current review.
+// row. Pass null to clear them all (the bottle has no review left).
 export function flatMirror(latest: ReviewEntry | null): Partial<CellarWine> {
   return {
     review_note: latest?.note ?? null,
@@ -53,4 +63,21 @@ export function flatMirror(latest: ReviewEntry | null): Partial<CellarWine> {
     review_date: latest?.date ?? null,
     user_drinking_window: latest?.drinkingWindow ?? null,
   };
+}
+
+// The cellar_wines patch that removes the given entries from a bottle and
+// re-mirrors the flat fields onto whichever entry is now the latest.
+export function withoutEntries(wine: CellarWine, entryIds: Iterable<string>): Partial<CellarWine> {
+  const drop = new Set(entryIds);
+  const remaining = entriesOf(wine).filter((e) => !drop.has(e.id));
+  return { review_entries: remaining, ...flatMirror(latestEntry(remaining)) };
+}
+
+// Split an entry's "place, city" location back into its two fields. The first
+// comma separates them; with no comma the whole string is the place.
+export function splitLocation(raw: string | null | undefined): { place: string; city: string } {
+  const text = (raw ?? '').trim();
+  const idx = text.indexOf(',');
+  if (idx === -1) return { place: text, city: '' };
+  return { place: text.slice(0, idx).trim(), city: text.slice(idx + 1).trim() };
 }

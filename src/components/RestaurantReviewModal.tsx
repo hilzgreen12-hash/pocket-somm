@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard, Share, ActivityIndicator, ScrollView, Alert,
+  StyleSheet, Keyboard, Share, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +12,7 @@ import { captureRef } from 'react-native-view-shot';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
 import { listLineupArchives } from '../api/lineups';
-import { addSessionBottle, patchChosenWine } from '../api/chosenWines';
+import { addSessionBottle, patchChosenWine, updateSessionRestaurant } from '../api/chosenWines';
 import { archiveCellarWine } from '../api/cellar';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { prepareImageBase64, detectLineup } from '../api/label';
@@ -33,6 +33,8 @@ import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import { isoToYmd, ymdToIso } from '../utils/reviewDate';
 import { noteHappyMoment } from '../services/ratingPrompt';
+import { wineHeaderLine } from '../utils/wineHeader';
+import { formatVisitDate } from '../utils/restaurantReview';
 
 interface WineLine {
   producer: string | null;
@@ -42,8 +44,6 @@ interface WineLine {
   // 'other' = brought to the visit (Off-List); anything else = chosen off the
   // restaurant's list (List Bottle). Undefined from legacy callers → List.
   source?: string | null;
-  // Whether this wine already carries a review (drives Add vs View/Edit).
-  reviewed?: boolean;
 }
 
 interface Props {
@@ -62,8 +62,8 @@ interface Props {
   // date under the header becomes editable (YYYY-MM-DD) and is saved back.
   capturedAt?: string | null;
   wines?: WineLine[];
-  // Opens the per-wine review (ChosenWineModal) for the picked wine at this
-  // index. Wired by the results screen; absent when there's nothing to link.
+  // Opens the review of the wine at this index (the parent closes this modal
+  // and navigates).
   onReviewWine?: (index: number) => void;
   // Opens Wine Intel for the wine at this index (parent closes the modal and
   // navigates — same reason onReviewWine is a callback, not done inline).
@@ -71,27 +71,46 @@ interface Props {
   // Opens the full "Edit wine" sheet (identity + style + photo) for the wine at
   // this index. Parent closes this modal and opens EditChosenWineModal.
   onEditWine?: (index: number) => void;
-  // Permanently delete the wine at this index from the visit.
+  // "Delete Wine" for the wine at this index — the parent asks whether to take
+  // it off this visit or delete its review too.
   onDeleteWine?: (index: number) => void;
   onClose: () => void;
   // Reports the saved name + city back so callers (e.g. the List results
   // card) can reflect edits without refetching.
   onSaved: (details?: { name: string | null; city: string | null }) => void;
+  // The parent is still creating the scan_sessions row (sessionId ''), or that
+  // failed (sessionError) — Save then offers onRetrySession instead.
+  sessionError?: boolean;
+  onRetrySession?: () => void;
   // The restaurant "photo of the night" shown on the Your Restaurants list —
   // mirrored at the top of this card. Tap to view full-screen (onViewPhoto), or
   // add one when there's none yet (onAddPhoto).
   restaurantPhotoPath?: string | null;
   onViewPhoto?: () => void;
   // Passes the CURRENTLY-typed restaurant name + city so "Find Online" searches
-  // for that specific restaurant, not the stale saved value (which is empty on a
-  // fresh review the user just named).
-  onAddPhoto?: (name: string, city: string) => void;
+  // for that restaurant, not the stale saved value. saveDraft persists unsaved
+  // edits, for a parent that must close this modal to navigate.
+  onAddPhoto?: (name: string, city: string, saveDraft: () => Promise<void>) => void;
+}
+
+type Place = { restaurant_name: string | null; city: string | null };
+
+// Write the review to its scan_sessions row, then carry a renamed restaurant or
+// changed city (vs `before`) onto the wines linked to the visit. The Supabase
+// client resolves with { error } rather than throwing, so check it explicitly.
+async function writeVisit(sessionId: string, payload: Place, before: Place) {
+  const { error } = await supabase.from('scan_sessions').update(payload).eq('id', sessionId);
+  if (error) throw error;
+  await updateSessionRestaurant(sessionId, {
+    ...(payload.restaurant_name !== before.restaurant_name ? { restaurantName: payload.restaurant_name } : {}),
+    ...(payload.city !== before.city ? { city: payload.city } : {}),
+  });
 }
 
 export function RestaurantReviewModal({
   visible, sessionId, initialName, initialNote, initialRatings, initialFavourite,
   city, date, capturedAt, wines, onReviewWine, onViewIntel, onEditWine, onDeleteWine, onClose, onSaved,
-  restaurantPhotoPath, onViewPhoto, onAddPhoto,
+  sessionError, onRetrySession, restaurantPhotoPath, onViewPhoto, onAddPhoto,
 }: Props) {
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -121,13 +140,13 @@ export function RestaurantReviewModal({
   const [atmosphere, setAtmosphere] = useState<number | null>(initialRatings?.atmosphere ?? null);
   const [glassware, setGlassware] = useState<number | null>(initialRatings?.glassware ?? null);
   const [value, setValue] = useState<number | null>(initialRatings?.value ?? null);
-  const [isFavourite] = useState(initialFavourite ?? false);
+  // Not editable here, but written back with every save.
+  const isFavourite = initialFavourite ?? false;
   // Visit date, editable as YYYY-MM-DD. Only writable when a raw capturedAt was
   // passed in (i.e. we know which timestamp to overwrite).
   const [dateValue, setDateValue] = useState(() => isoToYmd(capturedAt));
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [] = useState(false);
   const shareCardRef = useRef<View>(null);
 
   // The scan_sessions patch this review writes. Kept in one place so the Save
@@ -169,6 +188,8 @@ export function RestaurantReviewModal({
   payloadRef.current = buildPayload();
   const currentSnap = JSON.stringify(payloadRef.current);
   const savedSnapRef = useRef(currentSnap); // initialised to the loaded values
+  // The place as last written, so only a real rename/move touches the wines.
+  const savedPlaceRef = useRef<Place>({ restaurant_name: payloadRef.current.restaurant_name, city: payloadRef.current.city });
   const dirtyRef = useRef(false);
   dirtyRef.current = currentSnap !== savedSnapRef.current;
   const sessionIdRef = useRef(sessionId);
@@ -181,25 +202,21 @@ export function RestaurantReviewModal({
     return () => {
       if (discardRef.current || !dirtyRef.current || !sessionIdRef.current) return;
       // Fire-and-forget: the component is unmounting so we can't await. The
-      // scan-archive invalidation refreshes the list and the re-opened review
-      // form (via the ?openSession deep link) with the saved note + ratings.
-      supabase
-        .from('scan_sessions')
-        .update(payloadRef.current)
-        .eq('id', sessionIdRef.current)
-        .then(({ error }) => {
-          // Only refetch on a confirmed write. Invalidating unconditionally
-          // made a FAILED save look like a successful one: the list refetched
-          // and silently rendered the pre-edit values back over the user's
-          // changes, with no error shown.
-          if (error) return;
+      // invalidations refresh the list and a re-opened form with what was saved.
+      writeVisit(sessionIdRef.current, payloadRef.current, savedPlaceRef.current)
+        // Only refetch on a confirmed write: refetching after a failure would
+        // silently render the pre-edit values back over the user's changes.
+        .then(() => {
           qc.invalidateQueries({ queryKey: ['scan-archive'] });
-        });
+          qc.invalidateQueries({ queryKey: ['chosen-wines'] });
+        })
+        .catch(() => {});
     };
   }, []);
 
-  // --- Add a Bottle: ONE flow, four ways in (Cellar / Upload / Scan / Manual),
-  // all landing on a confirm-details sheet. Whether it's a "List Bottle" (off
+  // --- Add a Bottle: one flow, several ways in (Cellar / Upload / Scan /
+  // Search), all landing on a confirm-details sheet; "Link to a Wine Review"
+  // attaches existing reviews instead. Whether it's a "List Bottle" (off
   // the restaurant's list) or an "Off-List Bottle" (brought along) is INFERRED,
   // not asked up front — a wine picked from your own cellar is one you brought;
   // scanned/manual ones default to "off the list" with a single "I brought this"
@@ -498,22 +515,34 @@ export function RestaurantReviewModal({
 
   async function persist() {
     const payload = buildPayload();
-    // The Supabase client RESOLVES with { error } rather than throwing, so an
-    // undestructured await here swallowed RLS rejections and offline failures.
-    // The form was then marked clean regardless, which also disarmed the
-    // unmount autosave retry below — the user's ratings and note were lost
-    // with a success message on screen.
-    const { error } = await supabase.from('scan_sessions').update(payload).eq('id', sessionId);
-    if (error) throw error;
+    await writeVisit(sessionId, payload, savedPlaceRef.current);
     // Mark the form clean ONLY on a confirmed write, so a failure leaves it
     // dirty and the unmount autosave still gets its attempt.
     savedSnapRef.current = JSON.stringify(payload);
+    savedPlaceRef.current = { restaurant_name: payload.restaurant_name, city: payload.city };
+    qc.invalidateQueries({ queryKey: ['chosen-wines'] });
+  }
+
+  // Unsaved edits are written before the parent closes this modal to open
+  // another screen (Find Online), so nothing typed is lost on the way.
+  async function saveDraft() {
+    if (dirtyRef.current && sessionId) await persist();
+  }
+
+  // Something worth keeping: a name, note, rating, photo or wine.
+  function hasContent(): boolean {
+    return !!(restaurantName.trim() || note.trim() || restaurantPhotoPath || (wines?.length ?? 0) > 0
+      || [overall, food, wineList, service, atmosphere, glassware, value].some((r) => r != null));
   }
 
   async function handleSave() {
     // Dismiss the keyboard explicitly — on iOS, tapping a button outside a
     // focused TextInput can cost the first tap to a keyboard dismiss.
     Keyboard.dismiss();
+    if (!hasContent()) {
+      showAlert({ title: 'Nothing to save yet', body: "Add the restaurant's name, a rating or a few words about the visit first." });
+      return;
+    }
     setSaving(true);
     try {
       await persist();
@@ -531,10 +560,7 @@ export function RestaurantReviewModal({
       // Deliberately do NOT call onSaved here — that closes the modal. Keeping
       // it open preserves what the user typed and leaves the form dirty, so
       // the unmount autosave can still retry.
-      Alert.alert(
-        "Couldn't save your review",
-        'Check your connection and try again. Your notes and ratings are still here.',
-      );
+      showAlert({ title: "Couldn't save your review", body: 'Check your connection and try again. Your notes and ratings are still here.' });
     } finally {
       setSaving(false);
     }
@@ -589,10 +615,9 @@ export function RestaurantReviewModal({
         ratingText('Value', value),
       ].filter(Boolean).join('\n');
       const noteText = note.trim() ? `\n\n"${note.trim()}"` : '';
-      const winesBlock = !wines || wines.length === 0 ? '' : '\n\nWines I had:\n' + wines.map((w) => {
-        const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
-        return `· ${line}${w.userScore != null ? ` (${w.userScore}/100)` : ''}`;
-      }).join('\n');
+      const winesBlock = !wines || wines.length === 0 ? '' : '\n\nWines I had:\n' + wines.map((w) =>
+        `· ${wineHeaderLine(w.producer, w.wineName, w.vintage)}${w.userScore != null ? ` (${w.userScore}/100)` : ''}`,
+      ).join('\n');
       const message = `${header}${displayDate ? `\n${displayDate}` : ''}` + (ratings ? `\n\n${ratings}` : '') + noteText + winesBlock + VINSTER_TEXT_SHARE_FOOTER;
       await Share.share({ message, title: restaurant });
     } catch (err) {
@@ -611,13 +636,12 @@ export function RestaurantReviewModal({
   // otherwise fall back to the pre-formatted `date` prop.
   const displayDate = (() => {
     const iso = ymdToIso(dateValue);
-    if (!iso) return date ?? null;
-    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    return iso ? formatVisitDate(iso, 'long') : (date ?? null);
   })();
 
   // Tap a wine → choose to review it (add or view/edit) or see its Wine Intel.
   function openWinePopup(w: WineLine & { _idx: number }) {
-    const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
+    const line = wineHeaderLine(w.producer, w.wineName, w.vintage);
     const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
     if (onReviewWine) buttons.push({ text: 'Add/View Review', onPress: () => onReviewWine(w._idx) });
     if (onViewIntel) buttons.push({ text: 'View Wine Intel', onPress: () => onViewIntel(w._idx) });
@@ -630,9 +654,8 @@ export function RestaurantReviewModal({
   }
 
   const renderBottle = (w: WineLine & { _idx: number }) => {
-    const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
-    // Origin ("Brought" / "List Pick") now reads as a prefix on the wine line
-    // itself — no longer a separate bubble after it.
+    const line = wineHeaderLine(w.producer, w.wineName, w.vintage);
+    // Origin reads as a prefix on the wine line ("Brought: …").
     const origin = w.source === 'other' ? 'Brought' : 'List Pick';
     return (
       <TouchableOpacity key={w._idx} style={styles.wineRow} onPress={() => openWinePopup(w)} activeOpacity={0.7}>
@@ -662,8 +685,6 @@ export function RestaurantReviewModal({
           </View>
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
-            {/* Photo of the night — same thumbnail shown on the Your Restaurants
-                list. Tap to view full-screen, or add one when there's none. */}
             {/* Photo of the night as a large header banner — the picture fills
                 the header and the restaurant name + location · date sit
                 overlaid on it (a scrim + text shadow keep them legible). Tap an
@@ -673,19 +694,19 @@ export function RestaurantReviewModal({
                 <>
                   <LabelThumb path={restaurantPhotoPath} fallbackText={restaurantName} style={styles.photoBannerImg} radius={0} frame={0} resizeMode="contain" />
                   <View style={styles.photoBannerScrim} pointerEvents="none" />
-                  <TouchableOpacity style={styles.photoChangeBtn} onPress={() => onAddPhoto?.(restaurantName.trim(), cityValue.trim())} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Change photo">
+                  <TouchableOpacity style={styles.photoChangeBtn} onPress={() => onAddPhoto?.(restaurantName.trim(), cityValue.trim(), saveDraft)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Change photo">
                     <Ionicons name="camera" size={18} color={colors.gold} />
                   </TouchableOpacity>
                 </>
               ) : (
-                <TouchableOpacity style={styles.photoBannerAdd} onPress={() => onAddPhoto?.(restaurantName.trim(), cityValue.trim())} activeOpacity={0.85} />
+                <TouchableOpacity style={styles.photoBannerAdd} onPress={() => onAddPhoto?.(restaurantName.trim(), cityValue.trim(), saveDraft)} activeOpacity={0.85} />
               )}
               {/* Overlaid identity — always editable, anchored to the bottom.
                   A "+ Add Photo" gold link sits above the name when there's no
                   photo yet. Location · date share one line beneath the name. */}
               <View style={styles.photoBannerText} pointerEvents="box-none">
                 {!restaurantPhotoPath ? (
-                  <TouchableOpacity onPress={() => onAddPhoto?.(restaurantName.trim(), cityValue.trim())} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
+                  <TouchableOpacity onPress={() => onAddPhoto?.(restaurantName.trim(), cityValue.trim(), saveDraft)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
                     <Text style={styles.addPhotoLink}>+ Add Photo</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -792,19 +813,24 @@ export function RestaurantReviewModal({
             <Text style={styles.sectionLabel}>Wines You Drank</Text>
             <View style={styles.wineBlock}>
               {indexedWines.map(renderBottle)}
-              <TouchableOpacity style={styles.addBottleBtn} onPress={() => setBottleChooserOpen(true)} activeOpacity={0.8}>
+              {/* Bottles attach to the visit's row, so wait until it exists. */}
+              <TouchableOpacity style={[styles.addBottleBtn, !sessionId && styles.btnDisabled]} onPress={() => setBottleChooserOpen(true)} disabled={!sessionId} activeOpacity={0.8}>
                 <Text style={styles.addBottleText}>+ Add a bottle</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Share lives in the top-right corner now — no bottom share row. */}
-
-            <TouchableOpacity style={[styles.saveButton, (saving || !sessionId) && styles.btnDisabled]} onPress={handleSave} disabled={saving || !sessionId}>
-              <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save to Your Restaurant Reviews'}</Text>
-            </TouchableOpacity>
+            {!sessionId && sessionError ? (
+              <TouchableOpacity style={styles.saveButton} onPress={onRetrySession}>
+                <Text style={styles.saveButtonText}>Couldn't start this visit · Tap to Retry</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={[styles.saveButton, (saving || !sessionId) && styles.btnDisabled]} onPress={handleSave} disabled={saving || !sessionId}>
+                <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save to Your Restaurant Reviews'}</Text>
+              </TouchableOpacity>
+            )}
           </KeyboardAwareScrollView>
 
-          {/* Add-a-Bottle chooser — four ways in. */}
+          {/* Add-a-Bottle chooser. */}
           {bottleChooserOpen && (
             <View style={styles.bottleOverlay}>
               <TouchableOpacity style={styles.bottleBackdrop} activeOpacity={1} onPress={() => setBottleChooserOpen(false)} />
@@ -874,7 +900,7 @@ export function RestaurantReviewModal({
                       >
                         <View style={{ flex: 1 }}>
                           <Text style={styles.cellarRowName} numberOfLines={1}>{w.wine_name}</Text>
-                          <Text style={styles.cellarRowMeta} numberOfLines={1}>{[w.producer, w.vintage, w.chosen_at ? new Date(w.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null].filter(Boolean).join(' · ')}</Text>
+                          <Text style={styles.cellarRowMeta} numberOfLines={1}>{[w.producer, w.vintage, formatVisitDate(w.chosen_at)].filter(Boolean).join(' · ')}</Text>
                         </View>
                         <Text style={[styles.reviewCheck, checked && { color: colors.gold }]}>{checked ? '☑' : '☐'}</Text>
                       </TouchableOpacity>
@@ -951,7 +977,7 @@ export function RestaurantReviewModal({
                   {multiBottles.map((b, i) => {
                     const on = multiChecked.has(i);
                     const brought = multiBrought.has(i);
-                    const line = [b.producer, b.wineName, b.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ') || 'Unreadable bottle';
+                    const line = wineHeaderLine(b.producer, b.wineName, b.vintage) || 'Unreadable bottle';
                     return (
                       <View key={i} style={styles.multiRow}>
                         <TouchableOpacity onPress={() => toggleMultiCheck(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>

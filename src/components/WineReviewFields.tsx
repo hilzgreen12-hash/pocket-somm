@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MicButton } from './MicButton';
-import { DateInput } from './DateInput';
 import { showAlert } from './AppAlert';
 import { formatCurrency } from '../constants/currency';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+
+// Personal Notes are a short private aside. A longer existing note (e.g. from
+// an import) is kept whole when edited — the cap only stops it growing.
+const PERSONAL_NOTES_MAX = 50;
 
 interface Props {
   // Your Score (0–100).
@@ -25,26 +28,9 @@ interface Props {
   onReview: (s: string) => void;
   personalNotes: string;
   onPersonalNotes: (s: string) => void;
-  // When false, the Personal Notes field is hidden — cellar reviews keep their
-  // private note as the card-only "Cellar Note" instead.
-  showPersonalNotes?: boolean;
-  // Location — an editable city (Vinster GPS-prefills it via the callers) plus a
-  // place name (restaurant / home / other). A city is required to save.
+  // The review's city, edited on the card's date · city · venue line above
+  // these fields. A review can't be saved without one.
   city: string;
-  onCity: (s: string) => void;
-  locationName: string;
-  onLocationName: (s: string) => void;
-  // When false, the location row is hidden and a city is not required to save —
-  // used where the location is fixed elsewhere (a restaurant visit) or edited
-  // via the card's Edit popup rather than typed inline.
-  showLocation?: boolean;
-  // Block saving without a city even when the city is edited elsewhere (the
-  // review screens' date · City · Venue line). Defaults to showLocation.
-  requireCity?: boolean;
-  // Optional editable review date (YYYY-MM-DD). Rendered above Location when
-  // both are provided; used where the review's date should be correctable inline.
-  date?: string;
-  onDate?: (s: string) => void;
   drinkingWindow: string;
   onDrinkingWindow: (s: string) => void;
   // Save (+ optional delete).
@@ -61,19 +47,19 @@ interface Props {
   deleteLabel?: string;
 }
 
-// The shared wine-review input body, used by every review surface (List
-// Review, Your Wine Reviews drill-through, restaurant Review Wine) so they're
-// exactly the same. Order: Your Score → Your Review → Personal Notes → Drinking
-// Window → Price Paid · Estimated Value → Save → Delete. Share lives in each modal's top-right header. The parent owns state,
-// save and the surrounding card chrome (header, share card, etc.).
+// The shared wine-review input body, used by every Your Wine Reviews input
+// (add, edit, cellar) so they're exactly the same. Order: Your Score → Your
+// Review → Personal Notes → Drinking Window → Price Paid · Estimated Value →
+// Save → Delete. The parent owns state, save and the surrounding card chrome.
 export function WineReviewFields({
   score, onScore, pricePaid, onPricePaid, currency,
   estimatedValue, estimatedValueAt, estimating, onEstimate,
-  review, onReview, personalNotes, onPersonalNotes, showPersonalNotes = true,
-  city, onCity, locationName, onLocationName, showLocation = true, requireCity, date, onDate, drinkingWindow, onDrinkingWindow,
+  review, onReview, personalNotes, onPersonalNotes,
+  city, drinkingWindow, onDrinkingWindow,
   saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
 }: Props) {
   const currencySymbol = formatCurrency(0, currency, { decimals: 0 }).replace(/[\d.,\s]/g, '') || currency;
+  const personalNotesMax = Math.max(PERSONAL_NOTES_MAX, personalNotes.length);
 
   // Drinking window as TWO year fields (From / To) — no free text like
   // "until 2050". Stored as a single "YYYY - YYYY" string via drinkingWindow, so
@@ -114,46 +100,6 @@ export function WineReviewFields({
         maxLength={3}
       />
 
-      {/* Location — a pin, the (GPS-prefilled) editable city, and a place name.
-          Sits below the score, above the review. Hidden where the location is
-          fixed by the visit or edited via the card's Edit popup. */}
-      {date != null && onDate ? (
-        <>
-          <Text style={styles.fieldLabel}>Date</Text>
-          <DateInput
-            style={[styles.locInput, styles.dateInput]}
-            valueIso={date}
-            onChangeIso={onDate}
-            currency={currency}
-            placeholderTextColor={colors.textMuted}
-          />
-        </>
-      ) : null}
-
-      {showLocation ? (
-        <>
-          <Text style={styles.fieldLabel}>Location</Text>
-          <View style={styles.locRow}>
-            <View style={styles.locFields}>
-              <TextInput
-                style={styles.locInput}
-                value={city}
-                onChangeText={onCity}
-                placeholder="City"
-                placeholderTextColor={colors.textMuted}
-              />
-              <TextInput
-                style={[styles.locInput, styles.locInputSecond]}
-                value={locationName}
-                onChangeText={onLocationName}
-                placeholder="Restaurant, home, other…"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-          </View>
-        </>
-      ) : null}
-
       {/* Your Review */}
       <View style={styles.dictateRow}>
         <Text style={styles.sectionTitle}>Your Review</Text>
@@ -169,23 +115,19 @@ export function WineReviewFields({
       />
 
       {/* Personal Notes */}
-      {showPersonalNotes ? (
-        <>
-          <View style={styles.dictateRow}>
-            <Text style={styles.sectionTitle}>Personal Notes</Text>
-            <MicButton value={personalNotes} onChangeText={onPersonalNotes} onClear={() => onPersonalNotes('')} domain="note" serverCorrect />
-          </View>
-          <TextInput
-            style={[styles.input, styles.noteInput]}
-            value={personalNotes}
-            onChangeText={(t) => onPersonalNotes(t.slice(0, 50))}
-            placeholder="A short private note — max 50 characters."
-            placeholderTextColor={colors.textMuted}
-            maxLength={50}
-            multiline numberOfLines={2} textAlignVertical="top"
-          />
-        </>
-      ) : null}
+      <View style={styles.dictateRow}>
+        <Text style={styles.sectionTitle}>Personal Notes</Text>
+        <MicButton value={personalNotes} onChangeText={onPersonalNotes} onClear={() => onPersonalNotes('')} domain="note" serverCorrect />
+      </View>
+      <TextInput
+        style={[styles.input, styles.noteInput]}
+        value={personalNotes}
+        onChangeText={(t) => onPersonalNotes(t.slice(0, personalNotesMax))}
+        placeholder={`A short private note — max ${PERSONAL_NOTES_MAX} characters.`}
+        placeholderTextColor={colors.textMuted}
+        maxLength={personalNotesMax}
+        multiline numberOfLines={2} textAlignVertical="top"
+      />
 
       {/* Drinking Window — the user's own call, as a start + end year. */}
       <Text style={styles.fieldLabel}>Drinking Window — your call (optional)</Text>
@@ -259,7 +201,7 @@ export function WineReviewFields({
       <TouchableOpacity
         style={[styles.saveButton, (saved || goldSave) && styles.saveButtonSaved]}
         onPress={() => {
-          if ((requireCity ?? showLocation) && !(city ?? '').trim()) { showAlert({ title: 'Add a location', body: 'Add at least a city before saving your review.' }); return; }
+          if (!city.trim()) { showAlert({ title: 'Add a location', body: 'Add at least a city before saving your review.' }); return; }
           onSave();
         }}
         disabled={saving}
@@ -269,9 +211,6 @@ export function WineReviewFields({
           {saving ? 'Saving…' : saved ? (savedLabel ?? 'Review Saved') : (saveLabel ?? 'Save Review')}
         </Text>
       </TouchableOpacity>
-
-      {/* Share lives in each review modal's top-right corner, like the rest of
-          the app. */}
 
       {onDelete ? (
         <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
@@ -288,13 +227,7 @@ const styles = StyleSheet.create({
   dwRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   dwInput: { flex: 1, textAlign: 'center' },
   dwDash: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.textMuted, marginBottom: spacing.md },
-  // Location row: 📍 pin + stacked city / place-name inputs.
-  locRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.md },
 
-  locFields: { flex: 1, gap: spacing.sm },
-  locInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  locInputSecond: {},
-  dateInput: { width: 160, marginBottom: spacing.md },
   scoreInput: { width: 96 },
   noteInput: { minHeight: 90 },
   pairRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xs },

@@ -12,21 +12,12 @@ import * as Location from 'expo-location';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { findExistingReview, missingReviewFields } from '../utils/reviewDedup';
+import { chosenHasReview } from '../utils/reviewModel';
+import { todayYmd } from '../utils/reviewDate';
 import { normaliseCity } from '../utils/city';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { WineRecommendation, ChosenWine } from '../types/wine';
-
-// Today's date as yyyy-mm-dd (local time). Default Date for the review's
-// drinking date — the most useful value 99% of the time since users
-// review wines right after drinking them.
-function todayIso(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
 
 // A vintage must be a real four-digit year (or an explicitly-confirmed
 // non-vintage). Extraction sometimes yields 0 or null when it can't read a
@@ -64,7 +55,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
   // Drinking date — defaults to today, editable via the Discovered At
   // (edit) link. Stored as yyyy-mm-dd; pre-filled on every open so the
   // value always matches "today" if the user didn't touch it.
-  const [reviewDate, setReviewDate] = useState(todayIso());
+  const [reviewDate, setReviewDate] = useState(todayYmd());
   // Vintage the review will actually be saved with. Seeded from the pick, but
   // if that isn't a valid year the user is asked to confirm it before saving
   // (see the vintage-confirm prompt below).
@@ -80,9 +71,11 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
       setTastingNote('');
       setOtherObservations('');
       setUserScore(null);
+      setDrinkingFrom('');
+      setDrinkingTo('');
       setIsFavourite(false);
       setSaved(false);
-      setReviewDate(todayIso());
+      setReviewDate(todayYmd());
       setVintageValue(isValidVintageYear(wine?.vintage) ? wine!.vintage : null);
       setVintagePromptOpen(false);
       setVintageDraft('');
@@ -185,15 +178,9 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
       vintage,
     });
     if (existing) {
-      // A bottle pick added from the list starts as an empty row (no note,
-      // score or observations). Reviewing it right after adding just fills that
-      // row in — it's the FIRST review, not an edit of a prior one.
-      const hasContent = !!(
-        (existing.tasting_note ?? '').trim() ||
-        existing.user_score != null ||
-        (existing.other_observations ?? '').trim()
-      );
-      if (!hasContent) {
+      // A bottle pick added from the list starts as an empty row. Reviewing it
+      // just fills that row in — it's the FIRST review, not an edit of a prior one.
+      if (!chosenHasReview(existing)) {
         await doSave('update', existing, vintage);
         return;
       }
@@ -236,11 +223,10 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         });
       } else if (mode === 'update' && existing) {
         // Only reached for a bare, unreviewed bottle pick — fill its first
-        // review in place (this stamps reviewed_at and starts its 24h window).
-        const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
+        // review in place.
         await update.mutateAsync({
           id: existing.id,
-          input: { restaurantName: restaurant, city: cityClean, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, userDrinkingWindow, ...identity },
+          input: { restaurantName: restaurant, city: cityClean, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, userDrinkingWindow },
         });
       } else {
         await save.mutateAsync({
@@ -403,7 +389,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
             {saved ? (
               <View style={styles.savedBlock}>
-                <Text style={styles.savedNote}>Review Saved — you can edit this review for 24 hours.</Text>
+                <Text style={styles.savedNote}>Review saved.</Text>
                 <View style={styles.savedRow}>
                   <TouchableOpacity onPress={() => { onClose(); router.push('/wines/chosen'); }}>
                     <Text style={styles.savedLink}>View in Your Profile</Text>

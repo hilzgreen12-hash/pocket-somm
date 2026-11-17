@@ -19,11 +19,14 @@ export function CellarWinePicker({
   // When true, list EVERY cellar wine (placed or not) so the caller can offer to
   // MOVE a placed bottle. Default false = only unplaced (drop into a rack slot).
   allowPlaced = false,
+  // Overrides the default subtitle, which is written for rack placement.
+  subtitle,
 }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (wine: CellarWine) => void;
   allowPlaced?: boolean;
+  subtitle?: string;
 }) {
   const { wines } = useCellar();
   const { racks } = useRacks();
@@ -48,7 +51,7 @@ export function CellarWinePicker({
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <Text style={styles.title}>Select from Cellar List</Text>
-          <Text style={styles.subtitle}>{allowPlaced ? 'Pick a wine — already-placed bottles can be moved here.' : 'Unplaced wines — pick one to drop into this slot.'}</Text>
+          <Text style={styles.subtitle}>{subtitle ?? (allowPlaced ? 'Pick a wine — already-placed bottles can be moved here.' : 'Unplaced wines — pick one to drop into this slot.')}</Text>
           <TextInput
             style={styles.search}
             placeholder="Search your cellar…"

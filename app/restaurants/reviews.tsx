@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useScanHistory } from '../../src/hooks/useScanHistory';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { useScanHistory, type RestaurantVisit } from '../../src/hooks/useScanHistory';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
-import { createManualRestaurantSession } from '../../src/api/restaurantSessions';
-import { useAttachRestaurantPhoto } from '../../src/hooks/useAttachRestaurantPhoto';
+import { createManualRestaurantSession, discardEmptyVisit } from '../../src/api/restaurantSessions';
+import { unlinkFromSession } from '../../src/api/chosenWines';
+import { useAttachRestaurantPhoto, DISMISS_DELAY_MS } from '../../src/hooks/useAttachRestaurantPhoto';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
@@ -21,14 +23,12 @@ import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import type { LibraryFilter } from '../../src/api/libraryFilters';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { foldAccents } from '../../src/utils/wineIdentity';
+import {
+  UNNAMED_RESTAURANT, formatVisitDate, hasRestaurantReview, isRestaurantVisit, sessionsWithWines, visitStats,
+} from '../../src/utils/restaurantReview';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
-import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
 import type { ChosenWine } from '../../src/types/wine';
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
 
 function normName(s: string | null | undefined): string {
   return (s ?? '').trim().toLowerCase();
@@ -37,8 +37,8 @@ function normName(s: string | null | undefined): string {
 type RatingFilter = 'all' | '5' | '4plus' | '3plus';
 type FilterField = 'date' | 'rating' | null;
 
-// Year-month key + label for the Date filter — one entry per month that
-// has a review, e.g. "June 2026".
+// Year-month key + label for the Month filter — one entry per month that has a
+// visit, e.g. "June 2026".
 function monthKey(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -47,41 +47,20 @@ function monthLabel(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
+// How a visit's review form came to be opened. 'link' = the ?openSession param
+// (Review-tab carousel, or Back from a wine's review/intel); 'resume' = reopened
+// after Find Online; 'list' = tapped on this screen.
+type OpenedVia = 'link' | 'resume' | 'list';
+
 export default function RestaurantReviewsScreen() {
-  // archiveError was already exposed by the hook but never read here, so a
-  // failed fetch fell through to "No restaurants yet" — reads as lost visits.
-  const { archive, archiveLoading, archiveError, removeArchiveItem } = useScanHistory();
-
-  const [] = useState(false);
-
-  function handleLongPressRestaurant(item: ScanArchiveItem) {
-    const label = item.restaurantName?.trim() || 'this restaurant';
-    showAlert({
-      title: 'Remove from Your Restaurants?',
-      body: `${label}\n\nThis permanently deletes the scan and its restaurant review.`,
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            removeArchiveItem.mutate(item.id, {
-              onError: (err) => showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' }),
-            });
-          },
-        },
-      ],
-    });
-  }
+  const { archive, archiveLoading, archiveError, refetchArchive, deleteVisit } = useScanHistory();
   const { chosenWines, remove } = useChosenWines();
   const attachRestaurantPhoto = useAttachRestaurantPhoto();
   const { session } = useAuth();
-  const [editing, setEditing] = useState<ScanArchiveItem | null>(null);
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<RestaurantVisit | null>(null);
   // The restaurant "photo of the night" opened full-screen (zoomable viewer).
   const [viewerPhoto, setViewerPhoto] = useState<{ path: string; name: string } | null>(null);
-  // True when the review form was auto-opened via the ?openSession deep link
-  // (i.e. from the List results page) — closing then returns the user there.
-  const [editingFromLink, setEditingFromLink] = useState(false);
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   // True when the wine edit was opened via "Edit Wine" (open the identity sheet
   // directly) rather than "Add/View Review" (open the review view).
@@ -90,7 +69,6 @@ export default function RestaurantReviewsScreen() {
   const [dateFilter, setDateFilter] = useState<string>('all');         // 'all' | 'YYYY-MM'
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
-  const [] = useState(false);
   const [awaitingOpen, setAwaitingOpen] = useState(false);
   // Bespoke user-created filters (the "+ Add" chip), same as the Label Library.
   const { filters: customFilters, create: createFilter, setItems: setFilterItems, rename: renameFilter, remove: removeFilter } = useLibraryFilters('restaurant-review');
@@ -99,41 +77,59 @@ export default function RestaurantReviewsScreen() {
   const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
   const [savingFilter, setSavingFilter] = useState(false);
 
-  // Deep-link from the List results page (?openSession=<id>) — auto-open
-  // that visit's review form once the archive has loaded, so the user lands
-  // on the input rather than the bare list. Only fires once.
+  // --- Opening a visit from outside this screen ---
+  // ?openSession=<id> opens that visit's form once the archive has it. The
+  // param is cleared once read, so a later Back to this screen carrying the
+  // same id opens it again, and an unrelated refocus doesn't.
   const { openSession, add } = useLocalSearchParams<{ openSession?: string; add?: string }>();
-  const addTriggeredRef = useRef(false);
-  const autoOpenedRef = useRef(false);
-  useEffect(() => {
-    if (autoOpenedRef.current || !openSession) return;
-    const item = archive.find((a) => a.id === openSession);
-    if (item) {
-      setEditing(item);
-      setEditingFromLink(true);
-      autoOpenedRef.current = true;
-    }
-  }, [openSession, archive]);
+  // Arrived straight into a visit (from the Review-tab carousel): closing that
+  // visit returns there rather than leaving the user on this list.
+  const enteredViaLinkRef = useRef(!!openSession);
+  const leaveOnCloseRef = useRef(false);
+  // The visit to reopen when this screen regains focus after Find Online.
+  const resumeOnFocusRef = useRef<string | null>(null);
+  const [pendingOpen, setPendingOpen] = useState<{ id: string; via: OpenedVia } | null>(null);
 
-  // Close the restaurant review form, returning to the origin screen: if it
-  // was opened from the List results page (deep link), pop back there;
-  // otherwise just dismiss and stay on the Your Restaurants list.
-  // "Add+" — a manual restaurant review. Creates a blank scan_sessions row and
-  // opens the same review modal on it. If the user cancels without saving, the
-  // blank draft is removed (see closeRestaurantReview) so it doesn't linger.
+  useFocusEffect(useCallback(() => {
+    const resumeId = resumeOnFocusRef.current;
+    resumeOnFocusRef.current = null;
+    if (resumeId) setPendingOpen({ id: resumeId, via: 'resume' });
+    else if (openSession) setPendingOpen({ id: openSession, via: 'link' });
+    if (openSession) router.setParams({ openSession: undefined });
+  }, [openSession]));
+
+  // Waits until the visit is in the archive (it may still be loading or
+  // refetching after Find Online saved a photo).
+  useEffect(() => {
+    if (!pendingOpen) return;
+    const item = archive.find((a) => a.id === pendingOpen.id);
+    if (!item) return;
+    setPendingOpen(null);
+    openVisit(item, pendingOpen.via);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpen, archive]);
+
+  function openVisit(item: RestaurantVisit, via: OpenedVia) {
+    if (via !== 'resume') leaveOnCloseRef.current = via === 'link' && enteredViaLinkRef.current;
+    setEditing(item);
+  }
+
+  // --- "Add +": a visit added by hand ---
+  // Creates a blank scan_sessions row and opens the same form on it. If the user
+  // backs out without saving anything, closeRestaurantReview deletes it.
   const manualDraftIdRef = useRef<string | null>(null);
-  const manualSavedRef = useRef(false);
+  const addingRef = useRef(false); // a ref, not state: guards a fast double-tap
   const [addingRestaurant, setAddingRestaurant] = useState(false);
 
   async function handleAddRestaurant() {
-    if (!session?.user.id || addingRestaurant) return;
+    if (!session?.user.id || addingRef.current) return;
+    addingRef.current = true;
     setAddingRestaurant(true);
     try {
       const id = await createManualRestaurantSession(session.user.id);
       manualDraftIdRef.current = id;
-      manualSavedRef.current = false;
-      setEditingFromLink(false);
-      setEditing({
+      qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      openVisit({
         id,
         capturedAt: new Date().toISOString(),
         extractedWines: [],
@@ -150,16 +146,18 @@ export default function RestaurantReviewsScreen() {
         ratingGlassware: null,
         isFavourite: false,
         restaurantPhotoPath: null,
-      });
+      }, 'list');
     } catch (err) {
       showAlert({ title: 'Could not start a review', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
+      addingRef.current = false;
       setAddingRestaurant(false);
     }
   }
 
   // From the Review tab's "Add a restaurant review" (?add=1) — start a fresh
-  // restaurant review on arrival, once.
+  // visit on arrival, once.
+  const addTriggeredRef = useRef(false);
   useEffect(() => {
     if (add === '1' && session?.user.id && !addTriggeredRef.current) {
       addTriggeredRef.current = true;
@@ -168,45 +166,66 @@ export default function RestaurantReviewsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [add, session]);
 
-  // Keep the open review's photo path in step with the archive. Attaching a
-  // "photo of the night" writes the DB row and invalidates the archive, but
-  // `editing` is a snapshot — so without this the banner wouldn't refresh, and
-  // a manual draft that ONLY got a photo would be discarded on close. Syncing
-  // reflects the photo immediately AND marks the draft worth keeping.
+  // `editing` is a snapshot, so follow the archive for the photo: one added from
+  // inside the form (camera / library) shows in its banner straight away.
   useEffect(() => {
     if (!editing) return;
     const fresh = archive.find((a) => a.id === editing.id);
     if (fresh && fresh.restaurantPhotoPath !== editing.restaurantPhotoPath) {
-      if (fresh.restaurantPhotoPath && manualDraftIdRef.current === editing.id) {
-        manualSavedRef.current = true;
-      }
       setEditing((prev) => (prev ? { ...prev, restaurantPhotoPath: fresh.restaurantPhotoPath } : prev));
     }
   }, [archive, editing]);
 
-  // `pop` controls the deep-link back-pop. It MUST be false when the close is
-  // immediately followed by opening a sibling in-page modal (Edit/Review Wine):
-  // router.back() there pops THIS screen instance, so the subsequent state set
-  // lands on a buried instance and the edit modal never appears ("did nothing").
+  // Close the form. `pop` returns to the screen the user came from when they
+  // arrived straight into this visit; pass false when another in-page modal
+  // (Edit Wine) opens next — popping would unmount this screen under it.
   function closeRestaurantReview(pop = true) {
-    // Drop an unsaved manual draft so empty rows don't pile up in the list.
-    if (manualDraftIdRef.current && !manualSavedRef.current) {
-      removeArchiveItem.mutate(manualDraftIdRef.current);
+    const draftId = manualDraftIdRef.current;
+    if (draftId && draftId === editing?.id) {
+      manualDraftIdRef.current = null;
+      void discardEmptyVisit(draftId)
+        .then((deleted) => { if (deleted) qc.invalidateQueries({ queryKey: ['scan-archive'] }); })
+        .catch(() => {});
     }
-    manualDraftIdRef.current = null;
-    manualSavedRef.current = false;
     setEditing(null);
-    if (pop && editingFromLink) {
-      setEditingFromLink(false);
+    if (pop && leaveOnCloseRef.current) {
+      leaveOnCloseRef.current = false;
       router.back();
     }
   }
 
+  // Close the form for another screen and come back to this visit after —
+  // used by Find Online, which can't be shown over the form's Modal.
+  async function leaveForPhotoSearch(saveDraft: () => Promise<void>) {
+    if (!editing) return;
+    await saveDraft();
+    resumeOnFocusRef.current = editing.id;
+    setEditing(null);
+  }
+
+  function handleLongPressRestaurant(item: RestaurantVisit) {
+    showAlert({
+      title: 'Delete this visit?',
+      body: `${item.restaurantName?.trim() || UNNAMED_RESTAURANT}\n\nThis deletes the visit and its restaurant review. Wines from it stay in Your Wine Reviews.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteVisit.mutate(item.id, {
+              onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
+            });
+          },
+        },
+      ],
+    });
+  }
+
   // Two indexes:
-  //  - chosenBySession: precise FK lookup for wines saved after migration
-  //    032 — multiple wines per session land here together.
-  //  - chosenByRestaurant: fallback for legacy rows with scan_session_id
-  //    null (pre-migration saves, or wines added manually).
+  //  - chosenBySession: wines linked to a visit by scan_session_id (migration 032).
+  //  - chosenByRestaurant: older wines with no link, matched to a visit by
+  //    restaurant name (see fallbackForVisit).
   const { chosenBySession, chosenByRestaurant } = useMemo(() => {
     const bySession = new Map<string, ChosenWine[]>();
     const byRestaurant = new Map<string, ChosenWine[]>();
@@ -226,10 +245,9 @@ export default function RestaurantReviewsScreen() {
     return { chosenBySession: bySession, chosenByRestaurant: byRestaurant };
   }, [chosenWines]);
 
-  // Generate + show Wine Intel for a wine tapped in the restaurant modal. Same
-  // pattern as the Label Library: fill the label store, stash it as the last
-  // result, and open the intel card.
-  async function viewWineIntel(cw: ChosenWine, returnToSession?: string) {
+  // Generate + show Wine Intel for a wine tapped in the visit form. Same
+  // pattern as the Label Library: fill the label store and open the intel card.
+  function viewWineIntel(cw: ChosenWine, returnToSession: string) {
     const details = {
       producer: cw.producer ?? '',
       region: cw.region ?? '',
@@ -253,29 +271,38 @@ export default function RestaurantReviewsScreen() {
     })();
     // gen=1: build intel on the results screen (instant shell). confirmed=1: known
     // wine, no "which wine?" prompt. noRecent=1: a review view isn't a scan.
-    const backTo = returnToSession ? `&backTo=${encodeURIComponent(`/restaurants/reviews?openSession=${returnToSession}`)}` : '';
-    router.push(`/label/results?context=intel&confirmed=1&gen=1&noRecent=1${backTo}` as any);
+    const backTo = encodeURIComponent(`/restaurants/reviews?openSession=${returnToSession}`);
+    router.push(`/label/results?context=intel&confirmed=1&gen=1&noRecent=1&backTo=${backTo}` as any);
   }
 
+  // "Delete Wine" on a visit. Taking it off the visit is the default; deleting
+  // its review is offered separately because that removes it from Your Wine
+  // Reviews as well.
   function confirmDeleteWine(cw: ChosenWine) {
+    const onError = (err: unknown) => showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
     showAlert({
-      title: 'Delete wine?',
-      body: `${wineHeaderLine(cw.producer, cw.wine_name, cw.vintage)}\n\nThis permanently removes it from this visit.`,
+      title: 'Remove this wine?',
+      body: `${wineHeaderLine(cw.producer, cw.wine_name, cw.vintage)}\n\nTake it off this visit and keep its review in Your Wine Reviews, or delete the wine review too.`,
       buttons: [
-        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => remove.mutate(cw.id, { onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }) }),
+          text: 'Remove from Visit',
+          onPress: () => {
+            unlinkFromSession(cw.id)
+              .then(() => qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] }))
+              .catch(onError);
+          },
         },
+        { text: 'Delete Review Too', style: 'destructive', onPress: () => remove.mutate(cw.id, { onError }) },
+        { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
 
-  // Null-session (legacy / unlinked) bottles that plausibly belong to this
-  // visit — matched by restaurant name + city, and by time proximity so a
-  // restaurant's separate visits don't all claim the same loose bottle.
-  function fallbackForVisit(item: ScanArchiveItem): ChosenWine[] {
+  // Unlinked (legacy) wines that belong to this visit — same restaurant name,
+  // same city when both are known, and chosen within a day of the visit. No
+  // "closest regardless of time" fallback: that pulled wines from a different
+  // visit to the same restaurant into this one.
+  function fallbackForVisit(item: RestaurantVisit): ChosenWine[] {
     const key = normName(item.restaurantName);
     if (!key) return [];
     const candidates = chosenByRestaurant.get(key) ?? [];
@@ -289,71 +316,51 @@ export default function RestaurantReviewsScreen() {
     const pool = sameCity.length > 0 ? sameCity : candidates;
     const visitTime = new Date(item.capturedAt).getTime();
     const DAY = 24 * 60 * 60 * 1000;
-    // Only unlinked bottles chosen within ~a day of the visit belong to it. We do
-    // NOT fall back to "the single closest regardless of time": that pulled a pick
-    // from a DIFFERENT visit to the same restaurant into this review (and, after
-    // deleting it, surfaced the next-closest), showing bottles the user never
-    // selected here. A genuinely orphaned legacy bottle simply won't attach to an
-    // unrelated visit — correct over convenient.
     return pool.filter((c) => Math.abs(new Date(c.chosen_at).getTime() - visitTime) <= DAY);
   }
 
-  // A visit's bottles = FK-linked rows (definitely this visit) MERGED with any
-  // matching null-session legacy bottles. Merging — rather than the old
-  // either/or — is what stops an added bottle (which sets the session FK) from
-  // hiding a previously-shown list pick that was never FK-linked.
-  function findChosenForVisit(item: ScanArchiveItem): ChosenWine[] {
+  // A visit's wines: those linked to it plus any matching unlinked ones, in the
+  // order they were drunk/added.
+  function findChosenForVisit(item: RestaurantVisit): ChosenWine[] {
     const linked = chosenBySession.get(item.id) ?? [];
     const seen = new Set(linked.map((c) => c.id));
     const merged = [...linked];
     for (const c of fallbackForVisit(item)) {
       if (!seen.has(c.id)) { merged.push(c); seen.add(c.id); }
     }
-    // Chronological — the order they were drunk/added.
     merged.sort((a, b) => new Date(a.chosen_at).getTime() - new Date(b.chosen_at).getTime());
     return merged;
   }
 
-  const reviewed = archive.filter((a) => (a.restaurantName && a.restaurantName.trim()) || (a.restaurantNote && a.restaurantNote.trim()));
+  const visits = useMemo(() => {
+    const withWines = sessionsWithWines(chosenWines);
+    return archive.filter((v) => isRestaurantVisit(v, withWines));
+  }, [archive, chosenWines]);
 
-  // Date options — one per month that has a review, newest first.
+  // Month options — one per month that has a visit, newest first.
   const availableMonths = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const item of reviewed) {
+    for (const item of visits) {
       const k = monthKey(item.capturedAt);
       if (!seen.has(k)) seen.set(k, item.capturedAt);
     }
     return Array.from(seen.entries())
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
       .map(([value, iso]) => ({ value, label: monthLabel(iso) }));
-  }, [reviewed]);
-
-  // A restaurant counts as reviewed once it carries any rating or a note.
-  // Otherwise it's "to review" — a name captured from a List result, awaiting
-  // the user's actual review.
-  const restaurantReviewed = (item: typeof reviewed[number]) => !!(
-    item.ratingOverall != null || item.ratingFood != null || item.ratingService != null ||
-    item.ratingWineList != null || item.ratingAtmosphere != null || item.ratingValue != null ||
-    item.ratingGlassware != null ||
-    (item.restaurantNote && item.restaurantNote.trim())
-  );
+  }, [visits]);
 
   const filtered = useMemo(() => {
     const q = foldAccents(search.trim());
-    return reviewed.filter((item) => {
+    return visits.filter((item) => {
       if (dateFilter !== 'all' && monthKey(item.capturedAt) !== dateFilter) return false;
-      // Free-text search across restaurant name, location, and the wines
-      // (bottle picks) chosen on that visit.
+      // Free-text search across restaurant name, location and the visit's wines.
       if (q) {
         const nameHit = foldAccents(item.restaurantName ?? '').includes(q);
         const cityHit = foldAccents(item.city ?? '').includes(q);
-        const pickHit = chosenWines.some((cw) =>
-          cw.scan_session_id === item.id && (
-            foldAccents(cw.wine_name ?? '').includes(q) ||
-            foldAccents(cw.producer ?? '').includes(q)
-          )
+        const wineHit = !nameHit && !cityHit && findChosenForVisit(item).some((cw) =>
+          foldAccents(cw.wine_name ?? '').includes(q) || foldAccents(cw.producer ?? '').includes(q),
         );
-        if (!nameHit && !cityHit && !pickHit) return false;
+        if (!nameHit && !cityHit && !wineHit) return false;
       }
       if (ratingFilter !== 'all') {
         const r = item.ratingOverall;
@@ -368,12 +375,13 @@ export default function RestaurantReviewsScreen() {
       }
       return true;
     });
-  }, [reviewed, search, chosenWines, dateFilter, ratingFilter, activeCustomId, customFilters]);
+    // findChosenForVisit reads the chosenWines-derived indexes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visits, search, chosenWines, dateFilter, ratingFilter, activeCustomId, customFilters]);
 
-  // Restaurants awaiting review — a name captured from a List scan with no
-  // ratings or note yet. Drives the summary link + its modal.
-  const awaitingRestaurants = useMemo(() => reviewed.filter((it) => !restaurantReviewed(it)), [reviewed]);
-  const reviewedCount = useMemo(() => filtered.filter((it) => restaurantReviewed(it)).length, [filtered]);
+  // Visits with no rating or note yet — the "Awaiting Review" link and its sheet.
+  const awaitingRestaurants = useMemo(() => visits.filter((it) => !hasRestaurantReview(it)), [visits]);
+  const stats = visitStats(filtered);
 
   // Always newest-first.
   const sorted = useMemo(() => {
@@ -418,22 +426,12 @@ export default function RestaurantReviewsScreen() {
       setSavingFilter(false);
     }
   }
-  // Items offered in the create/edit sheet — every reviewed restaurant visit,
-  // by name + date.
-  const filterItems = useMemo(() => reviewed.map((item) => ({
+  // Items offered in the create/edit sheet — every visit, by name + date.
+  const filterItems = useMemo(() => visits.map((item) => ({
     id: item.id,
-    label: item.restaurantName?.trim() || 'Restaurant',
-    sublabel: [formatDate(item.capturedAt), item.city].filter(Boolean).join(' · ') || undefined,
-  })), [reviewed]);
-
-  // Every bottle pick the user has added (restaurant-context chosen_wines —
-  // not the "review without adding" path), newest first.
-  const bottlePicks = useMemo(() => {
-    return chosenWines
-      .filter((cw) => cw.source !== 'other')
-      .slice()
-      .sort((a, b) => new Date(b.chosen_at).getTime() - new Date(a.chosen_at).getTime());
-  }, [chosenWines]);
+    label: item.restaurantName?.trim() || UNNAMED_RESTAURANT,
+    sublabel: [formatVisitDate(item.capturedAt), item.city].filter(Boolean).join(' · ') || undefined,
+  })), [visits]);
 
   // Chip value labels.
   const dateChipLabel = dateFilter === 'all' ? 'All' : (availableMonths.find((m) => m.value === dateFilter)?.label ?? 'All');
@@ -455,6 +453,9 @@ export default function RestaurantReviewsScreen() {
     return null;
   }
   const activeDropdown = dropdownConfig(openDropdown);
+
+  // Wines in the open form, in display order (the modal refers to them by index).
+  const editingWines = editing ? findChosenForVisit(editing) : [];
 
   return (
     <View style={styles.container}>
@@ -484,28 +485,27 @@ export default function RestaurantReviewsScreen() {
       ) : archiveError ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Couldn&apos;t load your visits</Text>
-          <Text style={styles.emptyBody}>
-            Check your connection and pull down to refresh. Your reviews are safe.
-          </Text>
+          <Text style={styles.emptyBody}>Check your connection and try again. Your reviews are safe.</Text>
+          <TouchableOpacity onPress={() => { void refetchArchive(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+            <Text style={styles.addLink}>Try Again</Text>
+          </TouchableOpacity>
         </View>
-      ) : (reviewed.length === 0 && bottlePicks.length === 0) ? (
+      ) : visits.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No restaurants yet</Text>
-          <Text style={styles.emptyBody}>After scanning a wine list, add the restaurant name on the results page and tap "Review this restaurant" — your visits will appear here so you can capture the food, atmosphere and service.</Text>
+          <Text style={styles.emptyBody}>Tap Add + to review a restaurant. After scanning a wine list, you can also name the restaurant on the results page and tap it — your visits appear here so you can capture the food, atmosphere and service.</Text>
         </View>
       ) : (
         <>
-        {/* Header + stats bar stay fixed; only the filters / search / list below
-            scroll. */}
+        {/* Header, stats, filters and search stay fixed; only the list scrolls. */}
         <View style={styles.summaryRow}>
           <Text style={styles.summaryText}>
-            {sorted.length} {sorted.length === 1 ? 'Restaurant' : 'Restaurants'} · {reviewedCount} {reviewedCount === 1 ? 'Review' : 'Reviews'}
+            {stats.restaurants} {stats.restaurants === 1 ? 'Restaurant' : 'Restaurants'} · {stats.reviews} {stats.reviews === 1 ? 'Review' : 'Reviews'}
           </Text>
           <TouchableOpacity onPress={() => setAwaitingOpen(true)} disabled={awaitingRestaurants.length === 0} activeOpacity={0.7}>
             <Text style={[styles.summaryLink, awaitingRestaurants.length === 0 && { opacity: 0.5 }]}>View Restaurants Awaiting Review</Text>
           </TouchableOpacity>
         </View>
-          {/* Filters + search stay FIXED; only the review bubbles below scroll. */}
           <Text style={styles.filterHint}>Listed by recency · Swipe to see all filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterChipRow}>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
@@ -563,7 +563,6 @@ export default function RestaurantReviewsScreen() {
             ) : null}
           </View>
 
-          {/* Only the review bubbles scroll — the filters + search above are fixed. */}
           <ScrollView style={styles.scrollArea} contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           {sorted.length === 0 ? (
             <View style={styles.empty}>
@@ -575,12 +574,12 @@ export default function RestaurantReviewsScreen() {
                 <TouchableOpacity
                   key={item.id}
                   style={styles.cardCompact}
-                  onPress={() => { setEditing(item); setEditingFromLink(false); }}
+                  onPress={() => openVisit(item, 'list')}
                   onLongPress={() => handleLongPressRestaurant(item)}
                   delayLongPress={400}
                   activeOpacity={0.7}
                 >
-                  {/* The whole tile opens the review on tap and offers Remove on
+                  {/* The whole tile opens the review on tap and offers Delete on
                       long-press. The photo on the left keeps its own actions:
                       tap to view it full-screen, long-press to change or
                       remove it. */}
@@ -604,11 +603,11 @@ export default function RestaurantReviewsScreen() {
                   <View style={styles.headerTextCol}>
                     <View style={styles.cardCompactRow}>
                       <Text style={styles.restaurantName} numberOfLines={1}>
-                        {item.restaurantName || 'Unnamed restaurant'}
+                        {item.restaurantName?.trim() || UNNAMED_RESTAURANT}
                       </Text>
                     </View>
                     <View style={styles.cardCompactMetaRow}>
-                      <Text style={styles.metaText}>{formatDate(item.capturedAt)}</Text>
+                      <Text style={styles.metaText}>{formatVisitDate(item.capturedAt)}</Text>
                       {item.city ? (
                         <Text style={styles.metaText} numberOfLines={1}> · {item.city}</Text>
                       ) : null}
@@ -619,10 +618,9 @@ export default function RestaurantReviewsScreen() {
                         <StarRating value={item.ratingOverall} size={14} readonly />
                       </View>
                     )}
-                    {/* Yellow "Awaiting Review" note for a restaurant captured from a
-                        List scan that carries no rating or note yet — mirrors the
-                        wine review page. */}
-                    {!restaurantReviewed(item) && (
+                    {/* Gold "Awaiting Review" for a visit with no rating or note
+                        yet — mirrors Your Wine Reviews. */}
+                    {!hasRestaurantReview(item) && (
                       <Text style={styles.awaitingReviewNote}>Awaiting Review</Text>
                     )}
                     {/* First line of the review, in place of the detailed rating grid. */}
@@ -656,67 +654,54 @@ export default function RestaurantReviewsScreen() {
           }}
           initialFavourite={editing.isFavourite}
           city={editing.city}
-          date={formatDate(editing.capturedAt)}
+          date={formatVisitDate(editing.capturedAt)}
           capturedAt={editing.capturedAt}
           restaurantPhotoPath={editing.restaurantPhotoPath}
           onViewPhoto={editing.restaurantPhotoPath ? () => setViewerPhoto({ path: editing.restaurantPhotoPath!, name: editing.restaurantName || 'Photo of the night' }) : undefined}
-          onAddPhoto={(name, city) => attachRestaurantPhoto.present({ sessionId: editing.id, restaurant: (name || editing.restaurantName) ?? null, city: (city || editing.city) ?? null, hasPhoto: !!editing.restaurantPhotoPath })}
-          wines={findChosenForVisit(editing).map((cw) => ({
+          onAddPhoto={(name, city, saveDraft) => attachRestaurantPhoto.present({
+            sessionId: editing.id,
+            restaurant: (name || editing.restaurantName) ?? null,
+            city: (city || editing.city) ?? null,
+            hasPhoto: !!editing.restaurantPhotoPath,
+            leaveModal: () => leaveForPhotoSearch(saveDraft),
+          })}
+          wines={editingWines.map((cw) => ({
             producer: cw.producer,
             wineName: cw.wine_name,
             vintage: cw.vintage,
             userScore: cw.user_score,
             source: cw.source,
-            reviewed: !!((cw.tasting_note && cw.tasting_note.trim()) || (cw.other_observations && cw.other_observations.trim()) || cw.user_score != null),
           }))}
+          // Wine reviews live in Your Wine Reviews, never on this screen: open the
+          // wine's review there, with Back returning to this visit (?openSession).
+          // The push waits for the form's Modal to finish closing.
           onReviewWine={(i) => {
-            const cw = findChosenForVisit(editing)[i];
-            if (cw) {
-              // Reviews are NEVER stored/edited on this screen — the wine's
-              // review lives in Your Wine Reviews (one canonical place). Mirror
-              // the Label Library flow: click through to that wine's review card
-              // (reviewed or blank), with Back returning to THIS restaurant via
-              // the ?openSession deep link. Mark saved so closeRestaurantReview
-              // keeps the draft (silent autosave persists note/ratings on close).
-              manualSavedRef.current = true;
-              const id = cw.id;
-              const visitId = editing.id;
-              const backTo = encodeURIComponent(`/restaurants/reviews?openSession=${visitId}`);
-              setEditing(null);
-              setEditingFromLink(false);
-              // Push on the next tick — a push while the full-screen modal is
-              // still dismissing gets swallowed (same reason as onViewIntel).
-              setTimeout(() => router.push(`/wines/chosen?openReview=${id}&backTo=${backTo}`), 320);
-            }
+            const cw = editingWines[i];
+            if (!cw) return;
+            const backTo = encodeURIComponent(`/restaurants/reviews?openSession=${editing.id}`);
+            setEditing(null);
+            setTimeout(() => router.push(`/wines/chosen?openReview=${cw.id}&backTo=${backTo}` as any), DISMISS_DELAY_MS);
           }}
           onEditWine={(i) => {
-            const cw = findChosenForVisit(editing)[i];
-            if (cw) {
-              manualSavedRef.current = true; // keep the draft — see onReviewWine
-              closeRestaurantReview(false); // keep this instance — see onReviewWine
-              setEditWineIdentity(true);
-              setEditingWine(cw);
-            }
+            const cw = editingWines[i];
+            if (!cw) return;
+            closeRestaurantReview(false);
+            setEditWineIdentity(true);
+            setEditingWine(cw);
           }}
           onViewIntel={(i) => {
-            const cw = findChosenForVisit(editing)[i];
+            const cw = editingWines[i];
+            if (!cw) return;
             const visitId = editing.id;
-            // Close the full-screen modal WITHOUT the link-back, then generate +
-            // open intel on the next tick. Navigating while the modal is still
-            // dismissing gets swallowed (the intel screen mounts behind it), so
-            // we defer until the modal is gone — this is why it "did nothing".
-            if (cw) {
-              setEditing(null);
-              setEditingFromLink(false);
-              setTimeout(() => { void viewWineIntel(cw, visitId); }, 320);
-            }
+            setEditing(null);
+            setTimeout(() => viewWineIntel(cw, visitId), DISMISS_DELAY_MS);
           }}
           onDeleteWine={(i) => {
-            const cw = findChosenForVisit(editing)[i];
+            const cw = editingWines[i];
             if (cw) confirmDeleteWine(cw);
           }}
           onClose={() => closeRestaurantReview()}
-          onSaved={() => { manualSavedRef.current = true; closeRestaurantReview(); }}
+          onSaved={() => { manualDraftIdRef.current = null; closeRestaurantReview(); }}
         />
       )}
 
@@ -775,8 +760,8 @@ export default function RestaurantReviewsScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Restaurants awaiting review — opened from the summary link. Tap one
-          to jump straight into its review. */}
+      {/* Visits awaiting review — opened from the summary link. Tap one to
+          jump straight into its review. */}
       <Modal visible={awaitingOpen} transparent animationType="fade" onRequestClose={() => setAwaitingOpen(false)}>
         <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setAwaitingOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
@@ -789,11 +774,11 @@ export default function RestaurantReviewsScreen() {
                   <TouchableOpacity
                     key={item.id}
                     style={styles.awaitingRow}
-                    onPress={() => { setAwaitingOpen(false); setEditingFromLink(false); setEditing(item); }}
+                    onPress={() => { setAwaitingOpen(false); openVisit(item, 'list'); }}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.awaitingName} numberOfLines={1}>{item.restaurantName || 'Unnamed restaurant'}</Text>
-                    <Text style={styles.awaitingMeta} numberOfLines={1}>{[formatDate(item.capturedAt), item.city].filter(Boolean).join(' · ')}</Text>
+                    <Text style={styles.awaitingName} numberOfLines={1}>{item.restaurantName?.trim() || UNNAMED_RESTAURANT}</Text>
+                    <Text style={styles.awaitingMeta} numberOfLines={1}>{[formatVisitDate(item.capturedAt), item.city].filter(Boolean).join(' · ')}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -885,7 +870,6 @@ const styles = StyleSheet.create({
   awaitingName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   awaitingMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
 
-  // Search bar beneath the filter chips.
   // Search bar — mirrors Your Wine Reviews: a light input, not a dark filled row.
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
   searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },

@@ -58,6 +58,63 @@ function computeFreeSlots(
   return result;
 }
 
+// Crop one bottle's label out of the lineup photo for its cellar thumbnail. The
+// detected box is tight on the label, so pad it a little for context. Returns
+// null when the box is too small to be useful.
+async function cropLabel(
+  imageUri: string, dims: { width: number; height: number }, box: NonNullable<DetectedBottle['box']>,
+): Promise<string | null> {
+  const pad = 0.05;
+  const fx = Math.max(0, box.x - pad);
+  const fy = Math.max(0, box.y - pad);
+  const fw = Math.min(1 - fx, box.w + pad * 2);
+  const fh = Math.min(1 - fy, box.h + pad * 2);
+  const originX = Math.max(0, Math.round(fx * dims.width));
+  const originY = Math.max(0, Math.round(fy * dims.height));
+  const width = Math.min(dims.width - originX, Math.round(fw * dims.width));
+  const height = Math.min(dims.height - originY, Math.round(fh * dims.height));
+  if (width <= 10 || height <= 10) return null;
+  const cropped = await ImageManipulator.manipulateAsync(
+    imageUri,
+    [{ crop: { originX, originY, width, height } }],
+    { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
+  );
+  return cropped.uri;
+}
+
+// A minimal new cellar row for a lineup bottle; intel fills in when its card
+// is first opened.
+function newCellarRow(b: DetectedBottle, userId: string, quantity: number, extra: Record<string, unknown> = {}) {
+  return {
+    priceEstimate: 'market',
+    user_id: userId,
+    wine_name: b.wineName || b.producer,
+    producer: b.producer,
+    region: b.region ?? null,
+    vintage: b.vintage ?? null,
+    quantity,
+    storage_location: null,
+    date_received: new Date().toISOString().split('T')[0],
+    critic_score: null,
+    critic_score_note: null,
+    drinking_window_from: null,
+    drinking_window_to: null,
+    drinking_window_status: 'unknown',
+    tasting_notes: null,
+    grape_variety: b.grape ?? null,
+    label_image_path: null,
+    user_notes: null,
+    estimated_value: null,
+    estimated_value_currency: null,
+    estimated_value_at: null,
+    estimated_value_source: null,
+    purchase_price: null,
+    purchase_price_currency: null,
+    bottle_size_ml: b.bottleSizeMl ?? 750,
+    ...extra,
+  } as any;
+}
+
 // Place ONE wine's bottles as a line running PERPENDICULAR to the lineup axis,
 // from the wine's own position. A horizontal lineup (wines across columns)
 // stacks each wine's bottles DOWN its column; a vertical lineup (wines down
@@ -106,12 +163,11 @@ export default function ScanLineupScreen() {
   const isManualPlace = startSlot == null && !!originRackId;
   const isRackLineup = !!originRackId;
   const [placing, setPlacing] = useState(false);
+  // Synchronous double-tap guard — `placing` state lands a render too late.
+  const placingRef = useRef(false);
   // Quick batch confirm: each row is ticked once reviewed/edited; "Add Bottles"
   // unlocks when all are ticked.
   const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
-  // Original (unrotated) capture, kept so the Flip toggle can re-read the other
-  // way up. `flipped` = we rotated the photo 180° before analysis (auto for rack
-  // placement, where bottles sit neck-forward = upside down).
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState({ producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750, quantity: 1, overrideImageUri: null as string | null });
   const [scanningEdit, setScanningEdit] = useState(false);
@@ -141,37 +197,37 @@ export default function ScanLineupScreen() {
     }
   }
 
-  // Arriving from the Scan tile's "upload instead" opens the library picker
-  // straight away instead of the capture chooser.
+  // ?upload=1 (the "upload instead" entry) uses the photo library, never the
+  // camera: the picker opens straight away on arrival.
   const params = useLocalSearchParams<{ upload?: string }>();
+  const isUpload = params.upload === '1';
   const uploadTriggeredRef = useRef(false);
   useEffect(() => {
-    if (params.upload === '1' && stage === 'capture' && !uploadTriggeredRef.current) {
+    if (isUpload && stage === 'capture' && !uploadTriggeredRef.current) {
       uploadTriggeredRef.current = true;
-      void pickFrom('library');
+      void pickFromLibrary(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.upload, stage]);
+  }, [isUpload, stage]);
 
-  async function pickFrom(source: 'camera' | 'library') {
+  // Cancelling the first picker leaves the flow (there's nothing behind it);
+  // cancelling a Retake keeps the current read.
+  async function pickFromLibrary(leaveOnCancel: boolean) {
     try {
-      const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
-      const result = source === 'camera'
-        ? await ImagePicker.launchCameraAsync(opts)
-        : await ImagePicker.launchImageLibraryAsync(opts);
-      // Cancelling the "upload instead" picker leaves the flow rather than
-      // dropping onto the live camera behind it.
-      if (result.canceled || !result.assets.length) { if (params.upload === '1') router.back(); return; }
-      const uri = result.assets[0].uri;
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (result.canceled || !result.assets.length) { if (leaveOnCancel) router.back(); return; }
       // Read the photo exactly as taken — never auto-rotate. A 180° flip also
-      // mirrors left↔right, so blindly flipping an already-upright rack shot both
-      // turns the preview upside down AND reverses the bottle order, placing the
-      // lineup back-to-front. Users whose bottles sit neck-forward (label upside
-      // down in frame) tap "Labels upside down? Flip & re-read" to invert.
-      await analyze(uri, false);
+      // mirrors left↔right, so flipping an already-upright rack shot would
+      // reverse the bottle order and place the lineup back-to-front.
+      await analyze(result.assets[0].uri);
     } catch (err) {
-      showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not open the photo', body: err instanceof Error ? err.message : 'Please try again.' });
     }
+  }
+
+  function retake() {
+    if (isUpload) { void pickFromLibrary(false); return; }
+    setStage('capture');
   }
 
   async function analyze(uri: string, flip = false) {
@@ -196,9 +252,8 @@ export default function ScanLineupScreen() {
       if (!base64) throw new Error('Could not process the photo.');
       const { bottles } = await detectLineup(base64);
       const raw = bottles ?? [];
-      // Add a Lineup into the cellar is capped at 6 bottles — more than that gets
-      // confused, so we refuse and ask for a smaller photo (Archive a Night still
-      // takes up to 8). This counts physical bottles, before duplicate-batching.
+      // Adding to the cellar is capped at 6 physical bottles (Archive a Night
+      // takes 8) — larger lineups get misread and misplaced.
       if (raw.length > 6) {
         showAlert({
           title: 'Too many bottles',
@@ -207,17 +262,12 @@ export default function ScanLineupScreen() {
         setStage('capture');
         return;
       }
-      // Batch identical bottles (same producer + name + vintage) into one row
-      // carrying a quantity, so a lineup with two of the same wine reads as a
-      // single "×2" entry instead of two rows.
-      const capped = raw.slice(0, 6);
-      // Batch identical bottles (same producer + name + vintage) into one ×N row
-      // — different vintages of the same wine stay separate. This recognises
-      // duplicates in EVERY lineup flow (rack/fridge and onboarding), so a
-      // scanned pair becomes one cellar listing of quantity 2, not two listings.
+      // Batch identical bottles (same producer + name + vintage) into one ×N row,
+      // so a scanned pair becomes one cellar listing of 2, not two listings.
+      // Different vintages of the same wine stay separate.
       const batched: DetectedBottle[] = [];
       const indexByKey = new Map<string, number>();
-      for (const b of capped) {
+      for (const b of raw) {
         const key = `${norm(b.producer)}|${norm(b.wineName)}|${(b.vintage ?? '').trim()}`;
         const at = indexByKey.get(key);
         if (at != null) {
@@ -228,11 +278,10 @@ export default function ScanLineupScreen() {
           batched.push({ ...b, quantity: 1, bottleSizeMl: b.bottleSizeMl ?? 750 });
         }
       }
-      const result = batched;
       setConfirmed(new Set());
-      // Store the rotated image so the rack's cropped label thumbnails (and the
-      // preview) are upright too — the boxes were detected on this same image.
-      setLineup(result, workUri);
+      // Store the normalised image: the boxes were detected on it, so the label
+      // crops line up.
+      setLineup(batched, workUri);
       setStage('review');
     } catch (err) {
       showAlert({ title: 'Could not read the photo', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -349,15 +398,11 @@ export default function ScanLineupScreen() {
     router.replace('/label/confirm?context=lineup');
   }
 
-  // Match a detected bottle to an existing cellar line by identity (producer +
-  // name, vintage preferred) — mirrors matchLineupToCellar's matching.
+  // The existing cellar row that is the same wine AND vintage as a detected
+  // bottle. Producer alone is never enough — that once merged "Mullineux Iron"
+  // into "Mullineux Schist". Producer + name compare as an order-independent
+  // set, so an OCR producer/name swap still matches.
   function findCellarMatch(b: DetectedBottle): CellarWine | null {
-    // A lineup bottle is the SAME wine as an existing cellar row ONLY when its
-    // producer, cuvée name AND vintage all match. Matching on producer alone (the
-    // old behaviour) merged different cuvées from one producer — e.g. a lineup
-    // "Mullineux Iron" collapsing onto an existing "Mullineux Schist", inheriting
-    // its label + intel and bumping its count. Compare producer+name as an
-    // order-independent set so an OCR producer/name swap still matches.
     if (!wineNameKey(b.producer, b.wineName)) return null;
     return findSameCellarWine(cellarWines, { producer: b.producer, wineName: b.wineName, region: (b as any).region ?? null, vintage: b.vintage }) ?? null;
   }
@@ -390,12 +435,35 @@ export default function ScanLineupScreen() {
     });
   }
 
+  // The lineup photo's pixel size, for cropping per-bottle thumbnails (null =
+  // skip thumbnails).
+  async function lineupImageDims(): Promise<{ width: number; height: number } | null> {
+    if (!imageUri) return null;
+    try {
+      const d = await ImageManipulator.manipulateAsync(imageUri, [], {});
+      return { width: d.width, height: d.height };
+    } catch { return null; }
+  }
+
+  // Give a placed wine its thumbnail: a label re-scanned in the edit sheet wins,
+  // else the bottle's crop from the lineup photo. Non-fatal — a wine placed
+  // without a thumbnail is fine.
+  async function attachThumbnail(userId: string, wineId: string, b: DetectedBottle, imgDims: { width: number; height: number } | null) {
+    try {
+      const uri = b.overrideImageUri
+        ?? (b.box && imageUri && imgDims ? await cropLabel(imageUri, imgDims, b.box) : null);
+      if (!uri) return;
+      const path = await uploadLabelImage(userId, uri, wineId);
+      await updateWine.mutateAsync({ id: wineId, updates: { label_image_path: path } });
+    } catch { /* placed without a thumbnail */ }
+  }
+
   // Rack-placement: place each kept bottle into consecutive free slots from the
   // chosen start, in the chosen orientation. A wine already in the cellar has
   // these bottles added to its count (reusing its line); a new wine is created
   // minimally (intel auto-generates when its card is first opened).
   async function placeAll() {
-    if (!isRackPlacement || !originRackId || !startSlot || placing) return;
+    if (!isRackPlacement || !originRackId || !startSlot || placingRef.current) return;
     const rack = racks.find((r) => r.id === originRackId);
     const userId = session?.user.id;
     if (!rack || !userId) {
@@ -404,6 +472,7 @@ export default function ScanLineupScreen() {
     }
     const kept = lineupWines;
     if (kept.length === 0) return;
+    placingRef.current = true;
     setPlacing(true);
     try {
       const existing = await getRackSlots(originRackId);
@@ -416,16 +485,12 @@ export default function ScanLineupScreen() {
       const linearFree = useLinear
         ? computeFreeSlots(startSlot.row, startSlot.col, rack.rows, rack.cols, total, orientation, occupied, rack.large_format_cols)
         : [];
-      // Original lineup image dimensions, for cropping per-bottle thumbnails.
-      let imgDims: { width: number; height: number } | null = null;
-      if (imageUri) {
-        try { const d = await ImageManipulator.manipulateAsync(imageUri, [], {}); imgDims = { width: d.width, height: d.height }; } catch { /* skip thumbnails */ }
-      }
+      const imgDims = await lineupImageDims();
       let cursor = 0;
       let placedCount = 0;
-      // Identical wines are separate rows now, each reading the same stale
-      // match.quantity — accumulate the bumps per cellar id so the count rises
-      // by the true number of bottles placed, not just one.
+      // Several lineup rows can merge into one cellar wine, each holding the same
+      // stale match.quantity — keep a running total per cellar id so the count
+      // rises by every bottle placed.
       const bumps = new Map<string, number>();
       for (let wi = 0; wi < kept.length; wi++) {
         const b = kept[wi];
@@ -456,69 +521,13 @@ export default function ScanLineupScreen() {
           bumps.set(match.id, addedSoFar + slots.length);
           await updateWine.mutateAsync({ id: match.id, updates: { quantity: (match.quantity ?? 0) + addedSoFar + slots.length } });
         } else {
-          const saved = await addWine.mutateAsync({
-            priceEstimate: 'market',
-            user_id: userId,
-            wine_name: b.wineName || b.producer,
-            producer: b.producer,
-            region: b.region ?? null,
-            vintage: b.vintage ?? null,
-            quantity: slots.length,
-            storage_location: null,
-            date_received: new Date().toISOString().split('T')[0],
-            critic_score: null,
-            critic_score_note: null,
-            drinking_window_from: null,
-            drinking_window_to: null,
-            drinking_window_status: 'unknown',
-            tasting_notes: null,
-            grape_variety: b.grape ?? null,
-            label_image_path: null,
-            user_notes: null,
-            estimated_value: null,
-            estimated_value_currency: null,
-            estimated_value_at: null,
-            estimated_value_source: null,
-            purchase_price: null,
-            purchase_price_currency: null,
-            bottle_size_ml: b.bottleSizeMl ?? 750,
-          } as any);
+          const saved = await addWine.mutateAsync(newCellarRow(b, userId, slots.length));
           targetId = saved.id;
         }
         await assignSlots(originRackId, slots, targetId);
-        // Thumbnail: a re-scanned label (edit sheet) wins; else reuse the
-        // matched wine's existing label; else crop this bottle from the lineup
-        // photo. Non-fatal.
-        if (b.overrideImageUri) {
-          try {
-            const path = await uploadLabelImage(userId, b.overrideImageUri, targetId);
-            await updateWine.mutateAsync({ id: targetId, updates: { label_image_path: path } });
-          } catch { /* non-fatal — placed without the re-scanned photo */ }
-        } else if ((!reusedExisting || !match?.label_image_path) && b.box && imageUri && imgDims) {
-          try {
-            const { x, y, w, h } = b.box;
-            // Pad the (tight, label-focused) box a little so the thumbnail keeps
-            // some context and isn't cropped to the label's bare edge.
-            const pad = 0.05;
-            const fx = Math.max(0, x - pad);
-            const fy = Math.max(0, y - pad);
-            const fw = Math.min(1 - fx, w + pad * 2);
-            const fh = Math.min(1 - fy, h + pad * 2);
-            const originX = Math.max(0, Math.round(fx * imgDims.width));
-            const originY = Math.max(0, Math.round(fy * imgDims.height));
-            const cw = Math.min(imgDims.width - originX, Math.round(fw * imgDims.width));
-            const ch = Math.min(imgDims.height - originY, Math.round(fh * imgDims.height));
-            if (cw > 10 && ch > 10) {
-              const cropped = await ImageManipulator.manipulateAsync(
-                imageUri,
-                [{ crop: { originX, originY, width: cw, height: ch } }],
-                { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
-              );
-              const path = await uploadLabelImage(userId, cropped.uri, targetId);
-              await updateWine.mutateAsync({ id: targetId, updates: { label_image_path: path } });
-            }
-          } catch { /* non-fatal — placed without a thumbnail */ }
-        }
+        // A merged wine keeps the label it already has, unless the user
+        // re-scanned this bottle's label.
+        if (b.overrideImageUri || !reusedExisting || !match?.label_image_path) await attachThumbnail(userId, targetId, b, imgDims);
         placedCount += slots.length;
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', originRackId] });
@@ -533,103 +542,42 @@ export default function ScanLineupScreen() {
     } catch (err) {
       showAlert({ title: 'Could not place lineup', body: err instanceof Error ? err.message : 'Please try again.' });
       setPlacing(false);
+    } finally {
+      placingRef.current = false;
     }
   }
 
-  // Manual-placement lineup (no start slot): create each confirmed bottle as a
-  // new row "awaiting placement" in the rack — with its cropped label thumbnail —
-  // then hand back to the rack, where the user taps an empty slot for each one in
-  // scan order. Each wine is its OWN awaiting row (no silent merge) so the rack's
-  // one-tap-per-bottle placement counts them correctly.
+  // Manual-placement lineup (no start slot): each confirmed bottle becomes a
+  // cellar row "awaiting placement" in this rack, then the rack takes over and
+  // the user taps an empty slot for each, in scan order. A wine already in the
+  // cellar can join that listing instead (asked per bottle, never silently).
   async function placeAsAwaiting() {
-    if (!isManualPlace || !originRackId || placing) return;
+    if (!isManualPlace || !originRackId || placingRef.current) return;
     const userId = session?.user.id;
     if (!userId) { showAlert({ title: 'Could not add lineup', body: 'Please try again.' }); return; }
     const kept = lineupWines;
     if (kept.length === 0) return;
+    placingRef.current = true;
     setPlacing(true);
     try {
-      // Original lineup image dimensions, for cropping per-bottle thumbnails.
-      let imgDims: { width: number; height: number } | null = null;
-      if (imageUri) {
-        try { const d = await ImageManipulator.manipulateAsync(imageUri, [], {}); imgDims = { width: d.width, height: d.height }; } catch { /* skip thumbnails */ }
-      }
+      const imgDims = await lineupImageDims();
+      // Running total per merged cellar id (see placeAll) — two rows merging
+      // into one wine must both count, not overwrite each other.
+      const bumps = new Map<string, number>();
       for (const b of kept) {
         const count = b.quantity ?? 1;
-        // If this wine is already in the cellar, merge into that listing (bump its
-        // quantity + mark it awaiting a slot HERE) instead of spawning a duplicate
-        // row. Mirrors the rack-placement path; keeps one wine = one cellar line.
         const match = findCellarMatch(b) ?? findFuzzyCellarMatch(b);
-        if (match) {
-          const choice = await askMergeChoice(b, match);
-          if (choice === 'merge') {
-            await updateWine.mutateAsync({
-              id: match.id,
-              updates: { quantity: (match.quantity ?? 0) + count, awaiting_placement: true, awaiting_placement_unit_id: originRackId },
-            });
-            continue; // existing listing keeps its label + intel; nothing new to create
-          }
+        if (match && (await askMergeChoice(b, match)) === 'merge') {
+          const addedSoFar = bumps.get(match.id) ?? 0;
+          bumps.set(match.id, addedSoFar + count);
+          await updateWine.mutateAsync({
+            id: match.id,
+            updates: { quantity: (match.quantity ?? 0) + addedSoFar + count, awaiting_placement: true, awaiting_placement_unit_id: originRackId },
+          });
+          continue; // the existing listing keeps its label + intel
         }
-        const saved = await addWine.mutateAsync({
-          priceEstimate: 'market',
-          user_id: userId,
-          wine_name: b.wineName || b.producer,
-          producer: b.producer,
-          region: b.region ?? null,
-          vintage: b.vintage ?? null,
-          quantity: count,
-          storage_location: null,
-          date_received: new Date().toISOString().split('T')[0],
-          critic_score: null,
-          critic_score_note: null,
-          drinking_window_from: null,
-          drinking_window_to: null,
-          drinking_window_status: 'unknown',
-          tasting_notes: null,
-          grape_variety: b.grape ?? null,
-          label_image_path: null,
-          user_notes: null,
-          estimated_value: null,
-          estimated_value_currency: null,
-          estimated_value_at: null,
-          estimated_value_source: null,
-          purchase_price: null,
-          purchase_price_currency: null,
-          bottle_size_ml: b.bottleSizeMl ?? 750,
-          awaiting_placement: true,
-          awaiting_placement_unit_id: originRackId,
-        } as any);
-        const targetId = saved.id;
-        // Thumbnail: a re-scanned label (edit sheet) wins; else crop this bottle
-        // from the lineup photo. Non-fatal.
-        if (b.overrideImageUri) {
-          try {
-            const path = await uploadLabelImage(userId, b.overrideImageUri, targetId);
-            await updateWine.mutateAsync({ id: targetId, updates: { label_image_path: path } });
-          } catch { /* non-fatal */ }
-        } else if (b.box && imageUri && imgDims) {
-          try {
-            const { x, y, w, h } = b.box;
-            const pad = 0.05;
-            const fx = Math.max(0, x - pad);
-            const fy = Math.max(0, y - pad);
-            const fw = Math.min(1 - fx, w + pad * 2);
-            const fh = Math.min(1 - fy, h + pad * 2);
-            const originX = Math.max(0, Math.round(fx * imgDims.width));
-            const originY = Math.max(0, Math.round(fy * imgDims.height));
-            const cw = Math.min(imgDims.width - originX, Math.round(fw * imgDims.width));
-            const ch = Math.min(imgDims.height - originY, Math.round(fh * imgDims.height));
-            if (cw > 10 && ch > 10) {
-              const cropped = await ImageManipulator.manipulateAsync(
-                imageUri,
-                [{ crop: { originX, originY, width: cw, height: ch } }],
-                { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
-              );
-              const path = await uploadLabelImage(userId, cropped.uri, targetId);
-              await updateWine.mutateAsync({ id: targetId, updates: { label_image_path: path } });
-            }
-          } catch { /* non-fatal — placed without a thumbnail */ }
-        }
+        const saved = await addWine.mutateAsync(newCellarRow(b, userId, count, { awaiting_placement: true, awaiting_placement_unit_id: originRackId }));
+        await attachThumbnail(userId, saved.id, b, imgDims);
       }
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
       qc.invalidateQueries({ queryKey: ['rack-slots', originRackId] });
@@ -638,6 +586,8 @@ export default function ScanLineupScreen() {
     } catch (err) {
       showAlert({ title: 'Could not add lineup', body: err instanceof Error ? err.message : 'Please try again.' });
       setPlacing(false);
+    } finally {
+      placingRef.current = false;
     }
   }
 
@@ -652,10 +602,13 @@ export default function ScanLineupScreen() {
       </View>
 
       {stage === 'capture' ? (
-        // "Upload instead" opens the gallery only (via the effect above); the
-        // default is the live camera with a 6-bottle instruction overlay.
-        params.upload === '1' ? (
-          <View style={styles.cameraWrap} />
+        isUpload ? (
+          // Behind the library picker; also the way back in if it was dismissed.
+          <View style={styles.centerBlock}>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFromLibrary(false)} activeOpacity={0.85}>
+              <Text style={[styles.primaryBtnText, styles.chooseBtnText]}>Choose a Photo</Text>
+            </TouchableOpacity>
+          </View>
         ) : !permission ? (
           <View style={styles.cameraWrap} />
         ) : !permission.granted ? (
@@ -746,7 +699,7 @@ export default function ScanLineupScreen() {
                   {placing ? (isManualPlace ? 'Adding…' : 'Placing…') : 'Add Wines'}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={retake} activeOpacity={0.85}>
                 <Text style={styles.secondaryBtnText}>Retake</Text>
               </TouchableOpacity>
               <Text style={styles.placementHintItalic}>Select the bottle placement on the next screen</Text>
@@ -802,7 +755,7 @@ export default function ScanLineupScreen() {
           )}
 
           {!allDone && lineupWines.length > 0 ? (
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={retake} activeOpacity={0.85}>
               <Text style={styles.secondaryBtnText}>Retake</Text>
             </TouchableOpacity>
           ) : null}
@@ -899,6 +852,7 @@ const styles = StyleSheet.create({
   previewSmall: { width: '100%', height: 160, borderRadius: 12, backgroundColor: '#000', marginBottom: spacing.md },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
   primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  chooseBtnText: { paddingHorizontal: spacing.xl },
   secondaryBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   secondaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
   doneBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },

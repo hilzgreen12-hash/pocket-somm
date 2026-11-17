@@ -2,58 +2,61 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { getCellarWineById } from '../../src/api/cellar';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
-import { useChosenWines } from '../../src/hooks/useChosenWines';
-import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
-import { patchChosenWine, bulkDeleteChosenWines } from '../../src/api/chosenWines';
-import { deleteLibraryFilter } from '../../src/api/libraryFilters';
+import { getCellarWineById } from '../../src/api/cellar';
+import { patchChosenWine, bulkDeleteChosenWines, clearChosenReview, deleteChosenWine } from '../../src/api/chosenWines';
+import { deleteLibraryFilter, type LibraryFilter } from '../../src/api/libraryFilters';
+import { getCachedLabelUri } from '../../src/api/labelImageCache';
+import { prepareImageBase64, scanLabel } from '../../src/api/label';
+import { useChosenWines, useWineReviewCards } from '../../src/hooks/useChosenWines';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
+import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
+import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
+import { useLabelStore } from '../../src/stores/labelStore';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
-import { ReviewDetailModal } from '../../src/components/ReviewDetailModal';
-import { fromChosenGroup, fromCellar } from '../../src/utils/reviewModel';
-import { byRecency, entriesOf, flatMirror } from '../../src/utils/cellarReview';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
-import { showAlert } from '../../src/components/AppAlert';
-import { usePreferences } from '../../src/hooks/usePreferences';
-import { isMonthFirstCurrency } from '../../src/utils/vivinoCsv';
+import { ReviewDetailModal } from '../../src/components/ReviewDetailModal';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
-import { getCachedLabelUri } from '../../src/api/labelImageCache';
-import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
-import { useLabelStore } from '../../src/stores/labelStore';
-import { prepareImageBase64, scanLabel } from '../../src/api/label';
+import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
-import { regionWithCountry } from '../../src/utils/wineOrigin';
-import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
-import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
-import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
-import type { LibraryFilter } from '../../src/api/libraryFilters';
+import { showAlert } from '../../src/components/AppAlert';
+import {
+  cardKeyForChosen, chosenGroupId, chosenHasReview, refsOf, reviewIdentityKey, reviewTotals,
+  type EntryRef, type UnifiedEntry, type UnifiedReview,
+} from '../../src/utils/reviewModel';
+import { drinkingDateTime, entriesOf, latestEntry, withoutEntries } from '../../src/utils/cellarReview';
+import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/shareCard';
+import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
+import { isMonthFirstCurrency } from '../../src/utils/vivinoCsv';
+import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { normaliseCity } from '../../src/utils/city';
 import { foldAccents } from '../../src/utils/wineIdentity';
-import { wineNameKey } from '../../src/utils/wineConnections';
+import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ChosenWine, CellarWine } from '../../src/types/wine';
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+function formatDate(date: string | null | undefined): string {
+  const t = drinkingDateTime(date);
+  return t ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
 }
 
 // Month key + label for the Month filter. Key is 'YYYY-MM' (sortable);
 // label is "July 2026". 'all' is the no-filter sentinel.
-function monthKey(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
+function monthKey(date: string | null | undefined): string {
+  const t = drinkingDateTime(date);
+  if (!t) return '';
+  const d = new Date(t);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 function monthLabel(key: string): string {
@@ -62,244 +65,327 @@ function monthLabel(key: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
-// A chosen wine counts as "reviewed" once it carries any review content —
-// a tasting note, personal notes, or a score. Bare bottle picks (added via
-// List → "Add to Bottle Picks") have none of these and live only in You ·
-// Your Restaurants until the user reviews them.
-function chosenHasReview(wine: ChosenWine): boolean {
-  return !!(
-    (wine.tasting_note && wine.tasting_note.trim()) ||
-    (wine.other_observations && wine.other_observations.trim()) ||
-    wine.user_score != null
-  );
-}
-
+// City normalised on read so legacy rows saved as "Greater London" (a UK
+// reverse-geocode subregion) render as "London".
 function locationLine(wine: ChosenWine): string {
-  // City normalised on read so legacy rows saved as "Greater London"
-  // (UK reverse-geocode subregion) render as "London" without needing
-  // a backfill migration. New writes go in canonical via normaliseCity
-  // at the save sites — see ChosenWineModal etc.
-  const parts = [wine.restaurant_name, normaliseCity(wine.city)].filter(Boolean);
-  return parts.join(', ');
+  return [wine.restaurant_name, normaliseCity(wine.city)].filter(Boolean).join(', ');
 }
 
-function normKey(s: string | null | undefined): string {
-  return (s ?? '').trim().toLowerCase();
-}
+// One row of the list: a wine's review card, or a pick still awaiting review.
+type ListItem =
+  | { kind: 'review'; card: UnifiedReview }
+  | { kind: 'awaiting'; pick: ChosenWine };
 
-// Identity key for cross-referencing a review against cellar
-// rows — producer + name + vintage, normalised. Mirrors the matching
-// used by reviewSync.
-function wineIdentityKey(
-  producer: string | null | undefined,
-  wineName: string | null | undefined,
-  vintage: string | number | null | undefined,
-): string {
-  return `${normKey(producer)}|${normKey(wineName)}|${normKey(vintage != null ? String(vintage) : '')}`;
-}
+type Identity = { producer: string | null; wine_name: string | null; vintage: string | number | null; region: string | null; grape: string | null };
 
-// Source discriminator drives the Type filter chip. 'restaurant' and
-// 'other' both live on chosen_wines and are distinguished by the
-// `source` column (migration 042); 'cellar' is derived from any
-// cellar_wines row with user review content.
-type ReviewItem =
-  // `entries` holds the review's dated entries (the original plus any "Add to
-  // this review" entries), newest first; `wine` is the newest (representative).
-  | { source: 'restaurant'; date: string; score: number | null; wine: ChosenWine; entries: ChosenWine[] }
-  | { source: 'other';      date: string; score: number | null; wine: ChosenWine; entries: ChosenWine[] }
-  | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
+const itemKey = (it: ListItem) => (it.kind === 'review' ? it.card.key : `pick:${it.pick.id}`);
+const itemDate = (it: ListItem) => (it.kind === 'review' ? it.card.latestDate ?? '' : it.pick.chosen_at);
+const itemScore = (it: ListItem) => (it.kind === 'review' ? it.card.averageScore : null);
+const itemIdentity = (it: ListItem): Identity => (it.kind === 'review'
+  ? { producer: it.card.producer, wine_name: it.card.wineName, vintage: it.card.vintage, region: it.card.region, grape: it.card.grape }
+  : { producer: it.pick.producer, wine_name: it.pick.wine_name, vintage: it.pick.vintage, region: it.pick.region, grape: it.pick.grape });
+// The id a folder stores for this item. A pick reviewed in place keeps the
+// same group id, so it stays in its folder once reviewed.
+const itemFolderId = (it: ListItem) => (it.kind === 'review' ? it.card.folderId : chosenGroupId(it.pick));
+// Every id a folder may hold for this item — older folders stored row ids.
+const itemMemberIds = (it: ListItem): string[] => (it.kind === 'review'
+  ? [it.card.folderId, ...it.card.chosenRows.map((r) => r.id), ...it.card.cellarWines.map((w) => w.id)]
+  : [chosenGroupId(it.pick), it.pick.id]);
+
+type SortMode = 'recent' | 'score-desc' | 'score-asc';
+// Collection filter — restaurant (Winelist), cellar or other.
+type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'other';
+type FilterField = 'sort' | 'type' | 'month' | null;
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'recent',     label: 'All' },
+  { value: 'score-desc', label: 'Descending score' },
+  { value: 'score-asc',  label: 'Ascending score' },
+];
+const COLLECTION_OPTIONS: { value: TypeFilter; label: string }[] = [
+  { value: 'all',        label: 'All Wine Reviews' },
+  { value: 'restaurant', label: 'Winelist Wines' },
+  { value: 'cellar',     label: 'Cellar Wines' },
+  { value: 'other',      label: 'Other Wines' },
+];
+
+type AddSeed = { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; grape?: string | null; listPrice?: number | null; date?: string | null };
 
 export default function ChosenWinesScreen() {
-  const { chosenWines, isLoading, remove, dismissAwaiting } = useChosenWines();
-  const { wines: cellarWines, updateWine } = useCellar();
-  const { wines: archivedWines } = useArchive();
+  const { session } = useAuth();
+  const userId = session?.user.id;
   const qc = useQueryClient();
+  const { chosenWines, dismissAwaiting } = useChosenWines();
+  const { cards, awaiting, isLoading } = useWineReviewCards();
+  const { wines: liveWines, updateWine } = useCellar();
+  const { wines: archivedWines } = useArchive();
+  const { preferences } = usePreferences();
   const attachPhoto = useAttachLabelPhoto();
+  const params = useLocalSearchParams<{
+    openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; openCellarReviewEdit?: string;
+    seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; sg?: string; slp?: string; slu?: string; sd?: string;
+    backTo?: string; savedToast?: string; fromIntel?: string;
+  }>();
+
+  // The user's own bottles. In a shared household cellar the cellar queries
+  // hold the owner's bottles, which aren't the user's to review here.
+  const ownLive = useMemo(() => liveWines.filter((w) => w.user_id === userId), [liveWines, userId]);
+  const ownArchived = useMemo(() => archivedWines.filter((w) => w.user_id === userId), [archivedWines, userId]);
+  const findBottle = (id: string) => liveWines.find((w) => w.id === id) ?? archivedWines.find((w) => w.id === id);
+
+  // ---- Arriving for one wine -------------------------------------------------
+  // A deep link to a specific wine (a wine card, Wine Intel, a lineup, the
+  // Review tab carousel) returns there when its review closes.
+  const arrivedForOneWine = !!(params.openReview || params.openCellarReview || params.openCellarReviewInput || params.openCellarReviewEdit || params.seedAdd === '1');
+  // Pop back to the explicit backTo screen (pushing it again would stack a
+  // duplicate that takes several Backs to escape), else simply go back.
+  const returnToCaller = () => {
+    if (params.backTo) router.dismissTo(decodeURIComponent(params.backTo) as any);
+    else router.back();
+  };
+
+  // ---- Open review card + editors ---------------------------------------------
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  const detailCard = detailKey ? cards.find((c) => c.key === detailKey) ?? null : null;
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
-  // Every review (restaurant / cellar / other) opens the same unified detail view.
-  const [detailItem, setDetailItem] = useState<ReviewItem | null>(null);
-  // A label thumbnail tapped (in the list) to view full-screen.
+  const [editingCellar, setEditingCellar] = useState<{ wine: CellarWine; entryId: string | null } | null>(null);
+  // The card an editor was opened from, reopened when the editor closes.
+  const returnToDetailRef = useRef<string | null>(null);
+  // Hidden twins of the entry being edited (see UnifiedEntry.twins). Removed
+  // once the edit is saved, so the old copy can't resurface beside it.
+  const pendingCopiesRef = useRef<EntryRef[]>([]);
+  // A first cellar review hands off to Edit Wine Details when the title is
+  // tapped; remember the bottle so the review reopens (draft intact) on return.
+  const reopenCellarEditorRef = useRef<{ id: string; entryId: string | null } | null>(null);
   const [expandedThumb, setExpandedThumb] = useState<{ path: string; name?: string | null } | null>(null);
-  // The detail card that spawned an Edit — so closing the editor returns to the
-  // card, not out to the list. A REF (not state) so that a delete, which fires
-  // onSaved() then onClose() synchronously, clears it in onSaved before onClose
-  // reads it — otherwise a stale closure would restore the just-deleted card.
-  const returnToDetailRef = useRef<ReviewItem | null>(null);
-  const [editingCellarWine, setEditingCellarWine] = useState<CellarWine | null>(null);
-  // True when the cellar review modal was opened to EDIT the latest entry (from
-  // the review card's Edit) rather than to add a fresh one.
-  const [editingCellarLatest, setEditingCellarLatest] = useState(false);
-  // A first review hands off to Edit Wine Details when the user taps the wine
-  // title; remember which wine so the review re-opens (draft intact) on return.
-  const reopenReviewForRef = useRef<{ id: string; latest: boolean } | null>(null);
-  useFocusEffect(useCallback(() => {
-    const pending = reopenReviewForRef.current;
-    if (!pending) return;
-    reopenReviewForRef.current = null;
-    getCellarWineById(pending.id)
-      .then((fresh) => {
-        if (!fresh) return;
-        setEditingCellarLatest(pending.latest);
-        setEditingCellarWine(fresh);
-      })
-      .catch(() => {});
-  }, []));
+
+  // ---- Add a review -------------------------------------------------------------
+  const [chooserOpen, setChooserOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  // OCR pre-fill for the Add-a-Review modal when the user came via Scan/Upload
-  // (null for Manual Input). Keeps all three on the same review input screen.
-  const [addInitial, setAddInitial] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; grape?: string | null; listPrice?: number | null; date?: string | null } | null>(null);
-  // Local uri of a scanned/uploaded label, retained through the Add-a-Review
-  // modal so the new review can carry its label photo (Part 3). Null for Manual.
+  // Pre-fill for the Add modal — OCR from Scan / Upload, or a known wine.
+  const [addInitial, setAddInitial] = useState<AddSeed | null>(null);
+  // A scanned/uploaded label's local uri, uploaded with the new review.
   const [pendingReviewLabelUri, setPendingReviewLabelUri] = useState<string | null>(null);
-  // Set when the Add-a-Review modal is opened from Your Label Library, where the
-  // wine identity is already confirmed — the modal then shows a review CARD
-  // (name header + editable date + thumbnail) rather than the blank manual form.
+  // The wine is already known, so the Add modal shows the review card layout.
   const [addConfirmed, setAddConfirmed] = useState(false);
   const [addLabelPath, setAddLabelPath] = useState<string | null>(null);
-  // When set, the Add-a-Review modal is in "add to THIS review" mode: it appends
-  // a dated entry to this review_group_id and skips the "reviewed before" prompt.
+  // Set from a card's "+ Add Review": the new entry joins this review group.
   const [addToGroupId, setAddToGroupId] = useState<string | null>(null);
-  // "+ Add" opens a chooser first — Scan / Upload / Manual — then the
-  // chosen path takes over (manual reuses the existing AddChosenWineModal;
-  // scan + upload feed into the label flow with context=reviews).
-  const [chooserOpen, setChooserOpen] = useState(false);
+  const [addSource, setAddSource] = useState<'restaurant' | 'other'>('other');
   const [uploading, setUploading] = useState(false);
-  // Filter / sort state — mirrors the Full Cellar List pattern: one
-  // chip per filter dimension, each opens a modal dropdown with the
-  // available options. Sort is gold-bordered to mark it as the most
-  // common interaction. Default sort is "Recently added" (the previous
-  // 'date' option, renamed for consistency with Full Cellar List).
-  type SortMode = 'recent' | 'score-desc' | 'score-asc';
-  // Which collection to show — reviews are restaurant, cellar or other. Drives
-  // the centred collection selector.
-  type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'other';
-  type FilterField = 'sort' | 'type' | 'month' | null;
+  const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
+  const [cellarPickerSearch, setCellarPickerSearch] = useState('');
+
+  // ---- Filters ------------------------------------------------------------------
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [monthFilter, setMonthFilter] = useState<string>('all');
-  // Toggled by tapping "X Wines awaiting your review" in the header — shows only
-  // the not-yet-reviewed picks; tap again to clear.
+  // Toggled by the "X Wines awaiting your review" line: only awaiting picks.
   const [awaitingOnly, setAwaitingOnly] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
-  // Bespoke user-created filters (the "+ Add" chip), same as the Label Library.
+  // Your Folders — user-created filters (the "+ Add" chip).
   const { filters: customFilters, create: createFilter, setItems: setFilterItems, rename: renameFilter, remove: removeFilter } = useLibraryFilters('wine-review');
-  const { preferences } = usePreferences();
   const [activeCustomId, setActiveCustomId] = useState<string | null>(null);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
   const [savingFilter, setSavingFilter] = useState(false);
-  // Shown while a whole import folder + its (potentially thousands of) reviews are
-  // being deleted — the delete can take a while, so the user gets clear feedback.
+  // An import folder's delete can cover thousands of reviews — show progress.
   const [deletingImport, setDeletingImport] = useState(false);
-  // "+ Add" is a two-step chooser: first the collection (Restaurant / Cellar /
-  // Other), then — for restaurant/other — Scan / Upload / Manual. Cellar routes
-  // to a picker over the live cellar (a cellar review must attach to a real
-  // bottle). addSource carries the chosen collection into AddChosenWineModal.
-  const [collectionChooserOpen, setCollectionChooserOpen] = useState(false);
-  // "+ Add → Restaurant Wine" first shows the restaurant wines you've already
-  // recorded and not yet reviewed, so you review those rather than re-entering
-  // them. "Add Wine Anyway" drops through to the Scan/Upload/Manual chooser.
-  const [restaurantAwaitingOpen, setRestaurantAwaitingOpen] = useState(false);
-  const [addSource, setAddSource] = useState<'restaurant' | 'other'>('other');
-  const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
-  const [cellarPickerSearch, setCellarPickerSearch] = useState('');
-  // Review id whose tag-assignment sheet is open (null = closed).
-  const [assignForId, setAssignForId] = useState<string | null>(null);
-  // The folder highlighted in the Add-to-Folder sheet, committed on Confirm.
+  // The item whose "Add to Folder" sheet is open, and the folder picked in it.
+  const [assignFor, setAssignFor] = useState<ListItem | null>(null);
   const [assignPick, setAssignPick] = useState<string | null>(null);
-  useEffect(() => { if (assignForId) setAssignPick(null); }, [assignForId]);
+  useEffect(() => { if (assignFor) setAssignPick(null); }, [assignFor]);
+  // Cards being deleted from a long-press, hidden until the refetch lands.
+  const [deletingKeys, setDeletingKeys] = useState<Set<string>>(new Set());
 
-  // Cellar wines that have ANY user-supplied review content count as a
-  // "cellar review". Archived bottles are included too — a review added from an
-  // archived wine card must still surface in Your Wine Reviews, not vanish
-  // because the bottle left the live cellar.
-  const cellarReviews = [...cellarWines, ...archivedWines].filter((w) =>
-    // review_entries is the source of truth; the flat fields mirror the latest.
-    // Crucially include review_note (the actual "Your Review" text) — checking
-    // only user_notes (Personal Notes) meant a review that was JUST a tasting
-    // note with no score/date never appeared in Your Wine Reviews.
-    (Array.isArray((w as any).review_entries) && (w as any).review_entries.length > 0) ||
-    (w.review_note && w.review_note.trim().length > 0) ||
-    (w.user_notes && w.user_notes.trim().length > 0) ||
-    w.review_score != null ||
-    (w.review_location && w.review_location.trim().length > 0) ||
-    !!w.review_date
-  );
-
-  // A cellar review that's really the SAME wine as an existing reviewed chosen
-  // review — auto-linked / imported onto a cellar bottle — must not list twice.
-  // Drop the cellar copy from this list (the chosen review represents it here;
-  // the wine card still shows it via its own review_entries). Match by
-  // Wine-Searcher id, else order-independent name tokens + vintage.
-  const reviewedChosen = chosenWines.filter(chosenHasReview);
-  const reviewedWsIds = new Set(reviewedChosen.map((w) => w.ws_wine_id).filter((v): v is string => !!v));
-  const reviewKey = (w: { producer?: string | null; wine_name?: string | null; vintage?: string | number | null }) =>
-    `${wineNameKey(w.producer, w.wine_name)}|${String(w.vintage ?? '').trim()}`;
-  const reviewedChosenKeys = new Set(reviewedChosen.map(reviewKey));
-  const dedupedCellarReviews = cellarReviews.filter((w) =>
-    !(w.ws_wine_id && reviewedWsIds.has(w.ws_wine_id)) && !reviewedChosenKeys.has(reviewKey(w)),
-  );
-
-  // Group chosen reviews that share a review_group_id (an original review plus
-  // its later "Add to this review" entries) into ONE review card. Entries are
-  // ordered newest-first; the newest is the representative shown on the card.
-  const chosenGroupsMap = new Map<string, ChosenWine[]>();
-  for (const w of chosenWines) {
-    const k = w.review_group_id ?? w.id;
-    const arr = chosenGroupsMap.get(k);
-    if (arr) arr.push(w); else chosenGroupsMap.set(k, [w]);
+  // ---- Data refresh + entry removal ----------------------------------------------
+  function invalidateReviews() {
+    return Promise.all([
+      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] }),
+      qc.invalidateQueries({ queryKey: ['cellar', userId] }),
+      qc.invalidateQueries({ queryKey: ['cellar-archive', userId] }),
+      qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] }),
+    ]);
   }
-  const chosenGroups = [...chosenGroupsMap.values()].map((entries) =>
-    [...entries].sort((a, b) => new Date(b.chosen_at).getTime() - new Date(a.chosen_at).getTime()),
-  );
 
-  const items: ReviewItem[] = [
-    // The `source` column on chosen_wines (migration 042) drives the
-    // restaurant-vs-other split here. Legacy rows default to
-    // 'restaurant'; the "Review without adding" path tags 'other'.
-    ...chosenGroups.map((entries): ReviewItem => {
-      const rep = entries[0];
-      return {
-        source: rep.source === 'other' ? 'other' : 'restaurant',
-        date: rep.chosen_at,
-        // Sort by the wine's AVERAGE score (what the card shows), not just the
-        // newest tasting — so the Score sort groups by the visible average.
-        score: fromChosenGroup(entries).averageScore,
-        wine: rep,
-        entries,
-      };
-    }),
-    // Cellar wine reviews are shown here too, selectable via the collection
-    // header (All / Restaurant / Cellar / Other). Each is derived from a
-    // cellar_wines row carrying user review content; the review date drives
-    // recency + the Month filter, the review score drives sort.
-    ...dedupedCellarReviews.map((w): ReviewItem => ({
-      source: 'cellar',
-      date: w.review_date ?? w.updated_at ?? w.created_at,
-      // Average across the cellar wine's dated review entries — matches the card.
-      score: fromCellar(w).averageScore,
-      wine: w,
-    })),
-  ];
+  // Remove stored entries, touching only the rows they live in. A restaurant
+  // pick keeps its row on its visit with the review cleared — and with
+  // `dismissPicks`, hidden from Awaiting Review too.
+  async function removeEntries(refs: EntryRef[], { dismissPicks = false } = {}) {
+    const jobs: Promise<unknown>[] = [];
+    const entriesByBottle = new Map<string, { wine: CellarWine; ids: string[] }>();
+    for (const ref of refs) {
+      if (ref.kind === 'chosen') {
+        jobs.push(ref.row.scan_session_id
+          ? clearChosenReview(ref.row.id, { dismiss: dismissPicks })
+          : deleteChosenWine(ref.row.id));
+      } else {
+        const bottle = entriesByBottle.get(ref.wine.id) ?? { wine: ref.wine, ids: [] };
+        bottle.ids.push(ref.entryId);
+        entriesByBottle.set(ref.wine.id, bottle);
+      }
+    }
+    // One write per bottle, from its latest cached copy, so removing several
+    // entries can't overwrite each other.
+    for (const { wine, ids } of entriesByBottle.values()) {
+      const live = findBottle(wine.id) ?? wine;
+      jobs.push(updateWine.mutateAsync({ id: live.id, updates: withoutEntries(live, ids) }));
+    }
+    try {
+      await Promise.all(jobs);
+    } finally {
+      await invalidateReviews();
+    }
+  }
 
-  // Restaurant bottle picks the user has NOT yet reviewed — these are excluded
-  // from the main reviews list (they live in Your Restaurants until reviewed),
-  // and surface in the "Bottle Picks Awaiting Review" section + the on-open prompt.
-  // Identities (producer·name·vintage) that already carry a review somewhere —
-  // a chosen review OR a cellar review. A bare bottle-pick row for one of these
-  // is a phantom (e.g. a legacy duplicate) and must NOT show as "awaiting", so a
-  // wine you've reviewed never appears in the awaiting list too.
-  const idKey = (w: { producer?: string | null; wine_name?: string | null; vintage?: string | number | null }) =>
-    `${(w.producer ?? '').trim().toLowerCase()}|${(w.wine_name ?? '').trim().toLowerCase()}|${String(w.vintage ?? '').trim().toLowerCase()}`;
-  const reviewedIdentityKeys = new Set<string>();
-  for (const w of chosenWines) if (chosenHasReview(w)) reviewedIdentityKeys.add(idKey(w));
-  for (const w of cellarReviews) reviewedIdentityKeys.add(idKey(w));
-  const awaitingReview = chosenWines.filter((w) => !chosenHasReview(w) && !reviewedIdentityKeys.has(idKey(w)) && !w.review_dismissed);
+  function collapsePendingCopies() {
+    const copies = pendingCopiesRef.current;
+    pendingCopiesRef.current = [];
+    if (copies.length) void removeEntries(copies).catch(() => { /* a leftover copy is harmless */ });
+  }
 
-  // Long-press an awaiting-review pick to remove it from this list. It's a soft
-  // dismiss, not a delete — the wine stays on its restaurant's card in Your
-  // Restaurants (both screens read the same row).
+  // ---- Opening editors / cards -----------------------------------------------------
+  function openEntryEditor(ref: EntryRef, copies: EntryRef[]) {
+    pendingCopiesRef.current = copies;
+    if (ref.kind === 'chosen') setEditingWine(ref.row);
+    else setEditingCellar({ wine: ref.wine, entryId: ref.entryId });
+  }
+
+  // A new entry on a cellar bottle (entryId null), or edit one of its entries.
+  function openCellarEditor(wine: CellarWine, entryId: string | null) {
+    pendingCopiesRef.current = [];
+    setEditingCellar({ wine, entryId });
+  }
+
+  // Wait for fresh data before opening a card a save may have just created.
+  async function refreshThenOpen(findKey: () => string | null) {
+    await Promise.all([
+      qc.refetchQueries({ queryKey: ['chosen-wines', userId] }),
+      qc.refetchQueries({ queryKey: ['cellar', userId] }),
+      qc.refetchQueries({ queryKey: ['cellar-archive', userId] }),
+    ]).catch(() => { /* fall back to the cache */ });
+    const key = findKey();
+    if (key) setDetailKey(key);
+    else if (arrivedForOneWine) returnToCaller();
+  }
+
+  // An editor closed (saved or not): back to the card it was opened from, else
+  // — when we arrived for this one wine — back to the caller.
+  function afterEditorClosed(openAfter: (() => string | null) | null = null) {
+    const back = returnToDetailRef.current;
+    returnToDetailRef.current = null;
+    if (back) {
+      if (cards.some((c) => c.key === back)) setDetailKey(back);
+      else void refreshThenOpen(() => back);
+    } else if (openAfter) {
+      void refreshThenOpen(openAfter);
+    } else if (arrivedForOneWine) {
+      returnToCaller();
+    }
+  }
+
+  function closeDetail() {
+    setDetailKey(null);
+    if (arrivedForOneWine) returnToCaller();
+  }
+
+  // The open card's last entry was deleted (or the wine otherwise left the
+  // list) — close it.
+  useEffect(() => {
+    if (detailKey && !isLoading && !detailCard) closeDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailKey, detailCard, isLoading]);
+
+  useFocusEffect(useCallback(() => {
+    const pending = reopenCellarEditorRef.current;
+    if (!pending) return;
+    reopenCellarEditorRef.current = null;
+    getCellarWineById(pending.id)
+      .then((fresh) => { if (fresh) setEditingCellar({ wine: fresh, entryId: pending.entryId }); })
+      .catch(() => {});
+  }, []));
+
+  // ---- Deep links ------------------------------------------------------------------
+  //   ?openReview=<chosen id>            → that row's review card (or its input, if it's an unreviewed pick)
+  //   ?openCellarReview=<cellar id>      → that bottle's review card
+  //   ?openCellarReviewInput=<cellar id> → a new entry on that bottle
+  //   ?openCellarReviewEdit=<cellar id>  → edit that bottle's latest entry
+  //   ?addManual=1                       → the "Add a wine review" chooser
+  //   ?seedAdd=1&sp&sw&sv&sr&sg&sd&slp&slu → a new review of a known wine
+  // Each is handled once per distinct param set.
+  const handledParamRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isLoading) return;
+    const once = (key: string) => {
+      if (handledParamRef.current === key) return false;
+      handledParamRef.current = key;
+      return true;
+    };
+    if (params.openReview) {
+      const row = chosenWines.find((w) => w.id === params.openReview);
+      if (!row || !once(`open:${row.id}`)) return;
+      const card = cards.find((c) => c.chosenRows.some((r) => r.id === row.id));
+      if (card) setDetailKey(card.key);
+      else setEditingWine(row); // an unreviewed pick opens straight onto its input
+      return;
+    }
+    const bottleId = params.openCellarReview ?? params.openCellarReviewInput ?? params.openCellarReviewEdit;
+    if (bottleId) {
+      const bottle = findBottle(bottleId);
+      if (!bottle || !once(`bottle:${bottleId}`)) return;
+      const card = cards.find((c) => c.cellarWines.some((w) => w.id === bottleId));
+      if (params.openCellarReview && card) { setDetailKey(card.key); return; }
+      const latest = params.openCellarReviewEdit ? latestEntry(entriesOf(bottle)) : null;
+      if (!latest) { openCellarEditor(bottle, null); return; }
+      const entry = card?.entries.find((e) => refsOf(e).some((r) => r.kind === 'cellar' && r.entryId === latest.id));
+      const self: EntryRef = { kind: 'cellar', wine: bottle, entryId: latest.id };
+      openEntryEditor(self, entry ? refsOf(entry).filter((r) => !(r.kind === 'cellar' && r.entryId === latest.id)) : []);
+      return;
+    }
+    if (params.addManual === '1') {
+      if (!once('addManual')) return;
+      setAddSource('other');
+      setAddToGroupId(null);
+      setChooserOpen(true);
+      return;
+    }
+    if (params.seedAdd === '1') {
+      if (!once(`add:${params.sp}|${params.sw}|${params.sv}`)) return;
+      setAddInitial({ producer: params.sp || null, wineName: params.sw || null, vintage: params.sv || null, region: params.sr || null, grape: params.sg || null, date: params.sd || null });
+      // slu=1: a fresh scan whose label is still a local uri in the label
+      // store; slp: an already-uploaded storage path.
+      setPendingReviewLabelUri(params.slu === '1' ? (useLabelStore.getState().imageUri ?? null) : null);
+      setAddConfirmed(true);
+      setAddLabelPath(params.slp || null);
+      setAddOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, params.openReview, params.openCellarReview, params.openCellarReviewInput, params.openCellarReviewEdit, params.seedAdd, params.addManual, params.sp, params.sw, params.sv, chosenWines, cards, liveWines, archivedWines]);
+
+  // ---- Awaiting-review prompt --------------------------------------------------------
+  // One-time, dismissible nudge listing the picks waiting for a review. Only
+  // on a plain visit — not when the user deep-linked in for a specific wine.
+  const promptKey = `vinster-bottle-pick-prompt-dismissed:${userId ?? 'anon'}`;
+  const [reviewPrompt, setReviewPrompt] = useState<ChosenWine[] | null>(null);
+  const promptShownRef = useRef(false);
+  useEffect(() => {
+    if (promptShownRef.current || isLoading || awaiting.length === 0) return;
+    promptShownRef.current = true;
+    if (arrivedForOneWine) return;
+    const list = [...awaiting];
+    AsyncStorage.getItem(promptKey)
+      .then((dismissed) => { if (!dismissed) setReviewPrompt(list); })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, awaiting.length]);
+  async function dontShowPromptForever() {
+    try { await AsyncStorage.setItem(promptKey, '1'); } catch { /* non-fatal */ }
+    setReviewPrompt(null);
+  }
+
+  // Long-press an awaiting pick: a soft dismiss, not a delete — the wine stays
+  // on its restaurant's card in Your Restaurants.
   function promptDismissAwaiting(w: ChosenWine) {
     const label = wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'this wine');
     showAlert({
@@ -312,328 +398,118 @@ export default function ChosenWinesScreen() {
     });
   }
 
-  // One-time, dismissible prompt nudging the user to review a waiting pick.
-  const { session } = useAuth();
-  const promptKey = `vinster-bottle-pick-prompt-dismissed:${session?.user.id ?? 'anon'}`;
+  // ---- The list --------------------------------------------------------------------
+  const items: ListItem[] = useMemo(() => [
+    ...cards.filter((c) => !deletingKeys.has(c.key)).map((card): ListItem => ({ kind: 'review', card })),
+    ...awaiting.map((pick): ListItem => ({ kind: 'awaiting', pick })),
+  ], [cards, awaiting, deletingKeys]);
 
-  // Toggle a review in/out of a bespoke Folder (LibraryFilter). This is the same
-  // system the folder chips + filtering use, so an assignment is reflected there.
-  function toggleReviewInFolder(reviewId: string, f: LibraryFilter) {
-    const has = f.itemIds.includes(reviewId);
-    setFilterItems.mutate({ filterId: f.id, itemIds: has ? f.itemIds.filter((x) => x !== reviewId) : [...f.itemIds, reviewId] });
-  }
-  // "+ Import" — bring reviews in from a file. Vivino export or a general
-  // spreadsheet of reviews; both must be CSV (xlsx text mangles on-device).
-  function openReviewImportMenu() {
-    showAlert({
-      title: 'Import Reviews',
-      buttons: [
-        { text: 'Import Vivino CSV File', onPress: () => showImportInstructions('vivino-reviews') },
-        { text: 'Import Spreadsheet', onPress: () => showImportInstructions('review-spreadsheet') },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-  function showImportInstructions(src: 'vivino-reviews' | 'review-spreadsheet') {
-    const monthFirst = isMonthFirstCurrency(preferences?.defaultCurrency);
-    const dateLine = monthFirst
-      ? "You're in the US/Canada, so your file will be read with the date formatted month/day/year."
-      : "You're in the UK/Europe, so your file will be read with the date formatted day/month/year.";
-    // How ratings convert to Vinster's 100-point scale.
-    const scoreLine = src === 'vivino-reviews'
-      ? 'Your Vivino star ratings convert to Vinster\'s 100-point scale — each star is worth 20 points:\n\n5★ = 100   ·   4.5★ = 90   ·   4★ = 80\n3.5★ = 70   ·   3★ = 60   ·   2.5★ = 50'
-      : 'Ratings on a 0–5 scale convert to Vinster\'s 100-point scale (each point = 20: 5 = 100, 4 = 80, 3 = 60). Scores already on a 0–100 scale are kept as they are.';
-    showAlert({
-      title: src === 'vivino-reviews' ? 'Import a Vivino CSV' : 'Import a Spreadsheet',
-      body:
-        'Vinster can only accept uploads saved as CSV files — please make sure you have saved your document correctly before uploading.\n\n' +
-        'Ensure you have kept the Column Header row in the file, stating which input is in each column (Wine Name, Vintage, etc).\n\n' +
-        scoreLine + '\n\n' +
-        dateLine,
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Choose File', onPress: () => router.push(`/cellar/import-cellar?source=${src}` as any) },
-      ],
-    });
-  }
-  // The full list of wines awaiting review, snapshotted when the on-open prompt
-  // fires. More than one (e.g. two wines from the same restaurant visit) → the
-  // prompt lists them all, each a link into its review input card.
-  const [reviewPrompt, setReviewPrompt] = useState<ChosenWine[] | null>(null);
-  const [] = useState(false);
-  const promptShownRef = useRef(false);
-  // Deep-link params from Your Label Library's click-into-a-label popup (see
-  // below). Read up here so the on-open review nudge can bow out when we've
-  // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; openCellarReviewEdit?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; sg?: string; slp?: string; slu?: string; sd?: string; backTo?: string; savedToast?: string; fromIntel?: string }>();
-  const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
-  // Broader "arrived via a deep link to a specific wine's review" flag — also
-  // covers the cellar-review links (used by the Lineup wine list). Any of these
-  // should return to `backTo` (or the Label Library) when the review closes.
-  const cameViaLink = cameViaLabelLink || !!params.openCellarReview || !!params.openCellarReviewInput || !!params.openCellarReviewEdit;
-  // Return to wherever the user arrived from — an explicit backTo (e.g. a
-  // restaurant card via ?openSession) when provided, else the Label Library.
-  // dismissTo pops back to the EXISTING screen in the stack (don't router.replace
-  // — that pushes a duplicate on top, which is why Back then needed several
-  // presses to escape).
-  const returnToLibrary = () => router.dismissTo((params.backTo ? decodeURIComponent(params.backTo) : '/scan/archive') as any);
-
-  // After saving a review that arrived via a Label-Library link, land on THIS
-  // wine's review detail card (showing the entry just made) instead of bouncing
-  // back to the library. Refetches so the new entry is present, then opens the
-  // unified detail view; Back from there returns to the library (cameViaLink).
-  async function openSavedReviewDetail(target: { id?: string | null; producer?: string | null; wineName?: string | null; vintage?: string | number | null }) {
-    try { await qc.refetchQueries({ queryKey: ['chosen-wines', session?.user.id] }); } catch { /* fall back to cache */ }
-    const fresh = (qc.getQueryData(['chosen-wines', session?.user.id]) as ChosenWine[] | undefined) ?? chosenWines;
-    const wantKey = idKey({ producer: target.producer, wine_name: target.wineName, vintage: target.vintage });
-    let match = target.id ? fresh.find((w) => w.id === target.id) : undefined;
-    if (!match) match = fresh.find((w) => idKey(w) === wantKey && chosenHasReview(w));
-    if (!match) match = fresh.find((w) => idKey(w) === wantKey);
-    if (!match) { returnToLibrary(); return; }
-    const gid = match.review_group_id ?? match.id;
-    const entries = fresh
-      .filter((w) => (w.review_group_id ?? w.id) === gid)
-      .sort((a, b) => new Date(b.chosen_at ?? 0).getTime() - new Date(a.chosen_at ?? 0).getTime());
-    const source: 'restaurant' | 'other' = match.source === 'other' ? 'other' : 'restaurant';
-    setDetailItem({ source, date: entries[0]?.chosen_at ?? '', score: entries[0]?.user_score ?? null, wine: entries[0] ?? match, entries: entries.length ? entries : [match] });
+  // A wine the user owns (in the live cellar) belongs to the Cellar collection
+  // even when it was reviewed at a restaurant.
+  const ownedIdentities = useMemo(() => new Set(ownLive.map(reviewIdentityKey)), [ownLive]);
+  function collectionOf(it: ListItem): TypeFilter {
+    if (it.kind === 'review' && it.card.source === 'cellar') return 'cellar';
+    if (ownedIdentities.has(reviewIdentityKey(itemIdentity(it)))) return 'cellar';
+    return it.kind === 'review' ? it.card.source : it.pick.source;
   }
 
-  useEffect(() => {
-    if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
-    // Only nudge on a plain visit to Your Wine Reviews. When the user deep-linked
-    // in for a SPECIFIC wine — from a cellar wine card (openCellarReview /
-    // openCellarReviewInput) or the Label Library (openReview / seedAdd) — they're
-    // here on purpose; the "wines awaiting review" reminder would be an intrusion.
-    if (cameViaLink) { promptShownRef.current = true; return; }
-    promptShownRef.current = true;
-    const list = [...awaitingReview];
-    AsyncStorage.getItem(promptKey)
-      .then((dismissed) => { if (!dismissed) setReviewPrompt(list); })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, awaitingReview.length]);
-
-  // Tap a wine in the awaiting-review prompt → open its review input card.
-  function openAwaitingReview(w: ChosenWine) {
-    setReviewPrompt(null);
-    setEditingWine(w);
-  }
-
-  // Deep-link params (declared above) from Your Label Library's click-into-a-
-  // label popup:
-  //   ?openReview=<id>          → open that review for viewing/editing
-  //   ?seedAdd=1&sp&sw&sv&sr    → open a fresh review seeded with the identity
-  // Handled once per distinct param set so re-renders don't reopen the modal.
-  const handledParamRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (params.openReview) {
-      const key = `open:${params.openReview}`;
-      if (handledParamRef.current === key) return;
-      const match = chosenWines.find((w) => w.id === params.openReview);
-      if (match) {
-        handledParamRef.current = key;
-        // A pick that's still AWAITING review (a bottle pick with no review
-        // content yet) opens the INPUT directly — going to the read-only detail
-        // card and making the user tap Edit is wrong for an unreviewed wine.
-        if (!chosenHasReview(match)) { setEditingWine(match); return; }
-        // Otherwise open the unified READ-ONLY detail view (not the input card).
-        // Gather this review's dated entries — every row sharing its
-        // review_group_id — newest first, exactly as the list does.
-        const gid = match.review_group_id ?? match.id;
-        const entries = chosenWines
-          .filter((w) => (w.review_group_id ?? w.id) === gid)
-          .sort((a, b) => new Date(b.chosen_at ?? 0).getTime() - new Date(a.chosen_at ?? 0).getTime());
-        const source: 'restaurant' | 'other' = match.source === 'other' ? 'other' : 'restaurant';
-        setDetailItem({ source, date: entries[0]?.chosen_at ?? '', score: entries[0]?.user_score ?? null, wine: entries[0] ?? match, entries: entries.length ? entries : [match] });
-      }
-      return;
-    }
-    if (params.openCellarReview) {
-      // From a cellar wine card's "View Full Review(s)" link — open that
-      // bottle's unified review card (read-only), matching by cellar_wines id.
-      const key = `openCellar:${params.openCellarReview}`;
-      if (handledParamRef.current === key) return;
-      const w = cellarWines.find((x) => x.id === params.openCellarReview)
-        ?? archivedWines.find((x) => x.id === params.openCellarReview);
-      if (w) {
-        handledParamRef.current = key;
-        setDetailItem({ source: 'cellar', date: w.review_date ?? '', score: w.review_score ?? null, wine: w });
-      }
-      return;
-    }
-    if (params.openCellarReviewInput) {
-      // From a lineup wine with no review yet — open that cellar bottle's review
-      // INPUT (a fresh entry), not the read-only card.
-      const key = `openCellarInput:${params.openCellarReviewInput}`;
-      if (handledParamRef.current === key) return;
-      const w = cellarWines.find((x) => x.id === params.openCellarReviewInput)
-        ?? archivedWines.find((x) => x.id === params.openCellarReviewInput);
-      if (w) {
-        handledParamRef.current = key;
-        setEditingCellarLatest(false);
-        setEditingCellarWine(w);
-      }
-      return;
-    }
-    if (params.openCellarReviewEdit) {
-      // From a wine card's "View full review" — open the LATEST review in its
-      // full review / edit screen (same as Edit on the review card).
-      const key = `openCellarEdit:${params.openCellarReviewEdit}`;
-      if (handledParamRef.current === key) return;
-      const w = cellarWines.find((x) => x.id === params.openCellarReviewEdit)
-        ?? archivedWines.find((x) => x.id === params.openCellarReviewEdit);
-      if (w) {
-        handledParamRef.current = key;
-        setEditingCellarLatest(true);
-        setEditingCellarWine(w);
-      }
-      return;
-    }
-    if (params.addManual === '1') {
-      // From the Review tab's "Add a wine review" — open the mode-of-input
-      // chooser (Scan / Upload / Manual Input / Select from Cellar).
-      if (handledParamRef.current === 'addManual') return;
-      handledParamRef.current = 'addManual';
-      setAddSource('other');
-      setAddToGroupId(null);
-      setChooserOpen(true);
-      return;
-    }
-    if (params.seedAdd === '1') {
-      const key = `add:${params.sp}|${params.sw}|${params.sv}`;
-      if (handledParamRef.current === key) return;
-      handledParamRef.current = key;
-      setAddInitial({ producer: params.sp || null, wineName: params.sw || null, vintage: params.sv || null, region: params.sr || null, grape: params.sg || null, date: params.sd || null });
-      // slu=1 → a fresh scan (Save to Reviews → Review now) whose label is still
-      // a local uri in the label store; carry it so the +Add modal uploads it on
-      // save. slp carries an already-uploaded storage path instead.
-      setPendingReviewLabelUri(params.slu === '1' ? (useLabelStore.getState().imageUri ?? null) : null);
-      // Identity is confirmed → review-card presentation, carrying the label's
-      // photo (existing path via slp, or the local scan via slu above).
-      setAddConfirmed(true);
-      setAddLabelPath(params.slp || null);
-      setAddOpen(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.openReview, params.openCellarReview, params.openCellarReviewInput, params.openCellarReviewEdit, params.seedAdd, params.addManual, params.sp, params.sw, params.sv, params.sr, params.slu, chosenWines, cellarWines, archivedWines]);
-
-  // "Don't show me this again" — a direct action (no tick box): opt out
-  // permanently and dismiss.
-  async function dontShowPromptForever() {
-    try { await AsyncStorage.setItem(promptKey, '1'); } catch { /* non-fatal */ }
-    setReviewPrompt(null);
-  }
-
-  // A not-yet-reviewed restaurant/other pick that should surface in Your Wine
-  // Reviews as "Awaiting Review": has no review, its identity isn't already
-  // reviewed elsewhere (phantom rows), and it hasn't been dismissed. Same rule
-  // the flat `awaitingReview` list uses.
-  const isAwaitingPick = (w: ChosenWine): boolean =>
-    !chosenHasReview(w) && !reviewedIdentityKeys.has(idKey(w)) && !w.review_dismissed;
-  function isAwaitingItem(it: ReviewItem): boolean {
-    return (it.source === 'restaurant' || it.source === 'other') && isAwaitingPick(it.wine as ChosenWine);
-  }
-
-  // Whether an item belongs in the list at all — a written chosen review, any
-  // cellar review, OR an awaiting pick (which now stacks in by date alongside
-  // reviews rather than sitting in a separate section). Used by the Location /
-  // Month option lists and the main filter so they agree on what's visible.
-  function isShownReview(it: ReviewItem): boolean {
-    if (it.source === 'restaurant' || it.source === 'other') return chosenHasReview(it.wine as ChosenWine) || isAwaitingPick(it.wine as ChosenWine);
-    return true; // cellar reviews are always shown
-  }
-
-  // Months surfaced by the Month chip — every month that carries a shown review,
-  // most-recent first. 'all' is the no-filter sentinel.
   const availableMonths = useMemo(() => {
-    const set = new Set<string>();
-    for (const it of items) {
-      if (!isShownReview(it)) continue;
-      const k = monthKey(it.date);
-      if (k) set.add(k);
-    }
-    return ['all', ...Array.from(set).sort((a, b) => b.localeCompare(a))];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosenWines, cellarReviews]);
+    const months = new Set(items.map((it) => monthKey(itemDate(it))).filter(Boolean));
+    return ['all', ...Array.from(months).sort((a, b) => b.localeCompare(a))];
+  }, [items]);
 
-  // A reviewed wine the user also OWNS (its identity matches a bottle in the
-  // cellar) was drunk from the cellar — so it belongs to the Cellar collection
-  // even when it was reviewed as a restaurant (Winelist) or Other pick.
-  const cellarIdentityKeys = useMemo(
-    () => new Set(cellarWines.map((w) => wineIdentityKey(w.producer, w.wine_name, w.vintage))),
-    [cellarWines],
-  );
-  // Which collection a review belongs to: its source (restaurant = Winelist,
-  // cellar, other), except an owned wine is always Cellar (see above).
-  function collectionOf(
-    producer: string | null | undefined,
-    wineName: string | null | undefined,
-    vintage: string | number | null | undefined,
-    source: 'restaurant' | 'other' | 'cellar',
-  ): TypeFilter {
-    if (source === 'cellar') return 'cellar';
-    if (cellarIdentityKeys.has(wineIdentityKey(producer, wineName, vintage))) return 'cellar';
-    return source;
-  }
-
-  // Apply filters. Search is applied last so the chips still own the
-  // visible "shape" — typing a query just narrows whatever filters
-  // are on, matching Full Cellar List's behaviour.
+  const activeFolder = activeCustomId ? customFilters.find((f) => f.id === activeCustomId) : undefined;
   const q = foldAccents(search.trim());
   const filtered = items.filter((it) => {
-    // Awaiting picks show too (stacked by date); the header's "X awaiting"
-    // toggle narrows to only them.
-    if (!isShownReview(it)) return false;
-    if (awaitingOnly && !isAwaitingItem(it)) return false;
-    // Collection: All shows everything; otherwise a single collection. Maps onto
-    // item.source (restaurant = Winelist / cellar / other), except an owned wine
-    // always counts as Cellar (see collectionOf).
-    if (typeFilter !== 'all' && collectionOf(it.wine.producer, it.wine.wine_name, it.wine.vintage, it.source) !== typeFilter) return false;
-    if (monthFilter !== 'all' && monthKey(it.date) !== monthFilter) return false;
-    if (activeCustomId) {
-      const f = customFilters.find((cf) => cf.id === activeCustomId);
-      if (!(f?.itemIds ?? []).includes(it.wine.id)) return false;
-    }
+    if (awaitingOnly && it.kind !== 'awaiting') return false;
+    if (typeFilter !== 'all' && collectionOf(it) !== typeFilter) return false;
+    if (monthFilter !== 'all' && monthKey(itemDate(it)) !== monthFilter) return false;
+    if (activeFolder && !itemMemberIds(it).some((id) => activeFolder.itemIds.includes(id))) return false;
     if (q) {
-      const w = it.wine as { producer?: string | null; wine_name?: string | null; region?: string | null; grape_variety?: string | null; vintage?: string | number | null };
-      const hay = foldAccents([w.producer, w.wine_name, w.region, w.grape_variety, w.vintage != null ? String(w.vintage) : null]
-        .filter(Boolean)
-        .join(' '));
+      const w = itemIdentity(it);
+      const hay = foldAccents([w.producer, w.wine_name, w.region, w.grape, w.vintage != null ? String(w.vintage) : null].filter(Boolean).join(' '));
       if (!hay.includes(q)) return false;
     }
     return true;
   });
 
-  // Sort. Score-asc and score-desc both push score-less rows to the
-  // bottom (they're not interesting in either direction). Recent uses
-  // the unified `date` (chosen_at for restaurant, review_date /
-  // created_at for cellar — set when items[] is built).
+  // Score sorts push score-less items to the bottom; ties fall back to recency.
   const sorted = [...filtered].sort((a, b) => {
-    if (sortMode === 'score-desc' || sortMode === 'score-asc') {
-      const ar = a.score;
-      const br = b.score;
-      const aMissing = ar == null;
-      const bMissing = br == null;
-      if (aMissing !== bMissing) return aMissing ? 1 : -1;
-      if (ar != null && br != null && ar !== br) {
-        return sortMode === 'score-desc' ? br - ar : ar - br;
-      }
+    if (sortMode !== 'recent') {
+      const as = itemScore(a);
+      const bs = itemScore(b);
+      if ((as == null) !== (bs == null)) return as == null ? 1 : -1;
+      if (as != null && bs != null && as !== bs) return sortMode === 'score-desc' ? bs - as : as - bs;
     }
-    return new Date(b.date).getTime() - new Date(a.date).getTime();
+    return drinkingDateTime(itemDate(b)) - drinkingDateTime(itemDate(a));
   });
 
-  // Bespoke-filter management — mirrors the Label Library.
-  function applyCustom(id: string) {
-    setActiveCustomId((prev) => (prev === id ? null : id));
+  const totals = reviewTotals(filtered.flatMap((it) => (it.kind === 'review' ? [it.card] : [])));
+  const awaitingCount = new Set(filtered.flatMap((it) => (it.kind === 'awaiting' ? [reviewIdentityKey(it.pick)] : []))).size;
+
+  // A bottle's label photo stands in when a review has none of its own.
+  const cellarPhotoByIdentity = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const w of ownLive) if (w.label_image_path) map.set(reviewIdentityKey(w), w.label_image_path);
+    return map;
+  }, [ownLive]);
+  function labelPathFor(it: ListItem): string | null {
+    const own = it.kind === 'review' ? it.card.photoPath : it.pick.label_image_path;
+    return own ?? cellarPhotoByIdentity.get(reviewIdentityKey(itemIdentity(it))) ?? null;
   }
-  function openCreateFilter() {
-    setEditingFilter(null);
-    setFilterModalOpen(true);
+  // Where an added photo goes: the review's newest chosen row, else its bottle.
+  function presentAddPhoto(it: ListItem) {
+    const row = it.kind === 'awaiting' ? it.pick : it.card.chosenRows.find(chosenHasReview);
+    const bottle = it.kind === 'review' ? it.card.cellarWines[0] : undefined;
+    const target = row ?? bottle;
+    if (!target) return;
+    attachPhoto.present({ kind: row ? 'chosen' : 'cellar', wineId: target.id, producer: target.producer, wineName: target.wine_name });
   }
+
+  // ---- Deleting a whole wine (long-press) ---------------------------------------------
+  function handleLongPressReview(card: UnifiedReview) {
+    if (card.source !== 'other') { confirmDeleteCard(card); return; }
+    // Other reviews can also be filed into a folder (e.g. "BBR Tasting").
+    showAlert({
+      title: wineHeaderLine(card.producer, card.wineName, card.vintage),
+      buttons: [
+        { text: 'Add to Folder', onPress: () => setAssignFor({ kind: 'review', card }) },
+        { text: 'Delete wine', style: 'destructive', onPress: () => confirmDeleteCard(card) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // Removes every review of the wine. Bottles stay in the cellar and restaurant
+  // picks stay on their visits; only the reviews go.
+  function confirmDeleteCard(card: UnifiedReview) {
+    const label = wineHeaderLine(card.producer, card.wineName, card.vintage);
+    const keepsBottle = card.cellarWines.length > 0 ? ' — the bottle stays in your cellar' : '';
+    showAlert({
+      title: 'Delete this wine?',
+      body: `${label}\n\nThis deletes ${card.count === 1 ? 'your review' : `all ${card.count} of your reviews`} and removes this wine from your reviews${keepsBottle}. To delete a single review, open the wine and use Delete on that review.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            // Unreviewed rows in the group go too, so the wine leaves the list.
+            const bareRows: EntryRef[] = card.chosenRows.filter((r) => !chosenHasReview(r)).map((row) => ({ kind: 'chosen', row }));
+            setDeletingKeys((prev) => new Set(prev).add(card.key));
+            removeEntries([...card.entries.flatMap(refsOf), ...bareRows], { dismissPicks: true })
+              .catch((err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }))
+              .finally(() => setDeletingKeys((prev) => { const next = new Set(prev); next.delete(card.key); return next; }));
+          },
+        },
+      ],
+    });
+  }
+
+  // ---- Folders -------------------------------------------------------------------------
   function openFilterOptions(f: LibraryFilter) {
-    // An "Import — <date>" folder from a review import gets an extra destructive
-    // option to delete the folder AND every review it brought in — the clean way
-    // to undo an import (e.g. before re-importing a corrected file).
+    // An "Import — <date>" folder can also delete every review it brought in —
+    // the clean way to undo an import before re-importing a corrected file.
     const isImport = /^import\b/i.test(f.name.trim());
     showAlert({
       title: f.name,
@@ -646,12 +522,10 @@ export default function ChosenWinesScreen() {
       ],
     });
   }
-  // Delete an import wholesale: every review it added, then the folder. Used to
-  // undo an import before re-importing a corrected file.
   function confirmDeleteImport(f: LibraryFilter) {
     const n = f.itemIds.length;
     showAlert({
-      title: `Delete this import?`,
+      title: 'Delete this import?',
       body: `This permanently deletes the folder “${f.name}” and all ${n} review${n === 1 ? '' : 's'} it imported. This can’t be undone.`,
       buttons: [
         { text: 'Cancel', style: 'cancel' },
@@ -659,7 +533,15 @@ export default function ChosenWinesScreen() {
           setDeletingImport(true);
           try {
             if (activeCustomId === f.id) setActiveCustomId(null);
-            await bulkDeleteChosenWines(f.itemIds);
+            // The folder's own ids are row ids (imports) or group ids; delete
+            // the chosen rows of every review in it. Cellar entries are untouched.
+            const rowIds = new Set(f.itemIds);
+            for (const it of items) {
+              if (it.kind === 'review' && itemMemberIds(it).some((id) => f.itemIds.includes(id))) {
+                for (const r of it.card.chosenRows) rowIds.add(r.id);
+              }
+            }
+            await bulkDeleteChosenWines([...rowIds]);
             await deleteLibraryFilter(f.id);
             qc.invalidateQueries({ queryKey: ['chosen-wines'] });
             qc.invalidateQueries({ queryKey: ['library-filters'] });
@@ -689,50 +571,27 @@ export default function ChosenWinesScreen() {
       setSavingFilter(false);
     }
   }
-  // Items offered in the create/edit sheet — every reviewed/awaiting wine, by
-  // name + review date. Deduped by wine id (one entry per review group).
-  const filterItems = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { id: string; label: string; sublabel?: string }[] = [];
-    for (const it of items) {
-      if (!isShownReview(it)) continue;
-      if (seen.has(it.wine.id)) continue;
-      seen.add(it.wine.id);
-      const w = it.wine as ChosenWine;
-      out.push({
-        id: it.wine.id,
-        label: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name || w.producer || 'Wine',
-        sublabel: it.date ? new Date(it.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined,
-      });
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
+  // Every wine on the list, offered in the create/edit folder sheet.
+  const filterItems = useMemo(() => items.map((it) => {
+    const w = itemIdentity(it);
+    const date = itemDate(it);
+    return {
+      id: itemFolderId(it),
+      label: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name || w.producer || 'Wine',
+      sublabel: date ? new Date(drinkingDateTime(date)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined,
+    };
+  }), [items]);
+  // A folder's current members as folder ids (older folders hold row ids).
+  const editingFilterSelection = useMemo(() => (editingFilter
+    ? items.filter((it) => itemMemberIds(it).some((id) => editingFilter.itemIds.includes(id))).map(itemFolderId)
+    : undefined), [editingFilter, items]);
 
-  // Labels surfaced inside each chip's value line.
-  const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-    { value: 'recent',     label: 'All' },
-    { value: 'score-desc', label: 'Descending score' },
-    { value: 'score-asc',  label: 'Ascending score' },
-  ];
-  // Collection — a filter-carousel chip. Winelist (restaurant-list picks),
-  // Cellar (owned wines, incl. cellar bottles drunk out) and Other are distinct
-  // slices mapped onto item.source.
-  const COLLECTION_OPTIONS: { value: TypeFilter; label: string }[] = [
-    { value: 'all',        label: 'All Wine Reviews' },
-    { value: 'restaurant', label: 'Winelist Wines' },
-    { value: 'cellar',     label: 'Cellar Wines' },
-    { value: 'other',      label: 'Other Wines' },
-  ];
+  // ---- Filter chips ----------------------------------------------------------------------
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'All';
-  // Short value for the narrow Collection chip — the dropdown carries the full
-  // "… Wines" labels.
   const collectionChipLabel = typeFilter === 'all' ? 'All'
     : typeFilter === 'restaurant' ? 'Winelist'
     : typeFilter === 'cellar' ? 'Cellar' : 'Other';
-  const yourScoreLabel = (sortMode === 'score-desc' || sortMode === 'score-asc') ? sortLabel : 'All';
-
-  // Build the dropdown config for whichever chip the user tapped.
+  const yourScoreLabel = sortMode === 'recent' ? 'All' : sortLabel;
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'sort') return { title: 'Your Score', options: SORT_OPTIONS, selected: sortMode, onSelect: (v) => setSortMode(v as SortMode) };
     if (field === 'type') return { title: 'Collection', options: COLLECTION_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
@@ -746,198 +605,74 @@ export default function ChosenWinesScreen() {
   }
   const activeDropdown = dropdownConfig(openDropdown);
 
-  // A review's wine may also live in the cellar. Match by
-  // identity so each card can note when it was added there. date_received
-  // is the user-set acquisition date; fall back to created_at when blank.
-  const cellarByIdentity = new Map(
-    cellarWines.map((w) => [wineIdentityKey(w.producer, w.wine_name, w.vintage), w] as const),
-  );
-
-  // Label photo for a review card, shown like a cellar wine card. Cellar
-  // reviews carry it directly; chosen reviews use their own captured photo
-  // (migration 067) and fall back to a matching cellar wine's photo by
-  // identity. Null → the card stays text-only (no empty frame).
-  function labelPathFor(item: ReviewItem): string | null {
-    if (item.source === 'cellar') return (item.wine as CellarWine).label_image_path ?? null;
-    const own = (item.wine as ChosenWine).label_image_path;
-    if (own) return own;
-    const key = wineIdentityKey(item.wine.producer, item.wine.wine_name, item.wine.vintage);
-    return cellarByIdentity.get(key)?.label_image_path ?? null;
-  }
-
-  // Refresh a review item's wine from the LIVE chosen-wines query — detailItem is a
-  // snapshot, so a photo just added via "+ Add" wouldn't show on the open card /
-  // in a share until reopened. Resolving against the live row fixes both.
-  function liveItem(item: ReviewItem): ReviewItem {
-    if (item.source === 'cellar') return item;
-    const live = chosenWines.find((c) => c.id === item.wine.id);
-    return live ? ({ ...item, wine: live } as ReviewItem) : item;
-  }
-
-  // Long-press a review. Other reviews get a first step so the user can file
-  // them under a bespoke filter (e.g. "BBR Tasting") as well as delete; every
-  // other source goes straight to the delete confirm.
-  function handleLongPressReview(item: ReviewItem) {
-    if (item.source === 'other') {
-      const w = item.wine;
-      showAlert({
-        title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
-        buttons: [
-          { text: 'Add to Folder', onPress: () => setAssignForId(w.id) },
-          { text: 'Delete wine', style: 'destructive', onPress: () => confirmDeleteReview(item) },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-      });
-      return;
-    }
-    confirmDeleteReview(item);
-  }
-
-  // Delete a review. A restaurant review is its own chosen_wines row, so it's
-  // deleted outright. A cellar review lives on the cellar_wines row, so we only
-  // clear the review fields — the bottle stays in the cellar.
-  function confirmDeleteReview(item: ReviewItem) {
-    const w = item.wine;
-    const label = wineHeaderLine(w.producer, w.wine_name, w.vintage);
-    const onError = (err: unknown) => showAlert({
-      title: 'Could not delete',
-      body: err instanceof Error ? err.message : 'Please try again.',
-    });
-    const isCellar = item.source === 'cellar';
-    // Long-press delete removes the WINE from the reviews list (not just its
-    // review text). To delete the review only — keeping the wine — the user opens
-    // it and taps Edit. A cellar wine's bottle stays in the cellar either way.
+  // ---- Import -------------------------------------------------------------------------------
+  // Reviews come in from a Vivino export or a general spreadsheet, both as CSV
+  // (xlsx text mangles on-device).
+  function openReviewImportMenu() {
     showAlert({
-      title: 'Delete this wine?',
-      body: isCellar
-        ? `${label}\n\nThis will delete your review and remove this wine from your list of wines to review — the bottle stays in your cellar. To delete the review only, open it and tap Edit.`
-        : `${label}\n\nThis will delete your review and remove this wine from your list of wines to review. To delete the review only, open it and tap Edit.`,
+      title: 'Import Reviews',
+      buttons: [
+        { text: 'Import Vivino CSV File', onPress: () => showImportInstructions('vivino-reviews') },
+        { text: 'Import Spreadsheet', onPress: () => showImportInstructions('review-spreadsheet') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  function showImportInstructions(src: 'vivino-reviews' | 'review-spreadsheet') {
+    const dateLine = isMonthFirstCurrency(preferences?.defaultCurrency)
+      ? "You're in the US/Canada, so your file will be read with the date formatted month/day/year."
+      : "You're in the UK/Europe, so your file will be read with the date formatted day/month/year.";
+    const scoreLine = src === 'vivino-reviews'
+      ? 'Your Vivino star ratings convert to Vinster\'s 100-point scale — each star is worth 20 points:\n\n5★ = 100   ·   4.5★ = 90   ·   4★ = 80\n3.5★ = 70   ·   3★ = 60   ·   2.5★ = 50'
+      : 'Ratings on a 0–5 scale convert to Vinster\'s 100-point scale (each point = 20: 5 = 100, 4 = 80, 3 = 60). Scores already on a 0–100 scale are kept as they are.';
+    showAlert({
+      title: src === 'vivino-reviews' ? 'Import a Vivino CSV' : 'Import a Spreadsheet',
+      body:
+        'Vinster can only accept uploads saved as CSV files — please make sure you have saved your document correctly before uploading.\n\n' +
+        'Ensure you have kept the Column Header row in the file, stating which input is in each column (Wine Name, Vintage, etc).\n\n' +
+        scoreLine + '\n\n' +
+        dateLine,
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            const uid = session?.user.id;
-            if (isCellar) {
-              // Optimistically clear the review fields on the cellar row so the
-              // wine leaves the reviews list instantly; the mutation reconciles.
-              qc.setQueryData(['cellar', uid], (old: any) =>
-                Array.isArray(old)
-                  ? old.map((c: any) =>
-                      c.id === item.wine.id
-                        ? { ...c, user_notes: null, review_score: null, review_location: null, review_date: null, review_entries: [] }
-                        : c,
-                    )
-                  : old,
-              );
-              updateWine.mutate(
-                {
-                  id: item.wine.id,
-                  updates: { user_notes: null, review_score: null, review_location: null, review_date: null, review_entries: [] } as any,
-                },
-                {
-                  onError: (err) => {
-                    qc.invalidateQueries({ queryKey: ['cellar', uid] });
-                    onError(err);
-                  },
-                },
-              );
-            } else {
-              // Delete every chosen_wines row in this wine's review group so the
-              // whole wine leaves the list (not just the head entry).
-              const gid = (item.wine as ChosenWine).review_group_id ?? item.wine.id;
-              const ids = chosenWines.filter((c) => (c.review_group_id ?? c.id) === gid).map((c) => c.id);
-              const targets = ids.length ? ids : [item.wine.id];
-              const drop = new Set(targets);
-              // Optimistically remove the rows from the list so it updates instantly.
-              qc.setQueryData(['chosen-wines', uid], (old: any) =>
-                Array.isArray(old) ? old.filter((c: any) => !drop.has(c.id)) : old,
-              );
-              targets.forEach((id) =>
-                remove.mutate(id, {
-                  onError: (err) => {
-                    qc.invalidateQueries({ queryKey: ['chosen-wines', uid] });
-                    onError(err);
-                  },
-                }),
-              );
-            }
-          },
-        },
+        { text: 'Choose File', onPress: () => router.push(`/cellar/import-cellar?source=${src}` as any) },
       ],
     });
   }
 
-  const hasAnything = items.length > 0;
-
-  // Off-screen branded card used for review shares. Holds the props of
-  // the review currently being shared; mounted only while a share is in
-  // flight so we don't pay for layout work when nothing's queued.
+  // ---- Sharing ------------------------------------------------------------------------------
+  // A review shares as a branded PNG (WineReviewShareCard, captured off-screen),
+  // falling back to plain text where capture or expo-sharing isn't available.
   const reviewShareRef = useRef<View>(null);
   const [reviewSharing, setReviewSharing] = useState(false);
   const [reviewSharePayload, setReviewSharePayload] = useState<{
-    producer: string | null;
-    wineName: string;
-    vintage: string | number | null;
-    region: string | null;
-    userScore: number | null;
-    criticScore: number | null;
-    tastingNote: string | null;
-    otherObservations: string | null;
-    date: string | null;
-    location: string | null;
-    isFavourite: boolean;
-    imageUri?: string | null;
+    producer: string | null; wineName: string; vintage: string | number | null; region: string | null;
+    userScore: number | null; criticScore: number | null; tastingNote: string | null;
+    date: string | null; location: string | null; isFavourite: boolean; imageUri: string | null;
   } | null>(null);
 
-  // Hand a review to the native share sheet as a branded PNG — mirrors
-  // the WineListShareCard path used by List recommendations so the two
-  // surfaces feel like one family. Falls back to the previous plain-
-  // text share if capture or expo-sharing isn't available (older
-  // devices, simulator without share support).
-  async function handleShareReview(item: ReviewItem) {
+  async function handleShareReview(card: UnifiedReview) {
     if (reviewSharing) return;
-    // Use the live row so a just-added label photo is included in the share card.
-    item = liveItem(item);
-    const w = item.wine;
-    // Both restaurant and other reviews live on chosen_wines, so they
-    // share the same field shape for sharing. Only cellar splits off.
-    const isChosen = item.source !== 'cellar';
-    const cw = isChosen ? (w as ChosenWine) : null;
-    const cellar = !isChosen ? (w as CellarWine) : null;
-
-    const locText = isChosen
-      ? locationLine(cw!)
-      : (cellar!.review_location?.trim() ?? '');
-    const tastingNote = isChosen
-      ? cw!.tasting_note ?? ''
-      // review_note is the public "Your Review" text. NEVER share user_notes for a
-      // cellar wine — that's the PRIVATE Personal Note (deliberately hidden in the
-      // detail view); sharing it leaked exactly what the UI keeps private.
-      : cellar!.review_note ?? '';
-    const otherObs = isChosen ? (cw!.other_observations ?? '') : '';
-    const criticScore = isChosen ? cw!.critic_score : cellar!.critic_score;
-
-    let labelUri: string | null = null;
-    const lp = labelPathFor(item);
-    if (lp) { try { labelUri = await getCachedLabelUri(lp); } catch { /* no photo */ } }
+    const latest = card.entries[0];
+    // Only the shareable "Your Review" — never the private personal note.
+    const tastingNote = (latest?.note ?? '').trim();
+    const location = (latest?.location ?? '').trim();
+    let imageUri: string | null = null;
+    const photo = labelPathFor({ kind: 'review', card });
+    if (photo) { try { imageUri = await getCachedLabelUri(photo); } catch { /* no photo */ } }
     setReviewSharePayload({
-      producer: w.producer,
-      wineName: w.wine_name,
-      vintage: w.vintage,
-      region: w.region,
-      userScore: item.score,
-      criticScore,
+      producer: card.producer,
+      wineName: card.wineName ?? '',
+      vintage: card.vintage,
+      region: card.region,
+      userScore: card.averageScore,
+      criticScore: card.vinsterIntel.criticScore,
       tastingNote,
-      otherObservations: otherObs,
-      date: formatDate(item.date),
-      location: locText || null,
-      isFavourite: !!(w as { is_favourite?: boolean }).is_favourite,
-      imageUri: labelUri,
+      date: formatDate(latest?.dateIso) || null,
+      location: location || null,
+      isFavourite: !!latest?.favourite,
+      imageUri,
     });
     setReviewSharing(true);
-
     try {
       // One paint to let the off-screen card mount with the new props.
       await new Promise((r) => setTimeout(r, 250));
@@ -946,17 +681,11 @@ export default function ChosenWinesScreen() {
         await shareResult(uri, { sharerName: sharerNameFrom(session), message: vinsterSharedLead(sharerNameFrom(session), 'a wine review') });
         return;
       }
-      // Plain-text fallback — same shape as the previous behaviour so
-      // sharing still works on devices where capture / expo-sharing
-      // isn't supported. The Get Vinster footer is always appended.
-      const header = wineHeaderLine(w.producer, w.wine_name, w.vintage);
-      const scoreText = item.score != null ? `\nMy score: ${item.score}/100` : '';
-      const locFormatted = locText ? `\nWhere: ${locText}` : '';
-      const noteFormatted = tastingNote.trim() ? `\n\n"${tastingNote.trim()}"` : '';
-      await Share.share({
-        message: `${header}${scoreText}${locFormatted}${noteFormatted}${VINSTER_TEXT_SHARE_FOOTER}`,
-        title: header,
-      });
+      const header = wineHeaderLine(card.producer, card.wineName, card.vintage);
+      const scoreText = card.averageScore != null ? `\nMy score: ${card.averageScore}/100` : '';
+      const where = location ? `\nWhere: ${location}` : '';
+      const note = tastingNote ? `\n\n"${tastingNote}"` : '';
+      await Share.share({ message: `${header}${scoreText}${where}${note}${VINSTER_TEXT_SHARE_FOOTER}`, title: header });
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -965,21 +694,16 @@ export default function ChosenWinesScreen() {
     }
   }
 
+  // ---- "+ Add Review" chooser ----------------------------------------------------------------
+  function resetAdd() {
+    setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null);
+    setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null);
+  }
   function handleChooseManual() {
     setChooserOpen(false);
-    setAddInitial(null);
-    setPendingReviewLabelUri(null);
-    setAddConfirmed(false);
-    setAddLabelPath(null);
+    resetAdd();
     setAddOpen(true);
   }
-
-  // Scan / Upload both OCR a label and then open the SAME Add-a-Review modal as
-  // Manual (pre-filled) — no wine intel card, no /label detour.
-  async function handleChooseScan() { setChooserOpen(false); void ocrThenReview('camera'); }
-  async function handleChooseUpload() { setChooserOpen(false); void ocrThenReview('library'); }
-  // Review a wine already in the cellar — hand off to the cellar picker, which
-  // opens that bottle's cellar review.
   function handleChooseCellar() { setChooserOpen(false); setCellarPickerSearch(''); setCellarPickerOpen(true); }
 
   // "Scan again" from the review input — redo the capture for a bad OCR read.
@@ -995,7 +719,10 @@ export default function ChosenWinesScreen() {
     });
   }
 
+  // Scan / Upload read the label, then open the same Add modal as Manual,
+  // pre-filled; the photo is uploaded with the review.
   async function ocrThenReview(source: 'camera' | 'library') {
+    setChooserOpen(false);
     try {
       if (!(await ensureMediaPermission(source))) return;
       const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
@@ -1004,175 +731,82 @@ export default function ChosenWinesScreen() {
         : await ImagePicker.launchImageLibraryAsync(opts);
       if (picked.canceled || !picked.assets?.[0]) return;
       const uri = picked.assets[0].uri;
-      // Close any open add modal so it re-seeds cleanly on reopen (the reset only
-      // runs on a visible false→true toggle). No-op on the first scan.
+      // Close any open Add modal so it re-seeds cleanly when reopened.
       setAddOpen(false);
-      let ocr: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null = null;
       if (!(await ensureConnectionForUpload())) return;
+      let ocr: AddSeed | null = null;
       setUploading(true);
       try {
-        const base64 = await prepareImageBase64(uri);
-        const details = await scanLabel(base64);
+        const details = await scanLabel(await prepareImageBase64(uri));
         ocr = { producer: details.producer, wineName: details.wineName, vintage: details.vintage, region: details.region };
       } catch {
-        // OCR failed — still open the review input so the user can type it in.
-        ocr = null;
+        // OCR failed — still open the input so the user can type the wine in.
       } finally {
         setUploading(false);
       }
+      resetAdd();
       setAddInitial(ocr);
       setPendingReviewLabelUri(uri);
-      setAddConfirmed(false);
-      setAddLabelPath(null);
-      // The scanned photo rides onto the review itself (AddChosenWineModal's
-      // labelImageUri). It no longer ALSO spawns a Your Label Library row —
-      // the label library (Scan Archive) is fed only by actual label scans,
-      // so a review no longer duplicates the wine into it.
       setAddOpen(true);
     } catch (err) {
       showAlert({ title: 'Could not open photo', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
-  // Bottle tallies for the open review — how many bottles of THIS wine the user
-  // holds in the active cellar vs the archive. Matched on the same robust
-  // name-token + vintage key the reviews list uses, summed by quantity so the
-  // figures update as bottles are added or archived.
-  const detailBottleCounts = (() => {
-    if (!detailItem) return { cellar: 0, archive: 0 };
-    const key = reviewKey(detailItem.wine);
-    const tally = (rows: CellarWine[]) =>
-      rows.filter((w) => reviewKey(w) === key).reduce((n, w) => n + (w.quantity ?? 1), 0);
-    return { cellar: tally(cellarWines), archive: tally(archivedWines) };
-  })();
+  // How many bottles of the open wine the user holds, live vs archived.
+  const detailBottleCounts = useMemo(() => {
+    if (!detailCard) return { cellar: 0, archive: 0 };
+    const tally = (rows: CellarWine[]) => rows
+      .filter((w) => reviewIdentityKey(w) === detailCard.identityKey)
+      .reduce((n, w) => n + (w.quantity ?? 1), 0);
+    return { cellar: tally(ownLive), archive: tally(ownArchived) };
+  }, [detailCard, ownLive, ownArchived]);
+
+  const editingCellarWine = editingCellar ? (findBottle(editingCellar.wine.id) ?? editingCellar.wine) : null;
 
   return (
     <View style={styles.container}>
       <EditChosenWineModal
-        // Pass the LIVE row (not the snapshot) so a label photo attached from
-        // inside the modal shows immediately — the snapshot never refreshes.
+        // The LIVE row, so a photo attached from inside the modal shows at once.
         wine={editingWine ? (chosenWines.find((w) => w.id === editingWine.id) ?? editingWine) : null}
         visible={!!editingWine}
-        onClose={() => { setEditingWine(null); const back = returnToDetailRef.current; returnToDetailRef.current = null; if (back) setDetailItem(back); else if (cameViaLabelLink) returnToLibrary(); }}
-        onSaved={() => {
-          const w = editingWine;
+        onSaved={collapsePendingCopies}
+        onClose={() => {
+          const row = editingWine;
           setEditingWine(null);
-          if (returnToDetailRef.current) { returnToDetailRef.current = null; return; }
-          // Came via a Label-Library link → show this wine's review detail card.
-          if (cameViaLabelLink && w) { void openSavedReviewDetail({ id: w.id, producer: w.producer, wineName: w.wine_name, vintage: w.vintage }); }
-        }}
-      />
-
-      <ReviewDetailModal
-        review={detailItem
-          ? (detailItem.source === 'cellar'
-              ? fromCellar(detailItem.wine as CellarWine)
-              : fromChosenGroup((detailItem as Extract<ReviewItem, { source: 'restaurant' }>).entries))
-          : null}
-        cellarBottles={detailBottleCounts.cellar}
-        archiveBottles={detailBottleCounts.archive}
-        visible={!!detailItem}
-        onShare={() => { if (detailItem) void handleShareReview(detailItem); }}
-        onNoteGenerated={(note) => {
-          // Persist a card-generated Vinster's Note so it never regenerates.
-          // Restaurant/other reviews have a rationale column (the head row);
-          // cellar reviews don't, so they regenerate on demand each time.
-          const it = detailItem; if (!it || it.source === 'cellar') return;
-          void patchChosenWine(it.wine.id, { rationale: note })
-            .then(() => qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] }))
-            .catch(() => { /* best-effort persistence */ });
-        }}
-        onSavePersonalNote={async (entryId, note) => {
-          // Save / clear a chosen review's private note (other_observations) from
-          // the "Your Personal Note" popup. Cellar reviews don't surface it here.
-          const it = detailItem; if (!it || it.source === 'cellar') return;
-          const clean = note.trim() || null;
-          await patchChosenWine(entryId, { other_observations: clean });
-          qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
-          // Reflect it on the open card immediately (the link hides when cleared).
-          setDetailItem((prev) => {
-            if (!prev || prev.source === 'cellar') return prev;
-            const entries = prev.entries.map((e) => (e.id === entryId ? { ...e, other_observations: clean } : e));
-            return { ...prev, entries, wine: entries[0] ?? prev.wine } as ReviewItem;
-          });
-        }}
-        onClose={() => { setDetailItem(null); if (cameViaLink) returnToLibrary(); }}
-        onAddReview={() => {
-          const it = detailItem; if (!it) return;
-          setDetailItem(null);
-          if (it.source === 'cellar') { setEditingCellarLatest(false); setEditingCellarWine(it.wine as CellarWine); return; }
-          // Occasion add-to: open the review input pre-filled with this wine;
-          // its dedup then offers "Add to that review / Create a new review".
-          const w = it.wine as ChosenWine;
-          // Carry the stored menu price so the new entry keeps the restaurant
-          // list price even though the user no longer has the menu.
-          setAddInitial({ producer: w.producer, wineName: w.wine_name, vintage: w.vintage, region: w.region, grape: (w as ChosenWine).grape ?? null, listPrice: w.menu_price });
-          setAddSource(it.source === 'other' ? 'other' : 'restaurant');
-          // Review-card add flow: the wine is known, so use the clean review-card
-          // layout (thumbnail + name, no identity fields / header), carry the
-          // photo, and append to THIS review's group with no "reviewed before" prompt.
-          setAddConfirmed(true);
-          setAddLabelPath(labelPathFor(it));
-          setAddToGroupId(w.review_group_id ?? w.id);
-          setAddOpen(true);
-        }}
-        onEditLatest={() => {
-          const it = detailItem; if (!it) return;
-          returnToDetailRef.current = it; // restore this card when the editor closes
-          setDetailItem(null);
-          if (it.source === 'cellar') { setEditingCellarLatest(true); setEditingCellarWine(it.wine as CellarWine); }
-          else setEditingWine((it as Extract<ReviewItem, { source: 'restaurant' }>).entries[0]);
-        }}
-        thumbPath={detailItem ? labelPathFor(liveItem(detailItem)) : null}
-        onAddPhoto={() => {
-          const it = detailItem; if (!it) return;
-          attachPhoto.present({
-            kind: it.source === 'cellar' ? 'cellar' : 'chosen',
-            wineId: it.wine.id,
-            producer: it.wine.producer,
-            wineName: it.wine.wine_name,
-          });
-        }}
-        onDeleteEntry={async (entryId) => {
-          const it = detailItem; if (!it) return;
-          if (it.source === 'cellar') {
-            // Drop just this entry from the bottle's review_entries and re-mirror
-            // the flat review_* fields onto whatever entry is now the latest.
-            const w = it.wine as CellarWine;
-            const remaining = byRecency(entriesOf(w)).filter((e) => e.id !== entryId);
-            await updateWine.mutateAsync({ id: w.id, updates: { review_entries: remaining, ...flatMirror(remaining[0] ?? null) } });
-          } else {
-            // Occasion entries are individual chosen_wines rows.
-            await remove.mutateAsync(entryId);
-          }
+          pendingCopiesRef.current = [];
+          // Arrived to review this one pick → show its card once saved.
+          afterEditorClosed(arrivedForOneWine && row ? () => {
+            const fresh = qc.getQueryData<ChosenWine[]>(['chosen-wines', userId])?.find((w) => w.id === row.id);
+            return fresh && chosenHasReview(fresh) ? cardKeyForChosen(fresh) : null;
+          } : null);
         }}
       />
 
       <EditCellarReviewModal
         wine={editingCellarWine}
-        visible={!!editingCellarWine}
-        editLatest={editingCellarLatest}
+        visible={!!editingCellar}
+        editEntryId={editingCellar?.entryId ?? null}
         onEditWine={(w) => {
-          reopenReviewForRef.current = { id: w.id, latest: editingCellarLatest };
-          setEditingCellarWine(null);
+          reopenCellarEditorRef.current = { id: w.id, entryId: editingCellar?.entryId ?? null };
+          setEditingCellar(null);
           router.push(`/cellar/edit-wine/${w.id}` as any);
         }}
-        onClose={() => { setEditingCellarWine(null); const back = returnToDetailRef.current; returnToDetailRef.current = null; if (back) setDetailItem(back); else if (cameViaLink) returnToLibrary(); }}
+        onClose={() => { setEditingCellar(null); pendingCopiesRef.current = []; afterEditorClosed(); }}
         onSaved={() => {
-          setEditingCellarWine(null);
-          returnToDetailRef.current = null;
-          // Saved from an archived wine card: confirm it landed in Your Wine
-          // Reviews, then send the user back to the archived wine card (backTo).
-          if (params.savedToast) {
+          collapsePendingCopies();
+          setEditingCellar(null);
+          // Saved from an archived wine card: confirm where it went, then back.
+          if (params.savedToast && !returnToDetailRef.current) {
             const name = decodeURIComponent(params.savedToast);
             showAlert({
               title: 'Review Saved',
               body: `Your review of ${name} has been saved to Your Wine Reviews.`,
-              buttons: [{ text: 'OK', onPress: () => returnToLibrary() }],
+              buttons: [{ text: 'OK', onPress: returnToCaller }],
             });
-          } else if (cameViaLink) {
-            returnToLibrary();
+            return;
           }
+          afterEditorClosed();
         }}
       />
 
@@ -1185,15 +819,69 @@ export default function ChosenWinesScreen() {
         labelImagePath={addLabelPath}
         addToGroupId={addToGroupId}
         source={addSource}
-        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null); if (cameViaLabelLink) returnToLibrary(); }}
+        onClose={() => { resetAdd(); afterEditorClosed(); }}
         onSaved={() => {
-          const init = addInitial;
-          setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null);
-          // Came from a Wine Intel card → return straight back to that card
-          // (via backTo), not the Your Wine Reviews list.
-          if (params.fromIntel === '1') { returnToLibrary(); return; }
-          // Came via a Label-Library link → show this wine's review detail card.
-          if (cameViaLabelLink) { void openSavedReviewDetail({ producer: init?.producer, wineName: init?.wineName, vintage: init?.vintage }); }
+          const seed = addInitial;
+          resetAdd();
+          // From a Wine Intel card → straight back to that card.
+          if (params.fromIntel === '1' && !returnToDetailRef.current) { returnToCaller(); return; }
+          afterEditorClosed(arrivedForOneWine && seed ? () => {
+            const want = reviewIdentityKey({ producer: seed.producer, wine_name: seed.wineName, vintage: seed.vintage });
+            const fresh = qc.getQueryData<ChosenWine[]>(['chosen-wines', userId]) ?? [];
+            const row = fresh.find((w) => chosenHasReview(w) && reviewIdentityKey(w) === want);
+            return row ? cardKeyForChosen(row) : null;
+          } : null);
+        }}
+      />
+
+      <ReviewDetailModal
+        review={detailCard}
+        visible={!!detailCard}
+        cellarBottles={detailBottleCounts.cellar}
+        archiveBottles={detailBottleCounts.archive}
+        thumbPath={detailCard ? labelPathFor({ kind: 'review', card: detailCard }) : null}
+        onClose={closeDetail}
+        onShare={() => { if (detailCard) void handleShareReview(detailCard); }}
+        onAddPhoto={() => { if (detailCard) presentAddPhoto({ kind: 'review', card: detailCard }); }}
+        onAddReview={() => {
+          const card = detailCard; if (!card) return;
+          returnToDetailRef.current = card.key;
+          setDetailKey(null);
+          const head = card.chosenRows.find(chosenHasReview);
+          if (!head) {
+            // A cellar-only review grows on its bottle (a live one if there is).
+            openCellarEditor(card.cellarWines.find((w) => !w.archived_at) ?? card.cellarWines[0], null);
+            return;
+          }
+          // The wine is known: the review-card layout, its photo, and the stored
+          // menu price, appended to this review's group with no "reviewed before" prompt.
+          resetAdd();
+          setAddInitial({ producer: card.producer, wineName: card.wineName, vintage: card.vintage, region: card.region, grape: card.grape, listPrice: head.menu_price });
+          setAddSource(card.source === 'other' ? 'other' : 'restaurant');
+          setAddConfirmed(true);
+          setAddLabelPath(labelPathFor({ kind: 'review', card }));
+          setAddToGroupId(card.folderId);
+          setAddOpen(true);
+        }}
+        onEditEntry={(entry: UnifiedEntry) => {
+          if (detailCard) returnToDetailRef.current = detailCard.key;
+          setDetailKey(null);
+          openEntryEditor(entry.ref, entry.twins);
+        }}
+        onDeleteEntry={(entry: UnifiedEntry) => removeEntries(refsOf(entry))}
+        onSavePersonalNote={async (entry, note) => {
+          if (entry.ref.kind !== 'chosen') return;
+          await patchChosenWine(entry.ref.row.id, { other_observations: note.trim() || null });
+          await qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+        }}
+        onNoteGenerated={(note) => {
+          // Persist a generated Vinster's Note so it never regenerates. Only
+          // chosen rows have a rationale column; cellar-only cards regenerate.
+          const head = detailCard?.chosenRows.find(chosenHasReview);
+          if (!head) return;
+          void patchChosenWine(head.id, { rationale: note })
+            .then(() => qc.invalidateQueries({ queryKey: ['chosen-wines', userId] }))
+            .catch(() => { /* best-effort persistence */ });
         }}
       />
 
@@ -1204,95 +892,13 @@ export default function ChosenWinesScreen() {
         nounLabel="folder"
         items={filterItems}
         initialName={editingFilter?.name}
-        initialSelected={editingFilter?.itemIds}
+        initialSelected={editingFilterSelection}
         saving={savingFilter}
         onSave={saveFilter}
         onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
       />
 
-      {/* "+ Add" step 1 — "Add a Wine Review": pick the collection. Restaurant
-          and Other both flow into the Scan / Upload / Manual chooser (tagged with
-          the chosen source); Cellar opens a picker over the live cellar, since a
-          cellar review must attach to a real bottle you own. */}
-      <Modal visible={collectionChooserOpen} transparent animationType="fade" onRequestClose={() => setCollectionChooserOpen(false)}>
-        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setCollectionChooserOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
-            <Text style={styles.chooserTitle}>Add a Wine Review</Text>
-            <Text style={styles.chooserBody}>Which kind of wine are you reviewing?</Text>
-            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setCollectionChooserOpen(false); setAddSource('restaurant'); setRestaurantAwaitingOpen(true); }} activeOpacity={0.85}>
-              <Text style={styles.chooserBtnText}>Restaurant Wine</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={() => { setCollectionChooserOpen(false); setCellarPickerSearch(''); setCellarPickerOpen(true); }} activeOpacity={0.85}>
-              <Text style={styles.chooserBtnText}>Cellar Wine</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={() => { setCollectionChooserOpen(false); setAddSource('other'); setChooserOpen(true); }} activeOpacity={0.85}>
-              <Text style={styles.chooserBtnText}>Other Wine</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setCollectionChooserOpen(false)} style={styles.chooserCancel}>
-              <Text style={styles.chooserCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* "+ Add" → Restaurant Wine — first offer the restaurant wines already
-          recorded and awaiting review (tap one to review it). If there are none,
-          say so and let the user "Add Wine Anyway", which drops into the usual
-          Scan / Upload / Manual chooser. */}
-      <Modal visible={restaurantAwaitingOpen} transparent animationType="fade" onRequestClose={() => setRestaurantAwaitingOpen(false)}>
-        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setRestaurantAwaitingOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
-            <Text style={styles.dropdownTitle}>Restaurant Wine</Text>
-            {awaitingReview.length === 0 ? (
-              <>
-                <Text style={styles.pickerEmpty}>You have no restaurant wines awaiting review.</Text>
-                <TouchableOpacity
-                  onPress={() => { setRestaurantAwaitingOpen(false); setChooserOpen(true); }}
-                  style={styles.addAnywayWrap}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.addAnywayLink}>Add Wine Anyway</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.chooserBody}>Pick a wine you've recorded and want to review.</Text>
-                <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
-                  {awaitingReview.map((w) => (
-                    <TouchableOpacity
-                      key={`await-pick-${w.id}`}
-                      style={styles.dropdownOption}
-                      onPress={() => { setRestaurantAwaitingOpen(false); setEditingWine(w); }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.dropdownOptionText} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
-                      {[locationLine(w), w.chosen_at ? formatDate(w.chosen_at) : ''].filter(Boolean).length ? (
-                        <Text style={styles.awaitingMeta} numberOfLines={1}>
-                          {[locationLine(w), w.chosen_at ? formatDate(w.chosen_at) : ''].filter(Boolean).join(' · ')}
-                        </Text>
-                      ) : null}
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <TouchableOpacity
-                  onPress={() => { setRestaurantAwaitingOpen(false); setChooserOpen(true); }}
-                  style={styles.addAnywayWrap}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.addAnywayLink}>Add Wine Anyway</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            <TouchableOpacity style={styles.dropdownCancel} onPress={() => setRestaurantAwaitingOpen(false)}>
-              <Text style={styles.dropdownCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* "+ Add" → Cellar Wine — pick a bottle from the live cellar to review.
-          Selecting one opens EditCellarReviewModal (the same review form as the
-          wine card), which writes the review onto that cellar_wines row. */}
+      {/* "+ Add" → Select from Cellar: a review written onto one of your bottles. */}
       <Modal visible={cellarPickerOpen} transparent animationType="fade" onRequestClose={() => setCellarPickerOpen(false)}>
         <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setCellarPickerOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
@@ -1307,13 +913,8 @@ export default function ChosenWinesScreen() {
             />
             {(() => {
               const pq = cellarPickerSearch.trim().toLowerCase();
-              const rows = cellarWines
-                .filter((w) => !w.archived_at)
-                .filter((w) => {
-                  if (!pq) return true;
-                  const hay = [w.producer, w.wine_name, w.region, w.vintage != null ? String(w.vintage) : null].filter(Boolean).join(' ').toLowerCase();
-                  return hay.includes(pq);
-                })
+              const rows = ownLive
+                .filter((w) => !pq || [w.producer, w.wine_name, w.region, w.vintage != null ? String(w.vintage) : null].filter(Boolean).join(' ').toLowerCase().includes(pq))
                 .sort((a, b) => wineHeaderLine(a.producer, a.wine_name, a.vintage).localeCompare(wineHeaderLine(b.producer, b.wine_name, b.vintage)));
               return (
                 <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
@@ -1323,13 +924,11 @@ export default function ChosenWinesScreen() {
                     <TouchableOpacity
                       key={w.id}
                       style={styles.dropdownOption}
-                      onPress={() => { setCellarPickerOpen(false); setEditingCellarWine(w); }}
+                      onPress={() => { setCellarPickerOpen(false); openCellarEditor(w, null); }}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.dropdownOptionText} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
-                      {w.review_score != null || (w.user_notes && w.user_notes.trim()) ? (
-                        <Text style={styles.pickerReviewed}>Reviewed</Text>
-                      ) : null}
+                      {entriesOf(w).length > 0 ? <Text style={styles.pickerReviewed}>Reviewed</Text> : null}
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -1342,18 +941,17 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* "+ Add" step 2 (restaurant / other) — Scan / Upload run the same label
-          recognise+confirm pathway as an intel scan, but land on the review input
-          instead of the intel card. Manual opens the by-hand review form. */}
+      {/* "+ Add Review" — Scan / Upload read a label into the review input;
+          Search/Manual opens it blank; Select from Cellar reviews a bottle. */}
       <Modal visible={chooserOpen} transparent animationType="fade" onRequestClose={() => setChooserOpen(false)}>
         <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
             <Text style={styles.chooserTitle}>Add a wine review</Text>
             <Text style={styles.chooserBody}>Scan or upload a label and Vinster identifies the bottle, search for it, or pick a wine from your cellar — then straight to your review.</Text>
-            <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseScan} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => void ocrThenReview('camera')} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Scan Label</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseUpload} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={() => void ocrThenReview('library')} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Upload A Wine Label</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseManual} activeOpacity={0.85}>
@@ -1362,8 +960,6 @@ export default function ChosenWinesScreen() {
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseCellar} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Select from Cellar</Text>
             </TouchableOpacity>
-            {/* Bulk-import reviews from a file (Vivino CSV / spreadsheet) — same flow
-                as the old top-right "+ Import". */}
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={() => { setChooserOpen(false); openReviewImportMenu(); }} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Import Review Files</Text>
             </TouchableOpacity>
@@ -1374,10 +970,9 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Assign a review to bespoke filters — tick the tags it belongs to, or
-          create a new one on the spot. */}
-      <Modal visible={!!assignForId} transparent animationType="fade" onRequestClose={() => setAssignForId(null)}>
-        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setAssignForId(null)}>
+      {/* Add a review to a folder — highlight one, Confirm files it. */}
+      <Modal visible={!!assignFor} transparent animationType="fade" onRequestClose={() => setAssignFor(null)}>
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setAssignFor(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
             <Text style={styles.dropdownTitle}>Add to Folder</Text>
             {customFilters.length === 0 ? (
@@ -1385,10 +980,8 @@ export default function ChosenWinesScreen() {
             ) : (
               <ScrollView style={{ maxHeight: 340 }}>
                 {customFilters.map((f) => {
-                  // Highlight the tapped folder; a ✓ marks folders the review is
-                  // already in. Confirm commits the highlighted one.
                   const picked = assignPick === f.id;
-                  const already = !!(assignForId && f.itemIds.includes(assignForId));
+                  const already = !!assignFor && itemMemberIds(assignFor).some((id) => f.itemIds.includes(id));
                   return (
                     <TouchableOpacity
                       key={f.id}
@@ -1408,21 +1001,23 @@ export default function ChosenWinesScreen() {
               disabled={!assignPick}
               onPress={() => {
                 const f = customFilters.find((x) => x.id === assignPick);
-                if (assignForId && f && !f.itemIds.includes(assignForId)) toggleReviewInFolder(assignForId, f);
-                setAssignForId(null);
+                if (assignFor && f && !itemMemberIds(assignFor).some((id) => f.itemIds.includes(id))) {
+                  setFilterItems.mutate({ filterId: f.id, itemIds: [...f.itemIds, itemFolderId(assignFor)] });
+                }
+                setAssignFor(null);
               }}
               activeOpacity={0.85}
             >
               <Text style={styles.confirmBtnText}>Confirm</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.dropdownCancel} onPress={() => setAssignForId(null)}>
+            <TouchableOpacity style={styles.dropdownCancel} onPress={() => setAssignFor(null)}>
               <Text style={styles.dropdownCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
-      {/* On-open nudge to review a waiting restaurant bottle pick. */}
+      {/* On-open nudge listing the picks waiting for a review. */}
       <Modal visible={!!reviewPrompt} transparent animationType="fade" onRequestClose={() => setReviewPrompt(null)}>
         <View style={styles.promptOverlay}>
           <View style={styles.promptSheet}>
@@ -1433,7 +1028,7 @@ export default function ChosenWinesScreen() {
             <Text style={styles.promptSubheader}>Select a wine to review it</Text>
             <ScrollView style={{ maxHeight: 320 }} alwaysBounceVertical={false}>
               {(reviewPrompt ?? []).map((w) => (
-                <TouchableOpacity key={w.id} style={styles.promptWineRow} onPress={() => openAwaitingReview(w)} activeOpacity={0.7}>
+                <TouchableOpacity key={w.id} style={styles.promptWineRow} onPress={() => { setReviewPrompt(null); setEditingWine(w); }} activeOpacity={0.7}>
                   <Text style={styles.promptWineLink} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name || 'Wine'}</Text>
                   {(w.restaurant_name || w.city) ? (
                     <Text style={styles.promptWineMeta} numberOfLines={1}>{[w.restaurant_name, w.city].filter(Boolean).join(' · ')}</Text>
@@ -1456,19 +1051,14 @@ export default function ChosenWinesScreen() {
         onClose={() => setExpandedThumb(null)}
       />
 
-{/* Fullscreen overlay while the chosen photo is being read — the standard
-          Vinster percentage-bar loader (not a bare spinner on a black scrim),
-          sitting above the screen so the user can't tap "+ Add" again mid-scan. */}
+      {/* Blocks the screen while a scanned label is read, so "+ Add" can't be
+          tapped again mid-scan. */}
       {uploading ? (
-        // Just a spinner while the review input prepares — no branded "Vinster"
-        // wordmark overlaying the reviews screen.
         <View style={styles.prepOverlay} pointerEvents="auto">
           <ActivityIndicator size="large" color={colors.gold} />
         </View>
       ) : null}
 
-      {/* Blocking overlay while an import folder + its reviews delete (can be
-          thousands of rows, so it takes a moment). */}
       {deletingImport ? (
         <View style={styles.uploadingOverlay} pointerEvents="auto">
           <ActivityIndicator size="large" color={colors.gold} />
@@ -1476,45 +1066,29 @@ export default function ChosenWinesScreen() {
         </View>
       ) : null}
 
-      {/* Off-screen branded share card. Mounted only while a share is
-          in flight so its layout work doesn't sit idle in the tree. */}
+      {/* Off-screen share card, mounted only while a share is in flight. */}
       {reviewSharePayload && (
         <View style={styles.shareCardWrap} pointerEvents="none">
-          <WineReviewShareCard
-            ref={reviewShareRef}
-            producer={reviewSharePayload.producer}
-            wineName={reviewSharePayload.wineName}
-            vintage={reviewSharePayload.vintage}
-            region={reviewSharePayload.region}
-            userScore={reviewSharePayload.userScore}
-            criticScore={reviewSharePayload.criticScore}
-            tastingNote={reviewSharePayload.tastingNote}
-            otherObservations={reviewSharePayload.otherObservations}
-            date={reviewSharePayload.date}
-            location={reviewSharePayload.location}
-            isFavourite={reviewSharePayload.isFavourite}
-          />
+          <WineReviewShareCard ref={reviewShareRef} {...reviewSharePayload} otherObservations={null} />
         </View>
       )}
 
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
+          <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            onPress={() => { setAddSource('other'); setAddToGroupId(null); setChooserOpen(true); }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.headerActionLink}>+ Add Review</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={() => { setAddSource('other'); setAddToGroupId(null); setChooserOpen(true); }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.headerActionLink}>+ Add Review</Text>
+        </TouchableOpacity>
       </View>
 
       {isLoading ? (
         <View style={styles.empty}><ActivityIndicator size="large" color={colors.gold} /></View>
-      ) : !hasAnything ? (
+      ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptyBody}>
@@ -1523,67 +1097,20 @@ export default function ChosenWinesScreen() {
         </View>
       ) : (
         <>
-          {/* Summary + filter chips + search — mirrors Full Cellar List
-              so the two screens read the same way. Chip lineup (left to
-              right): Sort (gold-bordered, most common interaction) /
-              Type (cellar vs restaurant) / Favourites / Location. */}
+          {/* Wines · Reviews (every dated entry), then the awaiting toggle. */}
           <View style={styles.summaryRow}>
             <Text style={styles.summaryText}>
-              {(() => {
-                // Awaiting picks now live in `filtered` too, so count reviews and
-                // awaiting separately: reviews = shown items minus awaiting; wines
-                // = distinct identities across both.
-                const wineKeys = new Set(filtered.map((it) => {
-                  const w = it.wine as { producer?: string | null; wine_name?: string | null; vintage?: string | number | null };
-                  return `${(w.producer ?? '').toLowerCase()}|${(w.wine_name ?? '').toLowerCase()}|${w.vintage ?? ''}`;
-                }));
-                // Reviews = total tastings, not cards: a grouped wine (e.g. one
-                // reviewed 11 times) is ONE card but ELEVEN reviews. Sum each
-                // card's dated entries (chosen groups carry `entries`; cellar
-                // reviews carry review_entries via entriesOf).
-                const reviewed = filtered.filter((it) => !isAwaitingItem(it));
-                const r = reviewed.reduce((sum, it) => {
-                  const entries = it.source === 'cellar'
-                    ? entriesOf(it.wine as CellarWine).length
-                    : ((it as { entries?: unknown[] }).entries?.length ?? 1);
-                  return sum + Math.max(1, entries);
-                }, 0);
-                const n = wineKeys.size;
-                // Awaiting count reflects the SAME filtered set as the wine/review
-                // counts, so it tracks every active filter (not just the collection).
-                // Distinct awaiting identities so it reads as "X Wines". Stable across
-                // the awaiting-only toggle: that toggle only hides reviewed items, so
-                // the awaiting subset — and thus this count — is unchanged.
-                const a = new Set(
-                  filtered.filter(isAwaitingItem).map((it) => {
-                    const w = it.wine as { producer?: string | null; wine_name?: string | null; vintage?: string | number | null };
-                    return `${(w.producer ?? '').toLowerCase()}|${(w.wine_name ?? '').toLowerCase()}|${w.vintage ?? ''}`;
-                  }),
-                ).size;
-                return (
-                  <>
-                    {`${n} ${n === 1 ? 'Wine' : 'Wines'} · ${r} ${r === 1 ? 'Review' : 'Reviews'}`}
-                    {(a > 0 || awaitingOnly) ? (
-                      // Tap to toggle the "awaiting only" filter; tap again to clear.
-                      // Stays visible while the toggle is on so it's always escapable.
-                      <Text>{'\n'}<Text style={[styles.summaryLink, awaitingOnly && styles.summaryLinkActive]} onPress={() => setAwaitingOnly((v) => !v)}>{`${a} ${a === 1 ? 'Wine' : 'Wines'} awaiting your review${awaitingOnly ? '  ✕' : ''}`}</Text></Text>
-                    ) : null}
-                  </>
-                );
-              })()}
+              {`${totals.wines} ${totals.wines === 1 ? 'Wine' : 'Wines'} · ${totals.reviews} ${totals.reviews === 1 ? 'Review' : 'Reviews'}`}
+              {(awaitingCount > 0 || awaitingOnly) ? (
+                <Text>{'\n'}<Text style={[styles.summaryLink, awaitingOnly && styles.summaryLinkActive]} onPress={() => setAwaitingOnly((v) => !v)}>{`${awaitingCount} ${awaitingCount === 1 ? 'Wine' : 'Wines'} awaiting your review${awaitingOnly ? '  ✕' : ''}`}</Text></Text>
+              ) : null}
             </Text>
           </View>
 
-          {/* Bespoke Other filters — create named tags (e.g. "BBR Tasting") and
-              file Other reviews under them (long-press a review → "Add to a
-              filter"). Only shown while the Other collection is selected. */}
+          {/* Filter chips — Month / Your Score / Collection, then Your Folders
+              and "+ Add" to create one. Same pattern as Full Cellar List. */}
           <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterScroll}
-            contentContainerStyle={styles.filterRow}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('month')}>
               <View style={styles.filterChipHeadingRow}>
                 <Text style={styles.filterChipLabel}>Month</Text>
@@ -1607,38 +1134,33 @@ export default function ChosenWinesScreen() {
             </TouchableOpacity>
             {customFilters.map((f) => {
               const active = activeCustomId === f.id;
-              // Auto-generated import folders ("Import — <date>") get the "Import"
-              // heading and show just the date; user-created folders keep "Your
-              // Folder" + their name.
+              // Import folders ("Import — <date>") show the date under an
+              // "Import" heading; the user's own folders their name.
               const isImport = /^import\b/i.test(f.name.trim());
-              const chipLabel = isImport ? 'Import' : 'Your Folder';
-              const chipValue = isImport ? f.name.replace(/^import\s*[—-]\s*/i, '').trim() : f.name;
               return (
                 <TouchableOpacity
                   key={f.id}
-                  style={[styles.filterChip, active && styles.filterChipSort]}
-                  onPress={() => applyCustom(f.id)}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                  onPress={() => setActiveCustomId((prev) => (prev === f.id ? null : f.id))}
                   onLongPress={() => openFilterOptions(f)}
                   delayLongPress={400}
                   activeOpacity={0.7}
                 >
-                  {/* Two-row layout with a top-right chevron so bespoke filters
-                      match the standard filter bubbles. */}
                   <View style={styles.filterChipHeadingRow}>
-                    <Text style={styles.filterChipLabel}>{chipLabel}</Text>
+                    <Text style={styles.filterChipLabel}>{isImport ? 'Import' : 'Your Folder'}</Text>
                     <Text style={styles.filterChipChevron}>▾</Text>
                   </View>
-                  <Text style={[styles.filterChipValue, active && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{chipValue}</Text>
+                  <Text style={[styles.filterChipValue, active && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">
+                    {isImport ? f.name.replace(/^import\s*[—-]\s*/i, '').trim() : f.name}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
-            <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.customChipAdd} onPress={() => { setEditingFilter(null); setFilterModalOpen(true); }} activeOpacity={0.7}>
               <Text style={styles.customChipAddText}>+ Add</Text>
             </TouchableOpacity>
           </ScrollView>
 
-          {/* Search sits below the chips and narrows whatever the chips
-              already filter — same pattern as Full Cellar List. */}
           <View style={styles.searchRow}>
             <TextInput
               style={styles.searchInput}
@@ -1656,101 +1178,65 @@ export default function ChosenWinesScreen() {
             )}
           </View>
 
-        <FlatList
-          data={sorted}
-          keyExtractor={(item) => `${item.source}-${item.wine.id}`}
-          contentContainerStyle={{ paddingBottom: 60 }}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          windowSize={11}
-          removeClippedSubviews
-          keyboardShouldPersistTaps="handled"
-          ListEmptyComponent={
-            <View style={styles.emptyFilter}>
-              <Text style={styles.emptyBody}>No reviews match these filters.</Text>
-            </View>
-          }
-          renderItem={({ item }) => {
-              const w = item.wine;
-              // Every thumbnail opens a focused review input, never the full
-              // wine card: chosen_wines reviews (restaurant + other) open
-              // EditChosenWineModal; cellar reviews open the sibling
-              // EditCellarReviewModal (which saves to cellar_wines).
-              const isChosen = item.source !== 'cellar';
-              const awaiting = isAwaitingItem(item);
-              // All reviews open the same unified detail view.
-              const entries = isChosen ? (item as Extract<ReviewItem, { source: 'restaurant' }>).entries : [];
-              const uni = isChosen ? fromChosenGroup(entries) : fromCellar(item.wine as CellarWine);
-              // Awaiting picks open the review INPUT (write your review); reviewed
-              // items open the detail view.
-              const onPress = () => awaiting ? setEditingWine(item.wine as ChosenWine) : setDetailItem(item);
-              const locText = isChosen
-                ? locationLine(item.wine as ChosenWine)
-                : (item.wine as CellarWine).review_location ?? '';
+          <FlatList
+            data={sorted}
+            keyExtractor={itemKey}
+            contentContainerStyle={{ paddingBottom: 60 }}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={11}
+            removeClippedSubviews
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={
+              <View style={styles.emptyFilter}>
+                <Text style={styles.emptyBody}>No reviews match these filters.</Text>
+              </View>
+            }
+            renderItem={({ item }) => {
+              const w = itemIdentity(item);
               const thumbPath = labelPathFor(item);
+              const place = item.kind === 'review' ? (item.card.entries[0]?.location ?? '') : locationLine(item.pick);
               return (
                 <TouchableOpacity
-                  key={`${item.source}-${w.id}`}
                   style={styles.cardCompact}
-                  onPress={onPress}
-                  onLongPress={() => awaiting ? promptDismissAwaiting(item.wine as ChosenWine) : handleLongPressReview(item)}
+                  // A review opens its card; an awaiting pick opens its input.
+                  onPress={() => (item.kind === 'review' ? setDetailKey(item.card.key) : setEditingWine(item.pick))}
+                  onLongPress={() => (item.kind === 'review' ? handleLongPressReview(item.card) : promptDismissAwaiting(item.pick))}
                   delayLongPress={400}
                   activeOpacity={0.7}
                 >
                   <View style={styles.cardCompactOuter}>
-                    <View style={styles.reviewThumbWrap}>
+                    <View style={styles.reviewThumb}>
                       {thumbPath ? (
                         <TouchableOpacity onPress={() => setExpandedThumb({ path: thumbPath, name: w.wine_name })} activeOpacity={0.85}>
                           <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={5} frame={3} />
                         </TouchableOpacity>
                       ) : (
-                        // No label shot (e.g. a wine picked from a scanned list) —
-                        // offer to add one right from the review card.
-                        <AddPhotoThumb
-                          style={styles.reviewThumb}
-                          radius={5}
-                          onPress={() => attachPhoto.present({
-                            kind: isChosen ? 'chosen' : 'cellar',
-                            wineId: w.id,
-                            producer: w.producer,
-                            wineName: w.wine_name,
-                          })}
-                        />
+                        <AddPhotoThumb style={styles.reviewThumb} radius={5} onPress={() => presentAddPhoto(item)} />
                       )}
                     </View>
                     <View style={styles.cardCompactBody}>
-                      {/* Producer · Name · Vintage (white). No score here. */}
-                      <Text style={styles.wineNameCompact} numberOfLines={2}>
-                        {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
-                      </Text>
-                      {/* Region, Country (yellow) then grape variety beneath it. */}
+                      <Text style={styles.wineNameCompact} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
                       {w.region ? <Text style={styles.regionText} numberOfLines={1}>{regionWithCountry(w.region)}</Text> : null}
-                      {uni.grape ? <Text style={styles.grapeText} numberOfLines={1}>{uni.grape}</Text> : null}
-                      {/* Review date · location stamp (white). Wraps when long. */}
+                      {w.grape ? <Text style={styles.grapeText} numberOfLines={1}>{w.grape}</Text> : null}
                       <Text style={[styles.metaText, styles.cardCompactMeta]}>
-                        {formatDate(item.date)}{locText ? ` · ${locText}` : ''}
+                        {formatDate(itemDate(item))}{place ? ` · ${place}` : ''}
                       </Text>
-                      {/* Yellow stats line — "Awaiting Review" for a pick not yet
-                          reviewed, otherwise the entry count + average score. */}
                       <Text style={styles.reviewStatsLine}>
-                        {awaiting
+                        {item.kind === 'awaiting'
                           ? 'Awaiting Review'
-                          : `${uni.count} ${uni.count === 1 ? 'Review' : 'Reviews'}${uni.averageScore != null ? ` · ${uni.averageScore} Average Score` : ''}`}
+                          : `${item.card.count} ${item.card.count === 1 ? 'Review' : 'Reviews'}${item.card.averageScore != null ? ` · ${item.card.averageScore} Average Score` : ''}`}
                       </Text>
                     </View>
                   </View>
                 </TouchableOpacity>
               );
-          }}
-        />
+            }}
+          />
         </>
       )}
 
-      {/* Filter dropdown — single modal driven by openDropdown. The
-          chip the user tapped sets dropdownConfig, which feeds title
-          + options + current value into this sheet. Matches Full
-          Cellar List's interaction model so the two screens behave
-          identically. */}
+      {/* The dropdown for whichever filter chip was tapped. */}
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
         <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
@@ -1764,10 +1250,7 @@ export default function ChosenWinesScreen() {
                       <TouchableOpacity
                         key={opt.value}
                         style={[styles.dropdownOption, active && styles.dropdownOptionActive]}
-                        onPress={() => {
-                          activeDropdown.onSelect(opt.value);
-                          setOpenDropdown(null);
-                        }}
+                        onPress={() => { activeDropdown.onSelect(opt.value); setOpenDropdown(null); }}
                         activeOpacity={0.7}
                       >
                         <Text style={[styles.dropdownOptionText, active && styles.dropdownOptionTextActive]}>{opt.label}</Text>
@@ -1800,7 +1283,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
+  back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
   // On-open review prompt.
   promptOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   promptSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 440 },
@@ -1816,17 +1299,11 @@ const styles = StyleSheet.create({
   promptDontShow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
   promptDontShowText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 
-  // Cellar-wine picker (+ Add → Cellar Wine).
+  // Cellar-wine picker (+ Add → Select from Cellar).
   pickerSearch: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)', marginBottom: spacing.sm },
   pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
-  addAnywayWrap: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: spacing.xs },
-  addAnywayLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
   pickerReviewed: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.gold, marginLeft: spacing.sm },
 
-  awaitingMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 3 },
-
-  // Stacked "+ Import" (top) / "+ Add Review" (below) on the header's right.
-  headerActions: { alignItems: 'flex-end', gap: 6 },
   headerActionLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, textAlign: 'right' },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
@@ -1835,13 +1312,10 @@ const styles = StyleSheet.create({
   // Review bubbles — brown (colors.surface), matching Your Restaurant Reviews
   // and the carousel cards elsewhere.
   cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
-  // When a review has a label photo it sits as a small framed thumbnail to the
-  // left of the text (like a cellar wine card); text-only otherwise.
   cardCompactOuter: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   cardCompactBody: { flex: 1 },
-  // Larger thumbnail, matching the Label Library, with a top-right favourite star.
+  // Label thumbnail to the left of the card text, like a cellar wine card.
   reviewThumb: { width: 100, height: 130 },
-  reviewThumbWrap: { width: 100, height: 130 },
 
   cardCompactMeta: { marginTop: 2 },
   reviewStatsLine: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
@@ -1851,10 +1325,8 @@ const styles = StyleSheet.create({
 
   metaText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   emptyFilter: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
-  // Summary + filter carousel — copied from Full Cellar List
-  // (app/cellar/list.tsx) so the two screens look identical above the
-  // list itself. Sort chip is gold-bordered to mark it as the most
-  // common interaction.
+  // Summary + filter carousel — matches Full Cellar List (app/cellar/list.tsx)
+  // so the two screens look the same above the list.
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Tappable variant of the awaiting-review line (no underline, per house style).
@@ -1866,7 +1338,8 @@ const styles = StyleSheet.create({
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
-  filterChipSort: { borderColor: colors.gold },
+  // A selected folder chip.
+  filterChipActive: { borderColor: colors.gold },
 
   customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm },
   customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },

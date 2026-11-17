@@ -1,114 +1,80 @@
 import type { CellarWine } from '../types/wine';
 import type { DetectedBottle } from '../api/label';
-import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/cellar';
+import type { LineupWine } from '../api/lineups';
+import { addCellarWine, addCellarWineRemoval, getCellarWineById, updateCellarWine } from '../api/cellar';
 import { clearWineFromRacks } from '../api/racks';
 import { clearLocationPlacements, releaseBottlesFromPlacements, fetchPlacementsForWine, placedCount } from '../api/placements';
-import { wineNameKey, looseWineMatch } from '../utils/wineIdentity';
+import { findSameCellarWine, sameWineIdentity } from '../utils/wineMatch';
 
-export interface NightMatch {
-  wine: CellarWine;
-  count: number;            // how many of this wine were detected in the lineup
-  anyUnconfident: boolean;  // at least one matched detection was a low-confidence read
-}
+// Glossary — "archive" means two different things around Lineups:
+//  • archiving a BOTTLE moves it out of the live cellar into the cellar archive
+//    (cellar_wines.archived_at). That's archiveBottles below; LineupWine.archived
+//    records that it was done for a lineup row.
+//  • a lineup "archive" is a saved lineup (a lineup_archives row: photo, wines,
+//    note). "Archive a Night" is the capture flow that creates one — it never
+//    removes bottles from the cellar by itself.
 
-interface NightMatchResult {
-  matched: NightMatch[];
-  // Bottles Vinster read but couldn't find in the live cellar.
-  unmatched: DetectedBottle[];
-}
-
-// Match each detected bottle to a live cellar wine by producer + name (+ vintage
-// when both have one), then aggregate duplicates into per-wine counts. Bottles
-// with no cellar match are returned separately so the UI can say "not in your
-// cellar" rather than inventing a removal.
-//
-// Matching uses the shared `wineNameKey` identity so it's tolerant of the
-// formatting differences a lineup read introduces — accents ("Château" ==
-// "Chateau"), apostrophes/punctuation, definite articles ("Il Marroneto" ==
-// "Marroneto"), word order, and embedded vintages — the same logic the app's
-// search boxes and connection matching use. It stays conservative: distinct
-// cuvées with different significant words don't merge.
-export function matchLineupToCellar(detected: DetectedBottle[], cellar: CellarWine[]): NightMatchResult {
-  const byWineId = new Map<string, NightMatch>();
-  const unmatched: DetectedBottle[] = [];
-
+// Turn a lineup detection into the rows stored on the lineup, in the photo's
+// left-to-right order. Each row keeps the DETECTED identity; cellar_wine_id
+// links it to a cellar wine only when that wine is the same wine AND vintage
+// (findSameCellarWine — a producer-only or name-only resemblance never links,
+// so archiving can't touch the wrong bottle). Repeat bottles of one wine
+// collapse into a single row with a count.
+export function buildLineupWines(detected: DetectedBottle[], cellar: CellarWine[]): LineupWine[] {
+  const rows: LineupWine[] = [];
   for (const b of detected) {
-    const dKey = wineNameKey(b.producer, b.wineName);       // full identity
-    const dProducerKey = wineNameKey(b.producer, null);     // producer field alone
-    const dNameKey = wineNameKey(null, b.wineName);         // name field alone
-    const dVintage = (b.vintage ?? '').trim();
-
-    // Candidate cellar wines whose identity lines up. A full token-set match is
-    // the strongest signal; otherwise fall back to the producer or name lining
-    // up on its own (mirrors the original looser rule, now accent/punctuation/
-    // article/order tolerant).
-    let candidates = cellar.filter((w) => {
-      if (dKey && dKey === wineNameKey(w.producer, w.wine_name)) return true;
-      const wProducerKey = wineNameKey(w.producer, null);
-      const wNameKey = wineNameKey(null, w.wine_name);
-      const producerHit = !!dProducerKey && (wProducerKey === dProducerKey || wNameKey === dProducerKey);
-      const nameHit = !!dNameKey && (wNameKey === dNameKey || wProducerKey === dNameKey);
-      return producerHit || nameHit;
+    const identity = { producer: b.producer || null, wineName: b.wineName ?? '', vintage: b.vintage || null, region: b.region ?? null };
+    const match = findSameCellarWine(cellar, identity);
+    const sameAs = (r: LineupWine) => (match
+      ? r.cellar_wine_id === match.id
+      : !r.cellar_wine_id && sameWineIdentity(identity, { producer: r.producer, wineName: r.wine_name, vintage: r.vintage }));
+    const existing = rows.find(sameAs);
+    if (existing) { existing.count += b.quantity ?? 1; continue; }
+    rows.push({
+      producer: identity.producer,
+      wine_name: identity.wineName,
+      vintage: identity.vintage,
+      cellar_wine_id: match?.id ?? null,
+      archived: false,
+      count: b.quantity ?? 1,
     });
-    // Fallback (mirrors the scan-lineup placement path): the same wine scanned
-    // twice can split producer / name / grape across fields differently, so the
-    // strict key misses it. Accept a looser token-subset match, gated on a
-    // matching vintage, before declaring the bottle "not in your cellar".
-    if (candidates.length === 0) {
-      candidates = cellar.filter((w) => looseWineMatch(
-        { producer: b.producer, wineName: b.wineName, vintage: b.vintage },
-        { producer: w.producer, wineName: w.wine_name, grape: w.grape_variety, vintage: w.vintage },
-      ));
-    }
-
-    // Prefer an exact vintage match when the detection has a vintage.
-    let match: CellarWine | undefined;
-    if (dVintage) {
-      match = candidates.find((w) => (w.vintage ?? '').trim() === dVintage);
-    }
-    if (!match) match = candidates[0];
-
-    if (!match) { unmatched.push(b); continue; }
-
-    const existing = byWineId.get(match.id);
-    if (existing) {
-      existing.count += 1;
-      existing.anyUnconfident = existing.anyUnconfident || !b.confident;
-    } else {
-      byWineId.set(match.id, { wine: match, count: 1, anyUnconfident: !b.confident });
-    }
   }
-
-  return { matched: Array.from(byWineId.values()), unmatched };
+  return rows;
 }
 
-// Archive `count` bottles of one cellar wine — mirroring the wine card's
-// remove-bottles logic: log the removal event, then either fully archive the
-// row (count clears the cellar) or decrement and clone an archive row for the
-// bottles pulled. Frees the matching number of rack slots either way.
-export async function archiveBottles(wine: CellarWine, count: number, removeDate: string): Promise<void> {
-  const effective = Math.min(count, wine.quantity);
-  if (effective <= 0) return;
+// Archive `count` bottles of one cellar wine, dated `removeDate` — the same
+// outcome as the wine card's remove-bottles action. Returns how many bottles
+// were actually archived (0 when the wine is gone or already empty).
+//
+// The row is re-read rather than trusted from a cache, so two lineup rows linked
+// to the same wine each see the quantity the previous one left behind.
+//
+// Not a single transaction: on a partial removal the archive copy is inserted
+// BEFORE the live quantity is decremented, so a failure part-way can at worst
+// leave a bottle showing twice (visible and fixable) — never lose one.
+export async function archiveBottles(cellarWineId: string, count: number, removeDate: string): Promise<number> {
+  const wine = await getCellarWineById(cellarWineId);
+  if (!wine || wine.archived_at) return 0;
+  const effective = Math.min(count, wine.quantity ?? 0);
+  if (effective <= 0) return 0;
   const archivedAt = `${removeDate}T12:00:00.000Z`;
 
-  await addCellarWineRemoval({ cellarWineId: wine.id, removedAt: removeDate, count: effective });
-
-  const newQuantity = wine.quantity - effective;
-  if (newQuantity <= 0) {
-    await updateCellarWine(wine.id, { quantity: effective, archived_at: archivedAt } as any);
-    // Detach from ALL storage — rack slots AND alt-cellar placements — or the
-    // archived bottle lingers as a ghost in a rack / home storage location.
+  if (effective >= wine.quantity) {
+    // Every bottle goes: archive the row itself, then detach it from ALL storage
+    // (rack slots and location placements) so it can't linger as a ghost.
+    await updateCellarWine(wine.id, { archived_at: archivedAt } as Partial<CellarWine>);
     await clearWineFromRacks(wine.id);
     await clearLocationPlacements(wine.id);
   } else {
-    await updateCellarWine(wine.id, { quantity: newQuantity } as any);
-    const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine as any;
+    const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
     await addCellarWine({ ...rest, quantity: effective, archived_at: archivedAt } as any);
-    // Free the archived bottles taking loose ones first, then racks, then
-    // alt-cellar placements (removeSlotsForWine freed racks only, leaving ghosts).
-    const wp = await fetchPlacementsForWine(wine.id);
-    const unplaced = Math.max(0, wine.quantity - placedCount(wp));
+    await updateCellarWine(wine.id, { quantity: wine.quantity - effective });
+    // Free the archived bottles from loose stock first, then from placements.
+    const unplaced = Math.max(0, wine.quantity - placedCount(await fetchPlacementsForWine(wine.id)));
     const toFree = Math.max(0, effective - unplaced);
     if (toFree > 0) await releaseBottlesFromPlacements(wine.id, toFree);
   }
+
+  await addCellarWineRemoval({ cellarWineId: wine.id, removedAt: removeDate, count: effective });
+  return effective;
 }

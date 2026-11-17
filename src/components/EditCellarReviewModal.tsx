@@ -4,18 +4,17 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
-import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
 import { LabelThumb } from './LabelThumb';
 import { ReviewCardHeader, ReviewedLineEditable } from './ReviewCardHeader';
 import { WineReviewShareCard } from './WineReviewShareCard';
 import { getCachedLabelUri } from '../api/labelImageCache';
-import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
+import { todayYmd } from '../utils/reviewDate';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { showAlert } from './AppAlert';
-import { buildEntry, entriesOf, latestEntry, flatMirror } from '../utils/cellarReview';
+import { buildEntry, entriesOf, latestEntry, flatMirror, withoutEntries, splitLocation } from '../utils/cellarReview';
 import { missingReviewFields } from '../utils/reviewDedup';
 import { WineReviewFields } from './WineReviewFields';
 import { colors, spacing } from '../constants/theme';
@@ -26,30 +25,22 @@ interface Props {
   wine: CellarWine | null;
   visible: boolean;
   onClose: () => void;
+  // The entry was saved or deleted; the parent closes the modal.
   onSaved: () => void;
-  // When true, edit the latest entry in place (pre-filled) instead of appending
-  // a fresh blank review. Used by the review card's "Edit" action.
-  editLatest?: boolean;
+  // The entry to edit in place (pre-filled). Omit to write a NEW dated entry.
+  editEntryId?: string | null;
   // Tapping the wine title on a FIRST review hands off to the shared Edit Wine
   // Details screen (fix the name / add a vintage). The parent hides this modal,
   // opens the screen, and re-opens the modal for the same wine on return.
   onEditWine?: (wine: CellarWine) => void;
 }
 
-function todayISO() {
-  return new Date().toISOString().split('T')[0];
-}
-
-// The focused review input for a cellar wine — the sibling of
-// EditChosenWineModal. A cellar review's data lives on the cellar_wines
-// row (review_note / user_notes / review_score / review_location /
-// review_date) rather than chosen_wines, so this modal reads and saves
-// there. It lets Your Wine Reviews open every review the same way — a
-// review form, never the full wine card.
-export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLatest = false, onEditWine }: Props) {
+// The review input for a cellar bottle — the sibling of EditChosenWineModal.
+// A cellar review is a list of dated entries on the cellar_wines row
+// (review_entries); this writes one entry, new or edited, and nothing else.
+export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEntryId = null, onEditWine }: Props) {
   const { updateWine } = useCellar();
   const { session } = useAuth();
-  const qc = useQueryClient();
 
   const [reviewNote, setReviewNote] = useState('');
   const [personalNotes, setPersonalNotes] = useState('');
@@ -60,10 +51,6 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
   const [pricePaid, setPricePaid] = useState('');
   const [drinkingWindow, setDrinkingWindow] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  // In edit mode, the id of the entry being edited in place (else null = append).
-  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareLabelUri, setShareLabelUri] = useState<string | null>(null);
 
@@ -79,35 +66,30 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
       suspendedForEditRef.current = null;
       return;
     }
-    // Edit mode: pre-fill from the latest entry and edit it in place. Otherwise
-    // this modal writes a NEW review entry each time (append-only), so the
-    // review fields open blank; price stays (it's a bottle-level field).
-    const latest = editLatest ? latestEntry(entriesOf(wine)) : null;
-    setEditingEntryId(latest?.id ?? null);
-    if (latest) {
-      setReviewNote(latest.note ?? '');
-      setPersonalNotes(latest.personalNotes ?? '');
-      setScore(latest.score != null ? String(latest.score) : '');
-      setReviewDate(latest.date ?? todayISO());
-      const { restaurantName, city } = splitLocationString(latest.location ?? '');
-      setLocName(restaurantName ?? '');
-      setLocCity(city ?? '');
-      setPricePaid(wine.purchase_price != null ? String(wine.purchase_price) : '');
-      setDrinkingWindow(latest.drinkingWindow ?? '');
-      setSaved(false);
+    // Editing pre-fills from that entry; a new entry opens blank. Price stays
+    // either way — it belongs to the bottle, not the entry.
+    const editing = editEntryId ? entriesOf(wine).find((e) => e.id === editEntryId) : undefined;
+    setPricePaid(wine.purchase_price != null ? String(wine.purchase_price) : '');
+    if (editing) {
+      setReviewNote(editing.note ?? '');
+      setPersonalNotes(editing.personalNotes ?? '');
+      setScore(editing.score != null ? String(editing.score) : '');
+      setReviewDate(editing.date ?? todayYmd());
+      const { place, city } = splitLocation(editing.location);
+      setLocName(place);
+      setLocCity(city);
+      setDrinkingWindow(editing.drinkingWindow ?? '');
       return;
     }
     setReviewNote('');
     setPersonalNotes('');
     setScore('');
-    setReviewDate(todayISO());
+    setReviewDate(todayYmd());
     setLocName('');
     setLocCity('');
     captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
-    setPricePaid(wine.purchase_price != null ? String(wine.purchase_price) : '');
     setDrinkingWindow('');
-    setSaved(false);
-  }, [wine?.id, visible, editLatest]);
+  }, [wine?.id, visible, editEntryId]);
 
   async function persist() {
     if (!wine) return;
@@ -126,59 +108,25 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
     const parsedPrice = pricePaid.trim() ? parseFloat(pricePaid.trim()) : NaN;
     const priceValue = Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : null;
     const currency = (wine.purchase_price_currency ?? 'GBP').toUpperCase();
-    // Append a new dated entry to the bottle's review history; mirror the latest
-    // entry onto the flat review_* fields so existing surfaces keep reading it.
     const entry = buildEntry({
       note: reviewNote, personalNotes, score: parsedScore,
       location: locationTrim, date: dateTrim || null, drinkingWindow,
     });
-    // Edit mode replaces the entry in place (keeping its id + savedAt so the 24h
-    // edit clock isn't reset); otherwise append a fresh dated entry.
-    const nextEntries = editLatest && editingEntryId
-      ? entriesOf(wine).map((e) => (e.id === editingEntryId ? { ...entry, id: e.id, savedAt: e.savedAt } : e))
-      : [...entriesOf(wine), entry];
-    const latest = latestEntry(nextEntries);
+    // An edit replaces the entry in place, keeping its id and savedAt so it
+    // holds its place in the history; otherwise the entry is appended.
+    const existing = entriesOf(wine);
+    const nextEntries = editEntryId && existing.some((e) => e.id === editEntryId)
+      ? existing.map((e) => (e.id === editEntryId ? { ...entry, id: e.id, savedAt: e.savedAt } : e))
+      : [...existing, entry];
     await updateWine.mutateAsync({
       id: wine.id,
       updates: {
         review_entries: nextEntries,
-        ...flatMirror(latest),
+        ...flatMirror(latestEntry(nextEntries)),
         purchase_price: priceValue,
         purchase_price_currency: priceValue != null ? currency : null,
       },
     });
-    // Keep any duplicate rows (other cellar bottles / chosen reviews of the
-    // same wine) in lock-step — mirrors the wine card's save behaviour.
-    if (session?.user.id) {
-      const { restaurantName, city } = splitLocationString(locationTrim);
-      const identity = { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage };
-      const fields = {
-        userScore: parsedScore,
-        tastingNote: reviewNote,
-        otherObservations: personalNotes,
-        drinkingWindow,
-        restaurantName,
-        city,
-        reviewDate: dateTrim || undefined,
-        labelImagePath: wine.label_image_path,
-      };
-      try {
-        // Do NOT create a chosen_wines twin for a cellar review. A cellar review
-        // already surfaces natively in Your Wine Reviews as a 'cellar' item
-        // (chosen.tsx cellarReviews), where delete + multi-entry history work
-        // correctly. Creating a twin instead misclassified it as a 'chosen' row,
-        // which broke delete (the cellar row re-derived it back), collapsed the
-        // review count/history to 1, and could mis-file it under "Winelist". We
-        // only UPDATE a pre-existing twin (e.g. one created from a List scan of
-        // the same wine) so the two stay in lock-step.
-        await syncEditToChosen(session.user.id, identity, fields, { createIfMissing: false, region: wine.region });
-        await syncReviewToCellar(session.user.id, identity, fields, { excludeCellarWineId: wine.id });
-        qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
-        qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-      } catch (err) {
-        console.warn('[cellar review modal] sync failed:', err);
-      }
-    }
   }
 
   async function handleSave() {
@@ -210,9 +158,6 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
     try {
       await persist();
       onSaved();
-      // Stay on the form and flip the button to a gold "Review Saved" rather
-      // than closing — the user gets clear confirmation. Back exits.
-      setSaved(true);
     } catch (err) {
       // Surface the failure instead of swallowing it — a silent catch here is
       // what hid the missing-column 400 that broke saving entirely.
@@ -250,22 +195,20 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
     }
   }
 
-  function handleClearReview() {
-    if (!wine) return;
+  // Delete the entry being edited. Other entries of this wine stay, and the
+  // flat review fields re-mirror whichever entry is now the latest.
+  function handleDeleteEntry() {
+    if (!wine || !editEntryId) return;
     const label = wine.vintage ? `${wine.vintage} ${wine.wine_name}` : wine.wine_name;
     showAlert({
       title: 'Delete this review?',
-      body: `${label}\n\nThis clears your review. The bottle stays in your cellar.`,
+      body: `${label}\n\nThis deletes this review. The bottle stays in your cellar.`,
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete review', style: 'destructive', onPress: async () => {
             try {
-              await updateWine.mutateAsync({
-                id: wine.id,
-                updates: { review_score: null, review_location: null, review_date: null, review_note: null, user_notes: null },
-              });
+              await updateWine.mutateAsync({ id: wine.id, updates: withoutEntries(wine, [editEntryId]) });
               onSaved();
-              onClose();
             } catch (err) {
               showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
             }
@@ -308,7 +251,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
               vintage={wine.vintage}
               region={wine.region}
               grape={wine.grape_variety}
-              onPressTitle={onEditWine && !editLatest && entriesOf(wine).length === 0
+              onPressTitle={onEditWine && !editEntryId && entriesOf(wine).length === 0
                 ? () => { suspendedForEditRef.current = wine.id; onEditWine(wine); }
                 : undefined}
               thumbnail={wine.label_image_path
@@ -317,37 +260,33 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
             />
 
             <View style={styles.divider} />
-            <ReviewedLineEditable date={reviewDate} onDate={(t) => { setReviewDate(t.slice(0, 10)); setSaved(false); }} city={locCity} onCity={(v) => { setLocCity(v); setSaved(false); }} venue={locName} onVenue={(v) => { setLocName(v); setSaved(false); }} currency={(wine.purchase_price_currency ?? 'GBP').toUpperCase()} />
+            <ReviewedLineEditable date={reviewDate} onDate={(t) => setReviewDate(t.slice(0, 10))} city={locCity} onCity={setLocCity} venue={locName} onVenue={setLocName} currency={(wine.purchase_price_currency ?? 'GBP').toUpperCase()} />
 
             <WineReviewFields
               score={parsedScore}
-              onScore={(n) => { setScore(n != null ? String(n) : ''); setSaved(false); }}
+              onScore={(n) => setScore(n != null ? String(n) : '')}
               pricePaid={pricePaid}
-              onPricePaid={(v) => { setPricePaid(v); setSaved(false); }}
+              onPricePaid={setPricePaid}
               currency={(wine.purchase_price_currency ?? 'GBP').toUpperCase()}
               estimatedValue={wine.estimated_value ?? null}
               estimatedValueAt={wine.estimated_value_at}
               review={reviewNote}
-              onReview={(v) => { setReviewNote(v); setSaved(false); }}
+              onReview={setReviewNote}
               personalNotes={personalNotes}
-              onPersonalNotes={(v) => { setPersonalNotes(v); setSaved(false); }}
+              onPersonalNotes={setPersonalNotes}
               city={locCity}
-              onCity={(v) => { setLocCity(v); setSaved(false); }}
-              locationName={locName}
-              onLocationName={(v) => { setLocName(v); setSaved(false); }}
-              showLocation={false}
-              requireCity
               drinkingWindow={drinkingWindow}
-              onDrinkingWindow={(v) => { setDrinkingWindow(v); setSaved(false); }}
+              onDrinkingWindow={setDrinkingWindow}
               saving={saving || updateWine.isPending}
-              saved={saved}
               onSave={handleSave}
               saveLabel="Save Review"
             />
 
-            <TouchableOpacity style={styles.deleteButton} onPress={handleClearReview} disabled={updateWine.isPending}>
-              <Text style={styles.deleteText}>Delete this review</Text>
-            </TouchableOpacity>
+            {editEntryId ? (
+              <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteEntry} disabled={updateWine.isPending}>
+                <Text style={styles.deleteText}>Delete this review</Text>
+              </TouchableOpacity>
+            ) : null}
 
           </KeyboardAwareScrollView>
         </View>
@@ -365,7 +304,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
             criticScore={wine.critic_score}
             tastingNote={reviewNote}
             otherObservations={null}
-            date={reviewDate ? new Date(reviewDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null}
+            date={reviewDate ? new Date(`${reviewDate}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null}
             location={[locName.trim(), locCity.trim()].filter(Boolean).join(', ') || null}
             isFavourite={wine.is_favourite}
             imageUri={shareLabelUri}

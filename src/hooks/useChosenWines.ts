@@ -1,11 +1,13 @@
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
+import { useCellar, useArchive } from './useCellar';
 import { saveChosenWine, saveManualChosenWine, fetchChosenWines, updateChosenWine, deleteChosenWine, patchChosenWine, type SaveChosenWineInput, type ManualSaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
-import { syncReviewToCellar } from '../services/reviewSync';
 import type { ChosenWine, CellarWine } from '../types/wine';
 import { fetchAutoLabelUri } from '../api/label';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { sameWineIdentity } from '../utils/wineMatch';
+import { buildReviewCards, awaitingPicks } from '../utils/reviewModel';
 import { supabase } from '../api/supabase';
 
 export function useChosenWines() {
@@ -49,73 +51,39 @@ export function useChosenWines() {
     })();
   }
 
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+    qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
+  };
+
+  // Community sharing is opt-in only — it happens when the user taps "Share to
+  // Community" on a review, never automatically on save or edit.
   const save = useMutation({
     mutationFn: async (input: SaveChosenWineInput) => {
       const saved = await saveChosenWine(userId!, input);
-      await syncReviewToCellar(
-        userId!,
-        { producer: input.wine.producer, wineName: input.wine.name, vintage: input.wine.vintage },
-        { tastingNote: input.tastingNote, restaurantName: input.restaurantName, city: input.city, userScore: input.userScore },
-        { setReviewDate: true },
-      );
-      // Community sharing is opt-in only — it happens when the user taps
-      // "Share to Community" on a review, never automatically on save.
       attachLabelPhoto(saved);
       return saved; // the created row, so callers can track this session's pick
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-      qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
-    },
+    onSuccess: invalidate,
   });
 
   const update = useMutation({
-    mutationFn: async ({ id, input }: { id: string; input: UpdateChosenWineInput }) => {
-      await updateChosenWine(id, input);
-      await syncReviewToCellar(
-        userId!,
-        { producer: input.producer, wineName: input.wineName, vintage: input.vintage },
-        { tastingNote: input.tastingNote, restaurantName: input.restaurantName, city: input.city, userScore: input.userScore },
-      );
-      // Community sharing stays opt-in (see save above) — editing a review
-      // no longer republishes it automatically.
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-      qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
-    },
+    mutationFn: ({ id, input }: { id: string; input: UpdateChosenWineInput }) => updateChosenWine(id, input),
+    onSuccess: invalidate,
   });
 
   const saveManual = useMutation({
     mutationFn: async (input: ManualSaveChosenWineInput) => {
       const row = await saveManualChosenWine(userId!, input);
-      // Sync to a matching cellar row when one exists, same as
-      // the scan-driven save path.
-      await syncReviewToCellar(
-        userId!,
-        { producer: input.producer, wineName: input.wineName, vintage: input.vintage },
-        { tastingNote: input.tastingNote, restaurantName: input.restaurantName, city: input.city, userScore: input.userScore },
-        { setReviewDate: true },
-      );
-      // Community sharing stays opt-in (see save above).
       attachLabelPhoto(row);
       return row;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-      qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
-    },
+    onSuccess: invalidate,
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteChosenWine(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
-      qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
-    },
+    onSuccess: invalidate,
   });
 
   // Hide a restaurant bottle-pick from the "Awaiting Review" list on Your Wine
@@ -139,4 +107,23 @@ export function useChosenWines() {
   });
 
   return { chosenWines, isLoading, save, update, saveManual, remove, dismissAwaiting, setFavourite };
+}
+
+// Your Wine Reviews as cards (one per wine) plus the picks awaiting a review,
+// built from the user's chosen wines and their OWN cellar bottles, live and
+// archived. While a shared household cellar is selected the cellar queries hold
+// the owner's bottles; their reviews are the owner's, so they're left out.
+export function useWineReviewCards() {
+  const { session } = useAuth();
+  const userId = session?.user.id;
+  const { chosenWines, isLoading } = useChosenWines();
+  const { wines: live } = useCellar();
+  const { wines: archived } = useArchive();
+  const ownBottles = useMemo(
+    () => [...live, ...archived].filter((w) => w.user_id === userId),
+    [live, archived, userId],
+  );
+  const cards = useMemo(() => buildReviewCards(chosenWines, ownBottles), [chosenWines, ownBottles]);
+  const awaiting = useMemo(() => awaitingPicks(chosenWines, cards), [chosenWines, cards]);
+  return { cards, awaiting, isLoading };
 }

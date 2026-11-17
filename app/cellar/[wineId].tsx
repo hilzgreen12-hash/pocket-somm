@@ -1,6 +1,6 @@
 import { normalisePriceText } from '../../src/utils/priceInput';
 import { PER_75CL, bottleValue, priceForSize } from '../../src/utils/bottleValue';
-import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share, ScrollView } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
@@ -8,7 +8,7 @@ import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../src/utils/
 import { captureRef } from 'react-native-view-shot';
 import { showAlert } from '../../src/components/AppAlert';
 import { DateInput } from '../../src/components/DateInput';
-import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
@@ -23,8 +23,7 @@ import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { hasRealInsiderNote } from '../../src/constants/insiderNote';
 import { COMMUNITY_ENABLED } from '../../src/constants/features';
 import { useAuth } from '../../src/hooks/useAuth';
-import { buildEntry, entriesOf, latestEntry, byRecency, flatMirror } from '../../src/utils/cellarReview';
-import { findMatchingChosenWine } from '../../src/api/chosenWines';
+import { entriesOf, byRecency } from '../../src/utils/cellarReview';
 import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -53,7 +52,6 @@ import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations, assignWineToCase, deleteEmptyCasesForLocation, fetchStorageCasesByIds } from '../../src/api/storageLocations';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
-import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { PackagingPrompt } from '../../src/components/PackagingPrompt';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
@@ -311,58 +309,6 @@ export default function CellarWineDetail() {
   const [noIntelDismissed, setNoIntelDismissed] = useState(false);
   useEffect(() => { setNoIntelDismissed(false); setAutoGenFailed(false); }, [wine?.id]);
 
-  const [] = useState(false);
-  // The review is now edited only through the canonical EditCellarReviewModal,
-  // never inline on the card. This opens it.
-  const [reviewModalOpen, setReviewModalOpen] = useState(false);
-
-  // Auto-link an existing review: if this cellar wine carries no review yet but
-  // the user already reviewed it in Your Wine Reviews (same producer/name/vintage),
-  // pull that review onto the bottle so its Your Review shows straight away. This
-  // runs on every screen FOCUS (not just first mount) so a review written AFTER
-  // the card was first opened still gets attached when the user returns to it —
-  // previously it checked once and gave up, so a later review never linked.
-  // `autoLinkBusy` guards only against overlapping runs within one focus.
-  const autoLinkBusy = useRef(false);
-  useFocusEffect(
-    useCallback(() => {
-      // Archived wines DO link — a common flow is to review a bottle then archive
-      // it, and the review must still show on the archived card.
-      if (!wine) return;
-      if (entriesOf(wine).length > 0) return; // already has its own review
-      if (autoLinkBusy.current) return;
-      autoLinkBusy.current = true;
-      void (async () => {
-        if (!session?.user.id) { autoLinkBusy.current = false; return; }
-        try {
-          const match = await findMatchingChosenWine(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage, wsWineId: wine.ws_wine_id });
-          if (!match) return;
-          const hasContent = !!((match.tasting_note && match.tasting_note.trim()) || (match.other_observations && match.other_observations.trim()) || match.user_score != null);
-          if (!hasContent) return;
-          const entry = buildEntry({
-            note: match.tasting_note ?? '',
-            personalNotes: match.other_observations ?? '',
-            score: match.user_score,
-            location: [match.restaurant_name, match.city].map((s) => (s ?? '').trim()).filter(Boolean).join(', '),
-            date: match.chosen_at ? match.chosen_at.split('T')[0] : null,
-            drinkingWindow: match.user_drinking_window ?? '',
-          });
-          const next = [...entriesOf(wine), entry];
-          await updateWine.mutateAsync({ id: wine.id, updates: { review_entries: next, ...flatMirror(latestEntry(next)) } });
-        } catch { /* best-effort — the manual import stays available */ }
-        finally { autoLinkBusy.current = false; }
-      })();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [wine?.id, isArchived, session?.user.id]),
-  );
-
-  // Vinster's Note — collapsed by default now (was always visible).
-  // The "(what's this)" link surfaces a short explanation modal so a
-  // user encountering the field for the first time knows what it is.
-  const [] = useState(false);
-  // On-demand card sections (generated when first opened, then cached on the wine).
-  const [] = useState(false);
-  const [] = useState(false);
   // Live per-vintage Wine-Searcher table (same as the Wine Intel screen).
   const [vintageRows, setVintageRows] = useState<VintageComparisonRow[] | null>(null);
   // Written market & vintage summary — the fallback when Wine-Searcher has no
@@ -381,8 +327,6 @@ export default function CellarWineDetail() {
   // first time they're opened, are saved on the wine, and reopen instantly after
   // (Refresh / Regenerate to update).
   const [cardTab, setCardTab] = useState<'overview' | 'market' | 'somm' | 'cellar'>('overview');
-
-  const [] = useState(false);
 
   // Same off-screen-capture pattern for the top-right "Share" on the wine
   // card itself — shares Vinster's intelligence (scores, value, tasting note).
@@ -1794,13 +1738,9 @@ export default function CellarWineDetail() {
     return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
   }
 
-  // From an archived wine card, the review flow should return the user back
-  // HERE (backTo) with a "saved to Your Wine Reviews" confirmation, rather than
-  // stranding them on the reviews list.
-  // Always return to THIS wine card when the review closes: a cellar review lives
-  // in Your Wine Reviews, but the user opened it from here and should land back
-  // here — not stranded on the reviews list. Archived wines also get the "saved
-  // to Your Wine Reviews" confirmation toast.
+  // A review opened from here returns HERE when it closes (backTo), not to the
+  // Your Wine Reviews list. Archived wines also get a "saved to Your Wine
+  // Reviews" confirmation.
   const archiveReviewReturn = `&backTo=${encodeURIComponent(`/cellar/${wine.id}`)}${
     isArchived ? `&savedToast=${encodeURIComponent([wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ') || wine.wine_name || 'this wine')}` : ''
   }`;
@@ -1825,8 +1765,8 @@ export default function CellarWineDetail() {
   };
   const reviews = byRecency(entriesOf(wine));
   const latestReview = reviews[0] ?? null;
-  const hasAnyReview = !!latestReview || wine.review_score != null || !!wine.review_note;
-  const reviewOpenHref = hasAnyReview
+  // review_entries is the source of truth; the flat review_* fields only mirror it.
+  const reviewOpenHref = latestReview
     ? `/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}`
     : `/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}`;
   // "View full review" → the latest review's full review / edit screen.
@@ -2077,7 +2017,7 @@ export default function CellarWineDetail() {
                 </>
               ) : (
                 <TouchableOpacity onPress={() => router.push(reviewOpenHref as any)} activeOpacity={0.7}>
-                  <Text style={styles.wcLink}>{hasAnyReview ? 'View your review ›' : 'Add your review ›'}</Text>
+                  <Text style={styles.wcLink}>Add your review ›</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -2709,16 +2649,6 @@ export default function CellarWineDetail() {
           </View>
         </View>
       </Modal>
-
-      {/* Canonical review form — the single place a cellar wine's review is
-          edited (same component Your Wine Reviews opens). Reached via 'Add
-          Review' / 'Edit Review' on the card. */}
-      <EditCellarReviewModal
-        wine={wine}
-        visible={reviewModalOpen}
-        onClose={() => setReviewModalOpen(false)}
-        onSaved={() => qc.invalidateQueries({ queryKey: ['cellar'] })}
-      />
 
       {/* "How is this wine packaged?" — after filing this wine into an Other
           Home Storage location. */}

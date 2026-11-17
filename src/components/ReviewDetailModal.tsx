@@ -7,32 +7,36 @@ import { AddPhotoThumb } from './AddPhotoThumb';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { WineIdentityHeader } from './WineIdentityHeader';
 import { fetchVinsterReview } from '../api/label';
+import { showAlert } from './AppAlert';
+import { drinkingDateTime } from '../utils/cellarReview';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
-import type { UnifiedReview } from '../utils/reviewModel';
+import type { UnifiedReview, UnifiedEntry } from '../utils/reviewModel';
 
-// The single, source-agnostic review detail view. Restaurant, cellar and other
-// reviews all open THIS card. Layout: thumbnail + wine name, a rule, the stats
-// band, then "View Vinster's Note" (collapsed — Vinster's own take, kept out of
-// the user's OWN review), a rule, then each saved entry (newest first) — a large
-// date · location stamp, a concise origin line, score + drink window, and the
-// review body. Delete lives in Edit, not here; the latest entry is editable.
-function fmtDate(iso: string | null): string {
-  if (!iso) return '';
-  try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); }
-  catch { return ''; }
+// The personal note is a short private aside. Existing longer notes (e.g. from
+// an import) are kept whole; the cap only stops new text going past it.
+const PERSONAL_NOTE_MAX = 50;
+
+// The review detail view every wine review opens, whichever collection it's
+// in. Layout: thumbnail + wine name, the stats band, "View Vinster's Note"
+// (collapsed — Vinster's take, kept apart from the user's own review), then
+// each entry newest first: date, score + drink window, where it was drunk, the
+// review, and its own Edit / Delete.
+function fmtDate(date: string | null): string {
+  const t = drinkingDateTime(date);
+  return t ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
 }
 
 export function ReviewDetailModal({
-  review, visible, onClose, onAddReview, onEditLatest, thumbPath, onAddPhoto,
+  review, visible, onClose, onAddReview, onEditEntry, onDeleteEntry, thumbPath, onAddPhoto,
   cellarBottles = 0, archiveBottles = 0, onShare, onNoteGenerated, onSavePersonalNote,
 }: {
   review: UnifiedReview | null;
   visible: boolean;
   onClose: () => void;
   onAddReview: () => void;
-  onEditLatest: () => void;
-  onDeleteEntry?: (entryId: string) => Promise<void> | void;
+  onEditEntry: (entry: UnifiedEntry) => void;
+  onDeleteEntry: (entry: UnifiedEntry) => Promise<void>;
   thumbPath?: string | null;
   onAddPhoto?: () => void;
   cellarBottles?: number;
@@ -41,9 +45,9 @@ export function ReviewDetailModal({
   // Called once when Vinster's Note is generated on demand, so the caller can
   // persist it to the row and never regenerate it.
   onNoteGenerated?: (note: string) => void;
-  // Save (or clear, with '') a personal note for a specific review entry — wired
-  // to the "Your Personal Note" popup below. Null return = not editable here.
-  onSavePersonalNote?: (entryId: string, note: string) => Promise<void> | void;
+  // Save (or clear, with '') the personal note on a restaurant/other entry —
+  // wired to the "Your Personal Note" popup below.
+  onSavePersonalNote?: (entry: UnifiedEntry, note: string) => Promise<void> | void;
 }) {
   // "View Vinster's Note" is collapsed by default; the sommelier note is fetched
   // on demand (like the results card) when it wasn't saved on the wine.
@@ -55,15 +59,16 @@ export function ReviewDetailModal({
   const [noteUnknown, setNoteUnknown] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   // "Your Personal Note" popup — which entry is open, the editable draft + saving.
-  const [personalNoteEntryId, setPersonalNoteEntryId] = useState<string | null>(null);
+  const [personalNoteEntry, setPersonalNoteEntry] = useState<UnifiedEntry | null>(null);
   const [personalNoteDraft, setPersonalNoteDraft] = useState('');
+  const [personalNoteMax, setPersonalNoteMax] = useState(PERSONAL_NOTE_MAX);
   const [savingPersonalNote, setSavingPersonalNote] = useState(false);
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
 
-  // A new review opened → reset the collapsible + its fetched note.
-  const reviewKey = review ? `${review.title}|${review.entries[0]?.id ?? ''}` : null;
-  // Also close the (now sibling) photo viewer, so it can't linger over the
-  // parent screen when switching between reviews or dismissing the card.
-  useEffect(() => { setNoteOpen(false); setFetchedNote(null); setNoteUnknown(false); setNoteLoading(false); setViewerOpen(false); setPersonalNoteEntryId(null); }, [reviewKey]);
+  // A different review opened → reset the collapsible, its fetched note, and
+  // the photo viewer (a sibling modal that would otherwise linger).
+  const reviewKey = review?.key ?? null;
+  useEffect(() => { setNoteOpen(false); setFetchedNote(null); setNoteUnknown(false); setNoteLoading(false); setViewerOpen(false); setPersonalNoteEntry(null); }, [reviewKey]);
 
   if (!review) return null;
   const { entries } = review; // newest first
@@ -96,19 +101,48 @@ export function ReviewDetailModal({
     }
   }
 
-  function openPersonalNote(entryId: string, current: string) {
+  function openPersonalNote(entry: UnifiedEntry) {
+    const current = entry.personalNotes ?? '';
     setPersonalNoteDraft(current);
-    setPersonalNoteEntryId(entryId);
+    setPersonalNoteMax(Math.max(PERSONAL_NOTE_MAX, current.length));
+    setPersonalNoteEntry(entry);
   }
   async function savePersonalNote(next: string) {
-    if (!personalNoteEntryId) return;
+    if (!personalNoteEntry) return;
     setSavingPersonalNote(true);
     try {
-      await onSavePersonalNote?.(personalNoteEntryId, next.slice(0, 50));
-      setPersonalNoteEntryId(null);
+      await onSavePersonalNote?.(personalNoteEntry, next);
+      setPersonalNoteEntry(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSavingPersonalNote(false);
     }
+  }
+
+  function confirmDeleteEntry(entry: UnifiedEntry) {
+    const when = fmtDate(entry.dateIso);
+    showAlert({
+      title: 'Delete this review?',
+      body: `${review!.title}${when ? `\n${when}` : ''}\n\nThis removes this review only — any other reviews of this wine stay.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingEntryId(entry.id);
+            try {
+              await onDeleteEntry(entry);
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            } finally {
+              setDeletingEntryId(null);
+            }
+          },
+        },
+      ],
+    });
   }
 
   return (
@@ -197,22 +231,24 @@ export function ReviewDetailModal({
 
           <View style={styles.rule} />
 
-          {entries.map((e, i) => {
+          {entries.map((e) => {
             // The Location field ("Restaurant, home, other…") drives the single
-            // origin line: when it's set we show "You had this wine at X" — no
-            // "brought"/"purchased" wording. The date stands alone as the stamp.
+            // origin line: "You had this wine at X". The date stands alone.
             const place = (e.location ?? '').trim();
-            const editable = i === 0 && review.latestEditable;
             const drink = (e.drinkingWindow ?? '').trim();
+            const deleting = deletingEntryId === e.id;
             return (
               <View key={e.id} style={styles.entry}>
                 <View style={styles.metaRow}>
-                  <Text style={styles.stamp}>{fmtDate(e.dateIso) || 'Latest entry'}</Text>
-                  {editable ? (
-                    <TouchableOpacity onPress={onEditLatest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.stamp}>{fmtDate(e.dateIso) || 'Undated'}</Text>
+                  <View style={styles.entryActions}>
+                    <TouchableOpacity onPress={() => onEditEntry(e)} disabled={deleting} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Text style={styles.editLink}>Edit</Text>
                     </TouchableOpacity>
-                  ) : null}
+                    <TouchableOpacity onPress={() => confirmDeleteEntry(e)} disabled={deleting} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={styles.deleteLink}>{deleting ? 'Deleting…' : 'Delete'}</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 {(e.favourite || e.score != null || drink || e.pricePaid != null) ? (
                   <View style={styles.scoreRow}>
@@ -229,11 +265,11 @@ export function ReviewDetailModal({
                   <Text style={styles.sectionBody}>{e.note}</Text>
                 ) : null}
 
-                {/* Personal note: a private note surfaced only as a yellow link
-                    (below the review copy, above the separator). Cellar reviews keep
-                    their private note as the card-only "Cellar Note", so it's excluded. */}
-                {review.source !== 'cellar' && (e.personalNotes ?? '').trim() && onSavePersonalNote ? (
-                  <TouchableOpacity onPress={() => openPersonalNote(e.id, e.personalNotes ?? '')} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                {/* Personal note: a private note surfaced only as a gold link.
+                    Cellar entries keep theirs as the wine card's private note, so
+                    only restaurant/other entries show it here. */}
+                {e.ref.kind === 'chosen' && (e.personalNotes ?? '').trim() && onSavePersonalNote ? (
+                  <TouchableOpacity onPress={() => openPersonalNote(e)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                     <Text style={styles.personalNoteLink}>Your Personal Note</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -262,10 +298,10 @@ export function ReviewDetailModal({
       onClose={() => setViewerOpen(false)}
     />
     {/* "Your Personal Note" popup — view / edit / delete the private note. */}
-    <Modal visible={personalNoteEntryId !== null} transparent animationType="fade" onRequestClose={() => setPersonalNoteEntryId(null)}>
+    <Modal visible={personalNoteEntry !== null} transparent animationType="fade" onRequestClose={() => setPersonalNoteEntry(null)}>
       <View style={styles.pnOverlay}>
         <View style={styles.pnSheet}>
-          <TouchableOpacity style={styles.pnClose} onPress={() => setPersonalNoteEntryId(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close" activeOpacity={0.7}>
+          <TouchableOpacity style={styles.pnClose} onPress={() => setPersonalNoteEntry(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close" activeOpacity={0.7}>
             <Text style={styles.pnCloseText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.pnTitle}>Your Personal Note</Text>
@@ -273,15 +309,15 @@ export function ReviewDetailModal({
           <TextInput
             style={styles.pnInput}
             value={personalNoteDraft}
-            onChangeText={(t) => setPersonalNoteDraft(t.slice(0, 50))}
-            placeholder="A short private note — max 50 characters."
+            onChangeText={(t) => setPersonalNoteDraft(t.slice(0, personalNoteMax))}
+            placeholder={`A short private note — max ${PERSONAL_NOTE_MAX} characters.`}
             placeholderTextColor={colors.textMuted}
-            maxLength={50}
+            maxLength={personalNoteMax}
             multiline
             textAlignVertical="top"
             autoFocus
           />
-          <Text style={styles.pnCount}>{personalNoteDraft.length}/50</Text>
+          <Text style={styles.pnCount}>{personalNoteDraft.length}/{PERSONAL_NOTE_MAX}</Text>
           <TouchableOpacity style={[styles.pnSaveBtn, savingPersonalNote && { opacity: 0.5 }]} onPress={() => void savePersonalNote(personalNoteDraft)} disabled={savingPersonalNote} activeOpacity={0.85}>
             <Text style={styles.pnSaveText}>{savingPersonalNote ? 'Saving…' : 'Save'}</Text>
           </TouchableOpacity>
@@ -340,7 +376,9 @@ const styles = StyleSheet.create({
   // Larger date · location stamp; concise origin line beneath it in white, smaller.
   stamp: { fontFamily: fonts.bodySemibold, fontSize: 17, color: colors.text, flex: 1 },
   originLine: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.gold, marginTop: spacing.sm },
+  entryActions: { flexDirection: 'row', gap: spacing.md },
   editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+  deleteLink: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 
   scoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 8, marginBottom: spacing.sm },
   star: { fontSize: 18, color: colors.gold },

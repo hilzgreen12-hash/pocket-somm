@@ -101,7 +101,7 @@ export default function ScanTab() {
           A record of your most epic wine exploits.
         </Text>
       </View>
-      <LineupsCarousel requireAccount={requireAccount} max={8} showAdd={false} onViewAll={() => requireAccount(() => router.push('/cellar/lineups'))} />
+      <LineupsCarousel max={8} onViewAll={() => requireAccount(() => router.push('/cellar/lineups'))} />
 
       <SignInPromptModal
         visible={signInPromptVisible}

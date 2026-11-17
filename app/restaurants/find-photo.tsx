@@ -11,8 +11,8 @@ import { setRestaurantPhotoPath } from '../../src/api/restaurantSessions';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
-// "Find Online" for a restaurant review — searches the open web for photos of
-// the restaurant (by name + city), lets the user pick one, and stores it as the
+// "Find Online" for a restaurant visit — searches the web for photos of the
+// restaurant (by name + city), lets the user pick one, and stores it as the
 // visit's photo. Mirrors the wine-label find-label screen.
 type Stage = 'searching' | 'choosing' | 'saving' | 'empty' | 'error';
 
@@ -45,8 +45,8 @@ export default function FindRestaurantPhotoScreen() {
     setStage('saving');
     try {
       const path = await uploadRestaurantPhotoFromUrl(session.user.id, c.url, sessionId);
+      // Throws (and removes the upload) if the visit no longer exists.
       await setRestaurantPhotoPath(sessionId, path);
-      qc.invalidateQueries({ queryKey: ['label-image', path] });
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       router.back();
     } catch (err) {

@@ -1,7 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import { OfflinePhotoPlaceholder } from '../../../src/components/LineupThumb';
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../../src/utils/shareCard';
@@ -10,15 +10,16 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
-import { getLineupArchive, lineupSignedUrl, setLineupNote, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupWine } from '../../../src/api/lineups';
+import { getLineupArchive, lineupSignedUrl, setLineupNote, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupArchive, type LineupWine } from '../../../src/api/lineups';
 import * as ImagePicker from 'expo-image-picker';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import type { CellarWine } from '../../../src/types/wine';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { useScanHistory } from '../../../src/hooks/useScanHistory';
 import { detectLineup, prepareImageBase64, fetchAutoLabelUri } from '../../../src/api/label';
-import { matchLineupToCellar, archiveBottles } from '../../../src/services/archiveNight';
-import { wineNameKey } from '../../../src/utils/wineIdentity';
+import { buildLineupWines, archiveBottles } from '../../../src/services/archiveNight';
+import { findSameCellarWine, sameWineIdentity } from '../../../src/utils/wineMatch';
+import { getCellarWineById } from '../../../src/api/cellar';
 import { DateInput } from '../../../src/components/DateInput';
 import { labelSignedUrl } from '../../../src/api/labelPhotos';
 import { File, Paths } from 'expo-file-system';
@@ -35,9 +36,17 @@ import { useLabels } from '../../../src/hooks/useLabels';
 import { findWineConnections } from '../../../src/utils/wineConnections';
 import { useLabelStore } from '../../../src/stores/labelStore';
 import { SearchProgress } from '../../../src/components/SearchProgress';
-import { Modal } from 'react-native';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
+
+// Local YYYY-MM-DD of a lineup's date — matches the date shown on screen (a UTC
+// split can be a day out for rows saved near midnight).
+function lineupDay(archivedAt: string): string {
+  const d = new Date(archivedAt);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+const UNDO_NOTE = 'The bottle Vinster already moved to your archive for this lineup stays there — this doesn’t put it back in your cellar.';
 
 export default function LineupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -49,6 +58,16 @@ export default function LineupDetailScreen() {
     queryFn: () => getLineupArchive(id!),
     enabled: !!id,
   });
+
+  // Synchronous in-flight guards, keyed by action: React state lands too late to
+  // stop a fast double tap from firing an upload, read or archive twice.
+  const inFlight = useRef(new Set<string>());
+  function begin(key: string): boolean {
+    if (inFlight.current.has(key)) return false;
+    inFlight.current.add(key);
+    return true;
+  }
+  function end(key: string) { inFlight.current.delete(key); }
 
   const [genIntel, setGenIntel] = useState(false);
   // Where this lineup review/intel flow should return to on Back.
@@ -62,19 +81,15 @@ export default function LineupDetailScreen() {
   }
   const [zoomOpen, setZoomOpen] = useState(false);
   const [replacingPhoto, setReplacingPhoto] = useState(false);
-  // Editable lineup name (tap the title). Falls back to "Your Lineup".
-  const [nameOpen, setNameOpen] = useState(false);
-  const [nameDraft, setNameDraft] = useState('');
-  const [savingName, setSavingName] = useState(false);
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   // The note reads as plain text once saved; editing opens a popup with the
   // input, and saving converts it back to text.
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
-  // Inline "Title" field (the lineup's name), saved on blur.
+  // The lineup's name, edited inline as the title and saved on blur.
   const [name, setName] = useState('');
-  // Which wine row (index) is being matched to a cellar wine via the picker.
+  // Which wine row (index) is being linked to a cellar wine via the picker.
   const [cellarPickerFor, setCellarPickerFor] = useState<number | null>(null);
   const hydrated = useRef(false);
   useEffect(() => {
@@ -94,52 +109,77 @@ export default function LineupDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photoFailed, lineup?.image_path]);
 
-  async function saveName() {
-    if (!lineup || savingName) return;
-    setSavingName(true);
-    try {
-      await setLineupName(lineup.id, nameDraft);
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
-      setNameOpen(false);
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingName(false);
-    }
+  function invalidateLineup() {
+    qc.invalidateQueries({ queryKey: ['lineup', id] });
+    qc.invalidateQueries({ queryKey: ['lineup-archives'] });
   }
 
-  // Inline "Title" save (on blur) — the lineup's name.
   async function saveNameInline() {
     if (!lineup) return;
     if ((name.trim() || null) === (lineup.name?.trim() || null)) return; // unchanged
     try {
       await setLineupName(lineup.id, name);
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      invalidateLineup();
     } catch (err) {
       showAlert({ title: 'Could not save title', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
-  // Persist an updated wines array (used by tick-to-confirm and cellar-matching).
-  async function persistWines(next: LineupWine[]) {
-    if (!lineup) return;
+  // The lineup's wines as they stand NOW in the cache. Every write builds from
+  // this rather than from the render's snapshot, so a slow archive can't
+  // overwrite an edit made while it ran.
+  function currentWines(): LineupWine[] {
+    return qc.getQueryData<LineupArchive | null>(['lineup', id])?.wines ?? [];
+  }
+
+  // Apply a change to the latest wines and persist it. The cache is updated
+  // straight away so a quick follow-up edit builds on this one rather than on
+  // the pre-write array while the refetch is in flight.
+  async function updateWines(change: (wines: LineupWine[]) => LineupWine[]): Promise<boolean> {
+    if (!lineup) return false;
+    const next = change(currentWines());
     try {
       await setLineupWines(lineup.id, next);
-      // Reflect the write in the cache IMMEDIATELY so a rapid follow-up edit
-      // builds from `next`, not the pre-write array (which clobbered the first
-      // edit while the invalidation's refetch was still in flight).
-      qc.setQueryData(['lineup', id], (old: any) => (old ? { ...old, wines: next } : old));
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      qc.setQueryData<LineupArchive | null>(['lineup', id], (old) => (old ? { ...old, wines: next } : old));
+      invalidateLineup();
+      return true;
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      return false;
     }
   }
-  // Tick / untick "this read is correct" on a wine.
-  // Tapping "Off Cellar" → confirm this bottle was from the cellar, then open the
-  // picker to link it to the real cellar wine.
+
+  // Move the cellar bottles behind these lineup rows into the cellar archive,
+  // dated to the night, and mark each row archived. archiveBottles re-reads the
+  // cellar row, so two rows linked to one wine each take their own bottles.
+  async function archiveRows(indexes: number[]): Promise<void> {
+    if (!lineup || !begin('archive')) return;
+    const day = lineupDay(lineup.archived_at);
+    const done: Array<{ index: number; cellarId: string }> = [];
+    try {
+      for (const index of indexes) {
+        const w = currentWines()[index];
+        if (!w?.cellar_wine_id || w.archived) continue;
+        if ((await archiveBottles(w.cellar_wine_id, w.count ?? 1, day)) > 0) done.push({ index, cellarId: w.cellar_wine_id });
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      // Record whatever did get archived, even after a failure part-way. Rows are
+      // matched by position AND link, in case the list changed meanwhile.
+      if (done.length) {
+        await updateWines((ws) => ws.map((w, i) => (done.some((d) => d.index === i && d.cellarId === w.cellar_wine_id) ? { ...w, archived: true } : w)));
+      }
+      qc.invalidateQueries({ queryKey: ['cellar', session?.user.id] });
+      qc.invalidateQueries({ queryKey: ['cellar-archive', session?.user.id] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      end('archive');
+    }
+  }
+
+  // "Off Cellar" tapped → confirm the bottle came from the cellar, then pick
+  // the cellar wine it was.
   function confirmFromCellar(index: number) {
     showAlert({
       title: 'This was from my cellar',
@@ -150,56 +190,41 @@ export default function LineupDetailScreen() {
       ],
     });
   }
-  // Link a lineup wine to a chosen cellar wine, adopting its identity (so its
-  // review/intel/archiving all resolve correctly).
-  function pickCellarForWine(cw: CellarWine) {
-    if (cellarPickerFor == null || !lineup) { setCellarPickerFor(null); return; }
-    const current: LineupWine[] = lineup.wines ?? [];
-    const idx = cellarPickerFor;
+  // Link a lineup row to the chosen cellar wine — adopting its identity, since
+  // the user has said which wine it is — then archive that bottle.
+  async function pickCellarForWine(cw: CellarWine) {
+    const index = cellarPickerFor;
     setCellarPickerFor(null);
-    const prev = current[idx];
-    // Confirmed from the cellar → the bottle(s) were drunk that night, so they
-    // leave the cellar for the archive (counted like any other archive). Only
-    // once: a bottle already archived for this lineup isn't archived again.
-    const linked = current.map((w, i) => (
-      i === idx
-        ? { ...w, cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, confirmed: true }
-        : w
-    ));
-    void (async () => {
-      try {
-        // Saves the link and marks the bottle archived in one write.
-        await archiveCellarBottles(prev ? [{ ...prev, cellar_wine_id: cw.id }] : [], linked);
-      } catch (err) {
-        showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
-      }
-    })();
+    if (index == null) return;
+    const linked = await updateWines((ws) => ws.map((w, i) => (
+      i === index ? { ...w, cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, archived: false } : w
+    )));
+    if (linked) await archiveRows([index]);
   }
 
-  // Tap the "Your Cellar" badge on a matched wine → archive it from the cellar,
-  // or mark it as not actually from the cellar (Off Cellar).
-  function openCellarBadgeOptions(index: number, w: LineupWine, matchedCellar: CellarWine | null) {
+  // Tap the "Your Cellar" badge → archive the bottle from its wine card, or
+  // mark it as not from the cellar after all.
+  function openCellarBadgeOptions(index: number, w: LineupWine) {
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || 'This wine',
       buttons: [
-        // Open the cellar wine card to archive the bottle there (full archive flow);
-        // pressing back returns to this lineup. Gate on the LINK id (which is what
-        // makes the "Your Cellar" badge show), NOT on the wine being present in the
-        // loaded cellarWines list — a paginated/large cellar or a load-timing gap left
-        // matchedCellar null and made the button vanish. The wine card resolves the id.
+        // The wine card resolves the id itself, so this works even when the wine
+        // isn't in the locally loaded cellar list. Back returns to this lineup.
         ...(w.cellar_wine_id ? [{ text: 'Archive this bottle', onPress: () => router.push(`/cellar/${w.cellar_wine_id}` as any) }] : []),
-        { text: 'This wine was Off Cellar', onPress: () => markOffCellar(index) },
+        { text: 'This wine was Off Cellar', onPress: () => { void markOffCellar(index); } },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
-  // Unlink the bottle from the cellar — it wasn't actually from the user's cellar.
-  function markOffCellar(index: number) {
-    if (!lineup) return;
-    const current: LineupWine[] = lineup.wines ?? [];
-    persistWines(current.map((w, i) => (i === index ? { ...w, cellar_wine_id: null, confirmed: false } : w)));
+  // Unlink the bottle from the cellar. A removal already made stays made — say
+  // so, rather than implying the bottle has gone back.
+  async function markOffCellar(index: number) {
+    const wasArchived = !!currentWines()[index]?.archived;
+    const saved = await updateWines((ws) => ws.map((w, i) => (i === index ? { ...w, cellar_wine_id: null, archived: false } : w)));
+    if (saved && wasArchived) showAlert({ title: 'Marked Off Cellar', body: UNDO_NOTE });
   }
-  // Edit the date + location stamp (tap the stamp below the photo).
+
+  // Edit the date + location stamp (tap the stamp below the title).
   const [stampOpen, setStampOpen] = useState(false);
   const [dateDraft, setDateDraft] = useState('');
   const [cityDraft, setCityDraft] = useState('');
@@ -208,22 +233,18 @@ export default function LineupDetailScreen() {
 
   function openStampEdit() {
     if (!lineup) return;
-    // Seed from LOCAL date parts (not UTC) so the pre-filled draft matches the
-    // displayed stamp — avoids an off-by-one for rows saved near midnight.
-    const d = new Date(lineup.archived_at);
-    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    setDateDraft(local);
+    setDateDraft(lineupDay(lineup.archived_at));
     setCityDraft(lineup.city ?? '');
     setVenueDraft(lineup.venue ?? '');
     setStampOpen(true);
   }
   async function saveStamp() {
-    if (!lineup || savingStamp) return;
+    if (!lineup || !begin('stamp')) return;
     const ymd = dateDraft.trim();
     const valid = /^\d{4}-\d{2}-\d{2}$/.test(ymd) && !Number.isNaN(new Date(ymd).getTime());
-    // A non-empty but malformed date must not silently save nothing — tell the
-    // user rather than closing as if it worked. (Empty = leave the date as-is.)
+    // A malformed date must not silently save nothing. (Empty = leave as-is.)
     if (ymd && !valid) {
+      end('stamp');
       showAlert({ title: 'Check the date', body: 'Please enter a valid date.' });
       return;
     }
@@ -234,18 +255,17 @@ export default function LineupDetailScreen() {
         city: cityDraft,
         venue: venueDraft,
       });
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      invalidateLineup();
       setStampOpen(false);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSavingStamp(false);
+      end('stamp');
     }
   }
 
-  // For linking each identified wine to its reviews / cellar entry (like the
-  // Label Library), vintage-agnostic via findWineConnections.
+  // For linking each wine to its reviews / cellar entry (like the Label Library).
   const { wines: cellarWines } = useCellar();
   const { chosenWines } = useChosenWines();
   const { labels } = useLabels();
@@ -259,13 +279,13 @@ export default function LineupDetailScreen() {
     ? restaurantArchive.find((a) => a.id === lineup.restaurant_session_id) ?? null
     : null;
 
+  // Pass null to unmatch.
   async function matchRestaurant(sessionId: string | null) {
     if (!lineup || savingMatch) return;
     setSavingMatch(true);
     try {
       await setLineupRestaurant(lineup.id, sessionId);
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      invalidateLineup();
       setRestaurantPickerOpen(false);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -274,30 +294,19 @@ export default function LineupDetailScreen() {
     }
   }
 
-  // "No matching review" in the picker: just close it.
-  function dismissNoMatch() {
-    setRestaurantPickerOpen(false);
-  }
-  // Remove the lineup's link to a restaurant review.
-  async function unmatchLineup() {
-    await matchRestaurant(null);
-  }
-
-  // Restaurant reviews filtered by the picker's search box.
   const filteredRestaurants = restaurantArchive.filter((a) => {
     const q = restaurantSearch.trim().toLowerCase();
     if (!q) return true;
     return (a.restaurantName ?? '').toLowerCase().includes(q) || (a.city ?? '').toLowerCase().includes(q);
   });
 
-  // "Identify wines" — Vinster reads the archived photo, then the user confirms.
+  // "Identify wines" — Vinster reads the saved photo, then the user confirms.
   const [identifying, setIdentifying] = useState(false);
   const [confirmWines, setConfirmWines] = useState<LineupWine[] | null>(null);
   const [included, setIncluded] = useState<Set<number>>(new Set());
   const [savingWines, setSavingWines] = useState(false);
 
-  // Per-wine manual edit (replaces whole-photo re-identify): correct one bottle's
-  // producer / name / vintage in place and persist the lineup's wines list.
+  // Per-wine manual edit: correct one bottle's producer / name / vintage.
   const [editWineIndex, setEditWineIndex] = useState<number | null>(null);
   const [editProducer, setEditProducer] = useState('');
   const [editName, setEditName] = useState('');
@@ -311,10 +320,11 @@ export default function LineupDetailScreen() {
     setEditVintage(w.vintage != null ? String(w.vintage) : '');
   }
 
-  // Add/View Review → the wine's review in Your Wine Reviews (one canonical
-  // place), with Back returning to THIS lineup. Cellar bottles open their cellar
-  // review; off-cellar wines open the existing chosen review or a seeded new one.
+  // Your Review → the wine's review in Your Wine Reviews, with Back returning to
+  // THIS lineup. Cellar bottles open their cellar review; off-cellar wines open
+  // the existing review or a new one seeded with the lineup's date.
   async function goToWineReview(w: LineupWine, conn: ReturnType<typeof findWineConnections>) {
+    if (!lineup) return;
     const hasReview = conn.reviewCount > 0;
     if (w.cellar_wine_id) {
       const param = hasReview ? 'openCellarReview' : 'openCellarReviewInput';
@@ -325,20 +335,19 @@ export default function LineupDetailScreen() {
       (a, b) => new Date(b.chosen_at ?? 0).getTime() - new Date(a.chosen_at ?? 0).getTime(),
     )[0];
     if (chosen) { router.push(`/wines/chosen?openReview=${chosen.id}${backToLineup}` as any); return; }
-    // Brand-new off-cellar review — auto-fetch a web label so the review card gets
-    // a thumbnail rather than a blank one (the user can swap it later). Carried via
-    // slu=1 (the label store's uri, uploaded on save).
+    // Brand-new review — fetch a web label so the review card has a thumbnail
+    // (the user can swap it later). slu=1 carries it via the label store.
     setGenIntel(true);
     let img: string | null = null;
     try { img = await fetchAutoLabelUri(w.producer, w.wine_name); } catch { /* non-fatal */ }
     setGenIntel(false);
     useLabelStore.getState().setImageUri(img);
     const sl = img ? '&slu=1' : '';
-    router.push(`/wines/chosen?seedAdd=1${sl}&sp=${encodeURIComponent(w.producer ?? '')}&sw=${encodeURIComponent(w.wine_name ?? '')}&sv=${encodeURIComponent(w.vintage != null ? String(w.vintage) : '')}${backToLineup}` as any);
+    const seed = `sp=${encodeURIComponent(w.producer ?? '')}&sw=${encodeURIComponent(w.wine_name ?? '')}&sv=${encodeURIComponent(w.vintage != null ? String(w.vintage) : '')}&sd=${lineupDay(lineup.archived_at)}`;
+    router.push(`/wines/chosen?seedAdd=1${sl}&${seed}${backToLineup}` as any);
   }
 
-  // View Wine Intel → generate on demand and open the intel card. Lineup wines
-  // have no label photo, so clear the shared image (avoids showing a stale one).
+  // View Wine Intel → generate on demand and open the intel card.
   async function viewLineupWineIntel(w: LineupWine) {
     // Fill classification + appellation for a classified Bordeaux château so the
     // intel card is complete even though the lineup carried neither.
@@ -353,9 +362,9 @@ export default function LineupDetailScreen() {
     ls.setWineDetailsConfirmed(details as any);
     ls.setIntelligence(null);
     ls.setImageUri(null);
-    // Header image in the background: reuse the matched cellar wine's own label if
-    // it has one, else auto-fetch a web label. Best-effort — the card shows title-
-    // only until it lands.
+    // Header image in the background: the linked cellar wine's own label if it
+    // has one, else a web label. Best-effort — the card shows title-only until
+    // it lands.
     void (async () => {
       let img: string | null = null;
       if (w.cellar_wine_id) {
@@ -370,135 +379,100 @@ export default function LineupDetailScreen() {
     router.push(`/label/results?context=intel&confirmed=1&gen=1&noRecent=1${backToLineup}` as any);
   }
 
+  // After an identity edit, does the row still point at the right cellar wine?
+  // Kept when the edit still describes the linked wine; otherwise re-matched
+  // strictly (same wine + vintage) or unlinked.
+  async function relinkAfterEdit(prev: LineupWine, edited: { producer: string | null; wineName: string; vintage: string | null }) {
+    if (prev.cellar_wine_id) {
+      // A fully archived wine isn't in the live list, so fall back to fetching it.
+      const linked = cellarWines.find((c) => c.id === prev.cellar_wine_id)
+        ?? (await getCellarWineById(prev.cellar_wine_id).catch(() => null));
+      if (linked && sameWineIdentity(edited, linked)) return { cellar_wine_id: prev.cellar_wine_id, archived: prev.archived };
+    }
+    const match = findSameCellarWine(cellarWines, edited);
+    return { cellar_wine_id: match?.id ?? null, archived: false };
+  }
+
   async function saveWineEdit() {
-    if (!lineup || editWineIndex == null || savingWineEdit) return;
-    const current: LineupWine[] = lineup.wines ?? [];
-    const next = current.map((w, i) =>
-      i === editWineIndex
-        ? { ...w, producer: editProducer.trim() || null, wine_name: editName.trim() || editProducer.trim(), vintage: editVintage.trim() || null }
-        : w,
-    );
+    const index = editWineIndex;
+    if (index == null || !begin('editWine')) return;
     setSavingWineEdit(true);
     try {
-      await setLineupWines(lineup.id, next);
-      // Keep the cache in lock-step with the write (see persistWines) so a quick
-      // second edit doesn't rebuild from the stale pre-write array.
-      qc.setQueryData(['lineup', id], (old: any) => (old ? { ...old, wines: next } : old));
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      const prev = currentWines()[index];
+      if (!prev) return;
+      const edited = {
+        producer: editProducer.trim() || null,
+        wineName: editName.trim() || editProducer.trim(),
+        vintage: editVintage.trim() || null,
+      };
+      const link = await relinkAfterEdit(prev, edited);
+      const saved = await updateWines((ws) => ws.map((w, i) => (
+        i === index ? { ...w, producer: edited.producer, wine_name: edited.wineName, vintage: edited.vintage, ...link } : w
+      )));
+      if (!saved) return;
       setEditWineIndex(null);
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      if (prev.archived && link.cellar_wine_id !== prev.cellar_wine_id) {
+        showAlert({ title: 'Wine updated', body: `This bottle is no longer linked to the cellar wine it was archived from. ${UNDO_NOTE}` });
+      }
     } finally {
       setSavingWineEdit(false);
+      end('editWine');
     }
   }
 
   async function identifyWines() {
-    if (!lineup || identifying) return;
-    if (!(await ensureConnectionForUpload())) return;
-    setIdentifying(true);
+    if (!lineup || !begin('identify')) return;
     try {
-      const url = photoUrl ?? (await lineupSignedUrl(lineup.image_path));
+      if (!(await ensureConnectionForUpload())) return;
+      setIdentifying(true);
+      // Always a fresh signed URL: the one behind the on-screen photo may have
+      // expired if the screen has been open a while.
+      const url = await lineupSignedUrl(lineup.image_path);
       if (!url) { showAlert({ title: 'Photo unavailable', body: 'Could not load this lineup’s photo. Please try again.' }); return; }
-      // The archived photo lives in Storage — download it locally, then OCR.
       const dest = new File(Paths.cache, `lineup-detect-${lineup.id}.jpg`);
       try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
       const file = await File.downloadFileAsync(url, dest);
-      const base64 = await prepareImageBase64(file.uri);
-      const { bottles } = await detectLineup(base64);
-      if (!bottles.length) {
+      const { bottles } = await detectLineup(await prepareImageBase64(file.uri));
+      const candidates = buildLineupWines(bottles ?? [], cellarWines);
+      if (!candidates.length) {
         showAlert({ title: 'No wines detected', body: 'Vinster couldn’t read any bottles from this photo. A clearer, well-lit shot with the labels in frame works best.' });
         return;
       }
-      // Match to the live cellar so confirmed wines carry a cellar link where possible.
-      const { matched, unmatched } = matchLineupToCellar(bottles, cellarWines);
-      // Keep the photo's left-to-right order: matchLineupToCellar groups all
-      // matched wines ahead of unmatched ones, which scrambles the list. Sort
-      // every candidate back to where its bottle first appears in the detection.
-      const firstIdxForWine = (producer: string | null | undefined, wineName: string | null | undefined) => {
-        const kFull = wineNameKey(producer, wineName);
-        const kProd = wineNameKey(producer, null);
-        const kName = wineNameKey(null, wineName);
-        return bottles.findIndex((b) => {
-          const bFull = wineNameKey(b.producer, b.wineName);
-          if (kFull && bFull === kFull) return true;
-          const bProd = wineNameKey(b.producer, null);
-          const bName = wineNameKey(null, b.wineName);
-          return (!!kProd && (bProd === kProd || bName === kProd)) || (!!kName && (bName === kName || bProd === kName));
-        });
-      };
-      const withIdx = [
-        ...matched.map((m) => ({ idx: firstIdxForWine(m.wine.producer, m.wine.wine_name), cand: { producer: m.wine.producer, wine_name: m.wine.wine_name, vintage: m.wine.vintage, cellar_wine_id: m.wine.id, archived: false, count: m.count } as LineupWine })),
-        ...unmatched.map((b) => ({ idx: bottles.indexOf(b), cand: { producer: b.producer ?? null, wine_name: b.wineName, vintage: b.vintage, cellar_wine_id: null, archived: false, count: b.quantity ?? 1 } as LineupWine })),
-      ];
-      withIdx.sort((a, b) => (a.idx < 0 ? 9999 : a.idx) - (b.idx < 0 ? 9999 : b.idx));
-      const candidates: LineupWine[] = withIdx.map((x) => x.cand);
       setIncluded(new Set(candidates.map((_, i) => i)));
       setConfirmWines(candidates);
     } catch (err) {
       showAlert({ title: 'Could not identify wines', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setIdentifying(false);
+      end('identify');
     }
   }
 
   async function saveIdentifiedWines() {
-    if (!lineup || !confirmWines || savingWines) return;
+    if (!confirmWines || !begin('saveWines')) return;
     const kept = confirmWines.filter((_, i) => included.has(i));
     setSavingWines(true);
     try {
-      await setLineupWines(lineup.id, kept);
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      if (!(await updateWines(() => kept))) return;
       setConfirmWines(null);
-      // These were drunk that night — offer to archive the ones still live in
-      // the cellar so they don't linger as "in cellar".
-      const drunk = kept.filter((w) => w.cellar_wine_id && cellarWines.some((c) => c.id === w.cellar_wine_id));
-      if (drunk.length) promptArchiveDrunk(drunk, kept);
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      // These were drunk that night — offer to archive the cellar ones so they
+      // don't linger as "in cellar".
+      const fromCellar = kept.map((w, i) => (w.cellar_wine_id ? i : -1)).filter((i) => i >= 0);
+      if (fromCellar.length) promptArchiveDrunk(fromCellar, kept);
     } finally {
       setSavingWines(false);
+      end('saveWines');
     }
   }
 
-  // Archive the cellar bottle(s) behind a lineup wine — moves them from the live
-  // cellar into the archive, dated to the night (mirrors Archive a Night).
-  // Each lineup wine is archived at most ONCE: archived ones are skipped, and
-  // the ones archived here are marked archived on the lineup (`base` = the
-  // lineup's wines to mark, when the caller has a newer list than the cache).
-  async function archiveCellarBottles(list: LineupWine[], base?: LineupWine[]): Promise<void> {
-    if (!lineup) return;
-    const day = (lineup.archived_at ?? '').split('T')[0] || new Date().toISOString().split('T')[0];
-    const done = new Set<string>();
-    for (const w of list) {
-      if (w.archived || !w.cellar_wine_id) continue;
-      const cw = cellarWines.find((c) => c.id === w.cellar_wine_id);
-      if (cw && (cw.quantity ?? 0) > 0) {
-        await archiveBottles(cw, Math.min(w.count ?? 1, cw.quantity ?? 1), day);
-        done.add(cw.id);
-      }
-    }
-    const wines = base ?? lineup.wines ?? [];
-    if (done.size || base) {
-      await persistWines(wines.map((w) => (w.cellar_wine_id && done.has(w.cellar_wine_id) ? { ...w, archived: true } : w)));
-    }
-    qc.invalidateQueries({ queryKey: ['cellar', session?.user.id] });
-    qc.invalidateQueries({ queryKey: ['cellar-archive', session?.user.id] });
-    qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-    qc.invalidateQueries({ queryKey: ['rack-slots'] });
-  }
-
-  // Prompt (after Identify) to archive the cellar bottles that were drunk.
-  function promptArchiveDrunk(list: LineupWine[], base?: LineupWine[]) {
-    const n = list.reduce((s, w) => s + (w.count ?? 1), 0);
+  function promptArchiveDrunk(indexes: number[], wines: LineupWine[]) {
+    const n = indexes.reduce((s, i) => s + (wines[i].count ?? 1), 0);
     showAlert({
       title: 'You drank these — archive them?',
       body: `${n} ${n === 1 ? 'bottle is' : 'bottles are'} from your cellar. Move ${n === 1 ? 'it' : 'them'} into your archive now?`,
       buttons: [
         { text: 'Not now', style: 'cancel' },
-        { text: 'Archive', onPress: () => { archiveCellarBottles(list, base).catch((err) => showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' })); } },
+        { text: 'Archive', onPress: () => { void archiveRows(indexes); } },
       ],
     });
   }
@@ -515,45 +489,46 @@ export default function LineupDetailScreen() {
   }
 
   async function saveNoteFromEditor() {
-    if (!lineup || savingNote) return;
+    if (!lineup || !begin('note')) return;
     setSavingNote(true);
     try {
       await setLineupNote(lineup.id, noteDraft);
       setNote(noteDraft);
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
+      invalidateLineup();
       setNoteEditorOpen(false);
     } catch (err) {
       showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSavingNote(false);
+      end('note');
     }
   }
 
   // Replace the lineup photo — pick from the library, upload, repoint image_path.
   async function changeLineupPhoto() {
-    if (!lineup || !session?.user.id || replacingPhoto) return;
-    if (!(await ensureMediaPermission('library'))) return;
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-    if (res.canceled || !res.assets?.[0]) return;
-    setReplacingPhoto(true);
+    if (!lineup || !session?.user.id || !begin('photo')) return;
     try {
+      if (!(await ensureMediaPermission('library'))) return;
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (res.canceled || !res.assets?.[0]) return;
+      setReplacingPhoto(true);
       const path = await replaceLineupImage(session.user.id, lineup.id, res.assets[0].uri);
       setPhotoUrl(await lineupSignedUrl(path)); setPhotoFailed(false);
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      invalidateLineup();
     } catch (err) {
       showAlert({ title: 'Could not update photo', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setReplacingPhoto(false);
+      end('photo');
     }
   }
 
   async function handleShare() {
-    if (!lineup || sharing) return;
+    if (!lineup || !begin('share')) return;
     setSharing(true);
     try {
-      const url = photoUrl ?? (await lineupSignedUrl(lineup.image_path));
+      // Fresh signed URL — the on-screen one may have expired.
+      const url = await lineupSignedUrl(lineup.image_path);
       if (!url) throw new Error('Could not load the lineup photo.');
       capturedRef.current = false;
       setShareData({
@@ -563,9 +538,11 @@ export default function LineupDetailScreen() {
       });
     } catch (err) {
       setSharing(false);
+      end('share');
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
+  // Fired by the share card once its photo has loaded.
   async function captureAndShare() {
     if (capturedRef.current || !shareCardRef.current) return;
     capturedRef.current = true;
@@ -581,6 +558,7 @@ export default function LineupDetailScreen() {
       setSharing(false);
       setShareData(null);
       capturedRef.current = false;
+      end('share');
     }
   }
 
@@ -609,8 +587,7 @@ export default function LineupDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        {/* Back on its own row. Export moved to a button beneath "Match to a
-            Restaurant Review" at the foot of the page. */}
+        {/* Back on its own row; Export sits at the foot of the page. */}
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 16 }}>
             <Text accessibilityLabel="Back" style={styles.back}>←</Text>
@@ -690,10 +667,10 @@ export default function LineupDetailScreen() {
                   { producer: w.producer, wineName: w.wine_name, vintage: w.vintage },
                   { labels, chosenWines, cellarWines },
                 );
-                // Region · grape from the matched cellar wine, so the row mirrors the
+                // Region · grape from the linked cellar wine, so the row mirrors the
                 // Full Cellar List format (name line + region/grape line).
-                const matchedCellar = w.cellar_wine_id ? cellarWines.find((c) => c.id === w.cellar_wine_id) : null;
-                const subParts = [matchedCellar?.region, matchedCellar?.grape_variety].filter(Boolean) as string[];
+                const linkedCellar = w.cellar_wine_id ? cellarWines.find((c) => c.id === w.cellar_wine_id) : null;
+                const subParts = [linkedCellar?.region, linkedCellar?.grape_variety].filter(Boolean) as string[];
                 return (
                 <View key={`${w.cellar_wine_id ?? 'x'}-${i}`} style={styles.wineRow}>
                   <View style={{ flex: 1 }}>
@@ -705,11 +682,11 @@ export default function LineupDetailScreen() {
                       </Text>
                     </TouchableOpacity>
                     {subParts.length > 0 ? <Text style={styles.wineDetail} numberOfLines={1}>{subParts.join(' · ')}</Text> : null}
-                    {/* Status stamp. "Your Cellar" (matched) → tap for Archive from
-                        Cellar / mark Off Cellar. "Off Cellar" → tap to link it via
-                        "This was from my cellar". */}
+                    {/* Status stamp. "Your Cellar" (linked) → tap to archive the
+                        bottle or mark it Off Cellar. "Off Cellar" → tap to link it
+                        via "This was from my cellar". */}
                     {w.cellar_wine_id ? (
-                      <TouchableOpacity onPress={() => openCellarBadgeOptions(i, w, matchedCellar ?? null)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                      <TouchableOpacity onPress={() => openCellarBadgeOptions(i, w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.stampTag}>Your Cellar</Text>
                       </TouchableOpacity>
                     ) : (
@@ -717,9 +694,8 @@ export default function LineupDetailScreen() {
                         <Text style={styles.stampTag}>Off Cellar</Text>
                       </TouchableOpacity>
                     )}
-                    {/* Actions on their own line beneath the stamp: Your Review · Wine
-                        Intel only. (Editing is via the name; archiving is done from the
-                        cellar card, not here.) */}
+                    {/* Your Review · Wine Intel beneath the stamp. (Editing is via
+                        the name; archiving via the stamp.) */}
                     <View style={styles.tagRow}>
                       <TouchableOpacity onPress={() => goToWineReview(w, conn)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.viewLink}>Your Review</Text>
@@ -747,7 +723,7 @@ export default function LineupDetailScreen() {
               >
                 <Text style={styles.matchButtonText}>Your Restaurant Review</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={unmatchLineup} disabled={savingMatch} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <TouchableOpacity onPress={() => matchRestaurant(null)} disabled={savingMatch} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                 <Text style={styles.unmatchLink}>(unmatch)</Text>
               </TouchableOpacity>
             </View>
@@ -764,12 +740,13 @@ export default function LineupDetailScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* "This is in my cellar" — pick the real cellar wine for a mis-read bottle. */}
+      {/* "This was from my cellar" — pick the cellar wine this bottle was. */}
       <CellarWinePicker
         visible={cellarPickerFor != null}
         onClose={() => setCellarPickerFor(null)}
-        onSelect={pickCellarForWine}
+        onSelect={(cw) => { void pickCellarForWine(cw); }}
         allowPlaced
+        subtitle="Pick the wine this bottle came from — Vinster moves it from your cellar to your archive."
       />
 
       {/* Edit the date + location stamp. */}
@@ -872,8 +849,8 @@ export default function LineupDetailScreen() {
               <Text style={styles.closeX}>✕</Text>
             </TouchableOpacity>
 
-            {/* No match — dismisses the prompt for this lineup and closes. */}
-            <TouchableOpacity onPress={dismissNoMatch} disabled={savingMatch} activeOpacity={0.7} style={styles.noMatchRow}>
+            {/* No match — just closes the picker. */}
+            <TouchableOpacity onPress={() => setRestaurantPickerOpen(false)} disabled={savingMatch} activeOpacity={0.7} style={styles.noMatchRow}>
               <Text style={styles.noMatchText} numberOfLines={1}>Don't Match This Wine to a Review</Text>
             </TouchableOpacity>
 
@@ -952,35 +929,6 @@ export default function LineupDetailScreen() {
         </View>
       </Modal>
 
-      {/* Rename this lineup. */}
-      <Modal visible={nameOpen} transparent animationType="fade" onRequestClose={() => setNameOpen(false)}>
-        <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setNameOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
-            <View style={styles.dictateRowFlush}>
-              <Text style={styles.stampTitle}>Name this lineup</Text>
-              <TouchableOpacity onPress={() => setNameOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Cancel">
-                <Text style={styles.closeX}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={styles.stampInput}
-              value={nameDraft}
-              onChangeText={(t) => setNameDraft(t.slice(0, 60))}
-              placeholder="e.g. Birthday at The Ledbury"
-              placeholderTextColor={colors.textMuted}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={saveName}
-              spellCheck={false}
-              autoCorrect={false}
-            />
-            <TouchableOpacity style={[styles.stampSaveBtn, savingName && { opacity: 0.5 }]} onPress={saveName} disabled={savingName} activeOpacity={0.85}>
-              <Text style={styles.stampSaveText}>{savingName ? 'Saving…' : 'Save'}</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
       {/* Full-screen zoomable viewer for the lineup photo. */}
       <LabelPhotoViewer visible={zoomOpen} uri={photoUrl} onClose={() => setZoomOpen(false)} contain />
 
@@ -1031,7 +979,7 @@ const styles = StyleSheet.create({
   // the image alone collapses to 0 inside an auto-width touchable).
   photoTouch: { width: '92%' },
   photo: { width: '100%', height: 420, borderRadius: 14, backgroundColor: colors.surface },
-  // Camera (change photo) + favourite star, clustered top-right on the photo.
+  // Change-photo badge, top-right on the photo.
   photoBadges: { position: 'absolute', top: spacing.lg, right: '8%', flexDirection: 'row', gap: spacing.sm },
   photoBadge: { backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18, minWidth: 34, height: 32, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
 

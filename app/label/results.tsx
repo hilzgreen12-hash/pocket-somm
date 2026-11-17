@@ -9,7 +9,6 @@ import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { NaturalWineBadge } from '../../src/components/NaturalWineBadge';
 import { SpiritBadge } from '../../src/components/SpiritBadge';
 import { SearchProgress } from '../../src/components/SearchProgress';
-import { ReviewCardHeader, ReviewedStamp } from '../../src/components/ReviewCardHeader';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -31,12 +30,12 @@ import { entriesOf } from '../../src/utils/cellarReview';
 import { wineQueryName, wineQueryAltName, wineNameKey, normaliseVintage } from '../../src/utils/wineIdentity';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { patchChosenWine } from '../../src/api/chosenWines';
-import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
+import { findExistingReview } from '../../src/utils/reviewDedup';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
 import { createStorageCase, fetchStorageLocationCases, fetchStorageLocation, fetchStorageLocations } from '../../src/api/storageLocations';
 import { addLocationPlacement, fetchPlacementsForWine } from '../../src/api/placements';
 import { MicButton } from '../../src/components/MicButton';
-import type { ChosenWine, WineIntelligence } from '../../src/types/wine';
+import type { WineIntelligence } from '../../src/types/wine';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
@@ -99,10 +98,6 @@ export default function LabelResultsScreen() {
   const { context, fresh, backTo, confirm, labelId, confirmed, gen, noRecent } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string; labelId?: string; confirmed?: string; gen?: string; noRecent?: string }>();
   // A caller (e.g. a lineup wine) that KNOWS the identity — never disambiguate.
   const identityConfirmed = confirmed === '1';
-  // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
-  // a review, so the action area collapses to a single "Review this Wine"
-  // and the back + post-save routing land on /wines/chosen.
-  const isReviewsFlow = context === 'reviews';
   // Entered from Scan a Lineup — after saving (placed or not) we return to the
   // lineup list to onboard the next bottle, rather than the rack / wine card.
   const isLineupFlow = context === 'lineup';
@@ -129,7 +124,7 @@ export default function LabelResultsScreen() {
   const { wines, addWine, updateWine } = useCellar();
   // Serve before/after picks come only from bottles kept at home.
   const { wines: homeWines } = useHomeCellarWines();
-  const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
+  const { saveManual, chosenWines } = useChosenWines();
   const { create: createLabel } = useLabels();
   const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId, pendingCaseId, setPendingCaseId } = useRackStore();
   const { racks } = useRacks();
@@ -812,7 +807,6 @@ export default function LabelResultsScreen() {
   }
 
   const [addingToCellar, setAddingToCellar] = useState(false);
-  const [addingReview, setAddingReview] = useState(false);
   const [selectedRackId, setSelectedRackId] = useState<string | null>(null);
   // Bespoke cellar Location (rack_id NULL custom filter) chosen as the
   // destination — mutually exclusive with a rack/fridge selection.
@@ -828,7 +822,6 @@ export default function LabelResultsScreen() {
     useLabelStore.getState().wineDetailsConfirmed?.bottleSizeMl ?? 750
   );
   const [saving, setSaving] = useState(false);
-  const [] = useState(false);
   // "Edit Wine" manual-edit modal (top-right on the intel card): free-text edit of
   // the identity + grape + bottle size + photo, then regenerate the intel card.
   const [editWineOpen, setEditWineOpen] = useState(false);
@@ -841,13 +834,6 @@ export default function LabelResultsScreen() {
   const [editBottleSizeMl, setEditBottleSizeMl] = useState(750);
   const [editImageUri, setEditImageUri] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
-  // Review-without-adding form state — captured in a Modal and saved to
-  // chosen_wines without touching cellar inventory.
-  const [reviewNote, setReviewNote] = useState('');
-  const [reviewRestaurant, setReviewRestaurant] = useState('');
-  const [reviewCity, setReviewCity] = useState('');
-  const [reviewScore, setReviewScore] = useState('');
-  const [reviewListPrice, setReviewListPrice] = useState('');
   // Only used when the user came in from a tapped empty rack slot.
   const [placeCount, setPlaceCount] = useState('1');
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
@@ -1621,116 +1607,6 @@ export default function LabelResultsScreen() {
     }
   }
 
-  async function handleSaveReview() {
-    if (!session?.user.id) { setSignInPromptVisible(true); return; }
-    // If this wine already has a review, prompt to update / add a dated
-    // tasting / create new — same guard the List + manual-add flows use,
-    // so scanning or uploading a label for a wine you've reviewed before
-    // never silently creates a duplicate review.
-    const parsedVintage = parseInt(wine.vintage, 10);
-    const validVintage = !Number.isNaN(parsedVintage) ? parsedVintage : null;
-    const wineNameValue = wine.wineName ?? wine.producer;
-    const existing = findExistingReview(chosenWines, { producer: wine.producer, wineName: wineNameValue, vintage: validVintage });
-    if (existing) {
-      showAlert({
-        title: "You've reviewed this wine before",
-        body: `You already have a review for ${wineNameValue}. Update it, add a new dated tasting to it, or start a fresh review?`,
-        buttons: [
-          { text: 'Update review', onPress: () => { void doSaveReview('update', existing); } },
-          { text: 'Add to review', onPress: () => { void doSaveReview('append', existing); } },
-          { text: 'Create new', onPress: () => { void doSaveReview('create', null); } },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-      });
-      return;
-    }
-    await doSaveReview('create', null);
-  }
-
-  async function doSaveReview(mode: 'create' | 'update' | 'append', existing: ChosenWine | null) {
-    if (!session?.user.id) return;
-    setSaving(true);
-    try {
-      const parsedScore = parseInt(reviewScore, 10);
-      const validScore = !Number.isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 100 ? parsedScore : null;
-      const parsedPrice = parsePriceText(reviewListPrice);
-      const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
-      const parsedVintage = parseInt(wine.vintage, 10);
-      const validVintage = !Number.isNaN(parsedVintage) ? parsedVintage : null;
-      if (mode === 'create' || !existing) {
-        await saveManual.mutateAsync({
-          wineName: wine.wineName ?? wine.producer,
-          producer: wine.producer,
-          region: wine.region,
-          // Persist the grape so it shows on the review card — prefer the
-          // AI-resolved intel grape, falling back to whatever the label read.
-          grape: intel.grapeVariety ?? wine.grape ?? null,
-          vintage: validVintage,
-          restaurantName: reviewRestaurant,
-          city: reviewCity,
-          listPrice: validPrice,
-          currency: userCurrency,
-          tastingNote: reviewNote,
-          otherObservations: '',
-          userScore: validScore,
-          isFavourite: false,
-          // The "Review without adding" path on the Cellar add-wine
-          // flow isn't a restaurant scan and isn't a cellar wine — it's
-          // a standalone review. Mark it 'other' so the Your Wine
-          // Reviews Type filter can split it out from the Restaurant
-          // bucket. Manual-entry-via-Reviews-tab continues to fall back
-          // to the DB default 'restaurant'.
-          source: 'other',
-        });
-      } else {
-        const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
-        if (mode === 'update') {
-          await updateChosen.mutateAsync({
-            id: existing.id,
-            input: { restaurantName: reviewRestaurant, city: reviewCity, tastingNote: reviewNote, otherObservations: existing.other_observations ?? '', userScore: validScore, listPrice: validPrice, isFavourite: existing.is_favourite, ...identity },
-          });
-        } else {
-          // Append a dated tasting onto the existing review, keeping its
-          // original where/when/price/score intact.
-          const label = todayLabel();
-          await updateChosen.mutateAsync({
-            id: existing.id,
-            input: {
-              restaurantName: existing.restaurant_name ?? '',
-              city: existing.city ?? '',
-              tastingNote: appendDatedEntry(existing.tasting_note, reviewNote, label),
-              otherObservations: existing.other_observations ?? '',
-              userScore: validScore != null ? validScore : existing.user_score,
-              listPrice: existing.menu_price,
-              isFavourite: existing.is_favourite,
-              ...identity,
-            },
-          });
-        }
-      }
-      setAddingReview(false);
-      if (isReviewsFlow) {
-        // Entered from Your Wine Reviews — go straight back there so the
-        // user sees the new review land in the list.
-        router.replace('/wines/chosen');
-      } else {
-        showAlert({
-          title: 'Review saved',
-          body: 'Your tasting note is in Your Wine Reviews.',
-          buttons: [
-            { text: 'View reviews', onPress: () => router.replace('/wines/chosen') },
-            { text: 'Done', style: 'cancel', onPress: () => router.replace('/(tabs)/cellar') },
-          ],
-        });
-      }
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      showAlert({ title: 'Could not save review', body: detail });
-    } finally {
-      setSaving(false);
-    }
-  }
-
   // "Add to Existing Case" — a follow-up popup listing the cases already in this
   // location; picking one files the wine into it. No cases yet → nudge to create.
   function openExistingCasePicker() {
@@ -2102,7 +1978,6 @@ export default function LabelResultsScreen() {
   function intelGoBack() {
     router.dismissTo(
       backTo ? (decodeURIComponent(backTo) as any)
-      : isReviewsFlow ? '/wines/chosen'
       : isLineupFlow ? '/cellar/scan-lineup'
       : isIntelOnlyFlow ? '/(tabs)/scan'
       : '/(tabs)/cellar',
@@ -2469,7 +2344,6 @@ export default function LabelResultsScreen() {
         style={styles.backRow}
         onPress={() => router.dismissTo(
           backTo ? (decodeURIComponent(backTo) as any)
-          : isReviewsFlow ? '/wines/chosen'
           : isLineupFlow ? '/cellar/scan-lineup'
           // Wine Intel is launched from the Scan tab now, so return there by
           // default rather than the old Cellar home. Non-Scan origins should
@@ -2909,25 +2783,7 @@ export default function LabelResultsScreen() {
         </View>
       )}
 
-      {isReviewsFlow ? (
-        // User entered via Your Wine Reviews "+ Add" → Scan / Upload. The
-        // intent is to capture a review, not park inventory — show only
-        // the Review action.
-        <>
-          <View style={styles.singleActionRow}>
-            <TouchableOpacity
-              style={[styles.singleActionButton, saving && { opacity: 0.6 }]}
-              onPress={() => setAddingReview(true)}
-              disabled={saving}
-            >
-              <Text style={styles.singleActionButtonText}>Review this Wine</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/wines/chosen')}>
-            <Text style={styles.discardText}>Cancel</Text>
-          </TouchableOpacity>
-        </>
-      ) : isIntelOnlyFlow ? (
+      {isIntelOnlyFlow ? (
         // Cellar tab "Generate Wine Intel" — view-only. No Add to Cellar action
         // (deliberately removed when the add-a-wine routes were simplified);
         // this flow exists purely to surface the intel card.
@@ -2960,94 +2816,6 @@ export default function LabelResultsScreen() {
           </TouchableOpacity>
         </>
       )}
-
-      <Modal visible={addingReview} transparent animationType="slide" onRequestClose={() => !saving && setAddingReview(false)}>
-        <View style={styles.modalOverlay}>
-          <KeyboardAwareScrollView
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
-            keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets
-            bottomOffset={24}
-          >
-            <View style={styles.modalContent}>
-              <ReviewCardHeader
-                producer={wine.producer}
-                wineName={wine.wineName}
-                vintage={wine.vintage}
-                region={wine.region}
-                grape={intel.grapeVariety ?? wine.grape}
-                thumbnail={imageUri ? <Image source={{ uri: imageUri }} style={styles.reviewHeaderThumb} resizeMode="cover" /> : null}
-              />
-              <View style={styles.titleRule} />
-              <ReviewedStamp dateIso={new Date().toISOString()} location={[reviewRestaurant.trim(), reviewCity.trim()].filter(Boolean).join(', ')} />
-
-              <Text style={styles.modalLabel}>Tasting note</Text>
-              <TextInput
-                style={styles.reviewNoteInput}
-                value={reviewNote}
-                onChangeText={setReviewNote}
-                placeholder="What did you think?"
-                placeholderTextColor={colors.textSubtle}
-                multiline
-                textAlignVertical="top"
-              />
-
-              <Text style={styles.modalLabel}>Restaurant (optional)</Text>
-              <TextInput
-                style={styles.countInput}
-                value={reviewRestaurant}
-                onChangeText={setReviewRestaurant}
-                placeholder="Where did you drink it?"
-                placeholderTextColor={colors.textSubtle}
-              />
-
-              <Text style={styles.modalLabel}>City (optional)</Text>
-              <TextInput
-                style={styles.countInput}
-                value={reviewCity}
-                onChangeText={setReviewCity}
-                placeholder="City"
-                placeholderTextColor={colors.textSubtle}
-              />
-
-              <Text style={styles.modalLabel}>Your score (0–100, optional)</Text>
-              <TextInput
-                style={styles.countInput}
-                value={reviewScore}
-                onChangeText={(t) => setReviewScore(t.replace(/[^0-9]/g, '').slice(0, 3))}
-                placeholder="—"
-                placeholderTextColor={colors.textSubtle}
-                keyboardType="number-pad"
-              />
-
-              <Text style={styles.modalLabel}>List price (optional)</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
-                <TextInput
-                  style={styles.priceInput}
-                  value={reviewListPrice}
-                  onChangeText={setReviewListPrice}
-                  placeholder="0.00"
-                  placeholderTextColor={colors.textSubtle}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[styles.button, saving && styles.buttonDisabled]}
-                onPress={handleSaveReview}
-                disabled={saving}
-              >
-                <Text style={styles.buttonText}>{saving ? 'Saving…' : 'Save Review'}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setAddingReview(false)} disabled={saving}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAwareScrollView>
-        </View>
-      </Modal>
 
       <Modal visible={addingToCellar} transparent animationType="slide">
         <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
@@ -3457,7 +3225,6 @@ const styles = StyleSheet.create({
   statBarRule: { height: 1, backgroundColor: colors.divider },
   // Subtle separator directly beneath the "Wine Intel" title.
   titleRule: { height: 1, backgroundColor: colors.border },
-  reviewHeaderThumb: { width: 96, height: 128, borderRadius: 5, backgroundColor: colors.surface },
   // "Edit Wine" modal.
   editWineOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
   editWineScroll: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
@@ -3570,7 +3337,6 @@ const styles = StyleSheet.create({
   primaryAddBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center' },
   primaryAddBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, letterSpacing: 0.3 },
 
-  reviewNoteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 100, lineHeight: 22, marginBottom: spacing.md },
   bottleSizeWrap: { marginBottom: spacing.md },
 
   fieldSelect: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginBottom: spacing.md },
@@ -3595,9 +3361,6 @@ const styles = StyleSheet.create({
   fieldOptionText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, textAlign: 'center' },
   fieldModalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
   fieldModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
-  singleActionRow: { marginHorizontal: spacing.xl, marginTop: spacing.xl },
-  singleActionButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
-  singleActionButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, textAlign: 'center' },
   discardButton: { margin: spacing.xl, alignItems: 'center', paddingVertical: spacing.sm },
   discardText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },

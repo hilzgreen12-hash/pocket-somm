@@ -17,7 +17,6 @@ import { patchChosenWine, clearChosenReview } from '../api/chosenWines';
 import { generateWineIntel } from '../services/pricing';
 import { showAlert } from './AppAlert';
 import { WineReviewFields } from './WineReviewFields';
-import { clearReviewOnCellar } from '../services/reviewSync';
 import { isoToYmd, ymdToIso } from '../utils/reviewDate';
 import { captureCity } from '../utils/captureCity';
 import { colors, spacing } from '../constants/theme';
@@ -52,7 +51,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [] = useState(false);
   // Edit-identity sheet (name / vintage / region + thumbnail).
   const [identityEditOpen, setIdentityEditOpen] = useState(false);
   const [editProducer, setEditProducer] = useState('');
@@ -93,12 +91,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
       // "Edit Wine" entry point opens straight onto the identity sheet.
       if (initialIdentityEdit) openIdentityEdit();
       else setIdentityEditOpen(false);
-      // Auto-fill the estimated value once (no "Generate" button) — mirrors
-      // the cellar flow where every wine carries an estimate. Only fires
-      // when we don't already have one.
-      // No auto-estimate — Vinster only values on demand now (the yellow
-      // "Generate" link), so a fresh review isn't priced until the user asks.
-      // An already-saved valuation (with its date stamp) is reused above.
+      // No auto-estimate: Vinster values a review only when the user taps
+      // "Generate"; a saved valuation (with its date) is reused above.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, wine?.id]);
@@ -136,12 +130,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         // re-estimate on every open — the "update" link re-fetches on demand.
         estimated_value_at: at,
         // generateWineIntel is Wine-Searcher-first, so intel.criticScore is the
-        // real WS aggregated score when WS has one. Persist it too — otherwise
-        // the review's critic score stays null even though we just fetched a
-        // real one. Only overwrite when we actually got a score.
-        ...(intel.criticScore != null
-          ? { critic_score: intel.criticScore, critic_score_note: intel.criticScoreNote ?? null }
-          : {}),
+        // real aggregated score when WS has one — keep it on the review too.
+        // (chosen_wines has no critic_score_note column; that's cellar-only.)
+        ...(intel.criticScore != null ? { critic_score: intel.criticScore } : {}),
         // Canonical identity anchor when Wine-Searcher matched.
         ...(intel.wsWineId ? { ws_wine_id: intel.wsWineId, ws_wine_name: intel.wsWineName ?? null } : {}),
       });
@@ -166,9 +157,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         isFavourite: wine.is_favourite,
         purchasePrice: validPrice,
         purchasePriceCurrency: validPrice != null ? currency : null,
-        producer: wine.producer,
-        wineName: wine.wine_name,
-        vintage: wine.vintage,
       },
     });
     // user_drinking_window + the review date aren't part of the structured update
@@ -182,13 +170,14 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
 
   async function handleSave() {
     if (!wine) return;
-    // The 24h edit lock has been removed — the latest review is always editable.
     Keyboard.dismiss();
     setSaving(true);
     try {
       await persist();
       onSaved();
       onClose();
+    } catch (err) {
+      showAlert({ title: 'Could not save review', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -220,15 +209,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         await clearChosenReview(wine.id);
       } else {
         await remove.mutateAsync(wine.id);
-      }
-      // Also clear the same review off the matching cellar wine card (the
-      // review is shared between the two surfaces).
-      if (session?.user.id) {
-        try {
-          await clearReviewOnCellar(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage });
-          qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-          qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-        } catch { /* non-fatal */ }
       }
       qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
       onSaved(); onClose();
@@ -367,11 +347,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
               personalNotes={personalNotes}
               onPersonalNotes={setPersonalNotes}
               city={locCity}
-              onCity={setLocCity}
-              locationName={locName}
-              onLocationName={setLocName}
-              showLocation={false}
-              requireCity
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={setDrinkingWindow}
               saving={saving || update.isPending}

@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
-import { listLineupArchives, deleteLineupArchive, type LineupArchive } from '../api/lineups';
+import { listLineupArchives, deleteLineupArchive, lineupBottleTotal, type LineupArchive } from '../api/lineups';
 import { showAlert } from './AppAlert';
 import { LineupThumb } from './LineupThumb';
 import { ReviewStatsBar } from './ReviewCarousels';
@@ -55,15 +54,12 @@ function LineupCard({ item }: { item: LineupArchive }) {
   );
 }
 
-// "Your Lineups" — the Archive-a-Night thumbnail carousel, with an "Add a
-// lineup" tile at the end. Self-contained (loads the user's lineups); pass
-// requireAccount to gate the add action behind sign-in on account-only tabs.
-export function LineupsCarousel({ requireAccount, max, showAdd = true, onViewAll }: { requireAccount?: (action: () => void) => void; max?: number; showAdd?: boolean; onViewAll?: () => void }) {
+// "Your Lineups" — the Archive-a-Night thumbnail carousel on the Review tab.
+// Self-contained (loads the user's lineups). New lineups are started from the
+// tab's "+ Add" menu, so the carousel itself only shows and opens them.
+export function LineupsCarousel({ max, onViewAll }: { max?: number; onViewAll?: () => void }) {
   const { session } = useAuth();
   const userId = session?.user.id;
-  const gate = requireAccount ?? ((a: () => void) => a());
-  // "Add Lineup" chooser — Take a Photo (live camera) or Upload a Photo (library).
-  const [addOpen, setAddOpen] = useState(false);
   const { data: lineups = [], isLoading } = useQuery({
     queryKey: ['lineup-archives', userId],
     queryFn: () => listLineupArchives(userId!),
@@ -71,12 +67,7 @@ export function LineupsCarousel({ requireAccount, max, showAdd = true, onViewAll
   });
   if (isLoading) return <View style={styles.loading}><ActivityIndicator color={colors.gold} /></View>;
 
-  function startLineup(upload: boolean) {
-    setAddOpen(false);
-    router.push(upload ? '/cellar/archive-night?upload=1' : '/cellar/archive-night');
-  }
-
-  const bottleCount = lineups.reduce((n, l) => n + (l.bottle_count ?? l.wines?.length ?? 0), 0);
+  const bottleCount = lineups.reduce((n, l) => n + lineupBottleTotal(l), 0);
   return (
     <>
       {onViewAll ? (
@@ -86,31 +77,7 @@ export function LineupsCarousel({ requireAccount, max, showAdd = true, onViewAll
         {(max ? lineups.slice(0, max) : lineups).map((l) => <LineupCard key={l.id} item={l} />)}
         {/* Empty state → three faded bottle placeholders (like the scan carousel). */}
         {lineups.length === 0 ? LINEUP_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />) : null}
-        {showAdd ? (
-          <TouchableOpacity style={styles.addCard} onPress={() => gate(() => setAddOpen(true))} activeOpacity={0.85}>
-            <Text style={styles.addCardIcon} allowFontScaling={false}>＋</Text>
-            <Text style={styles.addCardText} allowFontScaling={false}>Add</Text>
-          </TouchableOpacity>
-        ) : null}
       </ScrollView>
-
-      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
-        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setAddOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => {}}>
-            <Text style={styles.sheetTitle}>Add Lineup</Text>
-            <Text style={styles.sheetBody}>Photograph your lineup now, or upload a photo you already have.</Text>
-            <TouchableOpacity style={styles.optBtn} onPress={() => startLineup(false)} activeOpacity={0.85}>
-              <Text style={styles.optText}>Take a Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.optBtn, styles.optBtnMt]} onPress={() => startLineup(true)} activeOpacity={0.85}>
-              <Text style={styles.optText}>Upload a Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setAddOpen(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
     </>
   );
 }
@@ -126,17 +93,4 @@ const styles = StyleSheet.create({
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
   cardStampTight: { marginTop: 2 },
-  addCard: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  addCardIcon: { fontFamily: fonts.headingBold, fontSize: 30, color: colors.gold },
-  addCardText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  // "Add Lineup" chooser popup.
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
-  sheetTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.xs },
-  sheetBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
-  optBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
-  optBtnMt: { marginTop: spacing.sm },
-  optText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
-  cancelBtn: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.xs },
-  cancelText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 15 },
 });

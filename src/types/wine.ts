@@ -430,9 +430,9 @@ export interface CellarWine {
   // The user's own drinking-window opinion (migration 048) — free text,
   // distinct from the Vinster drinking_window_* estimate above.
   user_drinking_window: string | null;
-  // Append-only review history (migration 080). The bottle's reviews as dated
-  // entries, newest last; the flat review_* fields above mirror the LATEST entry
-  // for back-compat. Each entry locks 24h after its savedAt. [] when unreviewed.
+  // Review history (migration 080): the bottle's reviews as dated entries, in
+  // the order written; the flat review_* fields above mirror the LATEST entry
+  // for back-compat. [] when unreviewed.
   review_entries: ReviewEntry[];
   is_favourite: boolean;
   // Favourite LABEL flag (migration 049) — Label Library only, distinct
@@ -446,8 +446,8 @@ export interface CellarWine {
 }
 
 // One dated entry in a cellar bottle's append-only review history (migration
-// 080). `savedAt` (ISO) is the immutable per-entry 24-hour edit clock; `date` is
-// the user's drinking date (yyyy-mm-dd).
+// 080). `savedAt` (ISO) is when the entry was first written; `date` is the
+// user's drinking date (yyyy-mm-dd).
 export interface ReviewEntry {
   id: string;
   savedAt: string;
@@ -623,7 +623,7 @@ export interface ChosenWine {
   // Groups the entries of one append-only review (migration 079). Rows sharing
   // a review_group_id are the original review + its later "Add to this review"
   // entries, shown together as one card. NULL = a standalone single-entry
-  // review. Each row's own reviewed_at is its 24h edit clock.
+  // review.
   review_group_id: string | null;
   // Label photo for the review (migration 067). Stored in the wine-labels
   // bucket (<user>/<chosenId>.jpg) and displayed via LabelThumb, exactly

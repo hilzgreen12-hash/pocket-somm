@@ -1,13 +1,38 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-// "Archive a Night" — identify each bottle in a photo of a 1–8 bottle lineup
-// so they can be matched against the cellar and bulk-archived. One entry per
-// physical bottle (duplicates are aggregated client-side after matching).
+// Identify each bottle in a photo of a 1–8 bottle lineup — used both to record
+// a night's lineup (Archive a Night) and to add a lineup to a rack. One entry
+// per physical bottle; the app groups duplicates and matches its cellar.
+
+// Usage limits per account (or per guest device): a Sonnet vision read, so a
+// stop on loops. Lineups need an account in the app, so a guest gets a token
+// allowance only.
+const HOURLY_LIMIT = 20;
+const DAILY_LIMIT = 60;
+const GUEST_LIMITS = { hourly: 2, daily: 2 };
+
+// The app sends a JPEG resized to ~1600px on its long side — comfortably under
+// this. Anything bigger isn't from the app; refuse it before it reaches Claude.
+const MAX_IMAGE_CHARS = 7_000_000; // ≈ 5 MB decoded, Claude's per-image cap
+const MAX_BODY_BYTES = MAX_IMAGE_CHARS + 64 * 1024;
+
+// { error, message } — the shape the app's edge clients read a reason from.
+function jsonError(message: string, status: number): Response {
+  return new Response(JSON.stringify({ error: message, message }), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
 Deno.serve(async (req) => {
   try {
+    const limited = await checkRateLimit(req, 'detect-lineup', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
+    if (limited) return limited;
+
+    if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return jsonError('That photo is too large. Please try a smaller one.', 413);
     const { base64Image, stream } = await req.json();
+    if (typeof base64Image !== 'string' || !base64Image) return jsonError('No photo was received. Please try again.', 400);
+    if (base64Image.length > MAX_IMAGE_CHARS) return jsonError('That photo is too large. Please try a smaller one.', 413);
 
     // The single Claude round-trip for this detect. Extracted so the buffered
     // and streamed paths run the identical read + JSON extraction.
@@ -23,7 +48,7 @@ Deno.serve(async (req) => {
             { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64Image } },
             {
               type: 'text',
-              text: `This photo shows a lineup of wine bottles (usually 1–8) that someone has just drunk and wants to remove from their cellar. Identify EACH bottle you can read.
+              text: `This photo shows a lineup of wine bottles (usually 1–8). Identify EACH bottle you can read.
 
 The photo may be rotated or upside down (bottles are often stored neck-forward in a rack, so a straight photo of the rack comes out inverted). Read every label regardless of its orientation, and never skip a bottle just because its label is rotated.
 
@@ -55,8 +80,8 @@ If you can't identify any bottles, return { "bottles": [] }. Raw JSON only — n
       return JSON.parse(match[0]);
     }
 
-    // Buffered path (stream !== true): unchanged single-JSON response. Kept as
-    // the fallback the current app build uses when streaming isn't available.
+    // Buffered path (stream !== true): a single JSON response — the app's
+    // fallback when the streamed connection drops.
     if (stream !== true) {
       const parsed = await run();
       return new Response(JSON.stringify(parsed), { headers: { 'Content-Type': 'application/json' } });
@@ -99,9 +124,6 @@ If you can't identify any bottles, return { "bottles": [] }. Raw JSON only — n
     // Logged above with full detail. The client gets a generic message:
     // raw exception text can carry Anthropic SDK request/response detail or
     // echo back model output on a JSON parse failure.
-    return new Response(
-      JSON.stringify({ error: 'Something went wrong. Please try again.' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    );
+    return jsonError('Something went wrong. Please try again.', 500);
   }
 });

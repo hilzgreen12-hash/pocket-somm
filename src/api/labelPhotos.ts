@@ -1,7 +1,7 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { supabase } from './supabase';
-import { primeCachedLabel } from './labelImageCache';
+import { primeCachedLabel, evictCachedLabel } from './labelImageCache';
 
 // Storage bucket for user wine-label photos. Created via dashboard SQL
 // (public-read; writes locked to each user's own {userId}/ folder). The
@@ -80,14 +80,14 @@ export async function uploadLabelImageFromUrl(userId: string, imageUrl: string, 
 }
 
 // Upload a restaurant-visit "photo of the night" to
-// wine-labels/{userId}/restaurants/{sessionId}.jpg and return the stored path
-// to persist in scan_sessions.restaurant_photo_path. Its own {userId}/restaurants/
-// prefix keeps it clear of label ({userId}/{wineId}.jpg), location and library
-// photos. Displays via labelSignedUrl / useLabelImageUrl / LabelThumb unchanged.
+// wine-labels/{userId}/restaurants/{sessionId}-{timestamp}.jpg and return the
+// stored path for scan_sessions.restaurant_photo_path. The timestamp makes a
+// replaced photo get a NEW path, so other devices (which cache by path) don't
+// keep showing the old one; setRestaurantPhotoPath removes the old file.
 export async function uploadRestaurantPhoto(userId: string, localUri: string, sessionId: string): Promise<string> {
   const base64 = await processToBase64(localUri);
   const bytes = base64ToBytes(base64);
-  const path = `${userId}/restaurants/${sessionId}.jpg`;
+  const path = `${userId}/restaurants/${sessionId}-${Date.now()}.jpg`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
     contentType: 'image/jpeg',
     upsert: true,
@@ -104,6 +104,15 @@ export async function uploadRestaurantPhotoFromUrl(userId: string, imageUrl: str
   try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
   const file = await File.downloadFileAsync(imageUrl, dest);
   return uploadRestaurantPhoto(userId, file.uri, sessionId);
+}
+
+// Best-effort removal of a restaurant photo that nothing points at any more
+// (visit deleted, photo replaced or removed). A failure only leaves an orphan
+// file behind, so it never surfaces to the user.
+export async function removeRestaurantPhoto(path: string | null | undefined): Promise<void> {
+  if (!path) return;
+  evictCachedLabel(path);
+  try { await supabase.storage.from(BUCKET).remove([path]); } catch { /* best-effort */ }
 }
 
 // Upload a home-storage-location's portrait photo to

@@ -203,7 +203,7 @@ export default function CellarTab() {
         </TouchableOpacity>
       </View>
 
-      {/* "Archive a Lineup" and "Your Lineups" now live on the Scan tab. */}
+      {/* "Archive a Lineup" and "Your Lineups" now live on the Review tab. */}
 
       {/* Export by Location — pick one of the user's storage locations. */}
       <Modal visible={exportPickerOpen} transparent animationType="fade" onRequestClose={() => setExportPickerOpen(false)}>

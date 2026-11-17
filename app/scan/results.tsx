@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share, Modal, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../src/api/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +28,9 @@ import { ChosenWineModal } from '../../src/components/ChosenWineModal';
 import { PickReveal } from '../../src/components/PickReveal';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
-import { useAttachRestaurantPhoto } from '../../src/hooks/useAttachRestaurantPhoto';
+import { useAttachRestaurantPhoto, DISMISS_DELAY_MS } from '../../src/hooks/useAttachRestaurantPhoto';
+import { deleteScanSession } from '../../src/api/restaurantSessions';
+import { updateSessionRestaurant } from '../../src/api/chosenWines';
 import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -69,10 +71,6 @@ function wsValueLine(menuPrice: number | null, avgPrice: number, sym: string, bo
   return `Market average ${avg} — about ${ratio.toFixed(1)}× retail, ${verdict}.`;
 }
 
-// Join appellation + region without repeating the location. The AI sometimes
-// puts the country in both (e.g. appellation "West Sussex/England" + region
-// "England"), which read as "West Sussex/England, England". If one already
-// contains the other, keep the more specific one.
 // Pull a readable message out of ANY thrown value. Supabase/PostgREST errors are
 // plain objects (NOT Error instances), so `err instanceof Error ? err.message : …`
 // silently collapsed every real DB failure (RLS, constraints, auth) to a useless
@@ -88,6 +86,10 @@ function errText(err: unknown): string {
   return 'Please try again.';
 }
 
+// Join appellation + region without repeating the location. The AI sometimes
+// puts the country in both (e.g. appellation "West Sussex/England" + region
+// "England"), which read as "West Sussex/England, England". If one already
+// contains the other, keep the more specific one.
 function joinPlace(appellation?: string | null, region?: string | null): string {
   const a = (appellation ?? '').trim();
   const r = (region ?? '').trim();
@@ -179,7 +181,7 @@ export default function ResultsScreen() {
   // index → real Wine-Searcher data for that pick (populated a beat after the
   // cards render, so results never wait on the API).
   const [wsByIndex, setWsByIndex] = useState<Record<number, WsEnrich>>({});
-  const { save: saveChosen, update: updateChosen, chosenWines, remove: removeChosen } = useChosenWines();
+  const { save: saveChosen, chosenWines, remove: removeChosen } = useChosenWines();
   // "Add a restaurant first" prompt — the List-Bottle button can't save without
   // a restaurant name, so we collect it (+ location) inline before proceeding.
   const [restaurantPromptOpen, setRestaurantPromptOpen] = useState(false);
@@ -222,14 +224,26 @@ export default function ResultsScreen() {
     }
   }, [historyRestaurant]);
 
-  // Effective scan_sessions id used by every restaurant-edit path on
-  // this screen. Prefers the URL sessionId (set when the user came in
-  // via View Last Result or the archive), falling back to whatever
-  // autoSave landed in this session.
-  const effectiveSessionId = sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+  // The scan_sessions row behind this result, if it exists yet: the URL's
+  // sessionId (a reopened scan), else the row created on THIS screen (the ref is
+  // set the moment the save resolves; autoSave.data lags a render behind).
+  function currentSessionId(): string | null {
+    return sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+  }
+  const effectiveSessionId = currentSessionId();
   const attachRestaurantPhoto = useAttachRestaurantPhoto();
   const [restaurantReviewOpen, setRestaurantReviewOpen] = useState(false);
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
+  // Creating the row for the review form failed — the form offers a retry.
+  const [reviewSessionError, setReviewSessionError] = useState(false);
+  // Reopen the review form when this screen regains focus — set when the form
+  // closes to show another screen (a wine's review, Find Online).
+  const resumeReviewOnFocusRef = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (!resumeReviewOnFocusRef.current) return;
+    resumeReviewOnFocusRef.current = false;
+    setRestaurantReviewOpen(true);
+  }, []));
 
   // Fetch a fresh GPS reading on mount so the stamp can show the user's
   // city in real time, before the server-side autoSave round-trip lands.
@@ -318,8 +332,10 @@ export default function ResultsScreen() {
                 if (prev?.id) savedSessionIdRef.current = prev.id;
                 if (autoCreated && autoCreated !== prev?.id) {
                   try {
-                    await supabase.from('scan_sessions').delete().eq('id', autoCreated);
+                    await deleteScanSession(autoCreated);
                     qc.invalidateQueries({ queryKey: ['scan-archive'] });
+                    // Point View Last Result at the visit this scan now belongs to.
+                    if (prev?.id) await updateLocalScan(session?.user.id ?? null, autoCreated, { sessionId: prev.id, restaurantName: name });
                   } catch { /* best-effort cleanup */ }
                 }
               },
@@ -393,11 +409,6 @@ export default function ResultsScreen() {
     return () => { active = false; };
   }, [recommendation, isFromHistory, userPrefs?.defaultCurrency]);
 
-  // Returns the scan_sessions id the name was saved against (or null if there
-  // was nothing to save / it failed). Callers use the RETURNED id rather than
-  // autoSave.data, which only updates on the next render and is stale right
-  // after the await — the cause of the "add a restaurant first" prompt firing
-  // even though the save had just succeeded.
   // Ensure this scan is backed by a scan_sessions row, creating one (nameless) if
   // needed. Runs at most once concurrently (inFlightSaveRef) and reuses any row
   // already made this session, so the on-mount auto-persist and a later
@@ -405,7 +416,7 @@ export default function ResultsScreen() {
   // row is intentional: it makes the scan appear in Recent Scans without polluting
   // Your Restaurants (which only lists sessions with a name or note).
   async function getOrCreateSession(): Promise<string | null> {
-    const existing = sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+    const existing = currentSessionId();
     if (existing) return existing;
     if (inFlightSaveRef.current) return inFlightSaveRef.current;
     if (!recommendation || !extractedWines) return null;
@@ -426,6 +437,9 @@ export default function ResultsScreen() {
     }
   }
 
+  // Save the restaurant name onto this scan's row (creating the row if needed)
+  // and return the row's id, or null if that failed. Callers use the RETURNED
+  // id: autoSave.data is still stale straight after the await.
   async function handleSaveRestaurant(nameOverride?: string): Promise<string | null> {
     setEditingRestaurant(false);
     const trimmed = (nameOverride ?? restaurantName).trim();
@@ -443,7 +457,10 @@ export default function ResultsScreen() {
         })
         .eq('id', liveSessionId);
       if (error) throw error;
+      // A rename also renames the wines already picked on this visit.
+      if (trimmed) await updateSessionRestaurant(liveSessionId, { restaurantName: trimmed, ...(cityOverride !== null ? { city: cityOverride } : {}) });
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
       // …and the local copy, so View Last Result shows the restaurant too.
       await updateLocalScan(session?.user.id ?? null, liveSessionId, { restaurantName: trimmed || null });
     } catch (err) {
@@ -463,7 +480,7 @@ export default function ResultsScreen() {
     setEditingCity(false);
     const trimmed = value.trim();
     setCityOverride(trimmed || null);
-    const liveSessionId = sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+    const liveSessionId = currentSessionId();
     if (!liveSessionId) return;
     try {
       const { error } = await supabase
@@ -471,7 +488,9 @@ export default function ResultsScreen() {
         .update({ city: trimmed || null })
         .eq('id', liveSessionId);
       if (error) throw error;
+      await updateSessionRestaurant(liveSessionId, { city: trimmed || null });
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
     } catch (err) {
       showAlert({ title: 'Could not save', body: errText(err) });
     }
@@ -511,49 +530,40 @@ export default function ResultsScreen() {
     );
   }
 
-  // Save any restaurant name in place, then open the restaurant review form
-  // right here on the results screen. Used by both the tappable location
-  // line and the foot-of-page CTA — the form opens in place rather than
-  // bouncing the user to the Your Restaurants list.
+  // Open the restaurant review form in place (tap on the restaurant line).
+  // It opens INSTANTLY: the row id is resolved in the background, and the form
+  // keeps Save and "+ Add a bottle" disabled until it lands.
   function openRestaurantReview() {
-    // Open the form INSTANTLY — never block on the network. The review modal
-    // only needs the scan_sessions id at *save* time, not to render, so we
-    // resolve the id in the background and slot it in when ready (the Save
-    // button stays disabled until it lands — usually well under a second).
     setRestaurantReviewOpen(true);
-    if (effectiveSessionId) {
-      setReviewSessionId(effectiveSessionId);
-      // Persist any restaurant-name edit in the background.
-      void handleSaveRestaurant();
-      return;
-    }
-    // No row yet — create one in the background to get an id to attach the
-    // review to. The user can start typing immediately while this resolves.
-    setReviewSessionId(null);
-    void handleSaveRestaurant().then((id) => {
-      if (id) setReviewSessionId(id);
-    });
+    void resolveReviewSession();
   }
 
-  // The List Archive is gone — autoSave still fires from
-  // handleSaveRestaurant so a scan with a restaurant name lands in
-  // Your Restaurants, but there's no longer an explicit save button or
-  // post-save confirmation block on this screen.
+  // Persist the restaurant name and get this visit's row id for the form.
+  async function resolveReviewSession() {
+    setReviewSessionError(false);
+    setReviewSessionId(currentSessionId());
+    const id = await handleSaveRestaurant();
+    if (id) setReviewSessionId(id);
+    else setReviewSessionError(true);
+  }
 
-  // Quick Select — the user says "I chose this one" without writing a
-  // full review. Writes a chosen_wines row with empty review fields so
-  // Vinster's personalisation has the signal but the user isn't pushed
-  // through the review modal. They can upgrade to a full review later
-  // via the Review Wine button on the expanded card.
-  //
-  // Duplicate behaviour: if a review for this wine identity already
-  // exists, we don't create a second row. Instead we update the
-  // existing review's other_observations with a dated "Selected at X"
-  // line so the user's history reads as a small log of when they've
-  // chosen this wine. Mirrors the user's mental model: ordering a wine
-  // they've had before should reinforce the existing review, not
-  // fragment it. Same-scan-session re-taps are a silent no-op (the chip
-  // just flips to Chosen).
+  // Path back to this screen as it is now, for screens that return via backTo.
+  function resultsHref(): string {
+    if (!isFromHistory) return '/scan/results';
+    const q = new URLSearchParams({ fromHistory: 'true' });
+    if (sessionId) q.set('sessionId', sessionId);
+    if (historyRestaurant) q.set('restaurant', historyRestaurant);
+    if (historyCity) q.set('city', historyCity);
+    if (historyDate) q.set('date', historyDate);
+    return `/scan/results?${q.toString()}`;
+  }
+
+  // "Select This Wine" — records that the diner chose this wine at this visit:
+  // a chosen_wines row linked to the visit, with no review yet (they can review
+  // it now from the popup, or later). Choosing a wine they've reviewed before
+  // adds a new entry to that review (same review_group_id), so this visit gets
+  // its own record while the earlier review stays as it was. Choosing it twice
+  // on the same visit is a no-op.
   async function handleQuickSelect(wine: WineRecommendation, i: number, overrides?: { restaurant?: string; city?: string }) {
     if (!session || chosenIndexes.has(i) || pendingIdxRef.current.has(i)) return;
     pendingIdxRef.current.add(i);
@@ -561,93 +571,54 @@ export default function ResultsScreen() {
     void Haptics.selectionAsync();
 
     const currentRestaurant = overrides?.restaurant ?? restaurantName ?? '';
-    // findExistingReview is a LOCAL check (no network), so we know instantly
-    // whether this is a fresh pick or a re-selection of an existing review.
+    // A LOCAL check (no network): has the diner reviewed this wine before?
     const existing = findExistingReview(chosenWines, {
       producer: wine.producer,
       wineName: wine.name,
       vintage: wine.vintage,
     });
-
-    // Fresh pick → confirm the selection IMMEDIATELY. showAlert only re-renders
-    // the lightweight alert host, so firing it BEFORE the optimistic chip flip
-    // (below) lets the popup paint without waiting on the 3 heavy wine cards
-    // re-rendering in the same commit — that shared commit was the delay.
-    if (!existing) {
-      showAlert({
-        title: 'Wine Selected',
-        body: `${wine.name} has been recorded in Your Restaurants – ${currentRestaurant.trim() || 'Your Restaurants'}.`,
-        showCloseX: true,
-        buttons: [
-          { text: 'Review it now', onPress: () => setChosenModalWine(wine) },
-          { text: 'Later', style: 'cancel' },
-        ],
-      });
+    const knownSessionId = currentSessionId();
+    if (existing && knownSessionId && existing.scan_session_id === knownSessionId) {
+      pendingIdxRef.current.delete(i);
+      setChosenIndexes((prev) => new Set([...prev, i]));
+      showAlert({ title: 'Already noted', body: "You've already chosen this wine on this list." });
+      return;
     }
 
+    // Confirm IMMEDIATELY: showAlert only re-renders the light alert host, so
+    // firing it BEFORE the chip flip (below) lets the popup paint without
+    // waiting on the three heavy wine cards re-rendering in the same commit.
+    const place = currentRestaurant.trim() || 'Your Restaurants';
+    showAlert({
+      title: 'Wine Selected',
+      body: existing
+        ? `${wine.name} has been recorded in Your Restaurants – ${place}. Your earlier review of it stays in Your Wine Reviews.`
+        : `${wine.name} has been recorded in Your Restaurants – ${place}.`,
+      showCloseX: true,
+      buttons: [
+        { text: 'Review it now', onPress: () => setChosenModalWine(wine) },
+        { text: 'Later', style: 'cancel' },
+      ],
+    });
+
     // Optimistic chip flip, deferred a tick so its heavy re-render lands in a
-    // separate commit from the alert. pendingIdxRef already blocks a double-tap
-    // synchronously, so nothing depends on the chip updating this instant.
+    // separate commit from the alert. pendingIdxRef already blocks a double-tap.
     setTimeout(() => setChosenIndexes((prev) => new Set([...prev, i])), 0);
 
     try {
-      // Save the SAME city the diner saw on the stamp — include liveCity (the GPS
-      // reading shown on the stamp) so the saved review's Discovered At matches
-      // what was on screen, not a blank/stale autoSave value.
+      // Save the SAME city the diner saw on the stamp (incl. the live GPS
+      // reading), so the pick's location matches what was on screen.
       const cityValue = overrides?.city
         ?? cityOverride
         ?? (isFromHistory ? (historyCity ?? '') : (autoSave.data?.[0]?.city ?? liveCity ?? ''));
-      // Guarantee the scan_session_id FK: resolve (or create, joining any
-      // in-flight save) the session BEFORE writing the pick, so the bottle is
-      // never orphaned with a null link because the background autoSave hadn't
-      // landed yet.
+      // Resolve (or create) the visit's row BEFORE writing the pick, so the pick
+      // is never saved unlinked because the background save hadn't landed yet.
       const sid = isFromHistory
         ? (sessionId ?? null)
         : await handleSaveRestaurant(currentRestaurant);
-
-      if (existing) {
-        // Same scan session → the user already noted this wine on this
-        // list (probably tapped Quick Select twice). Treat as a no-op
-        // so we don't add duplicate "Selected at" lines for one event.
-        if (existing.scan_session_id && sid && existing.scan_session_id === sid) {
-          showAlert({
-            title: 'Already noted',
-            body: "You've already chosen this wine on this list.",
-          });
-          return;
-        }
-
-        // Different occasion (or no scan-session info to compare) → re-mark it
-        // as chosen without touching the review. We deliberately DON'T append a
-        // dated "Selected at {place}" line into Personal Notes any more — the
-        // where/when lives on the review's own date + location stamp, not in the
-        // free-text notes. The original review context is left intact.
-        await updateChosen.mutateAsync({
-          id: existing.id,
-          input: {
-            restaurantName: existing.restaurant_name ?? '',
-            city: existing.city ?? '',
-            tastingNote: existing.tasting_note ?? '',
-            otherObservations: existing.other_observations ?? '',
-            userScore: existing.user_score,
-            listPrice: existing.menu_price,
-            isFavourite: existing.is_favourite,
-            producer: existing.producer,
-            wineName: existing.wine_name,
-            vintage: existing.vintage,
-          },
-        });
-        showAlert({
-          title: 'Noted',
-          body: "Added to your existing review for this wine — Vinster will fold this latest selection into your vinous amour.",
-        });
-        return;
-      }
-
-      const created = await saveChosen.mutateAsync({
-        // Carry a Vinster's Note already generated on this screen (chevron
-        // expanded) onto the saved pick, so the review card reuses it instead of
-        // regenerating. Falls back to whatever rationale the recommend call sent.
+      const input = {
+        // Carry a Vinster's Review already generated on this screen onto the
+        // pick, so its review card reuses it instead of regenerating.
         wine: { ...wine, rationale: wine.rationale ?? reviewByIndex[i] ?? null },
         scanSessionId: sid,
         restaurantName: currentRestaurant,
@@ -657,10 +628,13 @@ export default function ResultsScreen() {
         userScore: null,
         listPrice: null,
         isFavourite: false,
-      });
-      // Track this session's pick so unselect can delete exactly it.
+      };
+      // A wine reviewed before gets a new entry on that review (same group).
+      const created = await saveChosen.mutateAsync(
+        existing ? { ...input, reviewGroupId: existing.review_group_id } : input,
+      );
+      // Track this visit's pick so unselect deletes exactly it.
       if (created?.id) sessionPickIdRef.current.set(i, created.id);
-      // "Wine Selected" confirmation was already shown optimistically above.
     } catch (err) {
       // Roll back the optimistic selection so the chip reflects reality.
       setChosenIndexes((prev) => { const n = new Set(prev); n.delete(i); return n; });
@@ -681,7 +655,7 @@ export default function ResultsScreen() {
     const trackedId = sessionPickIdRef.current.get(i);
     setChosenIndexes((prev) => { const n = new Set(prev); n.delete(i); return n; });
     sessionPickIdRef.current.delete(i);
-    const sid = isFromHistory ? (sessionId ?? null) : (savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null);
+    const sid = currentSessionId();
     const identity = { producer: wine.producer, wineName: wine.name, vintage: wine.vintage };
     try {
       if (trackedId) {
@@ -777,7 +751,7 @@ export default function ResultsScreen() {
       setOpenIndex(0);
       // Save the new picks against this scan, so reopening it (View Last Result,
       // Recent Scans) shows these rather than the first set.
-      const sid = savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+      const sid = currentSessionId();
       if (sid) void saveScanRecommendation(session?.user.id ?? null, sid, newRec).catch(() => {});
     } catch (err) {
       // Keep the current picks, but say why nothing changed.
@@ -956,8 +930,6 @@ export default function ResultsScreen() {
                 {sharing ? 'Preparing…' : '+ Export Results'}
               </Text>
             </TouchableOpacity>
-            {/* "+ Review/Edit Restaurant" removed — tapping the venue/location
-                beneath the results opens the same review page (more instinctive). */}
           </View>
         </View>
 
@@ -969,12 +941,9 @@ export default function ResultsScreen() {
           </View>
         ) : null}
 
-        {/* Compact restaurant line — single line between the date and
-            'Vinster Recommends'. Empty state shows the pin + a tap-to-add
-            prompt. Once a name lands, the row reads pin · name · city.
-            Locked to read-only display when a scan_sessions row already
-            backs this result (edits happen via the CTA at the bottom of
-            the page). */}
+        {/* Restaurant line: pin · name · city. Empty, it's a tap-to-add prompt;
+            once named (and the scan's row exists), tapping the name opens the
+            restaurant review form. Read-only on a reopened scan. */}
         {isFromHistory ? (
           // Revisiting a saved scan → read-only line: view the venue/location, no edit.
           <View style={styles.restaurantLine}>
@@ -1307,10 +1276,6 @@ export default function ResultsScreen() {
         })}
       </View>
 
-      {/* The "Review or Edit Your Restaurant" CTA now lives in the top-right
-          (below + Share) and on the restaurant line itself — the
-          foot-of-page button was never seen. */}
-
       {!isFromHistory && (
         <TouchableOpacity
           style={styles.alternativeButton}
@@ -1355,22 +1320,25 @@ export default function ResultsScreen() {
         </View>
       </Modal>
 
-      {/* Restaurant review form — opened from the location line or the
-          foot-of-page CTA. Pre-filled from the saved scan_session when one
-          exists (e.g. View Last Result), blank for a fresh review. */}
+      {/* Restaurant review form — opened from the restaurant line. Pre-filled
+          from the saved visit when there is one. */}
       {restaurantReviewOpen ? (() => {
         const item = reviewSessionId ? (archive.find((a) => a.id === reviewSessionId) ?? null) : null;
-        // Only the wines the user actually picked belong under "Your Bottle
-        // Picks" — not every wine Vinster recommended. Keep the original
-        // recommendation index alongside each pick so "Review this wine →"
-        // still opens the right wine.
-        const pickedWines = recommendation.wines
-          .map((w, i) => ({ w, i }))
-          .filter(({ i }) => chosenIndexes.has(i));
+        // The wines recorded on this visit — picks from this list and bottles
+        // added in the form — oldest first, as on Your Restaurant Reviews.
+        const visitWines = reviewSessionId
+          ? chosenWines
+            .filter((cw) => cw.scan_session_id === reviewSessionId)
+            .sort((a, b) => new Date(a.chosen_at).getTime() - new Date(b.chosen_at).getTime())
+          : [];
+        // Close the form for another screen; it reopens when this one regains focus.
+        const leaveForm = () => { resumeReviewOnFocusRef.current = true; setRestaurantReviewOpen(false); };
         return (
           <RestaurantReviewModal
             visible={restaurantReviewOpen}
             sessionId={reviewSessionId ?? ''}
+            sessionError={reviewSessionError}
+            onRetrySession={() => { void resolveReviewSession(); }}
             initialName={restaurantName || item?.restaurantName || null}
             initialNote={item?.restaurantNote ?? null}
             initialRatings={item ? { food: item.ratingFood, service: item.ratingService, wineList: item.ratingWineList, overall: item.ratingOverall, value: item.ratingValue, atmosphere: item.ratingAtmosphere, glassware: item.ratingGlassware } : null}
@@ -1378,14 +1346,38 @@ export default function ResultsScreen() {
             city={stampCity}
             date={stampDate}
             capturedAt={item?.capturedAt ?? null}
-            wines={pickedWines.map(({ w }) => ({ producer: w.producer ?? null, wineName: w.name, vintage: w.vintage ?? null, userScore: null }))}
-            onReviewWine={(idx) => { setRestaurantReviewOpen(false); setChosenModalWine(pickedWines[idx]?.w ?? null); }}
-            onAddPhoto={async (name, city) => {
-              // The "+ Add Photo" link needs a scan_sessions row to attach to;
-              // ensure one exists (every scan auto-persists, but this is belt-and-braces).
+            restaurantPhotoPath={item?.restaurantPhotoPath ?? null}
+            wines={visitWines.map((cw) => ({
+              producer: cw.producer,
+              wineName: cw.wine_name,
+              vintage: cw.vintage,
+              userScore: cw.user_score,
+              source: cw.source,
+            }))}
+            // Wine reviews live in Your Wine Reviews; Back from there returns here.
+            onReviewWine={(idx) => {
+              const cw = visitWines[idx];
+              if (!cw) return;
+              leaveForm();
+              const backTo = encodeURIComponent(resultsHref());
+              setTimeout(() => router.push(`/wines/chosen?openReview=${cw.id}&backTo=${backTo}` as any), DISMISS_DELAY_MS);
+            }}
+            onAddPhoto={async (name, city, saveDraft) => {
               const sid = reviewSessionId ?? (await getOrCreateSession());
-              if (!sid) { showAlert({ title: 'Add a restaurant first', body: 'Enter the restaurant name so Vinster can attach the photo to this visit.' }); return; }
-              attachRestaurantPhoto.present({ sessionId: sid, restaurant: name || null, city: city || null, hasPhoto: !!item?.restaurantPhotoPath });
+              if (!sid) return; // getOrCreateSession has already said why
+              attachRestaurantPhoto.present({
+                sessionId: sid,
+                restaurant: name || null,
+                city: city || null,
+                hasPhoto: !!item?.restaurantPhotoPath,
+                leaveModal: async () => {
+                  await saveDraft();
+                  // The form reopens from this screen's state, so carry the edits.
+                  if (name) setRestaurantName(name);
+                  setCityOverride(city || null);
+                  leaveForm();
+                },
+              });
             }}
             onClose={() => setRestaurantReviewOpen(false)}
             onSaved={(details) => {
@@ -1436,7 +1428,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: spacing.xl,
   },
-  // Stacks + Share and + Review/Edit Restaurant at the top-right.
   topRightCol: { alignItems: 'flex-end', gap: spacing.xs },
   backLink: {
     fontSize: 16,

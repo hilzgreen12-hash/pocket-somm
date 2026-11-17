@@ -120,9 +120,8 @@ export default function YouScreen() {
       </Text>
 
       {/* Personality sketches now live on the Review tab under "Vinster's
-          Review of You"; Restaurant & Wine Reviews are there too, and the
-          Lineup Library is on the Cellar tab. About You starts with your
-          preferences, then account settings. */}
+          Review of You", alongside Restaurant & Wine Reviews and the Lineup
+          Library. About You starts with your preferences, then account settings. */}
       <View style={styles.headerDivider} />
 
       <View style={styles.block}>

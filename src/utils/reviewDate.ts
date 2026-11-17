@@ -19,3 +19,10 @@ export function ymdToIso(ymd: string): string | null {
   const d = new Date(`${t}T12:00:00`);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
+
+// Today as YYYY-MM-DD in the user's LOCAL time zone — the default drinking date
+// on a new review. (toISOString() would give the UTC day, which is "tomorrow"
+// or "yesterday" for part of the day outside the UK.)
+export function todayYmd(): string {
+  return isoToYmd(new Date().toISOString());
+}

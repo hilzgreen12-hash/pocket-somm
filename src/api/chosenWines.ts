@@ -1,6 +1,14 @@
 import { supabase } from './supabase';
-import { wineNameKey, looseWineMatch } from '../utils/wineIdentity';
+import { evictCachedLabel } from './labelImageCache';
+import { ymdToIso } from '../utils/reviewDate';
 import type { ChosenWine, WineRecommendation } from '../types/wine';
+
+// chosen_at is a timestamp. A bare YYYY-MM-DD would be stored as UTC midnight,
+// which reads as the previous day west of the UK and sorts before any review
+// saved later that same day — so date-only values are anchored at local noon.
+function toChosenAt(date: string): string {
+  return ymdToIso(date) ?? date;
+}
 
 export interface SaveChosenWineInput {
   wine: WineRecommendation;
@@ -42,10 +50,8 @@ export interface ManualSaveChosenWineInput {
   otherObservations: string;
   userScore: number | null;
   isFavourite: boolean;
-  // Source discriminator (migration 042). Omitted = falls back to the
-  // DB default 'restaurant'. The "Review without adding" path in
-  // /label/results passes 'other' so those reviews can be filtered out
-  // of the Restaurant Wines bucket in Your Wine Reviews.
+  // Source discriminator (migration 042): 'restaurant' or 'other'. Omitted
+  // falls back to the DB default 'restaurant'.
   source?: 'restaurant' | 'other';
   // Optional yyyy-mm-dd drinking date — overrides the chosen_at default of
   // now() so Your Wine Reviews carries the date the user actually drank it.
@@ -84,7 +90,7 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
     // omitting the key lets the DB default ('restaurant') kick in for
     // every existing call site that hasn't been updated.
     ...(input.source ? { source: input.source } : {}),
-    ...(input.reviewDate ? { chosen_at: input.reviewDate } : {}),
+    ...(input.reviewDate ? { chosen_at: toChosenAt(input.reviewDate) } : {}),
     ...(input.reviewGroupId ? { review_group_id: input.reviewGroupId } : {}),
   }).select().single();
   if (error) throw new Error(error.message);
@@ -132,7 +138,7 @@ export async function bulkCreateChosenReviews(userId: string, items: ImportRevie
       city: it.location?.trim() || null,
       label_image_path: it.labelImagePath,
       source: 'other' as const,
-      ...(it.reviewDate ? { chosen_at: it.reviewDate } : {}),
+      ...(it.reviewDate ? { chosen_at: toChosenAt(it.reviewDate) } : {}),
       // Repeat tastings of the same wine share a review_group_id so they collapse
       // into one review card (dated entries), matching Vinster's native model.
       ...(it.reviewGroupId ? { review_group_id: it.reviewGroupId } : {}),
@@ -211,9 +217,9 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
     user_drinking_window: userDrinkingWindow ?? null,
     is_favourite: isFavourite,
   };
-  // Only set chosen_at when the user picked a specific date — letting the
-  // DB default to now() otherwise. Treat as a date-only value (no time).
-  if (reviewDate) row.chosen_at = reviewDate;
+  // Only set chosen_at when the user picked a specific date — the DB
+  // defaults it to now() otherwise.
+  if (reviewDate) row.chosen_at = toChosenAt(reviewDate);
   // Set the group only for an "Add to this review" entry; a new review lets the
   // DB default a fresh group id.
   if (input.reviewGroupId) row.review_group_id = input.reviewGroupId;
@@ -236,12 +242,6 @@ export interface UpdateChosenWineInput {
   purchasePriceCurrency?: string | null;
   // Optional "YYYY - YYYY" drinking window; only written when provided.
   userDrinkingWindow?: string | null;
-  // Identity carried through so the post-update sync can find the matching
-  // cellar rows without an extra round-trip. The chosen_wines update itself
-  // doesn't change these fields.
-  producer: string | null;
-  wineName: string;
-  vintage: number | null;
 }
 
 export async function updateChosenWine(id: string, input: UpdateChosenWineInput): Promise<void> {
@@ -264,13 +264,28 @@ export async function updateChosenWine(id: string, input: UpdateChosenWineInput)
 }
 
 export async function deleteChosenWine(id: string): Promise<void> {
-  const { data, error } = await supabase.from('chosen_wines').delete().eq('id', id).select('id');
+  const { data, error } = await supabase.from('chosen_wines').delete().eq('id', id).select('id, label_image_path');
   if (error) throw new Error(error.message);
   // Verify a row was actually removed — a stale/expired session makes RLS match
   // zero rows and return no error, which would otherwise read as a fake success.
   if (!data || data.length === 0) {
     throw new Error('That review could not be deleted — please pull to refresh (you may need to sign in again).');
   }
+  await removeOrphanedReviewPhoto(id, (data[0] as { label_image_path: string | null }).label_image_path);
+}
+
+// Best-effort: remove a deleted review's own label photo from storage. Only a
+// photo uploaded for this row (<user>/<rowId>.jpg) qualifies — never a cellar
+// bottle's photo it borrowed — and only once no other row points at it.
+async function removeOrphanedReviewPhoto(rowId: string, path: string | null): Promise<void> {
+  if (!path || !path.endsWith(`/${rowId}.jpg`)) return;
+  try {
+    const stillUsed = await Promise.all(['chosen_wines', 'cellar_wines', 'labels'].map((table) =>
+      supabase.from(table).select('id', { count: 'exact', head: true }).eq('label_image_path', path)));
+    if (stillUsed.some((r) => r.error || (r.count ?? 0) > 0)) return;
+    await supabase.storage.from('wine-labels').remove([path]);
+    evictCachedLabel(path);
+  } catch { /* an orphaned file is harmless; never block the delete */ }
 }
 
 // Delete many chosen_wines rows by id, chunked so a large batch (e.g. clearing a
@@ -285,12 +300,18 @@ export async function bulkDeleteChosenWines(ids: string[]): Promise<void> {
   }
 }
 
-// Clear the review CONTENT off a chosen wine without deleting the row — so a
-// restaurant bottle pick returns to "awaiting review" instead of vanishing.
-export async function clearChosenReview(id: string): Promise<void> {
+// Clear the review CONTENT off a chosen wine without deleting the row, so a
+// restaurant bottle pick stays on its visit. It returns to "awaiting review"
+// unless `dismiss` also hides it from that list.
+export async function clearChosenReview(id: string, options: { dismiss?: boolean } = {}): Promise<void> {
   const { data, error } = await supabase
     .from('chosen_wines')
-    .update({ tasting_note: null, other_observations: null, user_score: null })
+    .update({
+      tasting_note: null,
+      other_observations: null,
+      user_score: null,
+      ...(options.dismiss ? { review_dismissed: true } : {}),
+    })
     .eq('id', id)
     .select('id');
   if (error) throw new Error(error.message);
@@ -325,93 +346,7 @@ export async function fetchChosenWines(userId: string): Promise<ChosenWine[]> {
   return fetchAllChosenWines(userId);
 }
 
-// Look up the most recent chosen_wines (review) row for this user that
-// matches a wine identity. Used by the review sync so that a review edited on a
-// cellar wine card pushes the same values back to the matching review.
-export async function findMatchingChosenWine(
-  userId: string,
-  identity: { producer: string | null; wineName: string; vintage: string | number | null; wsWineId?: string | null }
-): Promise<ChosenWine | null> {
-  // Paged so a match can be found even in a >1000-row review history (otherwise
-  // auto-link / review sync would only see the most recent 1000).
-  const list = await fetchAllChosenWines(userId);
-
-  const wantId = identity.wsWineId ?? null;
-  const wantKey = wineNameKey(identity.producer, identity.wineName);
-  const wantVintage = identity.vintage != null ? String(identity.vintage).trim() : '';
-  const sameVintage = (w: ChosenWine) => (w.vintage != null ? String(w.vintage).trim() : '') === wantVintage;
-  const hasReview = (w: ChosenWine) =>
-    !!((w.tasting_note && w.tasting_note.trim()) || (w.other_observations && w.other_observations.trim()) || w.user_score != null);
-
-  // Same wine, same vintage — by Wine-Searcher id (authoritative) when both
-  // carry one, else an order-/placement-independent name-token match. This is
-  // broader than the old exact producer==name==vintage equality, which missed
-  // reviews whose producer / name were split differently from the cellar wine
-  // (the "import review didn't link" bug).
-  const isMatch = (w: ChosenWine) =>
-    sameVintage(w) && (
-      (wantId != null && w.ws_wine_id != null && w.ws_wine_id === wantId) ||
-      (!!wantKey && wineNameKey(w.producer, w.wine_name) === wantKey) ||
-      // Looser subset fallback: the same wine filed with extra winery/appellation
-      // words on one side ("Kellerei Cantina Terlan … Terlaner" vs "Cantina
-      // Terlan") — one side's significant words are a subset of the other's.
-      looseWineMatch(
-        { producer: identity.producer, wineName: identity.wineName, vintage: identity.vintage },
-        { producer: w.producer, wineName: w.wine_name, grape: w.grape, vintage: w.vintage },
-      )
-    );
-
-  const matches = list.filter(isMatch);
-  if (matches.length === 0) return null;
-  // Prefer a match that actually carries a review, so an import/link lands on
-  // the real review rather than a bare bottle-pick of the same wine.
-  return matches.find(hasReview) ?? matches[0];
-}
-
-// Create a chosen_wines row from a review made directly on a cellar
-// bottle. Used when the user reviews a wine they own but have never
-// reviewed via a List scan — without this the review would live only on
-// cellar_wines and never surface in Your Wine Reviews. Relies on column
-// defaults for currency / chosen_at / is_favourite.
-export async function createChosenWineFromReview(
-  userId: string,
-  identity: { producer: string | null; wineName: string; vintage: string | number | null },
-  fields: { userScore?: number | null; restaurantName?: string; city?: string; reviewDate?: string; tastingNote?: string; otherObservations?: string; drinkingWindow?: string; labelImagePath?: string | null },
-  region: string | null,
-): Promise<void> {
-  const v = identity.vintage;
-  const vintageInt =
-    v == null || v === '' || !Number.isFinite(Number(v)) ? null : Math.trunc(Number(v));
-  const row: Record<string, unknown> = {
-    user_id: userId,
-    scan_session_id: null,
-    wine_name: identity.wineName.trim(),
-    producer: identity.producer?.trim() || null,
-    region: region?.trim() || null,
-    vintage: vintageInt,
-    restaurant_name: fields.restaurantName?.trim() || null,
-    city: fields.city?.trim() || null,
-    tasting_note: fields.tastingNote?.trim() || null,
-    user_score: fields.userScore ?? null,
-    // Carry Personal Notes + the drinking-window opinion so the twin is the FULL
-    // review (not note+score only) — Your Wine Reviews opens this row, not the
-    // cellar copy, once it exists.
-    other_observations: fields.otherObservations?.trim() || null,
-    user_drinking_window: fields.drinkingWindow?.trim() || null,
-    // Carry the cellar bottle's label photo so the review card + home carousel
-    // thumbnail match the wine (blank otherwise).
-    label_image_path: fields.labelImagePath?.trim() || null,
-  };
-  // chosen_at defaults to now(); when the user gave a drink date, use
-  // that instead so Your Wine Reviews sorts by when the wine was drunk.
-  if (fields.reviewDate) row.chosen_at = fields.reviewDate;
-  const { error } = await supabase.from('chosen_wines').insert(row);
-  if (error) throw new Error(error.message);
-}
-
-// Partial update used by the review sync path. Lets the caller touch only the
-// fields that actually changed rather than overwriting everything with the
-// EditChosenWineModal payload shape.
+// Partial update — touches only the fields given.
 export async function patchChosenWine(
   id: string,
   updates: Partial<{
@@ -430,7 +365,6 @@ export async function patchChosenWine(
     ws_wine_id: string | null;
     ws_wine_name: string | null;
     critic_score: number | null;
-    critic_score_note: string | null;
     rationale: string | null;      // Vinster's Note, persisted on first generation
     wine_name: string;
     producer: string | null;
@@ -444,5 +378,32 @@ export async function patchChosenWine(
   }>
 ): Promise<void> {
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+// Take a wine off a restaurant visit without deleting its review. The
+// restaurant name/city go too: Your Restaurant Reviews also matches unlinked
+// wines to a visit by restaurant name, so leaving them would put it straight back.
+export async function unlinkFromSession(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('chosen_wines')
+    .update({ scan_session_id: null, restaurant_name: null, city: null })
+    .eq('id', id)
+    .select('id');
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error('That wine could not be removed — please refresh and try again.');
+}
+
+// Keep the wines on a visit in step when its restaurant is renamed or its city
+// changes, so their reviews read "You had this at …" with the new details.
+export async function updateSessionRestaurant(
+  sessionId: string,
+  details: { restaurantName?: string | null; city?: string | null },
+): Promise<void> {
+  const updates: Record<string, string | null> = {};
+  if (details.restaurantName !== undefined) updates.restaurant_name = details.restaurantName?.trim() || null;
+  if (details.city !== undefined) updates.city = details.city?.trim() || null;
+  if (Object.keys(updates).length === 0) return;
+  const { error } = await supabase.from('chosen_wines').update(updates).eq('scan_session_id', sessionId);
   if (error) throw new Error(error.message);
 }
