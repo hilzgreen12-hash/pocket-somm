@@ -16,6 +16,7 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { detectLineup, prepareImageBase64, scanLabel, type DetectedBottle } from '../../src/api/label';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { findCellarWineByIdentity } from '../../src/api/cellar';
+import { freeSlotsFrom } from '../../src/utils/rackSlots';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { wineNameKey, looseWineMatch } from '../../src/utils/wineIdentity';
 import { findSameCellarWine } from '../../src/utils/wineMatch';
@@ -24,39 +25,11 @@ import type { CellarWine } from '../../src/types/wine';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
+import { launchCamera, launchImageLibrary } from '../../src/utils/imagePicker';
 
 type Stage = 'capture' | 'analyzing' | 'review';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-
-// Walk the rack grid from (startRow,startCol) in the given orientation, skipping
-// occupied slots, collecting up to `count` FREE positions. Vertical runs down a
-// column then to the next; Horizontal runs across a row then to the next. The
-// large-format band (row -1) stays on its own row.
-function computeFreeSlots(
-  startRow: number, startCol: number, rows: number, cols: number,
-  count: number, orient: 'Vertical' | 'Horizontal',
-  occupied: Set<string>, largeFormatCols?: number | null,
-): Array<{ row: number; col: number }> {
-  const result: Array<{ row: number; col: number }> = [];
-  if (startRow === -1) {
-    const lfCols = largeFormatCols ?? 0;
-    let col = startCol;
-    while (result.length < count && col < lfCols) {
-      if (!occupied.has(`-1,${col}`)) result.push({ row: -1, col });
-      col++;
-    }
-    return result;
-  }
-  let row = startRow;
-  let col = startCol;
-  while (result.length < count && row >= 0 && row < rows && col >= 0 && col < cols) {
-    if (!occupied.has(`${row},${col}`)) result.push({ row, col });
-    if (orient === 'Horizontal') { col++; if (col >= cols) { col = 0; row++; } }
-    else { row++; if (row >= rows) { row = 0; col++; } }
-  }
-  return result;
-}
 
 // Crop one bottle's label out of the lineup photo for its cellar thumbnail. The
 // detected box is tight on the label, so pad it a little for context. Returns
@@ -87,6 +60,8 @@ async function cropLabel(
 function newCellarRow(b: DetectedBottle, userId: string, quantity: number, extra: Record<string, unknown> = {}) {
   return {
     priceEstimate: 'market',
+    // Its label is cropped from the lineup photo, so no web label is needed.
+    hasOwnPhoto: !!(b.overrideImageUri || b.box),
     user_id: userId,
     wine_name: b.wineName || b.producer,
     producer: b.producer,
@@ -214,7 +189,7 @@ export default function ScanLineupScreen() {
   // cancelling a Retake keeps the current read.
   async function pickFromLibrary(leaveOnCancel: boolean) {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      const result = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
       if (result.canceled || !result.assets.length) { if (leaveOnCancel) router.back(); return; }
       // Read the photo exactly as taken — never auto-rotate. A 180° flip also
       // mirrors left↔right, so flipping an already-upright rack shot would
@@ -349,7 +324,7 @@ export default function ScanLineupScreen() {
   // captures a fresh photo that overrides the (often small) lineup crop.
   async function handleScanInEdit() {
     try {
-      const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
+      const res = await launchCamera({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
       if (res.canceled || !res.assets[0]) return;
       const uri = res.assets[0].uri;
       if (!(await ensureConnectionForUpload())) return;
@@ -483,7 +458,7 @@ export default function ScanLineupScreen() {
       // multiple bottles stack perpendicular to the lineup axis.
       const useLinear = startSlot.row === -1;
       const linearFree = useLinear
-        ? computeFreeSlots(startSlot.row, startSlot.col, rack.rows, rack.cols, total, orientation, occupied, rack.large_format_cols)
+        ? freeSlotsFrom(startSlot.row, startSlot.col, rack.rows, rack.cols, total, orientation, occupied, rack.large_format_cols)
         : [];
       const imgDims = await lineupImageDims();
       let cursor = 0;

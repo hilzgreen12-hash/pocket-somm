@@ -5,7 +5,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
-import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrary } from '../../src/utils/imagePicker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { WineSearchModal } from '../../src/components/WineSearchModal';
@@ -194,7 +194,7 @@ export default function ReviewRequirementsScreen() {
   async function handleUpload() {
     setFilters(buildFilters() as unknown as Record<string, unknown>);
     if (!(await ensureMediaPermission('library'))) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    const result = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
     if (!(await ensureConnectionForUpload())) return;

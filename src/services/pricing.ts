@@ -130,12 +130,30 @@ export interface VintageComparisonRow {
   price: number | null;
 }
 
-// Build a wine's per-vintage Wine-Searcher table (score + price) by probing a
-// window of recent vintages through the existing pricing proxy — which caches
-// each (wine, vintage), so a re-open is instant. Only EXACT-vintage listings are
-// kept (the all-vintage average fallback is filtered out) so every row is real
-// data for that year. Generated on request, since it's N live lookups.
-const COMPARISON_VINTAGES = 8;
+// Build a wine's per-vintage Wine-Searcher table (score + price) through the
+// pricing proxy, which caches each (wine, vintage), so a re-open is instant. Only
+// EXACT-vintage listings are kept (the all-vintage average fallback is filtered
+// out), so every row is real data for that year.
+//
+// Which years: for a wine with a vintage, the CLOSEST vintages Wine-Searcher
+// lists — 1999, 2001, 1998, 2002… around a 2000 — until COMPARISON_NEIGHBOURS
+// are found. A wine with no vintage compares the most recent years. Each new
+// (wine, vintage) is a paid lookup, so the walk is capped at COMPARISON_LOOKUPS.
+const COMPARISON_NEIGHBOURS = 4;
+const COMPARISON_LOOKUPS = 12;
+const COMPARISON_REACH = 15; // years either side of the vintage
+
+function comparisonYears(scannedVintage: number | null, lastVintage: number): number[] {
+  if (scannedVintage == null) {
+    return Array.from({ length: 8 }, (_, i) => lastVintage - i);
+  }
+  const years = [scannedVintage];
+  for (let d = 1; d <= COMPARISON_REACH; d++) {
+    years.push(scannedVintage - d);
+    if (scannedVintage + d <= lastVintage) years.push(scannedVintage + d);
+  }
+  return years;
+}
 
 export async function fetchVintageComparison(
   queryName: string,
@@ -145,19 +163,18 @@ export async function fetchVintageComparison(
   // no vintages at all.
   altName?: string | null,
 ): Promise<VintageComparisonRow[]> {
-  const nowYear = new Date().getFullYear();
-  const years: number[] = [];
-  // The last 8 vintages (plus the scanned one): each is a paid lookup against
-  // the 100/day Wine-Searcher allowance, and diners care about recent years.
-  for (let y = nowYear - 1; y >= nowYear - COMPARISON_VINTAGES; y--) years.push(y);
-  if (scannedVintage && Number.isFinite(scannedVintage) && !years.includes(scannedVintage)) years.push(scannedVintage);
+  const scanned = scannedVintage != null && Number.isFinite(scannedVintage) ? scannedVintage : null;
+  const candidates = comparisonYears(scanned, new Date().getFullYear() - 1);
   const rows: VintageComparisonRow[] = [];
+  let lookups = 0;
   let unavailable = 0;
-  // Small batches keep the Wine-Searcher request rate modest (the proxy handles
-  // its own rate-limit retries).
+  const enough = () => rows.filter((r) => r.vintage !== scanned).length >= COMPARISON_NEIGHBOURS;
+  // Small batches keep the Wine-Searcher request rate modest and let the walk
+  // stop as soon as enough nearby vintages are found.
   const BATCH = 3;
-  for (let i = 0; i < years.length; i += BATCH) {
-    const batch = years.slice(i, i + BATCH);
+  for (let i = 0; i < candidates.length && lookups < COMPARISON_LOOKUPS && !enough(); i += BATCH) {
+    const batch = candidates.slice(i, Math.min(i + BATCH, i + COMPARISON_LOOKUPS - lookups));
+    lookups += batch.length;
     const results = await Promise.all(batch.map(async (y) => {
       const p = await fetchPricing(queryName, y, currency, { exactOnly: true });
       if (isDown(p)) unavailable++;
@@ -170,7 +187,7 @@ export async function fetchVintageComparison(
   // Nothing came back AND most lookups errored (Wine-Searcher down, or its
   // daily lookup limit reached) — that is NOT "no data for this wine". Throw so
   // callers say "try again later" and never save an empty table.
-  if (rows.length === 0 && unavailable >= Math.ceil(years.length / 2)) throw new WineSearcherUnavailableError();
+  if (rows.length === 0 && unavailable >= Math.ceil(lookups / 2)) throw new WineSearcherUnavailableError();
   if (rows.length === 0 && altName && altName.toLowerCase() !== queryName.toLowerCase()) return fetchVintageComparison(altName, currency, scannedVintage, null);
   return rows;
 }

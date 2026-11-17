@@ -154,6 +154,21 @@ export async function clearSlot(rackId: string, rowIndex: number, colIndex: numb
   if (error) throw error;
 }
 
+// Free one slot only if it still holds this wine — a screen's idea of what sits
+// in a slot can be out of date. Returns whether a bottle was freed.
+export async function clearSlotOfWine(rackId: string, rowIndex: number, colIndex: number, cellarWineId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('rack_slots')
+    .delete()
+    .eq('rack_id', rackId)
+    .eq('row_index', rowIndex)
+    .eq('col_index', colIndex)
+    .eq('cellar_wine_id', cellarWineId)
+    .select('id');
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
 export async function clearWineFromRacks(cellarWineId: string): Promise<void> {
   const { error } = await supabase.from('rack_slots').delete().eq('cellar_wine_id', cellarWineId);
   if (error) throw error;

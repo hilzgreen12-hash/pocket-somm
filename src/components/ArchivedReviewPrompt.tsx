@@ -3,10 +3,11 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'rea
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../hooks/useAuth';
-import { useArchive } from '../hooks/useCellar';
+import { useArchive, useCellar } from '../hooks/useCellar';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { wineHeaderLine } from '../utils/wineHeader';
 import { sameWineIdentity } from '../utils/wineMatch';
+import { entriesOf } from '../utils/cellarReview';
 import type { CellarWine } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -14,22 +15,23 @@ import { fonts } from '../constants/fonts';
 // Cellar tab nudge, styled like Your Wine Reviews' "awaiting your review" pop-up:
 // archived bottles (last 60 days) the user hasn't reviewed. Review Now opens the
 // newest one's review; tapping a wine reviews that one; Review Later closes it
-// until the next app open; Don't show me again turns it off for good.
+// until the next app open; Don't show me again turns it off for good. Reviews
+// are personal, so in a shared cellar only the user's own archive is offered.
 const WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
 const MAX = 10;
 let shownThisSession = false;
 
+// A review entry, or on older rows a written review, score or drinking date.
+// Personal notes on their own aren't a review.
 function hasReview(w: CellarWine): boolean {
-  const any = w as any;
-  return (Array.isArray(any.review_entries) && any.review_entries.length > 0)
-    || !!(w.review_note && w.review_note.trim()) || !!(w.user_notes && w.user_notes.trim())
-    || w.review_score != null || !!w.review_date;
+  return entriesOf(w).length > 0 || !!w.review_note?.trim() || w.review_score != null || !!w.review_date;
 }
 
 export function ArchivedReviewPrompt() {
   const { session } = useAuth();
   const userId = session?.user.id;
-  const { wines: archived, isLoading } = useArchive();
+  const { wines: archive, isLoading } = useArchive();
+  const { wines: live } = useCellar();
   const { chosenWines } = useChosenWines();
   const [list, setList] = useState<CellarWine[] | null>(null);
   const [focused, setFocused] = useState(false);
@@ -41,20 +43,22 @@ export function ArchivedReviewPrompt() {
     const now = Date.now();
     const reviewedChosen = chosenWines.filter((c) => !!((c.tasting_note && c.tasting_note.trim()) || (c.other_observations && c.other_observations.trim()) || c.user_score != null));
     const picked: CellarWine[] = [];
-    const recent = [...archived]
-      .filter((w) => w.archived_at && now - new Date(w.archived_at).getTime() <= WINDOW_MS)
+    const reviewed = [...archive, ...live].filter(hasReview);
+    const recent = archive
+      .filter((w) => w.user_id === userId && w.archived_at && now - new Date(w.archived_at).getTime() <= WINDOW_MS)
       .sort((a, b) => new Date(b.archived_at!).getTime() - new Date(a.archived_at!).getTime());
     for (const w of recent) {
       if (picked.length >= MAX) break;
-      // Reviewed already (this entry, another archived entry of it, or a review).
-      const same = archived.filter((x) => sameWineIdentity(x, w));
-      if (same.some(hasReview)) continue;
+      // Reviewed already: on this entry, another archived entry of it, its
+      // bottles still in the cellar (where a partial archive leaves the
+      // reviews), or a restaurant / other review.
+      if (reviewed.some((x) => sameWineIdentity(x, w))) continue;
       if (reviewedChosen.some((c) => sameWineIdentity({ producer: c.producer, wine_name: c.wine_name, vintage: c.vintage }, w))) continue;
       if (picked.some((p) => sameWineIdentity(p, w))) continue;
       picked.push(w);
     }
     return picked;
-  }, [archived, chosenWines]);
+  }, [archive, live, chosenWines, userId]);
 
   useEffect(() => {
     if (!userId || !focused || isLoading || shownThisSession || checkedRef.current || awaiting.length === 0) return;
@@ -67,7 +71,9 @@ export function ArchivedReviewPrompt() {
 
   function review(w: CellarWine) {
     setList(null);
-    router.push(`/wines/chosen?openCellarReviewInput=${w.id}` as any);
+    // fromArchive: the review is dated the day it was archived, at the place
+    // its Archive Note names.
+    router.push(`/wines/chosen?openCellarReviewInput=${w.id}&fromArchive=1` as any);
   }
   async function dontShowAgain() {
     try { await AsyncStorage.setItem(key, '1'); } catch { /* non-fatal */ }

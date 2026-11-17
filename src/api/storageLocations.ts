@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { cellarOwner } from './cellarContext';
+import { cellarOwner, refusedWriteError } from './cellarContext';
 import { evictCachedLabel } from './labelImageCache';
 import { selectAllPages, selectAllInChunks, chunkIds } from './paging';
 import type { StorageLocation, StorageCase } from '../types/wine';
@@ -94,8 +94,9 @@ export async function deleteStorageLocation(id: string): Promise<void> {
   // failing is worth not swallowing silently (B1).
   const { data, error: readErr } = await supabase
     .from('storage_locations').select('user_id, photo_path').eq('id', id).maybeSingle();
-  const { error } = await supabase.from('storage_locations').delete().eq('id', id);
+  const { data: deleted, error } = await supabase.from('storage_locations').delete().eq('id', id).select('id');
   if (error) throw error;
+  if (!deleted?.length) throw refusedWriteError();
   const row = data as { user_id?: string; photo_path?: string | null } | null;
   const paths = new Set<string>();
   if (row?.photo_path) paths.add(row.photo_path);

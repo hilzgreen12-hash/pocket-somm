@@ -2,8 +2,7 @@ import { supabase } from './supabase';
 import { cellarOwner, assertCanEditCellar, canEditCellar, VIEW_ONLY_MESSAGE } from './cellarContext';
 import { selectAllPages } from './paging';
 import type { CellarWine } from '../types/wine';
-import { wineNameKey } from '../utils/wineIdentity';
-import { clearWineFromRacks } from './racks';
+import { findSameCellarWine, type WineLike } from '../utils/wineMatch';
 
 export async function getCellarWines(userId: string): Promise<CellarWine[]> {
   // Page through in 1000-row chunks — PostgREST caps a single response at ~1000
@@ -60,6 +59,44 @@ export async function addCellarWineRemoval(input: { cellarWineId: string; remove
   return data as CellarWineRemoval;
 }
 
+// Take back the removal log of `count` bottles that have come back from the
+// archive, archived on `day` (YYYY-MM-DD). The entry was written against the
+// row the bottles left — the live row after a partial archive, the archived row
+// itself after a whole one — so every row of the same wine (identical producer,
+// name, vintage and size, as an archive copy is) is searched, plus `alsoIds`.
+// The entry for exactly those bottles (that day, that count) goes. Failing that
+// (archives merged, or the date edited since), the most recent entries go until
+// `count` bottles are accounted for, the last one trimmed if it held more.
+export async function takeBackCellarWineRemovals(wine: CellarWine, alsoIds: string[], day: string, count: number): Promise<void> {
+  let rowsQuery = supabase.from('cellar_wines').select('id').eq('user_id', wine.user_id);
+  for (const col of ['producer', 'wine_name', 'vintage', 'bottle_size_ml'] as const) {
+    const v = wine[col];
+    rowsQuery = v == null ? rowsQuery.is(col, null) : rowsQuery.eq(col, v);
+  }
+  const { data: rows, error: rowsErr } = await rowsQuery;
+  if (rowsErr) throw rowsErr;
+  const wineIds = Array.from(new Set([wine.id, ...alsoIds, ...(rows ?? []).map((r: { id: string }) => r.id)]));
+
+  const { data, error } = await supabase
+    .from('cellar_wine_removals')
+    .select('id, removed_at, count')
+    .in('cellar_wine_id', wineIds)
+    .order('removed_at', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const logs = (data ?? []) as Pick<CellarWineRemoval, 'id' | 'removed_at' | 'count'>[];
+  const exact = logs.find((l) => l.removed_at === day && l.count === count);
+  let left = count;
+  for (const log of exact ? [exact] : logs) {
+    if (left <= 0) break;
+    const { error: writeErr } = log.count <= left
+      ? await supabase.from('cellar_wine_removals').delete().eq('id', log.id)
+      : await supabase.from('cellar_wine_removals').update({ count: log.count - left }).eq('id', log.id);
+    if (writeErr) throw writeErr;
+    left -= log.count;
+  }
+}
+
 // Heal data inconsistency: if a wine is currently assigned to a rack_slot, it
 // is by definition part of the user's live cellar. Older versions of the app
 // occasionally left wines with archived_at set while still referenced from a
@@ -92,42 +129,17 @@ export async function repairRackedWines(userId: string): Promise<number> {
   return (fixed ?? []).length;
 }
 
-export async function archiveCellarWine(id: string): Promise<void> {
-  const { data, error } = await supabase
-    .from('cellar_wines')
-    .update({ archived_at: new Date().toISOString() })
-    .eq('id', id)
-    .select('id');
-  if (error) throw error;
-  // A stale / expired session (e.g. right after switching accounts) makes RLS
-  // match zero rows and return NO error — so the update silently does nothing.
-  // Treat "affected nothing" as a failure so the UI can't falsely report success.
-  if (!data || data.length === 0) {
-    if (!canEditCellar()) throw new Error(VIEW_ONLY_MESSAGE);
-    throw new Error('That wine could not be updated — please pull to refresh (you may need to sign in again).');
-  }
-  // An archived wine has left physical storage, so detach it from EVERY spot:
-  // rack/fridge slots AND all cellar_placements (rack, bin and — crucially —
-  // alt-cellar 'location' rows). Location placements are app-owned since
-  // migration 106 (the DB no longer mirrors/clears them), so without this the
-  // alt-cellar screen — which reads cellar_placements — keeps showing the
-  // archived bottle's thumbnail even after a refetch. Centralised here so every
-  // full-archive caller (Full Cellar List, bulk select, useCellar, voice) is
-  // covered, not just the ones that happened to call clearWineFromRacks.
-  await clearWineFromRacks(id);
-  const { error: pErr } = await supabase.from('cellar_placements').delete().eq('cellar_wine_id', id);
-  if (pErr) throw pErr;
-}
-
+// Newest archive first. Paged past PostgREST's 1000-row cap, like getCellarWines.
 export async function getArchivedWines(userId: string): Promise<CellarWine[]> {
-  const { data, error } = await supabase
-    .from('cellar_wines')
-    .select('*')
-    .eq('user_id', cellarOwner(userId))
-    .not('archived_at', 'is', null)
-    .order('archived_at', { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  return selectAllPages<CellarWine>((from, to) =>
+    supabase
+      .from('cellar_wines')
+      .select('*')
+      .eq('user_id', cellarOwner(userId))
+      .not('archived_at', 'is', null)
+      .order('archived_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to));
 }
 
 export async function getSharedCellarWines(ownerId: string): Promise<CellarWine[]> {
@@ -149,7 +161,12 @@ export async function getCellarWineById(id: string): Promise<CellarWine | null> 
   return (data as CellarWine) ?? null;
 }
 
-export async function addCellarWine(wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>): Promise<CellarWine> {
+// A row to insert: who it belongs to, the wine and how many bottles. Every other
+// column is nullable or has a database default.
+export type NewCellarWine = Pick<CellarWine, 'user_id' | 'wine_name' | 'quantity'>
+  & Partial<Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>>;
+
+export async function addCellarWine(wine: NewCellarWine): Promise<CellarWine> {
   // Cellar bottles go into the shared cellar (the owner's id).
   assertCanEditCellar();
   const row = { ...wine, user_id: cellarOwner(wine.user_id) };
@@ -170,7 +187,7 @@ export async function updateCellarWine(id: string, updates: Partial<CellarWine>)
     .select('id');
   if (error) throw error;
   // A stale/expired session (RLS matches zero rows, no error) makes the update a
-  // silent no-op — the same guard archiveCellarWine/deleteCellarWine use. Without
+  // silent no-op — the same guard deleteCellarWine uses. Without
   // it, a partial-archive quantity decrement could silently not happen.
   if (!data || data.length === 0) {
     if (!canEditCellar()) throw new Error(VIEW_ONLY_MESSAGE);
@@ -192,13 +209,15 @@ export async function deleteCellarWine(id: string): Promise<void> {
   }
 }
 
-// Find an ACTIVE (non-archived) cellar wine matching a
-// producer+name identity, straight from the DB (not a possibly-stale client
-// cache) — so re-adding a wine merges into its existing line instead of
-// creating a duplicate, even if the cache is momentarily wrong.
+// The ACTIVE (non-archived) line for this wine, straight from the database
+// rather than a possibly-stale client cache — so re-adding a wine joins its
+// existing line instead of creating a duplicate. Same rule as every add path
+// (findSameCellarWine): same wine and vintage, and the same bottle size when
+// sizeMl is given.
 export async function findCellarWineByIdentity(
   userId: string,
-  identity: { producer: string | null; wineName: string | null; vintage?: string | number | null },
+  candidate: WineLike,
+  sizeMl?: number | null,
 ): Promise<CellarWine | null> {
   // Paged — PostgREST caps a select at 1000 rows, so a big (imported) cellar
   // would otherwise miss the match and create a duplicate line.
@@ -210,16 +229,21 @@ export async function findCellarWineByIdentity(
       .is('archived_at', null)
       .order('id', { ascending: true })
       .range(from, to) as any);
-  // Same wine = same producer+cuvée identity (order-independent word set, so an
-  // OCR producer/name split still matches) AND same vintage. Matching on producer
-  // alone merged distinct cuvées from one producer into a single row.
-  const target = wineNameKey(identity.producer, identity.wineName);
-  if (!target) return null;
-  const v = identity.vintage != null ? String(identity.vintage).trim().toLowerCase() : '';
-  return list.find((w) => {
-    if (wineNameKey(w.producer, w.wine_name) !== target) return false;
-    return (w.vintage ?? '').toString().trim().toLowerCase() === v;
-  }) ?? null;
+  return findSameCellarWine(list, candidate, sizeMl) ?? null;
+}
+
+// Give a wine a web-found label only while it still has no picture: one
+// conditional update, so it can never replace a photo that landed first.
+// Returns whether the label was used.
+export async function setAutoLabelIfMissing(id: string, path: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('cellar_wines')
+    .update({ label_image_path: path, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .is('label_image_path', null)
+    .select('id');
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
 }
 
 export async function shareCellar(ownerId: string, email: string): Promise<void> {

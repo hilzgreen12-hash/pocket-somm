@@ -11,30 +11,30 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
 import { getLineupArchive, lineupSignedUrl, setLineupNote, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupArchive, type LineupWine } from '../../../src/api/lineups';
-import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrary } from '../../../src/utils/imagePicker';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import type { CellarWine } from '../../../src/types/wine';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { useScanHistory } from '../../../src/hooks/useScanHistory';
-import { detectLineup, prepareImageBase64, fetchAutoLabelUri } from '../../../src/api/label';
+import { detectLineup, prepareImageBase64, type WineSearchResult } from '../../../src/api/label';
 import { buildLineupWines, archiveBottles } from '../../../src/services/archiveNight';
 import { findSameCellarWine, sameWineIdentity } from '../../../src/utils/wineMatch';
 import { getCellarWineById } from '../../../src/api/cellar';
-import { DateInput } from '../../../src/components/DateInput';
-import { labelSignedUrl } from '../../../src/api/labelPhotos';
+import { ReviewedLineEditable } from '../../../src/components/ReviewCardHeader';
+import { WineSearchInput } from '../../../src/components/WineSearchInput';
+import { BottleSizePicker, bottleSizeLabel } from '../../../src/components/BottleSizePicker';
 import { File, Paths } from 'expo-file-system';
 import { LineupShareCard } from '../../../src/components/LineupShareCard';
 import { LabelPhotoViewer } from '../../../src/components/LabelPhotoViewer';
-import { withBordeauxInfo } from '../../../src/constants/bordeauxClassification';
 import { Ionicons } from '@expo/vector-icons';
 import { MicButton } from '../../../src/components/MicButton';
 import { showAlert } from '../../../src/components/AppAlert';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
-import { useCellar } from '../../../src/hooks/useCellar';
+import { useCellar, invalidateCellarViews } from '../../../src/hooks/useCellar';
 import { useChosenWines } from '../../../src/hooks/useChosenWines';
-import { useLabels } from '../../../src/hooks/useLabels';
-import { findWineConnections } from '../../../src/utils/wineConnections';
-import { useLabelStore } from '../../../src/stores/labelStore';
+import { usePreferences } from '../../../src/hooks/usePreferences';
+import { UNNAMED_RESTAURANT, isRestaurantVisit, sessionsWithWines } from '../../../src/utils/restaurantReview';
+import { WINE_STYLES, inferWineStyle } from '../../../src/utils/wineStyle';
 import { SearchProgress } from '../../../src/components/SearchProgress';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -69,10 +69,6 @@ export default function LineupDetailScreen() {
   }
   function end(key: string) { inFlight.current.delete(key); }
 
-  const [genIntel, setGenIntel] = useState(false);
-  // Where this lineup review/intel flow should return to on Back.
-  const backToLineup = `&backTo=${encodeURIComponent(`/cellar/lineup/${id}`)}`;
-
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   // The photo couldn't load (usually no connection) → offline placeholder.
   const [photoFailed, setPhotoFailed] = useState(false);
@@ -81,14 +77,19 @@ export default function LineupDetailScreen() {
   }
   const [zoomOpen, setZoomOpen] = useState(false);
   const [replacingPhoto, setReplacingPhoto] = useState(false);
-  const [note, setNote] = useState('');
-  const [savingNote, setSavingNote] = useState(false);
-  // The note reads as plain text once saved; editing opens a popup with the
-  // input, and saving converts it back to text.
-  const [noteEditorOpen, setNoteEditorOpen] = useState(false);
-  const [noteDraft, setNoteDraft] = useState('');
-  // The lineup's name, edited inline as the title and saved on blur.
+  // The title, date · city · venue line and note are edited in place. Each is
+  // saved when its field loses focus, and "Save Lineup" saves whatever is still
+  // pending (e.g. a dictated note, which never blurs).
   const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+  const [dateDraft, setDateDraft] = useState('');
+  const [cityDraft, setCityDraft] = useState('');
+  const [venueDraft, setVenueDraft] = useState('');
+  // "Lineup Saved" after a successful Save Lineup, until the next edit.
+  const [lineupSaved, setLineupSaved] = useState(false);
+  const [savingLineup, setSavingLineup] = useState(false);
+  // Wraps a field setter so any edit turns the button back to "Save Lineup".
+  const edited = <T,>(set: (v: T) => void) => (v: T) => { setLineupSaved(false); set(v); };
   // Which wine row (index) is being linked to a cellar wine via the picker.
   const [cellarPickerFor, setCellarPickerFor] = useState<number | null>(null);
   const hydrated = useRef(false);
@@ -97,6 +98,9 @@ export default function LineupDetailScreen() {
       hydrated.current = true;
       setNote(lineup.note ?? '');
       setName(lineup.name ?? '');
+      setDateDraft(lineupDay(lineup.archived_at));
+      setCityDraft(lineup.city ?? '');
+      setVenueDraft(lineup.venue ?? '');
       loadPhoto(lineup.image_path);
     }
   }, [lineup]);
@@ -114,14 +118,64 @@ export default function LineupDetailScreen() {
     qc.invalidateQueries({ queryKey: ['lineup-archives'] });
   }
 
-  async function saveNameInline() {
-    if (!lineup) return;
-    if ((name.trim() || null) === (lineup.name?.trim() || null)) return; // unchanged
+  // The lineup as it stands in the cache — the baseline each save compares
+  // against, kept current so a blur save and Save Lineup don't both write.
+  function cachedLineup(): LineupArchive | null {
+    return qc.getQueryData<LineupArchive | null>(['lineup', id]) ?? null;
+  }
+  function patchCachedLineup(patch: Partial<LineupArchive>) {
+    qc.setQueryData<LineupArchive | null>(['lineup', id], (old) => (old ? { ...old, ...patch } : old));
+  }
+
+  // Each persist* writes its field only if it differs from what's saved, and
+  // throws on failure so the caller decides how to report it.
+  async function persistTitle() {
+    const saved = cachedLineup();
+    const next = name.trim() || null;
+    if (!saved || next === (saved.name?.trim() || null)) return;
+    await setLineupName(saved.id, next);
+    patchCachedLineup({ name: next });
+  }
+  async function persistNote() {
+    const saved = cachedLineup();
+    const next = note.trim() || null;
+    if (!saved || next === (saved.note?.trim() || null)) return;
+    await setLineupNote(saved.id, next);
+    patchCachedLineup({ note: next });
+  }
+  async function persistStamp() {
+    const saved = cachedLineup();
+    if (!saved) return;
+    // DateInput only reports complete, valid dates; an empty field leaves the
+    // saved date as it is. Noon keeps the day stable across time zones.
+    const archivedAt = dateDraft && dateDraft !== lineupDay(saved.archived_at) ? new Date(`${dateDraft}T12:00:00`).toISOString() : undefined;
+    const city = cityDraft.trim() || null;
+    const venue = venueDraft.trim() || null;
+    if (!archivedAt && city === (saved.city?.trim() || null) && venue === (saved.venue?.trim() || null)) return;
+    await updateLineupStamp(saved.id, { archivedAt, city, venue });
+    patchCachedLineup({ ...(archivedAt ? { archived_at: archivedAt } : {}), city, venue });
+  }
+
+  function saveOnBlur(persist: () => Promise<void>, errorTitle: string) {
+    persist().then(invalidateLineup, (err) => {
+      showAlert({ title: errorTitle, body: err instanceof Error ? err.message : 'Please try again.' });
+    });
+  }
+
+  async function saveLineup() {
+    if (!begin('saveLineup')) return;
+    setSavingLineup(true);
     try {
-      await setLineupName(lineup.id, name);
+      await persistTitle();
+      await persistStamp();
+      await persistNote();
       invalidateLineup();
+      setLineupSaved(true);
     } catch (err) {
-      showAlert({ title: 'Could not save title', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not save lineup', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingLineup(false);
+      end('saveLineup');
     }
   }
 
@@ -140,8 +194,9 @@ export default function LineupDetailScreen() {
     const next = change(currentWines());
     try {
       await setLineupWines(lineup.id, next);
-      qc.setQueryData<LineupArchive | null>(['lineup', id], (old) => (old ? { ...old, wines: next } : old));
+      patchCachedLineup({ wines: next });
       invalidateLineup();
+      setLineupSaved(false);
       return true;
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -160,7 +215,7 @@ export default function LineupDetailScreen() {
       for (const index of indexes) {
         const w = currentWines()[index];
         if (!w?.cellar_wine_id || w.archived) continue;
-        if ((await archiveBottles(w.cellar_wine_id, w.count ?? 1, day)) > 0) done.push({ index, cellarId: w.cellar_wine_id });
+        if ((await archiveBottles(w.cellar_wine_id, w.count ?? 1, day)).archived > 0) done.push({ index, cellarId: w.cellar_wine_id });
       }
     } catch (err) {
       showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -170,10 +225,7 @@ export default function LineupDetailScreen() {
       if (done.length) {
         await updateWines((ws) => ws.map((w, i) => (done.some((d) => d.index === i && d.cellarId === w.cellar_wine_id) ? { ...w, archived: true } : w)));
       }
-      qc.invalidateQueries({ queryKey: ['cellar', session?.user.id] });
-      qc.invalidateQueries({ queryKey: ['cellar-archive', session?.user.id] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      invalidateCellarViews(qc);
       end('archive');
     }
   }
@@ -224,51 +276,11 @@ export default function LineupDetailScreen() {
     if (saved && wasArchived) showAlert({ title: 'Marked Off Cellar', body: UNDO_NOTE });
   }
 
-  // Edit the date + location stamp (tap the stamp below the title).
-  const [stampOpen, setStampOpen] = useState(false);
-  const [dateDraft, setDateDraft] = useState('');
-  const [cityDraft, setCityDraft] = useState('');
-  const [venueDraft, setVenueDraft] = useState('');
-  const [savingStamp, setSavingStamp] = useState(false);
-
-  function openStampEdit() {
-    if (!lineup) return;
-    setDateDraft(lineupDay(lineup.archived_at));
-    setCityDraft(lineup.city ?? '');
-    setVenueDraft(lineup.venue ?? '');
-    setStampOpen(true);
-  }
-  async function saveStamp() {
-    if (!lineup || !begin('stamp')) return;
-    const ymd = dateDraft.trim();
-    const valid = /^\d{4}-\d{2}-\d{2}$/.test(ymd) && !Number.isNaN(new Date(ymd).getTime());
-    // A malformed date must not silently save nothing. (Empty = leave as-is.)
-    if (ymd && !valid) {
-      end('stamp');
-      showAlert({ title: 'Check the date', body: 'Please enter a valid date.' });
-      return;
-    }
-    setSavingStamp(true);
-    try {
-      await updateLineupStamp(lineup.id, {
-        archivedAt: valid ? new Date(`${ymd}T12:00:00`).toISOString() : undefined,
-        city: cityDraft,
-        venue: venueDraft,
-      });
-      invalidateLineup();
-      setStampOpen(false);
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingStamp(false);
-      end('stamp');
-    }
-  }
-
-  // For linking each wine to its reviews / cellar entry (like the Label Library).
   const { wines: cellarWines } = useCellar();
   const { chosenWines } = useChosenWines();
-  const { labels } = useLabels();
+  const { preferences } = usePreferences();
+  // Decides the date format (DD/MM vs MM/DD), as on the review screens.
+  const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const { archive: restaurantArchive } = useScanHistory();
 
   // Match this lineup to a restaurant review in Your Restaurants (scan_sessions).
@@ -279,13 +291,14 @@ export default function LineupDetailScreen() {
     ? restaurantArchive.find((a) => a.id === lineup.restaurant_session_id) ?? null
     : null;
 
-  // Pass null to unmatch.
+  // Pass null to unmatch (the "(unmatch)" link under a matched review).
   async function matchRestaurant(sessionId: string | null) {
     if (!lineup || savingMatch) return;
     setSavingMatch(true);
     try {
       await setLineupRestaurant(lineup.id, sessionId);
       invalidateLineup();
+      setLineupSaved(false);
       setRestaurantPickerOpen(false);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -294,7 +307,11 @@ export default function LineupDetailScreen() {
     }
   }
 
-  const filteredRestaurants = restaurantArchive.filter((a) => {
+  // Offer only the visits listed in Your Restaurant Reviews — the same
+  // predicate that list uses, so bare scan sessions never appear here.
+  const withWines = sessionsWithWines(chosenWines);
+  const restaurantVisits = restaurantArchive.filter((v) => isRestaurantVisit(v, withWines));
+  const filteredRestaurants = restaurantVisits.filter((a) => {
     const q = restaurantSearch.trim().toLowerCase();
     if (!q) return true;
     return (a.restaurantName ?? '').toLowerCase().includes(q) || (a.city ?? '').toLowerCase().includes(q);
@@ -306,77 +323,41 @@ export default function LineupDetailScreen() {
   const [included, setIncluded] = useState<Set<number>>(new Set());
   const [savingWines, setSavingWines] = useState(false);
 
-  // Per-wine manual edit: correct one bottle's producer / name / vintage.
+  // Edit wine pop-up (tap a wine name): correct one bottle's details.
   const [editWineIndex, setEditWineIndex] = useState<number | null>(null);
   const [editProducer, setEditProducer] = useState('');
   const [editName, setEditName] = useState('');
+  const [editRegion, setEditRegion] = useState('');
   const [editVintage, setEditVintage] = useState('');
+  const [editStyle, setEditStyle] = useState<string | null>(null);
+  const [editSizeMl, setEditSizeMl] = useState(750);
   const [savingWineEdit, setSavingWineEdit] = useState(false);
+  // "Find Online" swaps the pop-up's fields for a catalogue search.
+  const [findingOnline, setFindingOnline] = useState(false);
 
+  // Details the row doesn't carry yet fall back to its linked cellar wine.
   function openWineEdit(index: number, w: LineupWine) {
+    const linked = w.cellar_wine_id ? cellarWines.find((c) => c.id === w.cellar_wine_id) : undefined;
     setEditWineIndex(index);
     setEditProducer(w.producer ?? '');
     setEditName(w.wine_name ?? '');
+    setEditRegion(w.region ?? linked?.region ?? '');
     setEditVintage(w.vintage != null ? String(w.vintage) : '');
+    setEditStyle(w.style ?? (linked ? inferWineStyle({ style: linked.style, region: linked.region, grape_variety: linked.grape_variety }) : null));
+    setEditSizeMl(w.bottle_size_ml ?? linked?.bottle_size_ml ?? 750);
+    setFindingOnline(false);
   }
 
-  // Your Review → the wine's review in Your Wine Reviews, with Back returning to
-  // THIS lineup. Cellar bottles open their cellar review; off-cellar wines open
-  // the existing review or a new one seeded with the lineup's date.
-  async function goToWineReview(w: LineupWine, conn: ReturnType<typeof findWineConnections>) {
-    if (!lineup) return;
-    const hasReview = conn.reviewCount > 0;
-    if (w.cellar_wine_id) {
-      const param = hasReview ? 'openCellarReview' : 'openCellarReviewInput';
-      router.push(`/wines/chosen?${param}=${w.cellar_wine_id}${backToLineup}` as any);
-      return;
-    }
-    const chosen = [...conn.reviewedChosen].sort(
-      (a, b) => new Date(b.chosen_at ?? 0).getTime() - new Date(a.chosen_at ?? 0).getTime(),
-    )[0];
-    if (chosen) { router.push(`/wines/chosen?openReview=${chosen.id}${backToLineup}` as any); return; }
-    // Brand-new review — fetch a web label so the review card has a thumbnail
-    // (the user can swap it later). slu=1 carries it via the label store.
-    setGenIntel(true);
-    let img: string | null = null;
-    try { img = await fetchAutoLabelUri(w.producer, w.wine_name); } catch { /* non-fatal */ }
-    setGenIntel(false);
-    useLabelStore.getState().setImageUri(img);
-    const sl = img ? '&slu=1' : '';
-    const seed = `sp=${encodeURIComponent(w.producer ?? '')}&sw=${encodeURIComponent(w.wine_name ?? '')}&sv=${encodeURIComponent(w.vintage != null ? String(w.vintage) : '')}&sd=${lineupDay(lineup.archived_at)}`;
-    router.push(`/wines/chosen?seedAdd=1${sl}&${seed}${backToLineup}` as any);
-  }
-
-  // View Wine Intel → generate on demand and open the intel card.
-  async function viewLineupWineIntel(w: LineupWine) {
-    // Fill classification + appellation for a classified Bordeaux château so the
-    // intel card is complete even though the lineup carried neither.
-    const details = withBordeauxInfo({
-      producer: w.producer ?? '',
-      region: '',
-      wineName: w.wine_name || null,
-      vintage: w.vintage != null ? String(w.vintage) : 'NV',
-    });
-    const ls = useLabelStore.getState();
-    ls.reset();
-    ls.setWineDetailsConfirmed(details as any);
-    ls.setIntelligence(null);
-    ls.setImageUri(null);
-    // Header image in the background: the linked cellar wine's own label if it
-    // has one, else a web label. Best-effort — the card shows title-only until
-    // it lands.
-    void (async () => {
-      let img: string | null = null;
-      if (w.cellar_wine_id) {
-        const cw = cellarWines.find((c) => c.id === w.cellar_wine_id);
-        if (cw?.label_image_path) { try { img = await labelSignedUrl(cw.label_image_path); } catch { /* fall through */ } }
-      }
-      if (!img) { try { img = await fetchAutoLabelUri(w.producer, w.wine_name); } catch { /* photoless */ } }
-      if (img) useLabelStore.getState().setImageUri(img);
-    })();
-    // gen=1: build intel on the results screen (instant shell). confirmed=1: known
-    // wine, no "which wine?" prompt. noRecent=1: a lineup view isn't a scan.
-    router.push(`/label/results?context=intel&confirmed=1&gen=1&noRecent=1${backToLineup}` as any);
+  // A wine picked from Find Online fills the fields. The user's vintage and
+  // bottle size stay unless the search carried a vintage.
+  function applyFoundWine(r: WineSearchResult) {
+    setEditProducer(r.producer);
+    setEditName(r.wineName ?? '');
+    if (r.region) setEditRegion(r.region);
+    const found = inferWineStyle({ style: r.style ?? r.colour ?? null, region: r.region, grape_variety: r.grape });
+    if (found) setEditStyle(found);
+    if (r.vintage) setEditVintage(r.vintage);
+    setFindingOnline(false);
   }
 
   // After an identity edit, does the row still point at the right cellar wine?
@@ -407,7 +388,16 @@ export default function LineupDetailScreen() {
       };
       const link = await relinkAfterEdit(prev, edited);
       const saved = await updateWines((ws) => ws.map((w, i) => (
-        i === index ? { ...w, producer: edited.producer, wine_name: edited.wineName, vintage: edited.vintage, ...link } : w
+        i === index ? {
+          ...w,
+          producer: edited.producer,
+          wine_name: edited.wineName,
+          vintage: edited.vintage,
+          region: editRegion.trim() || null,
+          style: editStyle,
+          bottle_size_ml: editSizeMl,
+          ...link,
+        } : w
       )));
       if (!saved) return;
       setEditWineIndex(null);
@@ -483,38 +473,18 @@ export default function LineupDetailScreen() {
   const shareCardRef = useRef<View>(null);
   const capturedRef = useRef(false);
 
-  function openNoteEditor() {
-    setNoteDraft(note);
-    setNoteEditorOpen(true);
-  }
-
-  async function saveNoteFromEditor() {
-    if (!lineup || !begin('note')) return;
-    setSavingNote(true);
-    try {
-      await setLineupNote(lineup.id, noteDraft);
-      setNote(noteDraft);
-      invalidateLineup();
-      setNoteEditorOpen(false);
-    } catch (err) {
-      showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingNote(false);
-      end('note');
-    }
-  }
-
   // Replace the lineup photo — pick from the library, upload, repoint image_path.
   async function changeLineupPhoto() {
     if (!lineup || !session?.user.id || !begin('photo')) return;
     try {
       if (!(await ensureMediaPermission('library'))) return;
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      const res = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
       if (res.canceled || !res.assets?.[0]) return;
       setReplacingPhoto(true);
       const path = await replaceLineupImage(session.user.id, lineup.id, res.assets[0].uri);
       setPhotoUrl(await lineupSignedUrl(path)); setPhotoFailed(false);
       invalidateLineup();
+      setLineupSaved(false);
     } catch (err) {
       showAlert({ title: 'Could not update photo', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -580,38 +550,41 @@ export default function LineupDetailScreen() {
     </View>
   );
 
-  const dateStr = new Date(lineup.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const stamp = [dateStr, lineup.city, lineup.venue].filter(Boolean).join(' · ');
   const wines: LineupWine[] = lineup.wines ?? [];
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        {/* Back on its own row; Export sits at the foot of the page. */}
+        {/* Back on its own row; Share and Save Lineup sit at the foot of the page. */}
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 16 }}>
             <Text accessibilityLabel="Back" style={styles.back}>←</Text>
           </TouchableOpacity>
         </View>
-        {/* The lineup's own name IS the title (no fixed "Your Lineup" heading) —
-            saved on blur. */}
+        {/* The lineup's own name IS the title (no fixed "Your Lineup" heading). */}
         <TextInput
           style={styles.titleInput}
           value={name}
-          onChangeText={setName}
-          onEndEditing={saveNameInline}
-          onSubmitEditing={saveNameInline}
-          placeholder="Title"
+          onChangeText={edited(setName)}
+          onEndEditing={() => saveOnBlur(persistTitle, 'Could not save title')}
+          placeholder="Add Your Title"
           placeholderTextColor={colors.textMuted}
           returnKeyType="done"
           textAlign="center"
           spellCheck={false}
           autoCorrect={false}
         />
-        {/* Date · Location · Venue on one line (tap to edit all three). */}
-        <TouchableOpacity style={styles.headerStampWrap} onPress={openStampEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location · venue'}</Text>
-        </TouchableOpacity>
+        {/* Date · city · venue, editable in place — the same line as the wine
+            review input screens. */}
+        <View style={styles.headerStampWrap}>
+          <ReviewedLineEditable
+            date={dateDraft} onDate={edited(setDateDraft)}
+            city={cityDraft} onCity={edited(setCityDraft)}
+            venue={venueDraft} onVenue={edited(setVenueDraft)}
+            currency={currency}
+            onEndEditing={() => saveOnBlur(persistStamp, 'Could not save')}
+          />
+        </View>
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
@@ -632,26 +605,30 @@ export default function LineupDetailScreen() {
             </View>
           </View>
 
-          {/* Your Lineup Notes & Musings — the heading, then the note as copy (tap
-              to edit). The mic + trash live in the editor popup only, so they don't
-              sit over the saved copy. */}
+          {/* Your Lineup Notes & Musings — an input field styled like the wine
+              review fields, with the mic + clear inside it. */}
           <View style={styles.noteBlock}>
             <Text style={styles.noteHeadLabel}>Your Lineup Notes & Musings</Text>
-            {note.trim() ? (
-              <TouchableOpacity onPress={openNoteEditor} activeOpacity={0.7}>
-                <Text style={styles.noteBodyText}>{note}</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={openNoteEditor} activeOpacity={0.7}>
-                <Text style={styles.notePlaceholder}>Tap to write, or use the mic to dictate your thoughts on this lineup…</Text>
-              </TouchableOpacity>
-            )}
+            <View>
+              <TextInput
+                style={styles.noteInput}
+                value={note}
+                onChangeText={edited(setNote)}
+                onEndEditing={() => saveOnBlur(persistNote, 'Could not save note')}
+                placeholder="Tap to write, or use the mic to dictate your thoughts on this lineup…"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                textAlignVertical="top"
+              />
+              <MicButton style={styles.noteMic} value={note} onChangeText={edited(setNote)} onClear={() => edited(setNote)('')} domain="note" serverCorrect />
+            </View>
           </View>
 
           {/* Wines */}
           <View style={styles.winesHeaderRow}>
             <Text style={styles.sectionLabel}>Wines in this lineup</Text>
           </View>
+          {wines.length > 0 ? <Text style={styles.sectionHint}>Tap a wine name to edit it</Text> : null}
           {wines.length === 0 ? (
             <View>
               <Text style={styles.muted}>No bottles identified yet{lineup.bottle_count ? ` (${lineup.bottle_count} bottle${lineup.bottle_count === 1 ? '' : 's'} in the photo)` : ''}. Let Vinster read the labels and confirm what's in this lineup.</Text>
@@ -662,20 +639,20 @@ export default function LineupDetailScreen() {
           ) : (
             <View style={styles.wineList}>
               {wines.map((w, i) => {
-                // Whether this wine has been reviewed anywhere (any vintage).
-                const conn = findWineConnections(
-                  { producer: w.producer, wineName: w.wine_name, vintage: w.vintage },
-                  { labels, chosenWines, cellarWines },
-                );
-                // Region · grape from the linked cellar wine, so the row mirrors the
-                // Full Cellar List format (name line + region/grape line).
+                // Detail line beneath the name, as on the Full Cellar List: the
+                // row's own region (else the linked cellar wine's), grape, colour,
+                // and the bottle size when it isn't a standard 75cl.
                 const linkedCellar = w.cellar_wine_id ? cellarWines.find((c) => c.id === w.cellar_wine_id) : null;
-                const subParts = [linkedCellar?.region, linkedCellar?.grape_variety].filter(Boolean) as string[];
+                const subParts = [
+                  w.region ?? linkedCellar?.region,
+                  linkedCellar?.grape_variety,
+                  w.style,
+                  w.bottle_size_ml && w.bottle_size_ml !== 750 ? bottleSizeLabel(w.bottle_size_ml) : null,
+                ].filter(Boolean) as string[];
                 return (
                 <View key={`${w.cellar_wine_id ?? 'x'}-${i}`} style={styles.wineRow}>
                   <View style={{ flex: 1 }}>
-                    {/* Tap the name to edit the wine (correct a mis-read). Matches the
-                        Full Cellar List's name + region/grape formatting. */}
+                    {/* Tap the name to open the Edit wine pop-up. */}
                     <TouchableOpacity onPress={() => openWineEdit(i, w)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
                       <Text style={styles.wineName}>
                         {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
@@ -694,17 +671,6 @@ export default function LineupDetailScreen() {
                         <Text style={styles.stampTag}>Off Cellar</Text>
                       </TouchableOpacity>
                     )}
-                    {/* Your Review · Wine Intel beneath the stamp. (Editing is via
-                        the name; archiving via the stamp.) */}
-                    <View style={styles.tagRow}>
-                      <TouchableOpacity onPress={() => goToWineReview(w, conn)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                        <Text style={styles.viewLink}>Your Review</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.tagDot}>·</Text>
-                      <TouchableOpacity onPress={() => viewLineupWineIntel(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                        <Text style={styles.viewLink}>Wine Intel</Text>
-                      </TouchableOpacity>
-                    </View>
                   </View>
                 </View>
                 );
@@ -712,30 +678,39 @@ export default function LineupDetailScreen() {
             </View>
           )}
 
-          {/* Match to a restaurant review — a white button at the foot of the page.
-              Once matched it becomes "Your Restaurant Review" (with an unmatch). */}
+          {/* Foot of the page: Match (white), Share (white), Save Lineup (gold).
+              Once matched, Match becomes "Your Restaurant Review" with an
+              "(unmatch)" link beneath — the only way to unmatch. */}
           {matchedRestaurant ? (
             <View style={styles.matchBottomWrap}>
               <TouchableOpacity
-                style={styles.matchButton}
+                style={[styles.whiteButton, styles.footButton]}
                 onPress={() => router.push(`/restaurants/reviews?openSession=${matchedRestaurant.id}` as any)}
                 activeOpacity={0.85}
               >
-                <Text style={styles.matchButtonText}>Your Restaurant Review</Text>
+                <Text style={styles.whiteButtonText}>Your Restaurant Review</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => matchRestaurant(null)} disabled={savingMatch} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                 <Text style={styles.unmatchLink}>(unmatch)</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={styles.matchButton} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.85}>
-              <Text style={styles.matchButtonText}>Match to a Restaurant Review</Text>
+            <TouchableOpacity style={[styles.whiteButton, styles.footButton]} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.85}>
+              <Text style={styles.whiteButtonText}>Match to a Restaurant Review</Text>
             </TouchableOpacity>
           )}
 
-          {/* Export — a button beneath the Match button. */}
-          <TouchableOpacity style={styles.exportButton} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
-            <Text style={styles.exportButtonText}>{sharing ? 'Exporting…' : 'Export'}</Text>
+          <TouchableOpacity style={[styles.whiteButton, styles.footButton]} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
+            <Text style={styles.whiteButtonText}>{sharing ? 'Sharing…' : 'Share'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.goldButton, styles.footButton, savingLineup && { opacity: 0.5 }]}
+            onPress={saveLineup}
+            disabled={savingLineup || lineupSaved}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.goldButtonText}>{lineupSaved ? 'Lineup Saved' : savingLineup ? 'Saving…' : 'Save Lineup'}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -749,116 +724,76 @@ export default function LineupDetailScreen() {
         subtitle="Pick the wine this bottle came from — Vinster moves it from your cellar to your archive."
       />
 
-      {/* Edit the date + location stamp. */}
-      <Modal visible={stampOpen} transparent animationType="fade" onRequestClose={() => setStampOpen(false)}>
-        <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setStampOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
-            <Text style={styles.stampTitle}>Date, location & venue</Text>
-            <Text style={styles.stampFieldLabel}>Date</Text>
-            <DateInput
-              style={styles.stampInput}
-              valueIso={dateDraft}
-              onChangeIso={setDateDraft}
-              placeholderTextColor={colors.textMuted}
-            />
-            <Text style={styles.stampFieldLabel}>Location</Text>
-            <TextInput
-              style={styles.stampInput}
-              value={cityDraft}
-              onChangeText={setCityDraft}
-              placeholder="City or place"
-              placeholderTextColor={colors.textMuted}
-              spellCheck={false}
-              autoCorrect={false}
-            />
-            <Text style={styles.stampFieldLabel}>Venue</Text>
-            <TextInput
-              style={styles.stampInput}
-              value={venueDraft}
-              onChangeText={setVenueDraft}
-              placeholder="Restaurant, bar or home"
-              placeholderTextColor={colors.textMuted}
-              spellCheck={false}
-              autoCorrect={false}
-            />
-            <TouchableOpacity style={[styles.stampSaveBtn, savingStamp && { opacity: 0.5 }]} onPress={saveStamp} disabled={savingStamp} activeOpacity={0.85}>
-              <Text style={styles.stampSaveText}>{savingStamp ? 'Saving…' : 'Save'}</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Your note — editor popup. Saving converts the note back to text. */}
-      <Modal visible={noteEditorOpen} transparent animationType="fade" onRequestClose={() => setNoteEditorOpen(false)}>
-        <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setNoteEditorOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
-            <View style={styles.dictateRowFlush}>
-              <Text style={[styles.stampTitle, styles.noteEditorTitle]} numberOfLines={2}>Your Lineup Notes & Musings</Text>
-              <View style={styles.noteHeaderRight}>
-                <MicButton value={noteDraft} onChangeText={setNoteDraft} onClear={() => setNoteDraft('')} domain="note" serverCorrect />
-                <TouchableOpacity onPress={() => setNoteEditorOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Cancel">
-                  <Text style={styles.closeX}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <TextInput
-              style={styles.noteEditorInput}
-              value={noteDraft}
-              onChangeText={setNoteDraft}
-              placeholder="A memory from this night — who you were with, what you thought…"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              textAlignVertical="top"
-              autoFocus
-            />
-            <TouchableOpacity style={[styles.stampSaveBtn, savingNote && { opacity: 0.5 }]} onPress={saveNoteFromEditor} disabled={savingNote} activeOpacity={0.85}>
-              <Text style={styles.stampSaveText}>{savingNote ? 'Saving…' : 'Save'}</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Edit one bottle's identity. */}
+      {/* Edit wine pop-up. The backdrop is a sibling (not a wrapper) so the
+          sheet's ScrollView scrolls freely. */}
       <Modal visible={editWineIndex !== null} transparent animationType="fade" onRequestClose={() => setEditWineIndex(null)}>
-        <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setEditWineIndex(null)}>
-          <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
-            {/* White X (top-right) to exit the edit screen. */}
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setEditWineIndex(null)} />
+          <View style={[styles.modalSheet, styles.editSheet]}>
             <TouchableOpacity style={styles.pickerCloseX} onPress={() => setEditWineIndex(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
               <Text style={styles.closeX}>✕</Text>
             </TouchableOpacity>
-            <Text style={styles.stampTitle}>Edit wine</Text>
-            <Text style={styles.stampFieldLabel}>Producer</Text>
-            <TextInput style={styles.stampInput} value={editProducer} onChangeText={setEditProducer} placeholder="e.g. Château Batailley" placeholderTextColor={colors.textMuted} />
-            <Text style={styles.stampFieldLabel}>Wine name</Text>
-            <TextInput style={styles.stampInput} value={editName} onChangeText={setEditName} placeholder="e.g. Grand Cru Classé" placeholderTextColor={colors.textMuted} />
-            <Text style={styles.stampFieldLabel}>Vintage</Text>
-            <TextInput style={styles.stampInput} value={editVintage} onChangeText={(t) => setEditVintage(t.slice(0, 7))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} autoCapitalize="characters" maxLength={7} />
-            <TouchableOpacity style={[styles.stampSaveBtn, savingWineEdit && { opacity: 0.5 }]} onPress={saveWineEdit} disabled={savingWineEdit} activeOpacity={0.85}>
-              <Text style={styles.stampSaveText}>{savingWineEdit ? 'Saving…' : 'Save'}</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
+            <Text style={styles.modalTitle}>Edit wine</Text>
+            {findingOnline ? (
+              // Catalogue-only search (real wines, never generated), pre-filled
+              // with what Vinster already has for this wine.
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <WineSearchInput
+                  initialQuery={[editProducer, editName, editVintage].map((t) => t.trim()).filter(Boolean).join(' ')}
+                  onSelect={applyFoundWine}
+                />
+                <TouchableOpacity style={styles.confirmCancel} onPress={() => setFindingOnline(false)}>
+                  <Text style={styles.confirmCancelText}>Back</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            ) : (
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={styles.fieldLabel}>Producer</Text>
+                <TextInput style={styles.fieldInput} value={editProducer} onChangeText={setEditProducer} placeholder="e.g. Château Batailley" placeholderTextColor={colors.textMuted} />
+                <Text style={styles.fieldLabel}>Wine name</Text>
+                <TextInput style={styles.fieldInput} value={editName} onChangeText={setEditName} placeholder="e.g. Grand Cru Classé" placeholderTextColor={colors.textMuted} />
+                <Text style={styles.fieldLabel}>Region</Text>
+                <TextInput style={styles.fieldInput} value={editRegion} onChangeText={setEditRegion} placeholder="e.g. Pauillac" placeholderTextColor={colors.textMuted} />
+                <Text style={styles.fieldLabel}>Vintage</Text>
+                <TextInput style={styles.fieldInput} value={editVintage} onChangeText={(t) => setEditVintage(t.slice(0, 7))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} autoCapitalize="characters" maxLength={7} />
+                <Text style={styles.fieldLabel}>Colour</Text>
+                {/* Tap the selected colour again to clear it. */}
+                <View style={styles.styleChips}>
+                  {WINE_STYLES.map((st) => {
+                    const on = editStyle === st;
+                    return (
+                      <TouchableOpacity key={st} style={[styles.styleChip, on && styles.styleChipOn]} onPress={() => setEditStyle(on ? null : st)} activeOpacity={0.7}>
+                        <Text style={[styles.styleChipText, on && styles.styleChipTextOn]}>{st}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={styles.fieldLabel}>Bottle size</Text>
+                <BottleSizePicker value={editSizeMl} onChange={setEditSizeMl} />
+                <TouchableOpacity style={[styles.whiteButton, styles.findOnlineButton]} onPress={() => setFindingOnline(true)} activeOpacity={0.85}>
+                  <Text style={styles.whiteButtonText}>Find Online</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.saveButton, savingWineEdit && { opacity: 0.5 }]} onPress={saveWineEdit} disabled={savingWineEdit} activeOpacity={0.85}>
+                  <Text style={styles.saveButtonText}>{savingWineEdit ? 'Saving…' : 'Save'}</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+          </View>
+        </View>
       </Modal>
 
       {/* Match to a restaurant review in Your Restaurants. */}
       <Modal visible={restaurantPickerOpen} transparent animationType="fade" onRequestClose={() => setRestaurantPickerOpen(false)}>
-        <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setRestaurantPickerOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
-            {/* White X (top-right) to cancel. */}
-            <TouchableOpacity style={styles.pickerCloseX} onPress={() => setRestaurantPickerOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Cancel">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRestaurantPickerOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            {/* White X (top-right) dismisses without matching. */}
+            <TouchableOpacity style={styles.pickerCloseX} onPress={() => setRestaurantPickerOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
               <Text style={styles.closeX}>✕</Text>
             </TouchableOpacity>
 
-            {/* No match — just closes the picker. */}
-            <TouchableOpacity onPress={() => setRestaurantPickerOpen(false)} disabled={savingMatch} activeOpacity={0.7} style={styles.noMatchRow}>
-              <Text style={styles.noMatchText} numberOfLines={1}>Don't Match This Wine to a Review</Text>
-            </TouchableOpacity>
-
-            <View style={styles.pickerDivider} />
-
-            <Text style={styles.stampTitle}>Match this lineup to a restaurant review</Text>
+            <Text style={[styles.modalTitle, styles.pickerTitle]}>Match this lineup to a restaurant review</Text>
             <TextInput
-              style={styles.stampInput}
+              style={styles.fieldInput}
               value={restaurantSearch}
               onChangeText={setRestaurantSearch}
               placeholder="Search your restaurant reviews…"
@@ -866,37 +801,29 @@ export default function LineupDetailScreen() {
               spellCheck={false}
               autoCorrect={false}
             />
-            {restaurantArchive.length === 0 ? (
+            {restaurantVisits.length === 0 ? (
               <Text style={styles.muted}>No restaurant reviews yet. Add one in Your Restaurants first.</Text>
             ) : filteredRestaurants.length === 0 ? (
               <Text style={styles.muted}>No restaurants match your search.</Text>
             ) : (
               <ScrollView style={{ maxHeight: 300, marginTop: spacing.sm }} keyboardShouldPersistTaps="handled">
-                {filteredRestaurants.map((a) => {
-                  const active = a.id === lineup.restaurant_session_id;
-                  return (
-                    <TouchableOpacity key={a.id} style={styles.pickerOption} onPress={() => matchRestaurant(a.id)} disabled={savingMatch} activeOpacity={0.7}>
-                      <Text style={[styles.pickerOptionText, active && { color: colors.gold }]} numberOfLines={1}>{a.restaurantName?.trim() || 'Unnamed restaurant'}</Text>
-                      <Text style={styles.pickerOptionMeta} numberOfLines={1}>{[a.city?.trim(), a.capturedAt ? new Date(a.capturedAt).toLocaleDateString('en-GB') : ''].filter(Boolean).join(' · ')}{active ? '  ✓' : ''}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                {filteredRestaurants.map((a) => (
+                  <TouchableOpacity key={a.id} style={styles.pickerOption} onPress={() => matchRestaurant(a.id)} disabled={savingMatch} activeOpacity={0.7}>
+                    <Text style={styles.pickerOptionText} numberOfLines={1}>{a.restaurantName?.trim() || UNNAMED_RESTAURANT}</Text>
+                    <Text style={styles.pickerOptionMeta} numberOfLines={1}>{[a.city?.trim(), a.capturedAt ? new Date(a.capturedAt).toLocaleDateString('en-GB') : ''].filter(Boolean).join(' · ')}</Text>
+                  </TouchableOpacity>
+                ))}
               </ScrollView>
             )}
-            {matchedRestaurant ? (
-              <TouchableOpacity style={styles.pickerRemove} onPress={() => matchRestaurant(null)} disabled={savingMatch} activeOpacity={0.7}>
-                <Text style={styles.pickerRemoveText}>Remove match</Text>
-              </TouchableOpacity>
-            ) : null}
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
       {/* Confirm the wines Vinster identified — tap a wine to include/exclude. */}
       <Modal visible={confirmWines !== null} transparent animationType="fade" onRequestClose={() => setConfirmWines(null)}>
-        <View style={styles.stampOverlay}>
-          <View style={[styles.stampSheet, { maxHeight: '82%' }]}>
-            <Text style={styles.stampTitle}>Confirm the wines</Text>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { maxHeight: '82%' }]}>
+            <Text style={styles.modalTitle}>Confirm the wines</Text>
             <Text style={styles.confirmBlurb}>Vinster read these from the photo. Tap to include or exclude, then save.</Text>
             <ScrollView style={{ maxHeight: 380 }}>
               {(confirmWines ?? []).map((w, i) => {
@@ -919,8 +846,8 @@ export default function LineupDetailScreen() {
                 );
               })}
             </ScrollView>
-            <TouchableOpacity style={[styles.stampSaveBtn, (savingWines || included.size === 0) && { opacity: 0.5 }]} onPress={saveIdentifiedWines} disabled={savingWines || included.size === 0} activeOpacity={0.85}>
-              <Text style={styles.stampSaveText}>{savingWines ? 'Saving…' : `Save ${included.size} wine${included.size === 1 ? '' : 's'}`}</Text>
+            <TouchableOpacity style={[styles.saveButton, (savingWines || included.size === 0) && { opacity: 0.5 }]} onPress={saveIdentifiedWines} disabled={savingWines || included.size === 0} activeOpacity={0.85}>
+              <Text style={styles.saveButtonText}>{savingWines ? 'Saving…' : `Save ${included.size} wine${included.size === 1 ? '' : 's'}`}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.confirmCancel} onPress={() => setConfirmWines(null)} disabled={savingWines}>
               <Text style={styles.confirmCancelText}>Cancel</Text>
@@ -939,16 +866,6 @@ export default function LineupDetailScreen() {
         </View>
       ) : null}
 
-      {genIntel ? (
-        <View style={StyleSheet.absoluteFill}>
-          <SearchProgress
-            title="Loading wine intel…"
-            subtitle="Vinster needs a few seconds"
-            body="Vinster is pulling together this wine's scores, value and drinking window."
-            durationMs={20000}
-          />
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -956,23 +873,14 @@ export default function LineupDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.md },
-  header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   backLink: { fontSize: 15, color: colors.gold },
 
-  // "Title" — the lineup's own name, the large heading (was the page title's font); stays gold.
+  // The lineup's own name — the large gold heading.
   titleInput: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, paddingVertical: 4, marginTop: spacing.xs, alignSelf: 'stretch', paddingHorizontal: spacing.xl },
-  headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.xs },
-
-  unmatchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
-
-  pickerOption: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  pickerOptionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
-  pickerOptionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  pickerRemove: { alignItems: 'center', paddingTop: spacing.md },
-  pickerRemoveText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
-  headerStamp: { fontSize: 17, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center' },
+  headerStampWrap: { marginTop: spacing.sm },
 
   photoWrap: { alignItems: 'center', paddingTop: spacing.md },
   // The touchable owns the 92% width; the image fills it (a percentage width on
@@ -983,17 +891,66 @@ const styles = StyleSheet.create({
   photoBadges: { position: 'absolute', top: spacing.lg, right: '8%', flexDirection: 'row', gap: spacing.sm },
   photoBadge: { backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18, minWidth: 34, height: 32, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
 
-  stampOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  stampSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
-  stampTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.4, marginBottom: spacing.md },
-  stampFieldLabel: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, marginBottom: 4, marginTop: spacing.sm, letterSpacing: 0.3 },
-  stampInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  stampSaveBtn: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)' },
-  stampSaveText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Section headers — gold, all-caps, matching the stats-bar type.
+  sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
+  sectionHint: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, paddingHorizontal: spacing.xl, marginTop: -spacing.xs, marginBottom: spacing.xs },
   winesHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+
+  noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
+  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.sm },
+  // Same field as the wine review inputs (WineReviewFields), with room on the
+  // right for the mic + clear pinned inside it.
+  noteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, paddingRight: 92, minHeight: 100, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
+  noteMic: { position: 'absolute', top: spacing.sm, right: spacing.sm },
+
+  wineList: { paddingHorizontal: spacing.xl },
+  wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  wineName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
+  // Detail line beneath the name — mirrors the Full Cellar List row detail.
+  wineDetail: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  // "Your Cellar" / "Off Cellar" status stamp.
+  stampTag: { alignSelf: 'flex-start', fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
+  muted: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, lineHeight: 20 },
 
   identifyBtn: { marginHorizontal: spacing.xl, marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)' },
   identifyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+
+  // Buttons: white outline (secondary actions) and gold outline (saving).
+  whiteButton: { alignItems: 'center', borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl },
+  whiteButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
+  goldButton: { alignItems: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: 'rgba(224,184,74,0.12)' },
+  goldButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
+  // The foot-of-page buttons share one width so they line up.
+  footButton: { alignSelf: 'center', minWidth: '82%', marginTop: spacing.md },
+  matchBottomWrap: { alignItems: 'center', gap: spacing.sm },
+  unmatchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
+
+  // Pop-ups (Edit wine, restaurant match, confirm identified wines).
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
+  modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.4, marginBottom: spacing.md },
+  closeX: { fontFamily: fonts.bodyRegular, fontSize: 20, color: '#FFFFFF' },
+  pickerCloseX: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 2, padding: 4 },
+  fieldLabel: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, marginBottom: 4, marginTop: spacing.sm, letterSpacing: 0.3 },
+  fieldInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
+  saveButton: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)' },
+  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+
+  // Edit wine: taller than the other pop-ups, so its fields scroll.
+  editSheet: { maxHeight: '88%' },
+  styleChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  styleChip: { borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  styleChipOn: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)' },
+  styleChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+  styleChipTextOn: { color: colors.gold },
+  findOnlineButton: { marginTop: spacing.lg },
+
+  // Restaurant-match picker. The title is padded clear of the close X.
+  pickerTitle: { paddingHorizontal: spacing.lg },
+  pickerOption: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  pickerOptionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  pickerOptionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+
   confirmBlurb: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.md, lineHeight: 20 },
   confirmRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   confirmCheck: { fontSize: 22, color: colors.textMuted },
@@ -1004,52 +961,5 @@ const styles = StyleSheet.create({
   confirmCancel: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.xs },
   confirmCancelText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted },
 
-  dictateRowFlush: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  // Section headers — yellow, all-caps, matching the stats-bar type.
-  sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
-  noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
-
-  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.sm },
-
-  // Saved note reads back as copy (like a review); tap to edit in the popup.
-  // Match the Date · Location · Venue line's font (headingSemibold) so the note
-  // reads consistently with the rest of the header, not in an odd body face.
-  noteBodyText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, lineHeight: 22 },
-  notePlaceholder: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.textMuted, lineHeight: 22 },
-  // White "match to a restaurant review" button at the foot of the page.
-  matchBottomWrap: { alignItems: 'center', gap: spacing.sm },
-  // Match + Export are the two foot buttons — same width so Export isn't a small
-  // pill next to the long "Match to a Restaurant Review" label.
-  matchButton: { alignSelf: 'center', alignItems: 'center', minWidth: '82%', borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.xl },
-  matchButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
-  exportButton: { alignSelf: 'center', alignItems: 'center', minWidth: '82%', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(224,184,74,0.12)' },
-  exportButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
-
-  // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
-  noteHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 0 },
-  // In the editor popup's header row the title must shrink so the mic + close
-  // icons stay on the sheet instead of overflowing to the right.
-  noteEditorTitle: { flexShrink: 1, textAlign: 'left', marginBottom: 0, marginRight: spacing.sm },
-  closeX: { fontFamily: fonts.bodyRegular, fontSize: 20, color: '#FFFFFF' },
-  // Restaurant-match picker: white X, a "no match" dismiss link, then a divider.
-  pickerCloseX: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 2, padding: 4 },
-  noMatchRow: { paddingTop: spacing.md, paddingBottom: spacing.sm, paddingHorizontal: spacing.lg, alignItems: 'center' },
-  noMatchText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textAlign: 'center', textDecorationLine: 'underline' },
-  pickerDivider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
-
-  noteEditorInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 100, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
-
-  wineList: { paddingHorizontal: spacing.xl },
-  wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  wineName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
-  // Region · grape line beneath the name — mirrors the Full Cellar List row detail.
-  wineDetail: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
-  tagRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 4 },
-
-  // Non-link status stamps — all yellow (Off-cellar, Not reviewed, Archived).
-  stampTag: { alignSelf: 'flex-start', fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
-  viewLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
-  tagDot: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted },
-  muted: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, lineHeight: 20 },
   offscreen: { position: 'absolute', left: -9999, top: -9999 },
 });

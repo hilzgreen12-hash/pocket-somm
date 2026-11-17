@@ -15,7 +15,7 @@ function norm(s: string | null | undefined): string {
 
 // Tolerant accessor — rows come from the cellar (wine_name) or from review-style
 // callers (wineName), so accept either field name for the cuvée name.
-interface WineLike {
+export interface WineLike {
   producer?: string | null;
   wine_name?: string | null;
   wineName?: string | null;

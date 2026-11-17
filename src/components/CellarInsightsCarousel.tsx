@@ -16,6 +16,7 @@ import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, placeholderL
 import { splitPersonality } from '../utils/personalityText';
 import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+import type { CellarWine } from '../types/wine';
 
 // Vinster's Insights is NON-cellar: a data-driven, per-user strip of what the
 // user has been DOING in the app — kept tight at six tiles. Only tiles with real
@@ -90,17 +91,18 @@ export function CellarInsightsCarousel() {
     },
   });
 
-  // Bottles archived in the last month — count + labels for the collage.
+  // Bottles archived in the last month — every one counts; the newest labels
+  // make the collage.
   const { data: archivedLM = [] } = useQuery({
     queryKey: ['insights-archived-month', userId],
     enabled: !!userId,
     queryFn: async () => {
       const since = new Date(Date.now() - MONTH_MS).toISOString();
       const { data } = await supabase.from('cellar_wines')
-        .select('id, label_image_path, quantity, archived_at')
+        .select('label_image_path, quantity')
         .eq('user_id', cellarOwner(userId!)).not('archived_at', 'is', null).gte('archived_at', since)
-        .order('archived_at', { ascending: false }).limit(12);
-      return data ?? [];
+        .order('archived_at', { ascending: false });
+      return (data ?? []) as Pick<CellarWine, 'label_image_path' | 'quantity'>[];
     },
   });
 
@@ -156,14 +158,14 @@ export function CellarInsightsCarousel() {
   }
 
   // 2) Bottles archived last month (collage of their labels). Needs ≥1 label.
-  const archivedBottles = archivedLM.reduce((s: number, w: any) => s + (w.quantity ?? 0), 0);
-  const archivedThumbs = archivedLM.map((w: any) => w.label_image_path).filter(Boolean) as string[];
+  const archivedBottles = archivedLM.reduce((s, w) => s + (w.quantity ?? 0), 0);
+  const archivedThumbs = archivedLM.map((w) => w.label_image_path).filter((p): p is string => !!p).slice(0, 12);
   if (archivedBottles > 0 && archivedThumbs.length > 0) {
     tiles.push({
       key: 'archived',
       title: 'Drank Last Month', meta: `${archivedBottles} bottle${archivedBottles === 1 ? '' : 's'}`,
       collage: archivedThumbs,
-      onTap: () => router.push('/cellar/archive' as any),
+      onTap: () => router.push('/cellar/list?archived=1'),
     });
   }
 

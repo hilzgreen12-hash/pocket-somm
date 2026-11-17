@@ -24,7 +24,7 @@ import type { LibraryFilter } from '../../src/api/libraryFilters';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { foldAccents } from '../../src/utils/wineIdentity';
 import {
-  UNNAMED_RESTAURANT, formatVisitDate, hasRestaurantReview, isRestaurantVisit, sessionsWithWines, visitStats,
+  UNNAMED_RESTAURANT, formatVisitDate, hasRestaurantReview, isRestaurantVisit, lineupForVisitHref, sessionsWithWines, visitStats,
 } from '../../src/utils/restaurantReview';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -195,12 +195,15 @@ export default function RestaurantReviewsScreen() {
   }
 
   // Close the form for another screen and come back to this visit after —
-  // used by Find Online, which can't be shown over the form's Modal.
-  async function leaveForPhotoSearch(saveDraft: () => Promise<void>) {
+  // used by Find Online and "+ Add a lineup", which can't show over the form's Modal.
+  async function leaveFormAndResume(saveDraft: () => Promise<void>) {
     if (!editing) return;
-    await saveDraft();
+    // The draft saves in the background so the next screen opens at once
+    // (waiting on it left the screen doing nothing for a moment).
+    const saving = saveDraft();
     resumeOnFocusRef.current = editing.id;
     setEditing(null);
+    saving.catch((err) => showAlert({ title: 'Could not save your review', body: err instanceof Error ? err.message : 'Please try again.' }));
   }
 
   function handleLongPressRestaurant(item: RestaurantVisit) {
@@ -663,8 +666,19 @@ export default function RestaurantReviewsScreen() {
             restaurant: (name || editing.restaurantName) ?? null,
             city: (city || editing.city) ?? null,
             hasPhoto: !!editing.restaurantPhotoPath,
-            leaveModal: () => leaveForPhotoSearch(saveDraft),
+            leaveModal: () => leaveFormAndResume(saveDraft),
           })}
+          onAddLineup={async (upload, name, city, saveDraft) => {
+            const visit = editing;
+            await leaveFormAndResume(saveDraft);
+            setTimeout(() => router.push(lineupForVisitHref({
+              sessionId: visit.id,
+              venue: name || visit.restaurantName,
+              city: city || visit.city,
+              capturedAt: visit.capturedAt,
+              upload,
+            }) as any), DISMISS_DELAY_MS);
+          }}
           wines={editingWines.map((cw) => ({
             producer: cw.producer,
             wineName: cw.wine_name,

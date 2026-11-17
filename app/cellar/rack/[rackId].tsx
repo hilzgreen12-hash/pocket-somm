@@ -1,37 +1,39 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard, Animated } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { showAlert } from '../../../src/components/AppAlert';
 import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
 import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
-import { useLocalSearchParams, router, useNavigation } from 'expo-router';
+import { useLocalSearchParams, router, useNavigation, useFocusEffect } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useLineupStore } from '../../../src/stores/lineupStore';
-import { useCellar } from '../../../src/hooks/useCellar';
+import { useCellar, invalidateCellarViews } from '../../../src/hooks/useCellar';
+import { archiveBottles } from '../../../src/services/archiveNight';
+import { todayYmd } from '../../../src/utils/reviewDate';
+import { confirmWineDelete, reviewsOn } from '../../../src/utils/confirmWineDelete';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
-import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
-import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
+import { assignSlot, assignSlots, clearSlot, removeSlotsForWine } from '../../../src/api/racks';
+import { deleteCellarWine } from '../../../src/api/cellar';
 import { fetchStorageLocations } from '../../../src/api/storageLocations';
 import { addLocationPlacement, fetchPlacementsForWine, fetchPlacementsForWines, decrementPlacement, addBinPlacement, releaseBottlesFromPlacements, placedCount } from '../../../src/api/placements';
 import { getBins, getBinCells } from '../../../src/api/bins';
-import { supabase } from '../../../src/api/supabase';
-import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrary } from '../../../src/utils/imagePicker';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { useLabelStore } from '../../../src/stores/labelStore';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { ArchiveNoteModal } from '../../../src/components/ArchiveNoteModal';
-import { foldAccents } from '../../../src/utils/wineIdentity';
+import { foldAccents, matchesWineSearch } from '../../../src/utils/wineIdentity';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
 import { effectiveMaturity } from '../../../src/utils/maturity';
 import { RenameModal } from '../../../src/components/RenameModal';
-import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
+import { CellarCommandModal } from '../../../src/components/CellarCommandModal';
 import { LabelThumb } from '../../../src/components/LabelThumb';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -91,6 +93,13 @@ export default function RackGridScreen() {
   const qc = useQueryClient();
 
   const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode, pendingMove, setPendingMove } = useRackStore();
+  // Back on the rack means any scan / upload / manual add started from an empty
+  // slot has ended (placed or abandoned): drop its target slot(s), so a later
+  // add can't be filed into them.
+  useFocusEffect(useCallback(() => {
+    useRackStore.getState().setPendingSlot(null);
+    useRackStore.getState().setPendingSlots(null);
+  }, []));
   const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useCustomFilters(rackId);
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
@@ -947,7 +956,7 @@ export default function RackGridScreen() {
   async function handleUploadForSlot() {
     if (!(await ensureMediaPermission('library'))) return;
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      const result = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
       if (result.canceled || !result.assets[0]) return;
       if (!(await ensureConnectionForUpload())) return;
       setSlotUploading(true);
@@ -1253,38 +1262,6 @@ export default function RackGridScreen() {
     }
   }
 
-  // Archive this wine FROM THIS RACK — the redesigned menu confirms archive-vs-delete
-  // once, then acts. Scoped to the bottles physically in THIS rack: a wine split
-  // across a fridge and another rack only loses the bottles stored here (previously
-  // this archived the WHOLE wine and cleared every rack, so archiving from one unit
-  // wrongly took a bottle from another). Only when this rack holds ALL the wine's
-  // bottles does it become a full archive.
-  // FULL archive: free every app-side spot the row holds — all rack slots, all bin
-  // placements, and every alt-cellar placement EXCEPT external (offsite) cellars —
-  // so the archived row carries no stale bottles that would reappear on restore.
-  async function freeAllPlacementsForArchive(wineId: string) {
-    await clearWineFromRacks(wineId);
-    const pls = await fetchPlacementsForWine(wineId);
-    const binIds = pls.filter((p) => p.kind === 'bin').map((p) => p.id);
-    const locPls = pls.filter((p) => p.kind === 'location');
-    let locIds: string[] = [];
-    if (locPls.length > 0) {
-      const locationIds = Array.from(new Set(locPls.map((p) => p.storage_location_id).filter((x): x is string => !!x)));
-      const external = new Set<string>();
-      if (locationIds.length > 0) {
-        const { data, error } = await supabase.from('storage_locations').select('id, is_external').in('id', locationIds);
-        if (error) throw error;
-        for (const l of (data ?? []) as { id: string; is_external: boolean | null }[]) if (l.is_external) external.add(l.id);
-      }
-      locIds = locPls.filter((p) => !p.storage_location_id || !external.has(p.storage_location_id)).map((p) => p.id);
-    }
-    const ids = [...binIds, ...locIds];
-    if (ids.length > 0) {
-      const { error } = await supabase.from('cellar_placements').delete().in('id', ids);
-      if (error) throw error;
-    }
-  }
-
   // PARTIAL removal of `count` bottles issued from THIS rack, leaving `newQty` on
   // the live row. ORDER MATTERS: free the spots FIRST, then lower quantity — the DB
   // trim trigger cuts alt-cellar placements whenever quantity drops below the
@@ -1514,52 +1491,28 @@ export default function RackGridScreen() {
     });
   }
 
-  // Archive `count` bottles of a wine from the rack. Full (count === total) marks
-  // the row archived and clears its slots; partial decrements the live row, clones
-  // an archive row for the removed bottles, and frees that many slots — so the
-  // "Bottles in My Archive" stat stays correct. Note is logged on the removal.
+  // Archive `count` bottles of a wine from the rack, dated and noted from the
+  // archive modal. This rack's bottles leave first — the tapped one, then the
+  // rest here — by freeing their slots up front; archiveBottles then counts them
+  // as loose bottles and only takes any shortfall from elsewhere.
   async function handleSingleArchive(count: number, note: string, date: string) {
     const target = singleArchive;
     if (!target || archiving) return;
-    const { wineId, qty, slot } = target;
-    const today = date;
-    const wine = wines.find((w) => w.id === wineId);
+    const { wineId, slot } = target;
     setArchiving(true);
-    // Optimistically drop `count` of this wine's slots from the grid (the tapped
-    // one first) so the thumbnail disappears immediately.
+    // Drop the bottles from the grid at once; the refetch below puts back any
+    // that didn't go.
     optimisticDropSlots(wineId, count, slot);
     try {
-      await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count, note: note || null });
-      qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
-
-      if (count >= qty) {
-        // Full archive — clear all its spots (racks, bins, home alt cellars), then
-        // mark the row archived.
-        await freeAllPlacementsForArchive(wineId);
-        await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z`, archive_note: note.trim().slice(0, 35) || null } });
-        if (session?.user.id) {
-          qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wineId));
-          qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-          qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-        }
-      } else {
-        // Partial — free that many of its slots in THIS rack first (a wine can
-        // span units), THEN decrement the live row, then clone an archive row
-        // for the removed bottles.
-        await releaseHereThenSetQuantity(wineId, count, qty - count, slot);
-        if (wine) {
-          const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
-          await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, archive_note: note.trim().slice(0, 35) || null });
-        }
-        if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-      }
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      await freeSlotsHere(wineId, count, slot);
+      const { archived, archivedWineId } = await archiveBottles(wineId, count, date, { note: note || undefined });
+      if (archived === 0) throw new Error('This wine is no longer in your cellar. Pull to refresh and try again.');
       setSingleArchive(null);
-      setSavedMsg(count >= qty ? 'Wine archived' : `${count} bottle${count === 1 ? '' : 's'} archived`);
+      setSavedMsg(archivedWineId === wineId ? 'Wine archived' : `${archived} bottle${archived === 1 ? '' : 's'} archived`);
     } catch (err) {
       showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
+      invalidateCellarViews(qc);
       setArchiving(false);
     }
   }
@@ -1584,7 +1537,7 @@ export default function RackGridScreen() {
     } else if (spans) {
       confirmDeleteOneFromRack(wine.id, wine.wine_name, total, slot);
     } else {
-      confirmDeleteWine(wine.id, wine.wine_name, total);
+      confirmDeleteWine(wine);
     }
   }
 
@@ -1601,11 +1554,10 @@ export default function RackGridScreen() {
             try {
               await freeSlotsHere(wineId, 1, slot);
               await updateWine.mutateAsync({ id: wineId, updates: { quantity: Math.max(0, total - 1) } });
-              qc.invalidateQueries({ queryKey: ['cellar'] });
-              qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
             } catch (err) {
               showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            } finally {
+              invalidateCellarViews(qc);
             }
           },
         },
@@ -1614,39 +1566,42 @@ export default function RackGridScreen() {
     });
   }
 
-  function confirmDeleteWine(wineId: string, wineName: string, qty: number) {
-    showAlert({
-      title: qty > 1 ? `Delete all ${qty} bottles?` : 'Delete this wine?',
-      body: qty > 1
-        ? `Permanently remove all ${qty} bottles of ${wineName} from your cellar, but keep your reviews. This can't be undone.`
-        : "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
-      buttons: [
-        {
-          text: 'Delete permanently',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clearWineFromRacks(wineId);
-              const { error } = await supabase.from('cellar_wines').delete().eq('id', wineId);
-              if (error) throw error;
-              // Prune from the cellar cache immediately so the deleted wine
-              // can't linger (and falsely match a fresh add) if the refetch
-              // below is slow or fails — same pattern as the wine card.
-              if (session?.user.id) {
-                qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) =>
-                  (old ?? []).filter((w) => w.id !== wineId));
-              }
-              qc.invalidateQueries({ queryKey: ['cellar'] });
-              qc.invalidateQueries({ queryKey: ['cellar-archive'] });
-              qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-            } catch (err) {
-              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
+  function confirmDeleteWine(wine: CellarWine) {
+    const qty = wine.quantity ?? 1;
+    confirmWineDelete({
+      title: qty > 1 ? `Delete all ${qty} bottles?` : undefined,
+      lead: qty > 1
+        ? `Permanently remove all ${qty} bottles of ${wine.wine_name} from your cellar.`
+        : undefined,
+      reviewsLost: reviewsOn([wine]),
+      deleteText: 'Delete permanently',
+      onDelete: async () => {
+        try {
+          // Deleting the row also empties its rack slots (their wine link is
+          // ON DELETE SET NULL) and removes its placements (cascade).
+          await deleteCellarWine(wine.id);
+          // Prune from the cellar cache immediately so the deleted wine
+          // can't linger (and falsely match a fresh add) if the refetch
+          // below is slow or fails — same pattern as the wine card.
+          if (session?.user.id) {
+            qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) =>
+              (old ?? []).filter((w) => w.id !== wine.id));
+          }
+        } catch (err) {
+          showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+        } finally {
+          invalidateCellarViews(qc);
+        }
+      },
+      onArchive: async () => {
+        try {
+          await archiveBottles(wine.id, Infinity, todayYmd(), { fromUnit: { kind: 'rack', id: rackId! } });
+          invalidateCellarViews(qc);
+          setSavedMsg('Wine archived');
+        } catch (err) {
+          showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+        }
+      },
     });
   }
 
@@ -1675,10 +1630,10 @@ export default function RackGridScreen() {
     });
   }
 
-  // Delete from the multi-bottle modal. `deleteAll` removes the whole listing
-  // (row + all slots). Otherwise it permanently removes the entered count:
-  // decrement the live row and free exactly that many slots. No archive clone —
-  // this is a permanent delete, not an archive.
+  // Delete from the multi-bottle modal: permanently remove the entered count (or
+  // all of them here), freeing exactly that many of this rack's slots before the
+  // count drops. Deleting the wine's last bottles deletes the wine and its
+  // reviews, so that goes through the shared confirmation (with Archive instead).
   async function handleRackDelete(deleteAll: boolean) {
     if (!deleteModal || deleting) return;
     const { wineId, qty, totalQty, slot } = deleteModal;
@@ -1687,35 +1642,27 @@ export default function RackGridScreen() {
       showAlert({ title: 'Invalid', body: `Enter between 1 and ${qty} bottles.` });
       return;
     }
+    const newTotal = totalQty - count;
+    if (newTotal <= 0) {
+      const wine = wines.find((w) => w.id === wineId);
+      setDeleteModal(null);
+      if (wine) confirmDeleteWine(wine);
+      return;
+    }
     setDeleting(true);
-    // Optimistically drop `count` of this wine's slots (the tapped one first) so
-    // the thumbnail vanishes at once.
+    // Drop the bottles from the grid at once; the refetch below puts back any
+    // that didn't go.
     optimisticDropSlots(wineId, count, slot);
     try {
-      const newTotal = totalQty - count;
-      if (newTotal <= 0) {
-        // The wine's last bottles (anywhere) are gone — remove the row + all slots.
-        await clearWineFromRacks(wineId);
-        const { error } = await supabase.from('cellar_wines').delete().eq('id', wineId);
-        if (error) throw error;
-        if (session?.user.id) {
-          qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wineId));
-        }
-        qc.invalidateQueries({ queryKey: ['cellar'] });
-        qc.invalidateQueries({ queryKey: ['cellar-archive'] });
-      } else {
-        // Decrement the live row and free `count` slots FROM THIS RACK only — a
-        // bottle of the same wine in another rack/fridge is never touched.
-        // Free first, then lower quantity (see releaseHereThenSetQuantity).
-        await releaseHereThenSetQuantity(wineId, count, newTotal, slot);
-      }
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      // Only this rack's bottles — the same wine in another rack/fridge is never
+      // touched. Free first, then lower quantity (see releaseHereThenSetQuantity).
+      await releaseHereThenSetQuantity(wineId, count, newTotal, slot);
       setDeleteModal(null);
-      setSavedMsg(newTotal <= 0 ? 'Wine deleted' : `${count} bottle${count === 1 ? '' : 's'} deleted`);
+      setSavedMsg(`${count} bottle${count === 1 ? '' : 's'} deleted`);
     } catch (err) {
       showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
+      invalidateCellarViews(qc);
       setDeleting(false);
     }
   }
@@ -1789,11 +1736,7 @@ export default function RackGridScreen() {
       ? STATUS_SEARCH.filter(({ terms }) => terms.some((t) => t.includes(q) || q.includes(t))).map((s) => s.status)
       : [];
     return winesInRack.filter(({ wine }) =>
-      foldAccents(wine.wine_name).includes(q) ||
-      foldAccents(wine.producer ?? '').includes(q) ||
-      foldAccents(wine.region ?? '').includes(q) ||
-      foldAccents(wine.grape_variety ?? '').includes(q) ||
-      foldAccents(String(wine.vintage ?? '')).includes(q) ||
+      matchesWineSearch([wine.producer, wine.wine_name, wine.region, wine.grape_variety, wine.vintage], q) ||
       statuses.includes(effectiveMaturity(wine))
     );
   }, [winesInRack, searchQuery]);
@@ -2683,7 +2626,7 @@ export default function RackGridScreen() {
       />
 
       {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={rack?.name ?? null} scope={rackId ? { kind: 'rack', id: rackId } : undefined} hereWineIds={Array.from(new Set(slots.map((s) => s.cellar_wine_id).filter(Boolean) as string[]))} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} locationName={rack?.name ?? null} scope={rackId ? { kind: 'rack', id: rackId } : undefined} hereWineIds={Array.from(new Set(slots.map((s) => s.cellar_wine_id).filter(Boolean) as string[]))} />
 
       {/* Archive — the shared modal: how many (if you own more than one) + note. */}
       <ArchiveNoteModal

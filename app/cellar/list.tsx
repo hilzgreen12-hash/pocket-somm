@@ -1,198 +1,499 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput, type ListRenderItem } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCellar, useArchive } from '../../src/hooks/useCellar';
-import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
+import { useCellar, useArchive, invalidateCellarViews } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { updateCellarIntelBatch, isMissingIntel } from '../../src/services/bulkIntel';
-import { SearchProgress } from '../../src/components/SearchProgress';
-import { useLabelStore } from '../../src/stores/labelStore';
-import { prepareImageBase64, scanLabel } from '../../src/api/label';
-import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWine } from '../../src/api/cellar';
-import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
-import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
+import { useCellarContext } from '../../src/hooks/useCellarContext';
+import {
+  useCellarListFilters, locationOptions, PRICE_SORT_OPTIONS, SCORE_SORT_OPTIONS, COLOUR_OPTIONS, MATURITY_OPTIONS,
+  type SortMode, type CellarListRowData,
+} from '../../src/hooks/useCellarListFilters';
+import { updateCellarIntelBatch } from '../../src/services/bulkIntel';
+import { archiveBottles } from '../../src/services/archiveNight';
+import { moveExternalBottlesHome, moveWholeWineHome, type HomeDestination } from '../../src/services/moveBottles';
+import { backfillMissingMaturities } from '../../src/services/maturityBackfill';
+import { deleteCellarWine } from '../../src/api/cellar';
+import { getBins, getBinOfCell } from '../../src/api/bins';
+import { fetchCellarLocations, createCellarLocation, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
-import { fetchPlacementsForWines, fetchPlacementsForWine, placedCount, releaseBottlesFromPlacements, reconcileLegacyLocationWines, reconcileQuantityBelowPlacements, deleteLocationKeepWines, deleteLocationAndWines, decrementPlacement, addLocationPlacement, type CellarPlacement } from '../../src/api/placements';
+import {
+  fetchPlacementsForWines, reconcileLegacyLocationWines, reconcileQuantityBelowPlacements,
+  deleteLocationKeepWines, deleteLocationAndWines, type CellarPlacement,
+} from '../../src/api/placements';
+import { todayYmd } from '../../src/utils/reviewDate';
+import { confirmWineDelete, reviewsOn } from '../../src/utils/confirmWineDelete';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
+import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
+import { useReturnToCellar } from '../../src/components/winecard/cellar/useReturnToCellar';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
-import { LabelThumb } from '../../src/components/LabelThumb';
-import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
+import { SearchProgress } from '../../src/components/SearchProgress';
 import { RenameModal } from '../../src/components/RenameModal';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
-import { foldAccents } from '../../src/utils/wineIdentity';
-import { wineHeaderLine } from '../../src/utils/wineHeader';
-import { inferWineStyle } from '../../src/utils/wineStyle';
-import { effectiveMaturity } from '../../src/utils/maturity';
-import { backfillMissingMaturities } from '../../src/services/maturityBackfill';
-import { inferCountry } from '../../src/utils/wineCountry';
-import { baseRegionGroup } from '../../src/utils/wineRegionGroup';
-import { formatCurrency } from '../../src/constants/currency';
-import { bottleSizeCl } from '../../src/components/BottleSizePicker';
+import { CellarListRow } from '../../src/components/cellarList/CellarListRow';
+import { MoveHomeModal } from '../../src/components/cellarList/MoveHomeModal';
+import { AddWineChooser } from '../../src/components/cellarList/AddWineChooser';
+import { FilterSheet, type FilterSheetOption } from '../../src/components/cellarList/FilterSheet';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
-import type { CellarWine } from '../../src/types/wine';
-import { groupWinesByIdentity } from '../../src/utils/wineMatch';
-import { PER_75CL, bottleValue } from '../../src/utils/bottleValue';
+import type { CellarWine, StorageLocation, WineRack } from '../../src/types/wine';
 
-type SortMode =
-  | 'recent'
-  | 'est_desc' | 'est_asc'
-  | 'purch_desc' | 'purch_asc'
-  | 'critic_desc' | 'critic_asc'
-  | 'your_desc' | 'your_asc';
+// Your Cellar List — and, opened with ?archived=1, Your Cellar Archive (the
+// archived wines, one line per wine). ?add=1 opens the Add Wine chooser;
+// ?region= pre-filters to a region group (from Cellar Insights' Most Collected).
 
-// The list defaults to most-recently-added (handled implicitly); the Price
-// and Score chips each offer the four directional sorts plus a reset.
-const PRICE_SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'est_desc',   label: 'Estimated Value Descending' },
-  { value: 'est_asc',    label: 'Estimated Value Ascending' },
-  { value: 'purch_desc', label: 'Purchase Price Descending' },
-  { value: 'purch_asc',  label: 'Purchase Price Ascending' },
-];
+type Sheet = 'location' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | null;
 
-const SCORE_SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'critic_desc', label: 'Critic Score Descending' },
-  { value: 'critic_asc',  label: 'Critic Score Ascending' },
-  { value: 'your_desc',   label: 'Your Score Descending' },
-  { value: 'your_asc',    label: 'Your Score Ascending' },
-];
+const NEW_LOCATION = 'new_location';
+const INTEL_BATCH_SIZE = 25;
 
-const PRICE_SORTS: SortMode[] = ['est_desc', 'est_asc', 'purch_desc', 'purch_asc'];
-const SCORE_SORTS: SortMode[] = ['critic_desc', 'critic_asc', 'your_desc', 'your_asc'];
+// Stable empty defaults, so the memoised filters don't recompute while a query loads.
+const NO_PLACEMENTS: CellarPlacement[] = [];
+const NO_STORAGE: StorageLocation[] = [];
+const NO_CUSTOM: CustomFilter[] = [];
+const NO_BINS: WineRack[] = [];
+const NO_CELLS = new Map<string, string>();
 
-const COLOUR_OPTIONS = ['All', 'Red', 'White', 'Sparkling', 'Other'];
+// The two self-heal scans below read the whole cellar, so each runs once per
+// app session per cellar rather than on every visit.
+const healedThisSession = new Set<string>();
+function firstTimeThisSession(key: string): boolean {
+  if (healedThisSession.has(key)) return false;
+  healedThisSession.add(key);
+  return true;
+}
 
-// Maturity (drinking-window) filter. Values match the stored
-// `drinking_window_status` that the racks colour-code and Quick Cellar
-// Stats buckets by. Ordered youngest → oldest so the dropdown reads
-// as a natural maturity progression.
-const MATURITY_OPTIONS: { value: string; label: string }[] = [
-  { value: 'All', label: 'All maturities' },
-  { value: 'too_young', label: 'Too Young' },
-  { value: 'approaching', label: 'Early but Approachable' },
-  { value: 'peak', label: 'Sweet Spot' },
-  { value: 'declining', label: 'In Decline' },
-];
+const winesLabel = (n: number) => `${n} ${n === 1 ? 'wine' : 'wines'}`;
+const bottlesLabel = (n: number) => `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
+const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Please try again.');
 
-type FilterField = 'location' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | null;
+type MoveHomeTarget =
+  | { kind: 'one'; wine: CellarWine; externalPls: CellarPlacement[]; max: number }
+  | { kind: 'selected' };
 
-// Live cellar vs archived. Archived wines are viewed ONLY in the dedicated
-// Cellar Archive (this same screen opened with ?archived=1); the Full Cellar
-// List always hides them. There is no user-facing chip — the value is fixed by
-// the route (see isArchiveView below).
-type ArchivedFilter = 'hide' | 'include' | 'only';
+type LocationPicker = { mode: 'new' } | { mode: 'edit'; location: CustomFilter };
 
-export default function FullCellarListScreen() {
+export default function CellarListScreen() {
   const { session } = useAuth();
-  const { wines, isLoading, isError, updateWine } = useCellar();
-  const { wines: archivedWines } = useArchive();
-  const { racks } = useRacks();
-  const qc = useQueryClient();
-
   const userId = session?.user.id;
+  const qc = useQueryClient();
+  const { role, ownerId } = useCellarContext();
+  const canEdit = role !== 'view';
+  const cellarId = ownerId ?? userId;
   const { preferences } = usePreferences();
-  const [intelUpdating, setIntelUpdating] = useState(false);
-  const [intelProgress, setIntelProgress] = useState({ done: 0, total: 0 });
-  // Deleting a location's wines (a big import can be ~1000 rows, deleted one-by-one)
-  // — show a real percentage so it never looks frozen.
-  const [deleting, setDeleting] = useState(false);
-  const [deleteProgress, setDeleteProgress] = useState({ done: 0, total: 0 });
-  // Abort controller so the user can "Save Progress and Exit" a long intel update.
-  const intelAbortRef = useRef<AbortController | null>(null);
+  const { archived, added, add, region } = useLocalSearchParams<{ archived?: string; added?: string; add?: string; region?: string }>();
+  const isArchiveView = archived === '1';
 
-  // One-time, gentle backfill so wines added before entry-time maturity
-  // generation (and never opened) still get a drinking window — otherwise the
-  // maturity filter silently drops them. Runs sequentially, paced, capped.
-  useEffect(() => {
-    if (!userId || wines.length === 0) return;
-    void backfillMissingMaturities(wines, () => qc.invalidateQueries({ queryKey: ['cellar', userId] }));
-  }, [userId, wines.length, qc]);
+  const { wines, isLoading, isError } = useCellar();
+  const archive = useArchive({ enabled: isArchiveView });
+  const { racks } = useRacks();
 
-  // Cellar-wide "Location" filters (custom_filters with rack_id NULL).
-  const { data: locations = [] } = useQuery({
-    queryKey: ['cellar-locations', userId],
-    queryFn: () => fetchCellarLocations(userId!),
-    enabled: !!userId,
+  // ---- Storage data: placements, alt cellars, bins, custom Locations ----
+
+  const allWineIds = useMemo(() => wines.map((w) => w.id), [wines]);
+  const placementsQuery = useQuery({
+    queryKey: ['placements-list', allWineIds],
+    queryFn: () => fetchPlacementsForWines(allWineIds),
+    enabled: allWineIds.length > 0 && !isArchiveView,
   });
-  function refetchLocations() { qc.invalidateQueries({ queryKey: ['cellar-locations', userId] }); }
+  const allPlacements = placementsQuery.data ?? NO_PLACEMENTS;
+  const placementsByWine = useMemo(() => {
+    const m = new Map<string, CellarPlacement[]>();
+    for (const p of allPlacements) {
+      const list = m.get(p.cellar_wine_id);
+      if (list) list.push(p); else m.set(p.cellar_wine_id, [p]);
+    }
+    return m;
+  }, [allPlacements]);
 
-  // Home Storage locations (storage_locations, migration 064) — also offered as
-  // Location filter options so a wine filed in one is filterable here. This
-  // query refetches (react-query, refetch-on-mount) whenever a new Home Storage
-  // location is added, so the filter list stays current automatically.
-  const { data: storageLocations = [] } = useQuery({
+  const storageQuery = useQuery({
     queryKey: ['storage-locations', userId],
     queryFn: () => fetchStorageLocations(userId!),
     enabled: !!userId,
   });
+  const storageLocations = storageQuery.data ?? NO_STORAGE;
+  const externalLocIds = useMemo(
+    () => new Set(storageLocations.filter((s) => s.is_external).map((s) => s.id)),
+    [storageLocations],
+  );
+  const externalPlacementsOf = useCallback(
+    (w: CellarWine) => (placementsByWine.get(w.id) ?? [])
+      .filter((p) => p.kind === 'location' && externalLocIds.has(p.storage_location_id ?? '')),
+    [placementsByWine, externalLocIds],
+  );
 
-  // One-time self-heal for wines an OLD move left pointing at a home alt cellar
-  // without a real placement (invisible there, and split into a duplicate line
-  // here). Folds each back onto its existing line in that cellar. Idempotent —
-  // once healed there's nothing left to fix. Home locations only, so a large
+  const { data: bins = NO_BINS } = useQuery({
+    queryKey: ['bins', userId],
+    queryFn: () => getBins(userId!),
+    enabled: !!userId,
+  });
+  const binIds = useMemo(() => bins.map((b) => b.id), [bins]);
+  const { data: binOfCell = NO_CELLS } = useQuery({
+    queryKey: ['bin-cells', 'owners', binIds],
+    queryFn: () => getBinOfCell(binIds),
+    enabled: binIds.length > 0,
+  });
+
+  // Custom "Locations": tags the user puts on wines (custom_filters with no rack).
+  const { data: customLocations = NO_CUSTOM } = useQuery({
+    queryKey: ['cellar-locations', userId],
+    queryFn: () => fetchCellarLocations(userId!),
+    enabled: !!userId,
+  });
+  const refetchCustomLocations = () => qc.invalidateQueries({ queryKey: ['cellar-locations', userId] });
+  // After any change to the cellar's wines: every cellar view, plus the custom
+  // Locations (a deleted wine leaves them).
+  function refreshAll() {
+    invalidateCellarViews(qc);
+    refetchCustomLocations();
+  }
+
+  const filters = useCellarListFilters({
+    wines: isArchiveView ? archive.wines : wines,
+    isArchiveView,
+    placementsByWine,
+    externalLocIds,
+    binOfCell,
+    customLocations,
+    initialRegion: region ? String(region) : null,
+  });
+
+  // ---- Background upkeep (editors only) ----
+
+  // Heal any wine whose quantity drifted BELOW its rack-slot bottles (an
+  // impossible state, e.g. after an over-counted archive).
+  useEffect(() => {
+    if (!userId || !canEdit || wines.length === 0 || !firstTimeThisSession(`quantity:${cellarId}`)) return;
+    reconcileQuantityBelowPlacements(userId)
+      .then((healed) => { if (healed > 0) invalidateCellarViews(qc); })
+      .catch(() => { /* best-effort heal */ });
+  }, [userId, cellarId, canEdit, wines.length, qc]);
+
+  // Fold wines an OLD move left pointing at a home alt cellar without a real
+  // placement back onto their line there. Home cellars only, so a large
   // external import is never touched.
-  // Heal any wine whose quantity drifted BELOW its placed bottles (impossible
-  // state — e.g. an over-counted archive left quantity 1 with 2 in a rack). Runs
-  // once per mount; doesn't need storage locations, so it's separate from the
-  // legacy-location reconcile below.
-  const qtyHealedRef = useRef(false);
   useEffect(() => {
-    if (qtyHealedRef.current || !userId || wines.length === 0) return;
-    qtyHealedRef.current = true;
-    void reconcileQuantityBelowPlacements(userId)
-      .then((healed) => {
-        if (healed > 0) {
-          qc.invalidateQueries({ queryKey: ['cellar', userId] });
-          qc.invalidateQueries({ queryKey: ['placements-list'] });
-        }
-      })
-      .catch(() => { /* non-fatal — heal is best-effort */ });
-  }, [userId, wines.length, qc]);
-
-  const reconciledRef = useRef(false);
-  useEffect(() => {
-    if (reconciledRef.current || !userId || wines.length === 0 || storageLocations.length === 0) return;
-    reconciledRef.current = true;
+    if (!userId || !canEdit || wines.length === 0 || !storageQuery.isSuccess) return;
+    if (!firstTimeThisSession(`legacy-locations:${cellarId}`)) return;
     const homeIds = storageLocations.filter((s) => !s.is_external).map((s) => s.id);
-    if (homeIds.length === 0) return;
-    void reconcileLegacyLocationWines(userId, homeIds)
-      .then((healed) => {
-        if (healed > 0) {
-          qc.invalidateQueries({ queryKey: ['cellar', userId] });
-          qc.invalidateQueries({ queryKey: ['placements-list'] });
-          qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-        }
-      })
-      .catch(() => { /* non-fatal — reconcile is best-effort */ });
-  }, [userId, wines.length, storageLocations.length, qc]);
+    reconcileLegacyLocationWines(userId, homeIds)
+      .then((healed) => { if (healed > 0) invalidateCellarViews(qc); })
+      .catch(() => { /* best-effort heal */ });
+  }, [userId, cellarId, canEdit, wines.length, storageQuery.isSuccess, storageLocations, qc]);
 
-  // Long-press a bespoke Location chip in the filter → manage it, mirroring the
-  // rack filter menu: Add/Remove Wines · Rename Filter · Delete.
+  // Drinking windows for wines that have none, quietly in the background, so the
+  // Maturity filter doesn't drop them. Wines held only in External Storage stay
+  // on-demand (as do imports — see maturityBackfill).
+  const storageKnown = placementsQuery.isSuccess && storageQuery.isSuccess;
+  useEffect(() => {
+    if (!userId || !canEdit || isArchiveView || !storageKnown) return;
+    const externalOnly = (w: CellarWine) => {
+      const external = externalPlacementsOf(w).reduce((n, p) => n + (p.quantity ?? 0), 0);
+      return external > 0 && external >= (w.quantity ?? 0);
+    };
+    void backfillMissingMaturities(userId, wines.filter((w) => !externalOnly(w)), () => qc.invalidateQueries({ queryKey: ['cellar', userId] }));
+  }, [userId, canEdit, isArchiveView, storageKnown, wines, externalPlacementsOf, qc]);
+
+  // ---- Arrival: "added" toast, ?add=1 ----
+
+  // Brief "Added" toast after an add flow lands here; each add returns with a
+  // fresh `added` value.
+  const [showAddedToast, setShowAddedToast] = useState(false);
+  const lastAddedRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!added || added === lastAddedRef.current) return;
+    lastAddedRef.current = added;
+    setShowAddedToast(true);
+    const t = setTimeout(() => setShowAddedToast(false), 2600);
+    return () => clearTimeout(t);
+  }, [added]);
+
+  const [addWineOpen, setAddWineOpen] = useState(false);
+  const addParamHandledRef = useRef(false);
+  useEffect(() => {
+    if (add !== '1' || isArchiveView || !canEdit || addParamHandledRef.current) return;
+    addParamHandledRef.current = true;
+    setAddWineOpen(true);
+  }, [add, isArchiveView, canEdit]);
+
+  // ---- One wine: the long-press pop-up and its actions ----
+
+  const [busy, setBusy] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<CellarWine | null>(null);
+  const returnToCellar = useReturnToCellar();
+  const [moveHome, setMoveHome] = useState<MoveHomeTarget | null>(null);
+
+  function openWineActions(w: CellarWine) {
+    const externalPls = externalPlacementsOf(w);
+    const live = !isArchiveView;
+    const buttons = [
+      ...(canEdit ? [{ text: 'Edit Label or Wine Info', onPress: () => router.push(`/cellar/edit-wine/${w.id}`) }] : []),
+      // Only for bottles held in an external cellar — they can come home, never go back.
+      ...(canEdit && externalPls.length > 0 ? [{ text: 'Move to Home Storage', onPress: () => startMoveOneHome(w, externalPls) }] : []),
+      ...(live ? [{ text: 'View Location', onPress: () => viewWineLocation(w) }] : []),
+      ...(canEdit && live ? [
+        { text: 'Select', onPress: () => startSelect(w) },
+        { text: 'Archive Wine', onPress: () => setArchiveTarget(w) },
+      ] : []),
+      ...(canEdit && !live ? [{ text: 'Return to Cellar', onPress: () => returnToCellar.start(archiveRowsOf(w)) }] : []),
+      ...(canEdit ? [{ text: 'Delete Wine', style: 'destructive' as const, onPress: () => confirmDelete(w) }] : []),
+    ];
+    if (buttons.length === 0) return;
+    showAlert({
+      title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name,
+      buttons: [...buttons, { text: 'Cancel', style: 'cancel' }],
+    });
+  }
+
+  // Jump to where the wine's bottles are: one place goes straight there, several
+  // offer a choice, none says they're loose.
+  function viewWineLocation(w: CellarWine) {
+    const dests = new Map<string, string>();   // route → label (one entry per place)
+    let unresolvedBin = false;
+    for (const p of placementsByWine.get(w.id) ?? []) {
+      if (p.kind === 'rack' && p.rack_id) {
+        dests.set(`/cellar/rack/${p.rack_id}?highlight=${w.id}`, racks.find((r) => r.id === p.rack_id)?.name ?? 'Rack');
+      } else if (p.kind === 'bin') {
+        const binId = binOfCell.get(p.bin_cell_id ?? '');
+        if (binId) dests.set(`/cellar/bin/${binId}?highlight=${w.id}`, bins.find((b) => b.id === binId)?.name ?? 'Bin');
+        else unresolvedBin = true;
+      } else if (p.kind === 'location' && p.storage_location_id) {
+        const l = storageLocations.find((s) => s.id === p.storage_location_id);
+        dests.set(`/cellar/storage-location/${p.storage_location_id}?highlight=${w.id}`, `${l?.name ?? 'Alt Cellar'}${l?.is_external ? ' (external)' : ''}`);
+      }
+    }
+    const places = [...dests];
+    if (places.length === 0) {
+      showAlert(unresolvedBin
+        ? { title: 'Stored in a bin', body: 'This wine is filed in a storage bin — open it from Your Wines At Home on the Cellar tab.' }
+        : { title: 'No home-storage location', body: 'This wine has no placement yet — its bottles are loose in Your Cellar List.' });
+      return;
+    }
+    if (places.length === 1) { router.push(places[0][0]); return; }
+    showAlert({
+      title: 'View location',
+      buttons: [...places.map(([route, label]) => ({ text: label, onPress: () => router.push(route) })), { text: 'Cancel', style: 'cancel' }],
+    });
+  }
+
+  // Archive from the list, as the wine card does: the bottles leave storage
+  // (from the location being filtered on first) and the note becomes the
+  // archived bottles' Archive Note.
+  async function handleArchiveConfirm(count: number, note: string, date: string) {
+    const w = archiveTarget;
+    if (!w) return;
+    setBusy(true);
+    try {
+      const { archived } = await archiveBottles(w.id, count, date, { fromUnit: filters.unitFilter ?? undefined, note: note || undefined });
+      if (archived === 0) throw new Error('That wine is no longer in your cellar. Pull to refresh and try again.');
+      setArchiveTarget(null);
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: errorText(err) });
+    } finally {
+      refreshAll();
+      setBusy(false);
+    }
+  }
+
+  // In the archive one line stands for every archived entry of the wine
+  // (newest first).
+  function archiveRowsOf(w: CellarWine): CellarWine[] {
+    const ids = filters.groupIds.get(w.id) ?? [w.id];
+    return ids.map((id) => archive.wines.find((a) => a.id === id)).filter((a): a is CellarWine => !!a);
+  }
+
+  function confirmDelete(w: CellarWine) {
+    const rows = isArchiveView ? archiveRowsOf(w) : [w];
+    const ids = rows.map((r) => r.id);
+    confirmWineDelete({
+      reviewsLost: reviewsOn(rows),
+      onDelete: async () => {
+        setBusy(true);
+        // Deleting the row also empties its rack slots (their wine link is
+        // ON DELETE SET NULL) and removes its placements (cascade).
+        try { for (const id of ids) await deleteCellarWine(id); }
+        catch (err) { showAlert({ title: 'Could not delete', body: errorText(err) }); }
+        finally { refreshAll(); setBusy(false); }
+      },
+      onArchive: isArchiveView ? undefined : async () => {
+        setBusy(true);
+        try { await archiveBottles(w.id, Infinity, todayYmd()); }
+        catch (err) { showAlert({ title: 'Could not archive', body: errorText(err) }); }
+        finally { refreshAll(); setBusy(false); }
+      },
+    });
+  }
+
+  function startMoveOneHome(w: CellarWine, externalPls: CellarPlacement[]) {
+    const max = externalPls.reduce((n, p) => n + (p.quantity ?? 0), 0);
+    if (max > 0) setMoveHome({ kind: 'one', wine: w, externalPls, max });
+  }
+
+  async function moveOneHome(target: Extract<MoveHomeTarget, { kind: 'one' }>, dest: HomeDestination, count: number) {
+    const w = target.wine;
+    try {
+      const moved = await moveExternalBottlesHome(w.id, count, target.externalPls, dest);
+      if (moved === 0) throw new Error('Those bottles are no longer in external storage. Pull to refresh and try again.');
+      refreshAll();
+      if (dest.kind === 'rack') router.push(`/cellar/rack/${dest.id}?placeWine=${w.id}&placeLimit=${moved}`);
+      else if (dest.kind === 'bin') router.push(`/cellar/bin/${dest.id}`);
+      else showAlert({ title: 'Moved home', body: `${bottlesLabel(moved)} of ${w.wine_name} moved out of external storage to ${dest.kind === 'location' ? dest.name : 'Your Cellar List'}.` });
+    } catch (err) {
+      refreshAll();
+      showAlert({ title: 'Could not move', body: errorText(err) });
+    }
+  }
+
+  // ---- Select mode: archive or move several wines at once (live list only) ----
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+
+  function startSelect(w: CellarWine) {
+    setSelectedIds(new Set([w.id]));
+    setSelectMode(true);
+  }
+  function exitSelect() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  // A bulk action only ever touches what's on screen: when filters or search
+  // hide a selected wine, it drops out of the selection.
+  useEffect(() => {
+    if (!selectMode) return;
+    const visible = new Set(filters.rows.map((r) => r.wine.id));
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filters.rows, selectMode]);
+
+  // Runs `act` on each wine in turn. On a failure the wines already done leave
+  // the selection, so trying again only runs the rest.
+  async function runOnSelected(ids: string[], act: (id: string) => Promise<unknown>, verb: string, past: string): Promise<boolean> {
+    setBusy(true);
+    const done = new Set<string>();
+    try {
+      for (const id of ids) { await act(id); done.add(id); }
+      exitSelect();
+      return true;
+    } catch (err) {
+      setSelectedIds((prev) => new Set([...prev].filter((id) => !done.has(id))));
+      showAlert(done.size
+        ? { title: `Some ${past}, then hit a snag`, body: `${done.size} of ${ids.length} ${past}. The rest are still selected — try again. ${errorText(err)}` }
+        : { title: `Could not ${verb}`, body: errorText(err) });
+      return false;
+    } finally {
+      refreshAll();
+      setBusy(false);
+    }
+  }
+
+  function confirmArchiveSelected() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    showAlert({
+      title: `Archive ${winesLabel(ids.length)}?`,
+      body: 'Every bottle of each moves to Your Cellar Archive, dated today, and leaves wherever it was stored. Your reviews and history stay.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        // Infinity = every bottle, at the wine's latest count.
+        { text: 'Archive', onPress: () => void runOnSelected(ids, (id) => archiveBottles(id, Infinity, todayYmd()), 'archive', 'archived') },
+      ],
+    });
+  }
+
+  async function moveSelectedHome(dest: HomeDestination) {
+    const ids = [...selectedIds];
+    if (!(await runOnSelected(ids, (id) => moveWholeWineHome(id, dest), 'move', 'moved'))) return;
+    if (dest.kind === 'rack') router.push(`/cellar/rack/${dest.id}`);
+    else if (dest.kind === 'bin') router.push(`/cellar/bin/${dest.id}`);
+    else showAlert({ title: 'Moved', body: `${winesLabel(ids.length)} moved to ${dest.kind === 'location' ? dest.name : 'Your Cellar List, unplaced'}.` });
+  }
+
+  function onMoveHomePick(dest: HomeDestination, count: number) {
+    const target = moveHome;
+    setMoveHome(null);
+    if (target?.kind === 'one') void moveOneHome(target, dest, count);
+    else if (target?.kind === 'selected') void moveSelectedHome(dest);
+  }
+
+  // ---- List rows ----
+
+  // Rows are memoised, so they get stable callbacks that run the latest handlers.
+  const rowHandlers = useRef({ press: (_w: CellarWine) => {}, longPress: (_w: CellarWine) => {} });
+  useEffect(() => {
+    rowHandlers.current = {
+      press: (w) => (selectMode ? toggleSelected(w.id) : router.push(`/cellar/${w.id}`)),
+      longPress: (w) => (selectMode ? toggleSelected(w.id) : openWineActions(w)),
+    };
+  });
+  const onRowPress = useCallback((w: CellarWine) => rowHandlers.current.press(w), []);
+  const onRowLongPress = useCallback((w: CellarWine) => rowHandlers.current.longPress(w), []);
+
+  const showYourScore = filters.sort === 'your_desc' || filters.sort === 'your_asc';
+  const renderRow = useCallback<ListRenderItem<CellarListRowData>>(({ item }) => (
+    <CellarListRow
+      wine={item.wine}
+      bottles={item.bottles}
+      showYourScore={showYourScore}
+      showArchivedDate={isArchiveView}
+      selectMode={selectMode}
+      selected={selectedIds.has(item.wine.id)}
+      onPress={onRowPress}
+      onLongPress={onRowLongPress}
+    />
+  ), [showYourScore, isArchiveView, selectMode, selectedIds, onRowPress, onRowLongPress]);
+
+  // ---- Location filter: custom Locations and alt cellars ----
+
   const [renameLoc, setRenameLoc] = useState<{ id: string; name: string } | null>(null);
-  const [locEditTarget, setLocEditTarget] = useState<CustomFilter | null>(null);
+  const [locationPicker, setLocationPicker] = useState<LocationPicker | null>(null);
   const [busyLoc, setBusyLoc] = useState(false);
+  // Deleting a location's wines (a big import can be ~1000 rows, deleted one by
+  // one) shows a real percentage so it never looks frozen.
+  const [deleting, setDeleting] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState({ done: 0, total: 0 });
 
-  function openLocationOptions(id: string, name: string) {
-    const loc = locations.find((l) => l.id === id);
+  const locOptions = useMemo<FilterSheetOption[]>(() => {
+    const opts: FilterSheetOption[] = locationOptions({ customLocations, racks, bins, storageLocations })
+      .map((o) => ({ ...o, manageable: canEdit && (o.value.startsWith('loc:') || o.value.startsWith('sloc:')) }));
+    // "+ New Location" follows the custom Locations it creates.
+    if (canEdit) opts.splice(1 + customLocations.length, 0, { value: NEW_LOCATION, label: '+ New Location', action: true });
+    return opts;
+  }, [customLocations, racks, bins, storageLocations, canEdit]);
+
+  function manageLocation(opt: FilterSheetOption) {
+    if (opt.value.startsWith('loc:')) openCustomLocationOptions(opt.value.slice(4), opt.label);
+    else if (opt.value.startsWith('sloc:')) openStorageLocationOptions(opt.value.slice(5), opt.label);
+  }
+
+  function openCustomLocationOptions(id: string, name: string) {
+    const location = customLocations.find((l) => l.id === id);
     showAlert({
       title: name,
       body: 'Add or remove the wines in this location, rename it, or delete it. Your wines stay in your cellar either way.',
       buttons: [
-        { text: 'Add/Remove Wines', onPress: () => { if (loc) setLocEditTarget(loc); } },
+        { text: 'Add/Remove Wines', onPress: () => { if (location) setLocationPicker({ mode: 'edit', location }); } },
         { text: 'Rename Filter', onPress: () => setRenameLoc({ id, name }) },
-        { text: 'Delete', style: 'destructive', onPress: () => confirmDeleteLocation(id, name) },
+        { text: 'Delete', style: 'destructive', onPress: () => confirmDeleteCustomLocation(id, name) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
 
-  function confirmDeleteLocation(id: string, name: string) {
+  function confirmDeleteCustomLocation(id: string, name: string) {
     showAlert({
       title: `Delete "${name}"?`,
       body: 'This removes the location. Your wines stay in your cellar.',
@@ -204,10 +505,10 @@ export default function FullCellarListScreen() {
           onPress: async () => {
             try {
               await deleteCustomFilter(id);
-              if (locationFilter === `loc:${id}`) setLocationFilter('All');
-              refetchLocations();
+              if (filters.location === `loc:${id}`) filters.setLocation('All');
+              refetchCustomLocations();
             } catch (err) {
-              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+              showAlert({ title: 'Could not delete', body: errorText(err) });
             }
           },
         },
@@ -215,9 +516,48 @@ export default function FullCellarListScreen() {
     });
   }
 
-  // Long-press a Home/External storage location (an alt cellar, e.g. an import's
-  // folder) in the filter → delete it two ways: keep the wines (unplace them) or
-  // delete the wines too. Used to wipe & re-do a bad import.
+  async function saveLocationRename(name: string) {
+    if (!renameLoc) return;
+    setBusyLoc(true);
+    try {
+      await renameCustomFilter(renameLoc.id, name);
+      refetchCustomLocations();
+      setRenameLoc(null);
+    } catch (err) {
+      showAlert({ title: 'Could not rename', body: errorText(err) });
+    } finally {
+      setBusyLoc(false);
+    }
+  }
+
+  // The picker is authoritative over the location's FULL set of wines, so an
+  // edit replaces the set.
+  async function saveLocationPicker(name: string, ids: string[]) {
+    if (!locationPicker || !userId) return;
+    setBusyLoc(true);
+    try {
+      if (locationPicker.mode === 'new') {
+        await createCellarLocation(userId, name, ids);
+      } else {
+        await renameCustomFilter(locationPicker.location.id, name);
+        await setCustomFilterWines(locationPicker.location.id, ids);
+      }
+      refetchCustomLocations();
+      setLocationPicker(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: errorText(err) });
+    } finally {
+      setBusyLoc(false);
+    }
+  }
+
+  const locationPickerItems = useMemo(
+    () => (locationPicker ? wines.map((w) => ({ id: w.id, label: wineHeaderLine(w.producer, w.wine_name, w.vintage), sublabel: w.region ?? undefined })) : []),
+    [locationPicker, wines],
+  );
+
+  // Long-press an alt cellar (e.g. an import's folder) to delete it, keeping its
+  // wines (unplaced) or deleting them too — used to wipe and redo a bad import.
   function openStorageLocationOptions(id: string, name: string) {
     showAlert({
       title: name,
@@ -231,10 +571,8 @@ export default function FullCellarListScreen() {
   }
 
   function afterStorageLocationDeleted(id: string) {
-    if (locationFilter === `sloc:${id}`) setLocationFilter('All');
-    qc.invalidateQueries({ queryKey: ['cellar'] });
-    qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
-    qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+    if (filters.location === `sloc:${id}`) filters.setLocation('All');
+    refreshAll();
   }
 
   function confirmDeleteStorageKeepWines(id: string, name: string) {
@@ -251,7 +589,7 @@ export default function FullCellarListScreen() {
               await deleteLocationKeepWines(id);
               afterStorageLocationDeleted(id);
             } catch (err) {
-              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+              showAlert({ title: 'Could not delete', body: errorText(err) });
             }
           },
         },
@@ -262,7 +600,7 @@ export default function FullCellarListScreen() {
   function confirmDeleteStorageAndWines(id: string, name: string) {
     showAlert({
       title: `Delete "${name}" and its wines?`,
-      body: `This permanently deletes the location AND every bottle filed only in it. Wines that also live elsewhere keep their other bottles. This cannot be undone.`,
+      body: 'This permanently deletes the location AND every bottle filed only in it. Wines that also live elsewhere keep their other bottles. This cannot be undone.',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -274,9 +612,10 @@ export default function FullCellarListScreen() {
             try {
               const { deletedWines } = await deleteLocationAndWines(id, (done, total) => setDeleteProgress({ done, total }));
               afterStorageLocationDeleted(id);
-              showAlert({ title: 'Location deleted', body: `"${name}" and ${deletedWines} ${deletedWines === 1 ? 'wine' : 'wines'} removed.` });
+              showAlert({ title: 'Location deleted', body: `"${name}" and ${winesLabel(deletedWines)} removed.` });
             } catch (err) {
-              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+              refreshAll();
+              showAlert({ title: 'Could not delete', body: errorText(err) });
             } finally {
               setDeleting(false);
             }
@@ -286,632 +625,22 @@ export default function FullCellarListScreen() {
     });
   }
 
-  async function saveLocationRename(name: string) {
-    if (!renameLoc) return;
-    setBusyLoc(true);
-    try {
-      await renameCustomFilter(renameLoc.id, name);
-      refetchLocations();
-      setRenameLoc(null);
-    } catch (err) {
-      showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setBusyLoc(false);
-    }
-  }
+  // ---- "Update all": critic scores and values for wines missing them ----
 
-  async function saveLocationEdit(name: string, ids: string[]) {
-    if (!locEditTarget) return;
-    setBusyLoc(true);
-    try {
-      // The picker is authoritative over the FULL set, so a full replace is
-      // correct here (same as the rack's edit-filter modal).
-      await renameCustomFilter(locEditTarget.id, name);
-      await setCustomFilterWines(locEditTarget.id, ids);
-      refetchLocations();
-      setLocEditTarget(null);
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setBusyLoc(false);
-    }
-  }
+  const [intelUpdating, setIntelUpdating] = useState(false);
+  const [intelProgress, setIntelProgress] = useState({ done: 0, total: 0 });
+  const intelAbortRef = useRef<AbortController | null>(null);
 
-  // ---- Multi-select mode (long-press) ----
-  // Long-pressing a wine tints it gold and enters selection mode, where the
-  // user picks any number of wines and acts on them in bulk (archive, delete,
-  // add to a Location filter) — replacing the old single-wine delete popup.
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
-
-  function exitSelect() {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  }
-
-  function invalidateCellar() {
-    qc.invalidateQueries({ queryKey: ['cellar'] });
-    qc.invalidateQueries({ queryKey: ['cellar-archive'] });
-    qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-    qc.invalidateQueries({ queryKey: ['rack-slots'] });
-    qc.invalidateQueries({ queryKey: ['cellar-locations', userId] });
-    // Placement caches back the per-wine rack/loose breakdown, the Location filter
-    // and "Unplaced Bottles". A partial archive leaves the wine in the list (so
-    // allWineIds is unchanged and the ['placements-list', allWineIds] query never
-    // refetches on its own) — invalidate both keys or those surfaces show the stale
-    // pre-archive distribution.
-    qc.invalidateQueries({ queryKey: ['placements'] });
-    qc.invalidateQueries({ queryKey: ['placements-list'] });
-    // Archiving/deleting a wine also detaches it from any alt cellar, so refresh
-    // the home-storage-location screens or an archived bottle's thumbnail lingers
-    // there. Broad (no id) — the wine's location isn't known at this layer.
-    qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-    qc.invalidateQueries({ queryKey: ['storage-locations'] });
-  }
-
-  // Long-press a wine → a per-wine action popup (replaces the bottom select
-  // bar). Edit opens the Edit Wine Details screen (updates the wine wherever
-  // it's placed); the rest act on this one wine.
-  // External placements of this wine (bottles held in an offsite/external cellar).
-  function externalPlacementsOf(w: CellarWine): CellarPlacement[] {
-    return (placementsByWine.get(w.id) ?? []).filter((p) =>
-      p.kind === 'location' && p.storage_location_id &&
-      storageLocations.find((l) => l.id === p.storage_location_id)?.is_external);
-  }
-
-  function openWineActions(w: CellarWine) {
-    const externalPls = externalPlacementsOf(w);
-    showAlert({
-      title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name,
-      buttons: [
-        // Straight into the Edit Wine Details screen — it carries BOTH the label
-        // photo and the wine's details, so the old "photo or details?" chooser
-        // was a step with nothing to choose.
-        { text: 'Edit Label or Wine Info', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
-        // Only for wines held in an external cellar — bring them home.
-        ...(externalPls.length > 0 ? [{ text: 'Move to Home Storage', onPress: () => deliverToHome(w, externalPls) }] : []),
-        { text: 'View Location', onPress: () => viewWineLocation(w) },
-        ...(isArchiveView ? [] : [{ text: 'Archive Wine', onPress: () => confirmArchiveOne(w) }]),
-        { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteOne(w) },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-
-  // Move a wine's external-cellar bottles into home storage. Only ever offered for
-  // wines with bottles in an external cellar; home bottles can never be moved OUT
-  // to external storage. The user picks how many, then where: the Full Cellar List
-  // (loose), a rack/fridge (opens it to place them), a bin, or a home alt cellar.
-  const [deliverWine, setDeliverWine] = useState<{ wine: CellarWine; pls: CellarPlacement[]; max: number } | null>(null);
-  const [deliverCount, setDeliverCount] = useState(1);
-  function deliverToHome(w: CellarWine, externalPls: CellarPlacement[]) {
-    const max = externalPls.reduce((s, p) => s + (p.quantity ?? 0), 0);
-    if (max === 0) return;
-    setDeliverCount(max);
-    setDeliverWine({ wine: w, pls: externalPls, max });
-  }
-  async function runDeliver(dest: { kind: 'loose' } | { kind: 'location' | 'rack' | 'bin'; id: string; name: string }) {
-    if (!deliverWine) return;
-    const { wine: w, pls } = deliverWine;
-    const n = Math.max(1, Math.min(deliverCount, deliverWine.max));
-    setDeliverWine(null);
-    try {
-      // Free n bottles from the external cellar(s) first — they become loose on
-      // the same line (quantity unchanged), then land at the destination.
-      let freed = 0;
-      for (const p of pls) {
-        if (freed >= n) break;
-        const take = Math.min(n - freed, p.quantity ?? 0);
-        if (take > 0) { await decrementPlacement(p.id, take); freed += take; }
-      }
-      if (dest.kind === 'location') await addLocationPlacement(w.id, dest.id, null, freed);
-      if (dest.kind === 'bin') await updateWine.mutateAsync({ id: w.id, updates: { awaiting_placement: true, awaiting_placement_unit_id: dest.id } as any });
-      qc.invalidateQueries({ queryKey: ['placements-list'] });
-      qc.invalidateQueries({ queryKey: ['placements', w.id] });
-      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-      qc.invalidateQueries({ queryKey: ['storage-locations'] });
-      qc.invalidateQueries({ queryKey: ['cellar', session?.user.id] });
-      const label = `${freed} bottle${freed === 1 ? '' : 's'} of ${w.wine_name}`;
-      if (dest.kind === 'rack') {
-        router.push(`/cellar/rack/${dest.id}?placeWine=${w.id}&placeLimit=${freed}` as any);
-      } else if (dest.kind === 'bin') {
-        router.push(`/cellar/bin/${dest.id}` as any);
-      } else {
-        const where = dest.kind === 'location' ? dest.name : 'your Full Cellar List';
-        showAlert({ title: 'Moved home', body: `${label} moved out of external storage to ${where}.` });
-      }
-    } catch (err) {
-      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-  // "View Location" — jump to where the wine physically lives. One placement goes
-  // straight there; several offer a picker; none tells the user it's loose.
-  function viewWineLocation(w: CellarWine) {
-    const wp = placementsByWine.get(w.id) ?? [];
-    const dests: { label: string; route: string }[] = [];
-    let hasBinOnly = false;
-    for (const p of wp) {
-      if (p.kind === 'rack' && p.rack_id) {
-        const route = `/cellar/rack/${p.rack_id}?highlight=${w.id}`;
-        if (!dests.some((d) => d.route === route)) dests.push({ label: racks.find((r) => r.id === p.rack_id)?.name ?? 'Rack', route });
-      } else if (p.kind === 'location' && p.storage_location_id) {
-        const l = storageLocations.find((sl) => sl.id === p.storage_location_id);
-        dests.push({ label: `${l?.name ?? 'Alt Cellar'}${l?.is_external ? ' (external)' : ''}`, route: `/cellar/storage-location/${p.storage_location_id}` });
-      } else if (p.kind === 'bin') {
-        // Bins are wine_racks (storage_type='bin'); when the placement carries the
-        // bin's id we can jump straight there, otherwise just note it's in a bin
-        // rather than falsely calling it loose.
-        if (p.rack_id) {
-          const route = `/cellar/bin/${p.rack_id}`;
-          if (!dests.some((d) => d.route === route)) dests.push({ label: 'Bin', route });
-        } else {
-          hasBinOnly = true;
-        }
-      }
-    }
-    if (dests.length === 0) {
-      showAlert(hasBinOnly
-        ? { title: 'Stored in a bin', body: 'This wine is filed in a storage bin — open it from Your Wines At Home on the Cellar tab.' }
-        : { title: 'No home-storage location', body: 'This wine has no placement yet — its bottles are loose in your cellar list.' });
-      return;
-    }
-    if (dests.length === 1) { router.push(dests[0].route as any); return; }
-    showAlert({ title: 'View location', buttons: [...dests.map((d) => ({ text: d.label, onPress: () => router.push(d.route as any) })), { text: 'Cancel', style: 'cancel' as const }] });
-  }
-  // Archive from the list opens the note modal (mirrors the wine card): capture
-  // an optional "where / with whom" note + log the removal event so it shows in
-  // the wine's Bottles in my Archive, then archive the whole listing.
-  const [archiveWine, setArchiveWine] = useState<CellarWine | null>(null);
-  function confirmArchiveOne(w: CellarWine) {
-    setArchiveWine(w);
-  }
-  async function handleArchiveConfirm(count: number, note: string, date: string) {
-    const w = archiveWine;
-    if (!w) return;
-    const total = w.quantity ?? 1;
-    const today = date;
-    setBusy(true);
-    try {
-      await addCellarWineRemoval({ cellarWineId: w.id, removedAt: today, count, note: note || null });
-      if (count >= total) {
-        // Full archive.
-        await clearWineFromRacks(w.id);
-        await archiveCellarWine(w.id);
-        // The archive pop-up's note becomes the archived card's Archive Note.
-        if (note.trim()) await updateWine.mutateAsync({ id: w.id, updates: { archive_note: note.trim().slice(0, 35) } });
-      } else {
-        // Partial — decrement the live row, clone an archive row for the removed
-        // bottles, and free that many bottles taking LOOSE ones first, then rack
-        // slots, then alt-cellar placements (mirrors the wine-card logic). Freeing
-        // rack-only (removeSlotsForWine) left ghost bottles in alt cellars.
-        await updateWine.mutateAsync({ id: w.id, updates: { quantity: total - count } });
-        const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = w;
-        await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, archive_note: note.trim().slice(0, 35) || null } as any);
-        const wp = await fetchPlacementsForWine(w.id);
-        const unplaced = Math.max(0, total - placedCount(wp));
-        const toFree = Math.max(0, count - unplaced);
-        if (toFree > 0) await releaseBottlesFromPlacements(w.id, toFree);
-      }
-      qc.invalidateQueries({ queryKey: ['cellar-removals', w.id] });
-      invalidateCellar();
-      setArchiveWine(null);
-    } catch (err) {
-      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setBusy(false);
-    }
-  }
-  function confirmDeleteOne(w: CellarWine) {
-    showAlert({
-      title: 'Delete this wine?',
-      body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete (permanent)', style: 'destructive', onPress: async () => {
-          setBusy(true);
-          // In the Cellar Archive one line stands for every archived entry of the wine.
-          try {
-            for (const id of (isArchiveView ? archiveGroupIdsRef.current.get(w.id) : null) ?? [w.id]) { await clearWineFromRacks(id); await deleteCellarWine(id); }
-            invalidateCellar();
-          }
-          catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); }
-          finally { setBusy(false); }
-        } },
-      ],
-    });
-  }
-
-  function confirmArchiveSelected() {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    showAlert({
-      title: `Archive ${ids.length} wine${ids.length === 1 ? '' : 's'}?`,
-      body: 'They move to Your Archive and leave any racks they were placed in. Your reviews and history stay.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Archive Wines',
-          onPress: async () => {
-            setBusy(true);
-            const done: string[] = [];
-            try {
-              for (const id of ids) { await clearWineFromRacks(id); await archiveCellarWine(id); done.push(id); }
-              invalidateCellar();
-              exitSelect();
-            } catch (err) {
-              // Drop the wines already archived from the selection so a retry
-              // only runs the remainder, and tell the user how far it got.
-              invalidateCellar();
-              if (done.length) setSelectedIds((prev) => { const next = new Set(prev); done.forEach((id) => next.delete(id)); return next; });
-              showAlert({
-                title: done.length ? 'Archived some, then hit a snag' : 'Could not archive',
-                body: `${done.length ? `${done.length} of ${ids.length} archived. The rest are still selected — tap Archive Wines to retry. ` : ''}${err instanceof Error ? err.message : 'Please try again.'}`,
-              });
-            } finally { setBusy(false); }
-          },
-        },
-      ],
-    });
-  }
-
-  function confirmDeleteSelected() {
-    const ids = isArchiveView
-      ? [...selectedIds].flatMap((id) => archiveGroupIdsRef.current.get(id) ?? [id])
-      : [...selectedIds];
-    if (ids.length === 0) return;
-    showAlert({
-      title: `Delete ${selectedIds.size} wine${selectedIds.size === 1 ? '' : 's'}?`,
-      body: "Permanently remove them from your records. This can't be undone.",
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete (permanent)',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(true);
-            const done: string[] = [];
-            try {
-              for (const id of ids) { await clearWineFromRacks(id); await deleteCellarWine(id); done.push(id); }
-              invalidateCellar();
-              exitSelect();
-            } catch (err) {
-              // Drop the wines already deleted from the selection so a retry
-              // only runs the remainder.
-              invalidateCellar();
-              if (done.length) setSelectedIds((prev) => { const next = new Set(prev); done.forEach((id) => next.delete(id)); return next; });
-              showAlert({
-                title: done.length ? 'Deleted some, then hit a snag' : 'Could not delete',
-                body: `${done.length ? `${done.length} of ${ids.length} deleted. The rest are still selected — tap Delete to retry. ` : ''}${err instanceof Error ? err.message : 'Please try again.'}`,
-              });
-            } finally { setBusy(false); }
-          },
-        },
-      ],
-    });
-  }
-
-  // ---- Location create / add-to modal ----
-  // stage 'choose' = pick an existing location (or go to naming) for the
-  // selected wines; stage 'name' = type a name for a brand-new location.
-  const [locModal, setLocModal] = useState<{ open: boolean; stage: 'choose' | 'name'; wineIds: string[] }>({ open: false, stage: 'choose', wineIds: [] });
-  const [locNameDraft, setLocNameDraft] = useState('');
-
-  // "Add to Location" on the multi-select bar — adds the selected wines to a
-  // cellar-wide bespoke Location (created in the Full Cellar List). Rack/fridge
-  // filters are scoped to their rack and are added from within the rack itself.
-  function openAddSelectedToLocation() {
-    if (selectedIds.size === 0) return;
-    setLocNameDraft('');
-    setLocModal({ open: true, stage: 'choose', wineIds: [...selectedIds] });
-  }
-
-  // "Add a Lineup" from the Cellar List — a lineup is placed into a grid, so we
-  // pick which rack or fridge first, then hand off to its slot/orientation
-  // setup via ?lineup=1.
-  function startLineup() {
-    setAddWineOpen(false);
-    // Racks AND fridges both hold lineups (same grid detail screen).
-    const lineupRacks = racks.filter((r) => r.storage_type === 'rack' || r.storage_type === 'fridge');
-    if (lineupRacks.length === 0) {
-      showAlert({ title: 'No racks or fridges yet', body: 'Create a wine rack or fridge first, then you can add a lineup straight into it.' });
-      return;
-    }
-    if (lineupRacks.length === 1) {
-      router.push(`/cellar/rack/${lineupRacks[0].id}?lineup=1` as any);
-      return;
-    }
-    showAlert({
-      title: 'Add a Lineup',
-      body: "Add up to 6 bottles at a time straight into a wine rack or fridge — select which one you're adding this lineup to below.",
-      buttons: [
-        ...lineupRacks.map((r) => ({ text: r.name, onPress: () => router.push(`/cellar/rack/${r.id}?lineup=1` as any) })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ],
-    });
-  }
-  function closeLocModal() { setLocModal({ open: false, stage: 'choose', wineIds: [] }); }
-
-  async function addWinesToExistingLocation(loc: CustomFilter) {
-    setBusy(true);
-    try {
-      // Incremental insert (ignores duplicates) — never rewrites the whole set
-      // from a cached list, so a stale cache can't drop other members.
-      await addWinesToFilter(loc.id, locModal.wineIds);
-      refetchLocations();
-      closeLocModal();
-      exitSelect();
-    } catch (err) {
-      showAlert({ title: 'Could not add to location', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally { setBusy(false); }
-  }
-
-  async function saveNewLocation() {
-    const name = locNameDraft.trim();
-    if (!name || !userId) return;
-    setBusy(true);
-    try {
-      await createCellarLocation(userId, name, locModal.wineIds);
-      refetchLocations();
-      closeLocModal();
-      exitSelect();
-    } catch (err) {
-      showAlert({ title: 'Could not create location', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally { setBusy(false); }
-  }
-
-  const rackIds = racks.map((r) => r.id);
-  const { data: slotAssignments = [] } = useQuery({
-    queryKey: ['slot-assignments', rackIds],
-    queryFn: () => getSlotAssignments(rackIds),
-    enabled: rackIds.length > 0,
-  });
-
-  const wineToRackId: Record<string, string> = {};
-  for (const slot of slotAssignments) wineToRackId[slot.cellar_wine_id] = slot.rack_id;
-
-  // Unified placements for the whole list — drives the Location filter (a wine
-  // can now be split across a rack and an alt cellar).
-  const allWineIds = useMemo(() => wines.map((w) => w.id), [wines]);
-  const { data: allPlacements = [] } = useQuery({
-    queryKey: ['placements-list', allWineIds],
-    queryFn: () => fetchPlacementsForWines(allWineIds),
-    enabled: allWineIds.length > 0,
-  });
-  const placementsByWine = useMemo(() => {
-    const m = new Map<string, CellarPlacement[]>();
-    for (const p of allPlacements) { const arr = m.get(p.cellar_wine_id) ?? []; arr.push(p); m.set(p.cellar_wine_id, arr); }
-    return m;
-  }, [allPlacements]);
-
-  // 'All' | rackId | 'loc:'+locationId | 'Unassigned'
-  const [locationFilter, setLocationFilter] = useState<string>('All');
-  const [countryFilter, setCountryFilter] = useState<string>('All');     // 'All' | country canonical
-  const [colourFilter, setColourFilter] = useState<string>('All');       // 'All' | 'Red' | 'White' | 'Sparkling' | 'Other'
-  const [maturityFilter, setMaturityFilter] = useState<string>('All');   // 'All' | 'too_young' | 'approaching' | 'peak' | 'declining'
-  const [sortMode, setSortMode] = useState<SortMode>('recent');
-  // "View Your Archive" reuses this screen via ?archived=1 — it locks the list
-  // to archived wines only and hides the Archived filter chip so nothing
-  // outside the archive can ever show.
-  // region: opened from Cellar Insights' Most Collected tile — pre-filters the
-  // list to that region group (Burgundy, Tuscany…). Shown as a removable chip.
-  const { archived, added, add, region: regionParam } = useLocalSearchParams<{ archived?: string; added?: string; add?: string; region?: string }>();
-  const [regionFilter, setRegionFilter] = useState<string | null>(regionParam ? String(regionParam) : null);
-  const isArchiveView = archived === '1';
-  // Archive view: each shown line's id → every archived row it stands for.
-  const archiveGroupIdsRef = useRef(new Map<string, string[]>());
-  const [archivedFilter] = useState<ArchivedFilter>(isArchiveView ? 'only' : 'hide');
-  const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
-  const [search, setSearch] = useState('');
-
-  // Brief "Added to your cellar list" toast after an add flow lands here — shows
-  // for a beat then fades, instead of an action popup the user has to dismiss.
-  const [showAddedToast, setShowAddedToast] = useState(false);
-  const addedToastRef = useRef(false);
-  useEffect(() => {
-    if (!added || addedToastRef.current) return;
-    addedToastRef.current = true;
-    setShowAddedToast(true);
-    const t = setTimeout(() => setShowAddedToast(false), 2600);
-    return () => clearTimeout(t);
-  }, [added]);
-
-  // Share the current (filtered) list as a branded PNG. Same off-screen-capture
-  // pattern the wine card uses.
-  // Add-wine chooser + scan overlay. Mirrors the Cellar tab's
-  // "Add Wine / Generate Wine Intel" flow so the user can kick the
-  // same scan / upload / manual entry path from this screen without
-  // having to bounce back to the tab landing page.
-  const [addWineOpen, setAddWineOpen] = useState(false);
-  const [scanningLabel, setScanningLabel] = useState(false);
-  const { setImage, setWineDetails, setError, reset: resetLabelStore } = useLabelStore();
-
-  // Opened from the Cellar tab's "Add Wines" button (?add=1) — pop the same
-  // Scan / Upload / Manual chooser straight away, once.
-  const addParamRef = useRef(false);
-  useEffect(() => {
-    if (add === '1' && !isArchiveView && !addParamRef.current) {
-      addParamRef.current = true;
-      setAddWineOpen(true);
-    }
-  }, [add, isArchiveView]);
-
-  // "Import Cellar Doc" → the same source chooser as the Cellar tab's "Import
-  // Cellar" button (photo / screenshot / spreadsheet file).
-  function openImportChooser() {
-    showAlert({
-      title: 'Import Cellar Document',
-      body: 'Bring in an existing cellar list.',
-      buttons: [
-        { text: 'Scan Photo', onPress: () => router.push('/cellar/import-cellar?source=camera' as any) },
-        { text: 'Upload Screenshot', onPress: () => router.push('/cellar/import-cellar?source=library' as any) },
-        { text: 'Upload File', onPress: () => router.push('/cellar/import-cellar?source=file' as any) },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-
-  async function handleUpload() {
-    if (!(await ensureMediaPermission('library'))) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-    if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
-    if (!(await ensureConnectionForUpload())) return;
-    setScanningLabel(true);
-    try {
-      const base64 = await prepareImageBase64(uri);
-      setImage(uri, base64);
-      const details = await scanLabel(base64);
-      setWineDetails(details);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to scan label');
-    } finally {
-      setScanningLabel(false);
-    }
-    router.push('/label/confirm');
-  }
-
-  // Compute available filter options from the actual cellar
-  const availableCountries = useMemo(() => {
-    const set = new Set<string>();
-    for (const w of wines) {
-      const c = inferCountry(w.region);
-      if (c) set.add(c);
-    }
-    return ['All', ...Array.from(set).sort()];
-  }, [wines]);
-
-  const wineStyle = (w: CellarWine): 'Red' | 'White' | 'Sparkling' | 'Other' => {
-    const s = inferWineStyle({ style: (w as any).style, region: w.region, grape_variety: w.grape_variety });
-    if (s === 'Red') return 'Red';
-    if (s === 'White') return 'White';
-    if (s === 'Sparkling') return 'Sparkling';
-    return 'Other';
-  };
-
-  // Apply filters. The search query is applied last so the chips still
-  // own their truth — typing a query just narrows whatever filters are on.
-  const q = foldAccents(search.trim());
-  // Archived view swaps the source list; the other filters still apply.
-  const baseWines = archivedFilter === 'only'
-    ? archivedWines
-    : archivedFilter === 'include'
-      ? [...wines, ...archivedWines]
-      : wines;
-  // Alt Cellars split into home vs external (migration 097). Racks/fridges/bins are
-  // always home; only Alt Cellars (storage_locations) can be external. Declared
-  // BEFORE `filtered` — the Home/External filter branches read it, so a later
-  // declaration threw a temporal-dead-zone error ("something went wrong").
-  const externalLocIds = useMemo(
-    () => new Set(storageLocations.filter((s) => s.is_external).map((s) => s.id)),
-    [storageLocations],
-  );
-  const filtered = baseWines.filter((w) => {
-    if (locationFilter !== 'All') {
-      const wp = placementsByWine.get(w.id) ?? [];
-      const locP = wp.filter((p) => p.kind === 'location');
-      const placed = wp.reduce((s, p) => s + (p.quantity ?? 0), 0);
-      const unplaced = Math.max(0, (w.quantity ?? 0) - placed);
-      if (locationFilter === 'home') {
-        // At home = has bottles in a rack/bin/home Alt Cellar, or loose bottles —
-        // i.e. anything that isn't exclusively in an external Alt Cellar.
-        const hasHome = wp.some((p) => p.kind !== 'location' || !externalLocIds.has(p.storage_location_id ?? '')) || unplaced > 0;
-        if (!hasHome) return false;
-      } else if (locationFilter === 'external') {
-        if (!locP.some((p) => externalLocIds.has(p.storage_location_id ?? ''))) return false;
-      } else if (locationFilter === 'Unassigned') {
-        // Loose Bottles — the wine has bottles not filed into any placement.
-        if (unplaced <= 0) return false;
-      } else if (locationFilter.startsWith('loc:')) {
-        const loc = locations.find((l) => l.id === locationFilter.slice(4));
-        if (!loc || !loc.wineIds.includes(w.id)) return false;
-      } else if (locationFilter.startsWith('sloc:')) {
-        const sid = locationFilter.slice(5);
-        if (!locP.some((p) => p.storage_location_id === sid)) return false;
-      } else if (wineToRackId[w.id] !== locationFilter) {
-        return false;
-      }
-    }
-    if (countryFilter !== 'All' && inferCountry(w.region) !== countryFilter) return false;
-    if (regionFilter && baseRegionGroup(w.region) !== regionFilter) return false;
-    if (colourFilter !== 'All' && wineStyle(w) !== colourFilter) return false;
-    if (maturityFilter !== 'All' && effectiveMaturity(w) !== maturityFilter) return false;
-    if (q) {
-      const hay = foldAccents([w.producer, w.wine_name, w.region, w.grape_variety, w.vintage]
-        .filter(Boolean)
-        .join(' '));
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
-
-  // Sort. Default ('recent') is newest-added first; the Price/Score chips
-  // override with directional sorts. Nulls sort to the bottom either way.
-  // Cellar Archive: one line per wine (same identity + bottle size), not one per
-  // archive event. The line is the most recently archived entry, carrying the
-  // total bottles archived, so it sorts by the wine's LAST trip to the archive;
-  // its wine card holds the full archive history.
-  const shownWines = ((): CellarWine[] => {
-    if (!isArchiveView) return filtered;
-    const byLatest = [...filtered].sort((a, b) =>
-      new Date(b.archived_at ?? b.created_at).getTime() - new Date(a.archived_at ?? a.created_at).getTime());
-    const bySize = new Map<number, CellarWine[]>();
-    for (const w of byLatest) {
-      const ml = w.bottle_size_ml ?? 750;
-      bySize.set(ml, [...(bySize.get(ml) ?? []), w]);
-    }
-    const out: CellarWine[] = [];
-    const ids = new Map<string, string[]>();
-    for (const rows of bySize.values()) {
-      for (const g of groupWinesByIdentity(rows)) {
-        out.push({ ...g.rep, quantity: g.totalQuantity });
-        ids.set(g.rep.id, g.rows.map((r) => r.id));
-      }
-    }
-    archiveGroupIdsRef.current = ids;
-    return out;
-  })();
-
-  const sorted = [...shownWines].sort((a, b) => {
-    switch (sortMode) {
-      case 'est_desc':   return (bottleValue(b) ?? -1) - (bottleValue(a) ?? -1);
-      case 'est_asc':    return (bottleValue(a) ?? Infinity) - (bottleValue(b) ?? Infinity);
-      case 'purch_desc': return Number(b.purchase_price ?? -1) - Number(a.purchase_price ?? -1);
-      case 'purch_asc':  return Number(a.purchase_price ?? Infinity) - Number(b.purchase_price ?? Infinity);
-      case 'critic_desc': return (b.critic_score ?? -1) - (a.critic_score ?? -1);
-      case 'critic_asc':  return (a.critic_score ?? Infinity) - (b.critic_score ?? Infinity);
-      case 'your_desc':   return (b.review_score ?? -1) - (a.review_score ?? -1);
-      case 'your_asc':    return (a.review_score ?? Infinity) - (b.review_score ?? Infinity);
-      default: {
-        // "Recent" in the Archive view = most recently ARCHIVED (a full archive
-        // updates the existing row, so its created_at stays old and it would
-        // otherwise sort into the middle). Elsewhere = most recently added.
-        const at = new Date((isArchiveView ? a.archived_at : null) ?? a.created_at).getTime();
-        const bt = new Date((isArchiveView ? b.archived_at : null) ?? b.created_at).getTime();
-        if (bt !== at) return bt - at;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      }
-    }
-  });
-
-  const totalBottles = filtered.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
-  // Wines shown that have no critic score / pricing downloaded yet.
-  const winesMissingIntel = filtered.filter(isMissingIntel);
-
-  // "Update all" — refresh critic score + pricing (and a thumbnail + region/grape
-  // for wines missing them) in bunches of 25 for efficiency. Each run confirms
-  // first, then does the next 25; the missing-intel count drops by 25 and the user
-  // presses again for the next bunch.
-  const INTEL_BATCH_SIZE = 25;
+  // Runs in bunches of 25: each press confirms, then does the next bunch.
   function handleUpdateAllIntel() {
-    if (winesMissingIntel.length === 0 || intelUpdating) return;
-    const total = winesMissingIntel.length;
-    const batch = winesMissingIntel.slice(0, INTEL_BATCH_SIZE);
+    const missing = filters.missingIntel;
+    if (missing.length === 0 || intelUpdating) return;
+    const batch = missing.slice(0, INTEL_BATCH_SIZE);
     showAlert({
       title: 'Update wine intel',
       body: `Vinster updates your wines in bunches of ${INTEL_BATCH_SIZE} at a time, which it completes with ease.${
-        total > batch.length
-          ? ` This will do the next ${batch.length} of ${total} — press "Update all" again for each further bunch.`
+        missing.length > batch.length
+          ? ` This will do the next ${batch.length} of ${missing.length} — press "Update all" again for each further bunch.`
           : ''
       }`,
       buttons: [
@@ -922,150 +651,77 @@ export default function FullCellarListScreen() {
   }
 
   async function runIntelBatch(batch: CellarWine[]) {
-    if (batch.length === 0 || intelUpdating) return;
-    const currency = preferences?.defaultCurrency ?? 'GBP';
     const controller = new AbortController();
     intelAbortRef.current = controller;
     setIntelUpdating(true);
     setIntelProgress({ done: 0, total: batch.length });
     try {
-      await updateCellarIntelBatch(batch, currency, (done, total) => setIntelProgress({ done, total }), controller.signal);
-      qc.invalidateQueries({ queryKey: ['cellar'] });
+      await updateCellarIntelBatch(batch, preferences?.defaultCurrency ?? 'GBP', (done, total) => setIntelProgress({ done, total }), controller.signal);
     } catch {
       showAlert({ title: 'Could not finish', body: 'Some wines could not be updated. Please try again.' });
     } finally {
+      refreshAll();
       setIntelUpdating(false);
       intelAbortRef.current = null;
     }
   }
 
-  // "Save Progress and Exit Update" — stop launching further wines (each already-
-  // updated wine is saved) and close the progress screen.
+  // "Save Progress and Exit Update": stop starting further wines; each wine
+  // already updated is saved.
   function exitIntelUpdate() {
     intelAbortRef.current?.abort();
     setIntelUpdating(false);
-    qc.invalidateQueries({ queryKey: ['cellar'] });
+    refreshAll();
   }
 
-  // Keep multi-select honest: when the filters/search change, drop any selected
-  // wines that are no longer visible so a bulk action can only ever touch what's
-  // on screen (previously the selection silently survived filter changes).
-  useEffect(() => {
-    if (!selectMode) return;
-    setSelectedIds((prev) => {
-      const visible = new Set(filtered.map((w) => w.id));
-      const next = new Set([...prev].filter((id) => visible.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locationFilter, countryFilter, regionFilter, colourFilter, maturityFilter, archivedFilter, search, selectMode]);
+  // ---- Filter chips and their pop-ups ----
 
-  // Location dropdown: All · each rack/fridge · each custom location · Not in a
-  // rack · "+ Add Location" (an action, handled specially in onSelect).
-  const locationOptions = useMemo(() => {
-    type Opt = { value: string; label: string; indent?: boolean; group?: boolean; header?: boolean; disabled?: boolean };
-    const homeCellars = storageLocations.filter((s) => !s.is_external);
-    const externalCellars = storageLocations.filter((s) => s.is_external);
-    const opts: Opt[] = [{ value: 'All', label: 'All locations' }];
-    // Bespoke cellar-wide Location filters stay at the top level.
-    for (const l of locations) opts.push({ value: `loc:${l.id}`, label: l.name });
-    // At-home group — a non-selectable title, then "View All" (all home wines),
-    // then the racks/fridges, home Alt Cellars, and the unplaced.
-    opts.push({ value: 'home_header', label: 'All Wines At Home', group: true, header: true });
-    opts.push({ value: 'home', label: 'View All', indent: true });
-    for (const r of racks) opts.push({ value: r.id, label: r.name, indent: true });
-    for (const s of homeCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
-    opts.push({ value: 'Unassigned', label: 'Unplaced Bottles', indent: true });
-    // External group — a non-selectable title (tapping it routed to a broken view).
-    // Once any external cellars exist, "View All" (all external wines) leads, then
-    // each cellar; until then a "Nothing here yet" placeholder.
-    opts.push({ value: 'external_header', label: 'All Wines Stored Externally', group: true, header: true });
-    if (externalCellars.length === 0) {
-      opts.push({ value: '__external_empty__', label: 'Nothing here yet', indent: true, disabled: true });
-    } else {
-      opts.push({ value: 'external', label: 'View All', indent: true });
-      for (const s of externalCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
-    }
-    return opts;
-  }, [racks, locations, storageLocations]);
+  const [openSheet, setOpenSheet] = useState<Sheet>(null);
+  const priceActive = PRICE_SORT_OPTIONS.some((o) => o.value === filters.sort);
+  const scoreActive = SCORE_SORT_OPTIONS.some((o) => o.value === filters.sort);
+  const sortLabel = [...PRICE_SORT_OPTIONS, ...SCORE_SORT_OPTIONS].find((o) => o.value === filters.sort)?.label ?? 'Recently Added';
+  const locationLabel = filters.location === 'All' ? 'All'
+    // The "View All" options read as their group's name on the chip.
+    : filters.location === 'home' ? 'All Wines At Home'
+    : filters.location === 'external' ? 'All Wines Stored Externally'
+    : locOptions.find((o) => o.value === filters.location)?.label ?? 'All';
+  const maturityLabel = MATURITY_OPTIONS.find((o) => o.value === filters.maturity && o.value !== 'All')?.label ?? 'All';
 
-  const locationLabel = locationFilter === 'All'
-    ? 'All'
-    // "View All" options share their group's meaning — show the group name on the
-    // chip rather than the generic "View All".
-    : locationFilter === 'home'
-      ? 'All Wines At Home'
-      : locationFilter === 'external'
-        ? 'All Wines Stored Externally'
-        : (locationOptions.find((o) => o.value === locationFilter)?.label ?? 'All');
-  const priceActive = PRICE_SORTS.includes(sortMode);
-  const scoreActive = SCORE_SORTS.includes(sortMode);
-  const priceLabel = priceActive ? (PRICE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
-  const scoreLabel = scoreActive ? (SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
-  const maturityLabel = maturityFilter === 'All' ? 'All' : (MATURITY_OPTIONS.find((o) => o.value === maturityFilter)?.label ?? 'All');
-  // Current ordering, shown in the hint above the filters. Dynamic so it stays
-  // accurate when the user switches to a Price/Score sort.
-  const sortLabel = sortMode === 'recent'
-    ? 'Recently Added'
-    : (PRICE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label
-        ?? SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label
-        ?? 'Recently Added');
-
-  function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string; indent?: boolean; group?: boolean; header?: boolean; disabled?: boolean }[]; selected: string; onSelect: (v: string) => void } | null {
-    if (field === 'location') {
-      return {
-        title: 'Filter by location',
-        options: locationOptions,
-        selected: locationFilter,
-        onSelect: (v) => setLocationFilter(v),
-      };
+  function sheetFor(field: Sheet): { title: string; options: FilterSheetOption[]; selected: string; onSelect: (v: string) => void } | null {
+    const sortReset = { value: 'recent', label: 'Recently added (default)' };
+    const setSort = (v: string) => filters.setSort(v as SortMode);
+    switch (field) {
+      case 'location':
+        return {
+          title: 'Filter by location',
+          options: locOptions,
+          selected: filters.location,
+          onSelect: (v) => (v === NEW_LOCATION ? setLocationPicker({ mode: 'new' }) : filters.setLocation(v)),
+        };
+      case 'country':
+        return { title: 'Filter by country', options: filters.countries.map((c) => ({ value: c, label: c === 'All' ? 'All countries' : c })), selected: filters.country, onSelect: filters.setCountry };
+      case 'colour':
+        return { title: 'Filter by colour', options: COLOUR_OPTIONS.map((c) => ({ value: c, label: c === 'All' ? 'All colours' : c })), selected: filters.colour, onSelect: filters.setColour };
+      case 'maturity':
+        return { title: 'Filter by maturity', options: MATURITY_OPTIONS, selected: filters.maturity, onSelect: filters.setMaturity };
+      case 'price':
+        return { title: 'Sort by Value', options: [sortReset, ...PRICE_SORT_OPTIONS], selected: filters.sort, onSelect: setSort };
+      case 'score':
+        return { title: 'Sort by Score', options: [sortReset, ...SCORE_SORT_OPTIONS], selected: filters.sort, onSelect: setSort };
+      default:
+        return null;
     }
-    if (field === 'country') {
-      return {
-        title: 'Filter by country',
-        options: availableCountries.map((c) => ({ value: c, label: c === 'All' ? 'All countries' : c })),
-        selected: countryFilter,
-        onSelect: setCountryFilter,
-      };
-    }
-    if (field === 'colour') {
-      return {
-        title: 'Filter by colour',
-        options: COLOUR_OPTIONS.map((c) => ({ value: c, label: c === 'All' ? 'All colours' : c })),
-        selected: colourFilter,
-        onSelect: setColourFilter,
-      };
-    }
-    if (field === 'maturity') {
-      return {
-        title: 'Filter by maturity',
-        options: MATURITY_OPTIONS,
-        selected: maturityFilter,
-        onSelect: setMaturityFilter,
-      };
-    }
-    if (field === 'price') {
-      return {
-        title: 'Sort by Value',
-        options: [{ value: 'recent', label: 'Recently added (default)' }, ...PRICE_SORT_OPTIONS],
-        selected: sortMode,
-        onSelect: (v) => setSortMode(v as SortMode),
-      };
-    }
-    if (field === 'score') {
-      return {
-        title: 'Sort by Score',
-        options: [{ value: 'recent', label: 'Recently added (default)' }, ...SCORE_SORT_OPTIONS],
-        selected: sortMode,
-        onSelect: (v) => setSortMode(v as SortMode),
-      };
-    }
-    return null;
   }
+  const sheet = sheetFor(openSheet);
+  const chipMarker = (field: Sheet) => (openSheet === field ? '▴' : '▾');
 
-  const activeDropdown = dropdownConfig(openDropdown);
+  // ---- Render ----
 
-  if (isLoading) {
+  const listLoading = isArchiveView ? archive.isLoading : isLoading;
+  const listError = isArchiveView ? archive.isError : isError;
+  const sourceEmpty = (isArchiveView ? archive.wines : wines).length === 0;
+
+  if (listLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.gold} />
@@ -1075,55 +731,146 @@ export default function FullCellarListScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerBand}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
+        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Back">
+          <Text style={styles.back}>←</Text>
         </TouchableOpacity>
-        {/* Adding + exporting now start from the Cellar tab ("Add Wines" opens
-            this list with ?add=1; "Export Cellar" exports the branded PDF). */}
-        <View style={{ width: 40 }} />
       </View>
+      <Text style={styles.title}>{isArchiveView ? 'Your Cellar Archive' : 'Your Cellar List'}</Text>
 
-      {/* Title sits on its own line, brought down below the back row so it doesn't
-          crowd the top of the screen. */}
-      <Text style={styles.title}>{isArchiveView ? 'Cellar Archive' : 'Full Cellar List'}</Text>
-      </View>
-
-      {/* Transient "added" toast — auto-fades, no action to dismiss. */}
       {showAddedToast && (
         <View style={styles.addedToast} pointerEvents="none">
-          <Text style={styles.addedToastText}>Added to your cellar list ✓</Text>
+          <Text style={styles.addedToastText}>Added to Your Cellar List ✓</Text>
         </View>
       )}
 
       {!session ? (
         <ArchiveSignInPrompt
           title="Sign in to view your cellar"
-          body="Track every bottle in your collection — sign in to see your full cellar list."
+          body={`Track every bottle in your collection — sign in to see ${isArchiveView ? 'Your Cellar Archive' : 'Your Cellar List'}.`}
         />
       ) : (
         <>
-
-      {/* Summary row */}
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryText}>
-          {filtered.length} {filtered.length === 1 ? 'wine' : 'wines'} · {totalBottles} {totalBottles === 1 ? 'bottle' : 'bottles'}
-        </Text>
-        {/* Wines with no critic score / pricing yet — one tap values them all. */}
-        {winesMissingIntel.length > 0 ? (
-          <TouchableOpacity onPress={handleUpdateAllIntel} activeOpacity={0.7} style={styles.missingIntelBtn}>
-            <Text style={styles.missingIntelText}>
-              {winesMissingIntel.length} {winesMissingIntel.length === 1 ? 'wine' : 'wines'} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryText}>
+              {winesLabel(filters.rows.length)} · {bottlesLabel(filters.totalBottles)}
             </Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+            {canEdit && filters.missingIntel.length > 0 ? (
+              <TouchableOpacity onPress={handleUpdateAllIntel} activeOpacity={0.7} style={styles.missingIntelBtn}>
+                <Text style={styles.missingIntelText}>
+                  {winesLabel(filters.missingIntel.length)} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
 
-      {/* Full-screen progress while intel updates — the same percentage/time
-          tracker as the scan flows, for consistency. Duration scales with the
-          number of wines (3-way concurrency); the tracker's own past-cap lines
-          cover any overrun. Back is blocked so a mid-batch dismiss can't strand it. */}
+          <Text style={styles.filterHint}>Listed by {sortLabel} · Swipe to see all filters →</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
+            {/* A Region chip leads when the list was opened from Most Collected —
+                tap it to clear the region. Location and Maturity are live-list only. */}
+            {filters.region ? (
+              <FilterChip label="Region" value={filters.region} active marker="✕" onPress={() => filters.setRegion(null)} accessibilityLabel={`Clear the ${filters.region} filter`} />
+            ) : null}
+            {!isArchiveView && (
+              <FilterChip label="Location" value={locationLabel} active={filters.location !== 'All'} marker={chipMarker('location')} onPress={() => setOpenSheet('location')} />
+            )}
+            {!isArchiveView && (
+              <FilterChip label="Maturity" value={maturityLabel} active={filters.maturity !== 'All'} marker={chipMarker('maturity')} onPress={() => setOpenSheet('maturity')} />
+            )}
+            <FilterChip label="Score" value={scoreActive ? sortLabel : 'Any'} active={scoreActive} marker={chipMarker('score')} onPress={() => setOpenSheet('score')} />
+            <FilterChip label="Value" value={priceActive ? sortLabel : 'Any'} active={priceActive} marker={chipMarker('price')} onPress={() => setOpenSheet('price')} />
+            <FilterChip label="Country" value={filters.country} active={filters.country !== 'All'} marker={chipMarker('country')} onPress={() => setOpenSheet('country')} />
+            <FilterChip label="Colour" value={filters.colour} active={filters.colour !== 'All'} marker={chipMarker('colour')} onPress={() => setOpenSheet('colour')} />
+          </ScrollView>
+
+          <View style={styles.searchRow}>
+            <TextInput
+              style={styles.searchInput}
+              value={filters.search}
+              onChangeText={filters.setSearch}
+              placeholder="Search producer, wine, region, vintage…"
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+            />
+            {filters.search.length > 0 && (
+              <TouchableOpacity onPress={() => filters.setSearch('')} style={styles.searchClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.searchClearText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {filters.rows.length === 0 ? (
+            <View style={styles.empty}>
+              {listError ? (
+                // Distinct from the empty state on purpose: the list is [] on a
+                // failed fetch too, and an "empty" cellar reads as data loss.
+                <>
+                  <Text style={styles.emptyTitle}>Couldn&apos;t load {isArchiveView ? 'Your Cellar Archive' : 'your cellar'}</Text>
+                  <Text style={styles.emptyBody}>Check your connection and try again. Your wines are safe.</Text>
+                  <TouchableOpacity style={styles.retryBtn} onPress={() => qc.invalidateQueries({ queryKey: [isArchiveView ? 'cellar-archive' : 'cellar', userId] })} activeOpacity={0.85}>
+                    <Text style={styles.retryBtnText}>Try again</Text>
+                  </TouchableOpacity>
+                </>
+              ) : sourceEmpty ? (
+                isArchiveView ? (
+                  <>
+                    <Text style={styles.emptyTitle}>Your Cellar Archive is empty</Text>
+                    <Text style={styles.emptyBody}>Wines you archive from Your Cellar List land here.</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.emptyTitle}>Your cellar is empty</Text>
+                    <Text style={styles.emptyBody}>Add wines to your cellar to generate your list.</Text>
+                  </>
+                )
+              ) : (
+                <>
+                  <Text style={styles.emptyTitle}>No wines match</Text>
+                  <Text style={styles.emptyBody}>Try clearing some filters to see more of your cellar.</Text>
+                </>
+              )}
+            </View>
+          ) : (
+            <FlatList
+              style={styles.list}
+              data={filters.rows}
+              keyExtractor={(r) => r.wine.id}
+              renderItem={renderRow}
+              contentContainerStyle={{ paddingTop: spacing.xs, paddingBottom: selectMode ? 150 : 60 }}
+              initialNumToRender={12}
+              windowSize={7}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
+        </>
+      )}
+
+      {selectMode && (
+        <View style={styles.selectBar}>
+          <View style={styles.selectBarTop}>
+            <Text style={styles.selectBarCount}>{busy ? 'Working…' : `${selectedIds.size} selected`}</Text>
+            <TouchableOpacity onPress={exitSelect} disabled={busy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.selectBarCancel}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.selectBarActions}>
+            {[
+              { label: 'Archive', onPress: confirmArchiveSelected },
+              { label: 'Move', onPress: () => setMoveHome({ kind: 'selected' }) },
+            ].map((a) => {
+              const disabled = selectedIds.size === 0 || busy;
+              return (
+                <TouchableOpacity key={a.label} style={[styles.selectAction, disabled && styles.selectActionDisabled]} disabled={disabled} onPress={a.onPress}>
+                  <Text style={styles.selectActionText}>{a.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* "Update all" progress. Back is blocked so a mid-batch dismiss can't strand it. */}
       <Modal visible={intelUpdating} animationType="fade" onRequestClose={() => {}}>
         <View style={{ flex: 1 }}>
           <SearchProgress
@@ -1132,15 +879,13 @@ export default function FullCellarListScreen() {
             body="Vinster is fetching critic scores and market values for your wines."
             durationMs={Math.max(15000, intelProgress.total * 2500)}
           />
-          {/* Let the user bail out of a long run — everything done so far is saved. */}
           <TouchableOpacity style={styles.exitUpdateBtn} onPress={exitIntelUpdate} activeOpacity={0.85}>
             <Text style={styles.exitUpdateText}>Save Progress and Exit Update</Text>
           </TouchableOpacity>
         </View>
       </Modal>
 
-      {/* Deleting a location's wines — a real percentage bar so a big import's
-          delete never looks frozen. Back blocked mid-delete. */}
+      {/* Deleting a location's wines. Back is blocked mid-delete. */}
       <Modal visible={deleting} animationType="fade" onRequestClose={() => {}}>
         <View style={styles.deleteProgressWrap}>
           <ActivityIndicator color={colors.gold} />
@@ -1157,336 +902,17 @@ export default function FullCellarListScreen() {
         </View>
       </Modal>
 
-      {/* Filter row — Sort first so the most common interaction (changing
-          order) is closest to the user's thumb. Rack / Country / Colour
-          follow in descending likelihood of use. */}
-      <Text style={styles.filterHint}>Listed by {sortLabel} · Swipe to see all filters →</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterScroll}
-        contentContainerStyle={styles.filterRow}
-      >
-        {/* Order: Location · Maturity · Score · Price · Favourites · Country ·
-            Colour · Archive. Location/Maturity/Archive are Full-Cellar-List-only
-            (hidden in the Archive view). A Region chip leads when the list was
-            opened from Most Collected — tap it to clear the region. */}
-        {regionFilter ? (
-          <TouchableOpacity style={[styles.filterChip, styles.sortChip]} onPress={() => setRegionFilter(null)} accessibilityLabel={`Clear the ${regionFilter} filter`}>
-            <View style={styles.filterChipHeadingRow}>
-              <Text style={[styles.filterChipLabel, styles.filterChipTextOn]}>Region</Text>
-              <Text style={styles.filterChipChevron}>✕</Text>
-            </View>
-            <Text style={[styles.filterChipValue, { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{regionFilter}</Text>
-          </TouchableOpacity>
-        ) : null}
-        {!isArchiveView && (
-          <TouchableOpacity style={[styles.filterChip, locationFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('location')}>
-            <View style={styles.filterChipHeadingRow}>
-              <Text style={[styles.filterChipLabel, locationFilter !== 'All' && styles.filterChipTextOn]}>Location</Text>
-              <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
-            </View>
-            <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
-          </TouchableOpacity>
-        )}
-        {!isArchiveView && (
-          <TouchableOpacity style={[styles.filterChip, maturityFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('maturity')}>
-            <View style={styles.filterChipHeadingRow}>
-              <Text style={[styles.filterChipLabel, maturityFilter !== 'All' && styles.filterChipTextOn]}>Maturity</Text>
-              <Text style={styles.filterChipChevron}>{openDropdown === 'maturity' ? '▴' : '▾'}</Text>
-            </View>
-            <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity style={[styles.filterChip, scoreActive && styles.sortChip]} onPress={() => setOpenDropdown('score')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={[styles.filterChipLabel, scoreActive && styles.filterChipTextOn]}>Score</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'score' ? '▴' : '▾'}</Text>
-          </View>
-          <Text style={[styles.filterChipValue, scoreActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{scoreLabel}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, priceActive && styles.sortChip]} onPress={() => setOpenDropdown('price')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={[styles.filterChipLabel, priceActive && styles.filterChipTextOn]}>Value</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'price' ? '▴' : '▾'}</Text>
-          </View>
-          <Text style={[styles.filterChipValue, priceActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{priceLabel}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, countryFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('country')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={[styles.filterChipLabel, countryFilter !== 'All' && styles.filterChipTextOn]}>Country</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'country' ? '▴' : '▾'}</Text>
-          </View>
-          <Text style={[styles.filterChipValue, countryFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{countryFilter === 'All' ? 'All' : countryFilter}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, colourFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('colour')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={[styles.filterChipLabel, colourFilter !== 'All' && styles.filterChipTextOn]}>Colour</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'colour' ? '▴' : '▾'}</Text>
-          </View>
-          <Text style={[styles.filterChipValue, colourFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
-        </TouchableOpacity>
-        {/* The Archive folder chip is retired here — the archived-bottles view is
-            reached from Your Wine Archive → Your Cellar Archive instead. The
-            ?archived=1 route still powers that dedicated view. */}
-      </ScrollView>
+      <FilterSheet
+        visible={!!sheet}
+        title={sheet?.title ?? ''}
+        hint={openSheet === 'location' && canEdit && (customLocations.length > 0 || storageLocations.length > 0) ? 'Long-press a location to manage or delete it' : undefined}
+        options={sheet?.options ?? []}
+        selected={sheet?.selected ?? ''}
+        onSelect={(v) => sheet?.onSelect(v)}
+        onLongPress={manageLocation}
+        onClose={() => setOpenSheet(null)}
+      />
 
-      {/* Search sits below the filter chips and narrows whatever the chips
-          already filter — handy when there are dozens of wines in the
-          selected rack / colour / country. */}
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search producer, wine, region, vintage…"
-          placeholderTextColor={colors.textMuted}
-          returnKeyType="search"
-          clearButtonMode="while-editing"
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')} style={styles.searchClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.searchClearText}>✕</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {sorted.length === 0 ? (
-        <View style={styles.empty}>
-          {isError ? (
-            // Distinct from the empty state on purpose: `wines` is [] on a
-            // failed fetch too, and telling someone with a full cellar that
-            // it is empty reads as data loss.
-            <>
-              <Text style={styles.emptyTitle}>Couldn&apos;t load your cellar</Text>
-              <Text style={styles.emptyBody}>
-                Check your connection and try again. Your wines are safe.
-              </Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={() => qc.invalidateQueries({ queryKey: ['cellar', userId] })} activeOpacity={0.85}>
-                <Text style={styles.retryBtnText}>Try again</Text>
-              </TouchableOpacity>
-            </>
-          ) : wines.length === 0 ? (
-            <>
-              <Text style={styles.emptyTitle}>Your cellar is empty</Text>
-              <Text style={styles.emptyBody}>Add wines to your cellar to generate your list.</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.emptyTitle}>No wines match</Text>
-              <Text style={styles.emptyBody}>Try clearing some filters to see more of your cellar.</Text>
-            </>
-          )}
-        </View>
-      ) : (
-        <ScrollView
-          style={styles.listScroll}
-          contentContainerStyle={{ paddingTop: spacing.xs, paddingBottom: selectMode ? 150 : 60 }}
-        >
-          {sorted.map((w) => {
-            const valueText = w.estimated_value != null
-              ? `${formatCurrency(Number(w.estimated_value), w.estimated_value_currency, { decimals: 0 })}${PER_75CL}`
-              : null;
-            const isSelected = selectedIds.has(w.id);
-            return (
-              <TouchableOpacity
-                key={w.id}
-                style={[styles.row, isSelected && styles.rowSelected]}
-                onPress={() => router.push(`/cellar/${w.id}`)}
-                onLongPress={() => openWineActions(w)}
-                delayLongPress={350}
-                activeOpacity={0.7}
-              >
-                <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} />
-                <View style={styles.rowMain}>
-                  {/* White producer+name, gold region + grape beneath (shared header). */}
-                  <WineIdentityHeader
-                    producer={w.producer}
-                    wineName={w.wine_name}
-                    vintage={w.vintage}
-                    region={w.region}
-                    grape={w.grape_variety}
-                    size="sm"
-                    align="left"
-                  />
-                  {isArchiveView && w.archived_at ? (
-                    <Text style={styles.rowArchivedDate}>Archived {new Date(w.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.rowRight}>
-                  {/* When sorting by Your Score, show the user's own score (white)
-                      so the sorted list is comparable at a glance — otherwise the
-                      gold critic score. */}
-                  {sortMode === 'your_desc' || sortMode === 'your_asc'
-                    ? (w.review_score != null ? <Text style={styles.rowScoreUser}>{w.review_score} pts</Text> : null)
-                    : (w.critic_score != null ? <Text style={styles.rowScore}>{w.critic_score} pts</Text> : null)}
-                  {valueText && <Text style={styles.rowValue}>{valueText}</Text>}
-                  <Text style={styles.rowQty}>{w.quantity}x{bottleSizeCl(w.bottle_size_ml ?? 750)}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      )}
-        </>
-      )}
-
-      {/* Multi-select action bar — floats at the bottom while selecting. */}
-      {selectMode && (
-        <View style={styles.selectBar}>
-          <View style={styles.selectBarTop}>
-            <Text style={styles.selectBarCount}>{selectedIds.size} selected</Text>
-            <TouchableOpacity onPress={exitSelect} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.selectBarCancel}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.selectBarActions}>
-            <TouchableOpacity
-              style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]}
-              disabled={selectedIds.size === 0 || busy}
-              onPress={confirmArchiveSelected}
-            >
-              <Text style={styles.selectActionText}>Archive Wines</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]}
-              disabled={selectedIds.size === 0 || busy}
-              onPress={confirmDeleteSelected}
-            >
-              <Text style={styles.selectActionText}>Delete (permanent)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]}
-              disabled={selectedIds.size === 0 || busy}
-              onPress={openAddSelectedToLocation}
-            >
-              <Text style={styles.selectActionText}>Add to Location</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Create / pick a Location for selected wines (or a fresh empty one
-          from the filter's "+ Add Location"). */}
-      <Modal visible={locModal.open} transparent animationType="fade" onRequestClose={closeLocModal}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeLocModal}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            {locModal.stage === 'choose' ? (
-              <>
-                <Text style={styles.modalTitle}>
-                  Add {locModal.wineIds.length} wine{locModal.wineIds.length === 1 ? '' : 's'} to a location
-                </Text>
-                <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
-                  <TouchableOpacity
-                    style={styles.modalOption}
-                    onPress={() => { setLocNameDraft(''); setLocModal((m) => ({ ...m, stage: 'name' })); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.modalOptionText, { color: colors.gold }]}>＋ New location…</Text>
-                  </TouchableOpacity>
-                  {locations.length === 0 ? (
-                    <Text style={styles.locEmpty}>No locations yet — create one above.</Text>
-                  ) : locations.map((l) => (
-                    <TouchableOpacity key={l.id} style={styles.modalOption} disabled={busy} onPress={() => addWinesToExistingLocation(l)} activeOpacity={0.7}>
-                      <Text style={styles.modalOptionText} numberOfLines={1}>{l.name}</Text>
-                      <Text style={styles.locCount}>{l.wineIds.length}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <TouchableOpacity style={styles.modalCancel} onPress={closeLocModal}>
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={styles.modalTitle}>Name your location</Text>
-                <TextInput
-                  style={styles.locNameInput}
-                  value={locNameDraft}
-                  onChangeText={setLocNameDraft}
-                  placeholder="e.g. Eton Park, LCB"
-                  placeholderTextColor={colors.textMuted}
-                  autoFocus
-                  maxLength={40}
-                  returnKeyType="done"
-                  onSubmitEditing={saveNewLocation}
-                />
-                <TouchableOpacity
-                  style={[styles.addBtn, (!locNameDraft.trim() || busy) && { opacity: 0.5 }]}
-                  disabled={!locNameDraft.trim() || busy}
-                  onPress={saveNewLocation}
-                >
-                  <Text style={styles.addBtnText}>
-                    {busy ? 'Saving…' : locModal.wineIds.length ? `Create & add ${locModal.wineIds.length}` : 'Create location'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalCancel} onPress={closeLocModal}>
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            {activeDropdown && (
-              <>
-                <Text style={styles.modalTitle}>{activeDropdown.title}</Text>
-                {openDropdown === 'location' && (locations.length > 0 || storageLocations.length > 0) ? (
-                  <Text style={styles.locationHint}>Long-press a location to manage or delete it</Text>
-                ) : null}
-                <ScrollView style={{ maxHeight: 400 }}>
-                  {activeDropdown.options.map((opt) => {
-                    const active = activeDropdown.selected === opt.value;
-                    // Bespoke locations (loc:…) can be managed via long-press.
-                    const isLocation = openDropdown === 'location' && opt.value.startsWith('loc:');
-                    // Home/External storage locations (sloc:…) — long-press to delete
-                    // the location (optionally with its wines).
-                    const isStorageLoc = openDropdown === 'location' && opt.value.startsWith('sloc:');
-                    // Section headers and the "Nothing here yet" placeholder are
-                    // labels, not choices — render them as plain, non-tappable rows.
-                    if (opt.header || opt.disabled) {
-                      return (
-                        <View key={opt.value} style={[styles.modalOption, opt.indent && styles.modalOptionIndent]}>
-                          <Text style={[styles.modalOptionText, opt.group && styles.modalOptionGroupText, opt.disabled && styles.modalOptionDisabledText]}>{opt.label}</Text>
-                        </View>
-                      );
-                    }
-                    return (
-                      <TouchableOpacity
-                        key={opt.value}
-                        style={[styles.modalOption, opt.indent && styles.modalOptionIndent, active && styles.modalOptionActive]}
-                        onPress={() => {
-                          activeDropdown.onSelect(opt.value);
-                          setOpenDropdown(null);
-                        }}
-                        onLongPress={
-                          isLocation ? () => { setOpenDropdown(null); openLocationOptions(opt.value.slice(4), opt.label); }
-                          : isStorageLoc ? () => { setOpenDropdown(null); openStorageLocationOptions(opt.value.slice(5), opt.label); }
-                          : undefined
-                        }
-                        delayLongPress={400}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.modalOptionText, opt.group && styles.modalOptionGroupText, active && styles.modalOptionTextActive]}>{opt.label}</Text>
-                        {active && <Text style={styles.modalOptionCheck}>✓</Text>}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                <TouchableOpacity style={styles.modalCancel} onPress={() => setOpenDropdown(null)}>
-                  <Text style={styles.modalCancelText}>Close</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Rename a bespoke Location. */}
       <RenameModal
         visible={!!renameLoc}
         initialName={renameLoc?.name ?? ''}
@@ -1496,156 +922,112 @@ export default function FullCellarListScreen() {
         onClose={() => setRenameLoc(null)}
       />
 
-      {/* Add/Remove the wines in a Location — the same picker the rack uses. */}
+      {/* Create a custom Location, or add/remove the wines in one. */}
       <LibraryFilterModal
-        visible={!!locEditTarget}
-        title="Edit location"
+        visible={!!locationPicker}
+        title={locationPicker?.mode === 'edit' ? 'Edit location' : 'New location'}
         itemNoun="wines"
-        items={wines.map((w) => ({
-          id: w.id,
-          label: wineHeaderLine(w.producer, w.wine_name, w.vintage),
-          sublabel: w.region ?? undefined,
-        }))}
-        initialName={locEditTarget?.name}
-        initialSelected={locEditTarget?.wineIds}
+        nounLabel="location"
+        items={locationPickerItems}
+        initialName={locationPicker?.mode === 'edit' ? locationPicker.location.name : ''}
+        initialSelected={locationPicker?.mode === 'edit' ? locationPicker.location.wineIds : []}
         saving={busyLoc}
-        onSave={saveLocationEdit}
-        onClose={() => setLocEditTarget(null)}
+        onSave={saveLocationPicker}
+        onClose={() => setLocationPicker(null)}
       />
 
-      {/* Add-wine chooser — Scan / Upload / Manual. Same three-way
-          flow as the Cellar tab's "Add Wine / Generate Wine Intel"
-          button so the user lands on the same /label/* downstream
-          screens regardless of which surface they triggered it from. */}
-      <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddWineOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Add Wine to Your Cellar</Text>
-            <Text style={styles.addBody}>Scan or Upload a Label or Lineup, or manually input the details.</Text>
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={() => { setAddWineOpen(false); router.push('/label/camera'); }}
-            >
-              <Text style={styles.addBtnText}>Scan Label</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.addBtn, { marginTop: spacing.sm }]}
-              onPress={() => { setAddWineOpen(false); handleUpload(); }}
-            >
-              <Text style={styles.addBtnText}>Upload Label</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.addBtn, { marginTop: spacing.sm }]}
-              onPress={startLineup}
-            >
-              <Text style={styles.addBtnText}>Add a Lineup (up to 6 bottles)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.addBtn, { marginTop: spacing.sm }]}
-              onPress={() => {
-                setAddWineOpen(false);
-                // Clear any prior scan so Confirm Wine Details opens
-                // blank for the user to fill in by hand.
-                resetLabelStore();
-                router.push('/label/confirm?manual=1');
-              }}
-            >
-              <Text style={styles.addBtnText}>Search/Manual Input</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.addBtn, { marginTop: spacing.sm }]}
-              onPress={() => { setAddWineOpen(false); openImportChooser(); }}
-            >
-              <Text style={styles.addBtnText}>Import Cellar Doc</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setAddWineOpen(false)} style={styles.modalCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+      <AddWineChooser visible={addWineOpen} racks={racks} onClose={() => setAddWineOpen(false)} />
 
-      {/* Scanning overlay — sits on top of the screen while OCR runs
-          so the user has a visual cue between the picker dismiss and
-          the confirm screen mounting (the round-trip can take 5–15s). */}
-      {scanningLabel && (
-        <View style={styles.scanningOverlay} pointerEvents="auto">
-          <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.scanningText}>Reading the label…</Text>
-        </View>
-      )}
-
-      {/* Move to Home Storage — external bottles only (see deliverToHome). */}
-      <Modal visible={!!deliverWine} transparent animationType="fade" onRequestClose={() => setDeliverWine(null)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setDeliverWine(null)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Move to Home Storage</Text>
-            <Text style={styles.addBody} numberOfLines={2}>{deliverWine ? (wineHeaderLine(deliverWine.wine.producer, deliverWine.wine.wine_name, deliverWine.wine.vintage) || deliverWine.wine.wine_name) : ''}</Text>
-            {(deliverWine?.max ?? 0) > 1 && (
-              <View style={styles.deliverStepper}>
-                <TouchableOpacity onPress={() => setDeliverCount((c) => Math.max(1, c - 1))} style={styles.deliverStepBtn} accessibilityLabel="Fewer bottles">
-                  <Text style={styles.deliverStepText}>−</Text>
-                </TouchableOpacity>
-                <Text style={styles.deliverCount}>{deliverCount} of {deliverWine?.max} bottles</Text>
-                <TouchableOpacity onPress={() => setDeliverCount((c) => Math.min(deliverWine?.max ?? 1, c + 1))} style={styles.deliverStepBtn} accessibilityLabel="More bottles">
-                  <Text style={styles.deliverStepText}>+</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            <ScrollView style={{ maxHeight: 340 }}>
-              <TouchableOpacity style={styles.deliverRow} onPress={() => void runDeliver({ kind: 'loose' })}>
-                <Text style={styles.deliverName}>Full Cellar List</Text>
-                <Text style={styles.deliverType}>Unplaced</Text>
-              </TouchableOpacity>
-              {racks.map((r) => (
-                <TouchableOpacity key={r.id} style={styles.deliverRow} onPress={() => void runDeliver({ kind: r.storage_type === 'bin' ? 'bin' : 'rack', id: r.id, name: r.name })}>
-                  <Text style={styles.deliverName} numberOfLines={1}>{r.name}</Text>
-                  <Text style={styles.deliverType}>{r.storage_type === 'bin' ? 'Bin' : r.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
-                </TouchableOpacity>
-              ))}
-              {storageLocations.filter((l) => !l.is_external).map((l) => (
-                <TouchableOpacity key={l.id} style={styles.deliverRow} onPress={() => void runDeliver({ kind: 'location', id: l.id, name: l.name })}>
-                  <Text style={styles.deliverName} numberOfLines={1}>{l.name}</Text>
-                  <Text style={styles.deliverType}>Alt Cellar</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity onPress={() => setDeliverWine(null)} style={styles.modalCancel}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+      <MoveHomeModal
+        visible={!!moveHome}
+        subtitle={moveHome?.kind === 'one'
+          ? wineHeaderLine(moveHome.wine.producer, moveHome.wine.wine_name, moveHome.wine.vintage) || moveHome.wine.wine_name
+          : `Every bottle of ${winesLabel(selectedIds.size)}`}
+        maxBottles={moveHome?.kind === 'one' ? moveHome.max : undefined}
+        racks={racks}
+        bins={bins}
+        storageLocations={storageLocations}
+        onPick={onMoveHomePick}
+        onClose={() => setMoveHome(null)}
+      />
 
       <ArchiveNoteModal
-        visible={!!archiveWine}
+        visible={!!archiveTarget}
         title="Archive this wine?"
-        body="It moves to Your Archive and leaves any rack or location it was placed in. Your reviews and history stay."
+        body="It moves to Your Cellar Archive and leaves any rack or location it was placed in. Your reviews and history stay."
         busy={busy}
-        maxCount={archiveWine?.quantity ?? 1}
+        maxCount={archiveTarget?.quantity ?? 1}
         onConfirm={handleArchiveConfirm}
-        onClose={() => setArchiveWine(null)}
+        onClose={() => setArchiveTarget(null)}
       />
     </View>
   );
 }
 
+function FilterChip({ label, value, active, marker, onPress, accessibilityLabel }: {
+  label: string; value: string; active: boolean; marker: string; onPress: () => void; accessibilityLabel?: string;
+}) {
+  return (
+    <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress} accessibilityLabel={accessibilityLabel}>
+      <View style={styles.chipHeadingRow}>
+        <Text style={[styles.chipLabel, active && styles.chipTextOn]}>{label}</Text>
+        <Text style={styles.chipMarker}>{marker}</Text>
+      </View>
+      <Text style={[styles.chipValue, active && styles.chipTextOn]} numberOfLines={1} ellipsizeMode="tail">{value}</Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
-  // Move to Home Storage popup — count stepper + destination rows.
-  deliverStepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg, marginVertical: spacing.md },
-  deliverStepBtn: { width: 40, height: 40, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  deliverStepText: { fontFamily: fonts.bodySemibold, fontSize: 20, color: colors.gold },
-  deliverCount: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text },
-  deliverRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  deliverName: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, flexShrink: 1 },
-  deliverType: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6 },
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  // Terracotta header band (lighter than the buttons) with cream fonts.
-  headerBand: {},
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  // Inter — back/nav link (gold, to match the rest of the app)
-  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row' },
+  back: { width: 40, fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
+  title: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg },
+  addedToast: { marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, backgroundColor: 'rgba(224,184,74,0.14)', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  addedToastText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
+
+  // Summary bar: counts, then the "missing intel" link.
+  summaryRow: { marginVertical: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center', borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
+  summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  missingIntelBtn: { marginTop: 4 },
+  missingIntelText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
+  missingIntelLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
+
+  // Filter chips: a label with an open/closed marker over the current value;
+  // a gold outline and text when the filter is on.
+  filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
+  filterScroll: { flexGrow: 0, flexShrink: 0 },
+  filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
+  chip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  chipActive: { borderColor: colors.gold },
+  chipTextOn: { color: colors.gold },
+  chipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
+  chipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  chipMarker: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },
+  chipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
+  searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
+  searchClear: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  searchClearText: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.textMuted },
+
+  list: { flex: 1 },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
+  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
+  emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  retryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+
+  // Select mode's bar, floating at the bottom.
+  selectBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.lg, gap: spacing.sm },
+  selectBarTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
+  selectBarCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
+  selectBarCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold },
+  selectBarActions: { flexDirection: 'row', gap: spacing.sm },
+  selectAction: { flex: 1, borderWidth: 1, borderColor: 'rgba(244,235,224,0.30)', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  selectActionDisabled: { opacity: 0.4 },
+  selectActionText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.cream, textAlign: 'center', letterSpacing: 0.3 },
 
   exitUpdateBtn: { position: 'absolute', bottom: 64, alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: colors.background },
   exitUpdateText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
@@ -1655,112 +1037,4 @@ const styles = StyleSheet.create({
   deleteProgressTrack: { width: '100%', maxWidth: 340, height: 8, borderRadius: 4, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   deleteProgressFill: { height: '100%', backgroundColor: colors.gold },
   deleteProgressHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
-
-  // Inter — body in modal
-  addBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
-  addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
-  // Cormorant — button text
-  addBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  scanningOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
-  // Inter — body (processing status)
-  scanningText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
-  // Cormorant — page header
-  title: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg },
-  // Stats bar — green outline + light-green fill (matches the "upload instead"
-  // banner on the Scan tab), distinct from the terracotta separator lines.
-  // Stats BAR — full-width, with a green rule top and bottom running edge to
-  // edge (light-green fill between), the stat text centred.
-  summaryRow: { marginVertical: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center', borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
-  // Inter — summary read-out
-  summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
-  missingIntelBtn: { marginTop: 4 },
-  missingIntelText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
-  missingIntelLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
-  // Inter — hint
-  filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
-
-  filterScroll: { flexGrow: 0, flexShrink: 0 },
-  listScroll: { flex: 1 },
-  filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
-  // Filter chips — terracotta fill with cream text (a shaded bubble), distinct
-  // from the cream page. Active chips get a green outline (sortChip).
-  // Filters — green-tint fill + green outline + green text; ACTIVE (sortChip)
-  // swaps to a terracotta fill with cream text.
-  filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
-  sortChip: { borderColor: colors.gold },
-  filterChipTextOn: { color: colors.gold },
-  // Inter — chip label
-  filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  // Inter — chip value read-out
-  filterChipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
-  // Heading row inside a filter chip — label on the left, a small up/down
-  // chevron on the right that flips when this chip's dropdown is open, so
-  // users can see the chip is a selectable filter.
-  filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
-  filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
-  // Inter — form input
-  searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
-  searchClear: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
-  // Inter — clear glyph
-  searchClearText: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.textMuted },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  // Cormorant — empty-state header
-  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
-  // Inter — empty body
-  emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
-  retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
-  retryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  addedToast: { marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, backgroundColor: 'rgba(224,184,74,0.14)', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
-  addedToastText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  // Gold tinge on a row picked in multi-select mode.
-  rowSelected: { backgroundColor: 'rgba(212,176,96,0.18)' },
-  // Floating bulk-action bar shown while selecting.
-  selectBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.lg, gap: spacing.sm },
-  selectBarTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
-  selectBarCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
-  selectBarCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold },
-  selectBarActions: { flexDirection: 'row', gap: spacing.sm },
-  // Elegant, uniform action buttons — soft cream outline + cream text, no gold
-  // and no separate destructive colour (Delete reads the same as the rest).
-  selectAction: { flex: 1, borderWidth: 1, borderColor: 'rgba(244,235,224,0.30)', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
-  selectActionDisabled: { opacity: 0.4 },
-  selectActionText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.cream, textAlign: 'center', letterSpacing: 0.3 },
-  locEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
-  locCount: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted },
-  locNameInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
-  rowThumb: { width: 38, height: 48, marginRight: spacing.md },
-  rowMain: { flex: 1, marginRight: spacing.md },
-
-  rowArchivedDate: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3, letterSpacing: 0.2 },
-  rowRight: { alignItems: 'flex-end', gap: 2 },
-  // Inter — score value
-  rowScore: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.gold },
-  // User's own review score — white, shown when sorting by Your Score.
-  rowScoreUser: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.text },
-  // Inter — value read-out
-  rowValue: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.text },
-  // Inter — quantity caption
-  rowQty: { fontSize: 11, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
-  // Cormorant — modal pop-up title
-  modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
-  locationHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: -spacing.sm, marginBottom: spacing.sm },
-  modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  // Sub-items under a group header ("All wines at home" / "…externally").
-  modalOptionIndent: { paddingLeft: spacing.xl },
-  modalOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
-  // Cormorant — option button text
-  modalOptionText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
-  // Group headers ("All wines at home" / "…externally") — bold, uppercase.
-  modalOptionGroupText: { fontFamily: fonts.headingBold, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 14, color: colors.gold },
-  modalOptionDisabledText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textTransform: 'none', letterSpacing: 0 },
-  modalOptionTextActive: { color: colors.gold },
-  // Inter — check glyph
-  modalOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
-  modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
-  // Inter — cancel link (not a button)
-  modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

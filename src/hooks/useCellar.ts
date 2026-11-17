@@ -1,11 +1,25 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { getCellarWines, addCellarWine, updateCellarWine, deleteCellarWine, archiveCellarWine, getArchivedWines, shareCellar, getCellarShares, removeCellarShare } from '../api/cellar';
+import { getCellarWines, addCellarWine, updateCellarWine, getArchivedWines, shareCellar, getCellarShares, removeCellarShare, setAutoLabelIfMissing, type NewCellarWine } from '../api/cellar';
 import { fetchAutoLabelUri } from '../api/label';
-import { uploadLabelImage } from '../api/labelPhotos';
+import { uploadLabelImage, removeLabelImage } from '../api/labelPhotos';
 import type { CellarWine } from '../types/wine';
 import { estimatePurchasePriceOnAdd, type PurchaseEstimateMode } from '../services/purchaseEstimate';
 import { noteHappyMoment } from '../services/ratingPrompt';
+
+// Refresh every cached view of the cellar's bottles and where they sit: the
+// lists, the archive (and Cellar Insights' month of it), placements,
+// racks/fridges, bins and alt cellars. For actions that can touch any of them —
+// every archive, return, move, add or delete. Prefix keys, so each screen's
+// per-id variants refetch too.
+const CELLAR_VIEW_KEYS = [
+  'cellar', 'cellar-archive', 'insights-archived-month', 'placements', 'placements-list',
+  'rack-slots', 'slot-assignments', 'awaiting-placed-elsewhere', 'bins', 'bin-cells', 'bin-cell',
+  'storage-locations', 'storage-location-wines',
+];
+export function invalidateCellarViews(qc: QueryClient): void {
+  for (const key of CELLAR_VIEW_KEYS) void qc.invalidateQueries({ queryKey: [key] });
+}
 
 export function useCellar() {
   const { session } = useAuth();
@@ -30,14 +44,16 @@ export function useCellar() {
   // Adding a wine is kept deliberately FAST — no wine-intel generation here.
   // Intel (critic score, value, tasting note) is generated lazily when the user
   // opens the wine card, and maturity/drinking-window is backfilled in the
-  // background from the Full Cellar List (see services/maturityBackfill) so the
+  // background from Your Cellar List (see services/maturityBackfill) so the
   // maturity filter still works without slowing down the add.
   const addWine = useMutation({
     // `priceEstimate`: how to fill a missing purchase price with the market
     // value on the day the wine is added (default 'full'; multi-wine adds pass
     // 'market' so a long list doesn't fire a Vinster estimate per bottle).
-    mutationFn: async (input: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'> & { priceEstimate?: PurchaseEstimateMode }) => {
-      const { priceEstimate = 'full', ...wine } = input;
+    // `hasOwnPhoto`: the caller is about to attach the user's own label photo,
+    // so no web label is looked up (it would waste a paid search).
+    mutationFn: async (input: NewCellarWine & { priceEstimate?: PurchaseEstimateMode; hasOwnPhoto?: boolean }) => {
+      const { priceEstimate = 'full', hasOwnPhoto = false, ...wine } = input;
       const saved = await addCellarWine(wine);
       if (saved?.id && saved.purchase_price == null && !saved.archived_at) {
         const prefs = qc.getQueryData<{ defaultCurrency?: string | null } | null>(['preferences', userId]);
@@ -46,17 +62,18 @@ export function useCellar() {
           .then((done) => { if (done) qc.invalidateQueries({ queryKey: ['cellar', userId] }); })
           .catch(() => { /* best-effort: the card can still estimate on demand */ });
       }
-      // Best-effort: give an imageless wine a web label thumbnail so
-      // it never shows as a blank tile. Fire-and-forget — never blocks the add;
-      // any failure is silently ignored.
-      if (saved?.id && !saved.label_image_path && saved.producer) {
+      // Best-effort: give a wine added without a photo a web label so it never
+      // shows as a blank tile. Fire-and-forget — never blocks the add. Stored
+      // under its own name and only used while the wine still has no picture,
+      // so it can't replace a photo the user attaches meanwhile.
+      if (saved?.id && !hasOwnPhoto && !saved.label_image_path && saved.producer) {
         void (async () => {
           try {
             const uri = await fetchAutoLabelUri(saved.producer, saved.wine_name);
             if (!uri) return;
-            const path = await uploadLabelImage(userId, uri, saved.id);
-            await updateCellarWine(saved.id, { label_image_path: path });
-            qc.invalidateQueries({ queryKey: ['cellar', userId] });
+            const path = await uploadLabelImage(userId, uri, `${saved.id}-web`);
+            if (await setAutoLabelIfMissing(saved.id, path)) qc.invalidateQueries({ queryKey: ['cellar', userId] });
+            else void removeLabelImage(path);
           } catch { /* best-effort thumbnail */ }
         })();
       }
@@ -86,27 +103,6 @@ export function useCellar() {
     },
   });
 
-  const deleteWine = useMutation({
-    mutationFn: (id: string) => archiveCellarWine(id),
-    onSuccess: (_data, id) => {
-      // Prune the removed wine from the cached cellar list immediately so its
-      // "memory" is gone the instant the archive succeeds — the fresh-add
-      // duplicate check can't match it even if the background refetch below
-      // is slow or fails on a flaky connection.
-      qc.setQueryData<CellarWine[]>(['cellar', userId], (old) =>
-        (old ?? []).filter((w) => w.id !== id));
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-      qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
-      // archiveCellarWine also detaches the wine from every rack/bin/alt-cellar
-      // placement, so refresh those screens or the archived bottle keeps showing
-      // in the rack or home storage location it just left.
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['rack-slots'] });
-      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-      qc.invalidateQueries({ queryKey: ['storage-locations'] });
-    },
-  });
-
   const share = useMutation({
     mutationFn: (email: string) => shareCellar(userId, email),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar-shares', userId] }),
@@ -117,39 +113,23 @@ export function useCellar() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar-shares', userId] }),
   });
 
-  return { wines, isLoading, isError, shares, addWine, updateWine, deleteWine, share, removeShare };
+  return { wines, isLoading, isError, shares, addWine, updateWine, share, removeShare };
 }
 
-export function useArchive() {
+// The cellar archive. `enabled: false` skips the fetch for screens that only
+// sometimes show it.
+export function useArchive(opts?: { enabled?: boolean }) {
   const { session } = useAuth();
   const userId = session?.user.id ?? '';
-  const qc = useQueryClient();
 
-  const { data: wines = [], isLoading } = useQuery({
+  const { data: wines = [], isLoading, isError } = useQuery({
     queryKey: ['cellar-archive', userId],
     queryFn: () => getArchivedWines(userId),
-    enabled: !!userId,
+    enabled: !!userId && (opts?.enabled ?? true),
     // Always refetch on mount so a just-archived wine appears immediately
     // — invalidation alone can be skipped if the cache is still fresh.
     refetchOnMount: 'always',
   });
 
-  const updateNote = useMutation({
-    mutationFn: ({ id, note }: { id: string; note: string }) =>
-      updateCellarWine(id, { user_notes: note || null }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
-      // Editing a note on a wine that's still racked needs rack-slots to
-      // pick up the new note text — the live cellar/[wineId] edit path
-      // already invalidates this for the same reason.
-      qc.invalidateQueries({ queryKey: ['rack-slots'] });
-    },
-  });
-
-  const deleteWine = useMutation({
-    mutationFn: (id: string) => deleteCellarWine(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar-archive', userId] }),
-  });
-
-  return { wines, isLoading, updateNote, deleteWine };
+  return { wines, isLoading, isError };
 }

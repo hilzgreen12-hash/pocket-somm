@@ -6,11 +6,16 @@ import { useAuth } from '../../../src/hooks/useAuth';
 import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, binCellLabels, binDiamondCount } from '../../../src/api/bins';
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { RenameModal } from '../../../src/components/RenameModal';
-import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
-import { updateCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWine, getCellarWineById } from '../../../src/api/cellar';
+import { CellarCommandModal } from '../../../src/components/CellarCommandModal';
+import { updateCellarWine, deleteCellarWine, getCellarWineById } from '../../../src/api/cellar';
 import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, fetchPlacementsForWines, placedCount } from '../../../src/api/placements';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
-import { useCellar } from '../../../src/hooks/useCellar';
+import { useCellar, invalidateCellarViews } from '../../../src/hooks/useCellar';
+import { archiveBottles } from '../../../src/services/archiveNight';
+import { releaseLeavingBottles } from '../../../src/services/moveBottles';
+import { ArchiveBottlesSheet } from '../../../src/components/winecard/cellar/ArchiveBottlesSheet';
+import { todayYmd } from '../../../src/utils/reviewDate';
+import { confirmWineDelete, reviewsOn } from '../../../src/utils/confirmWineDelete';
 import { showAlert } from '../../../src/components/AppAlert';
 import { bottleSizeLabel } from '../../../src/components/BottleSizePicker';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
@@ -18,7 +23,7 @@ import { tidyWineRegion } from '../../../src/utils/regionFormat';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 import type { BinCell, CellarWine } from '../../../src/types/wine';
-import { foldAccents } from '../../../src/utils/wineIdentity';
+import { foldAccents, matchesWineSearch } from '../../../src/utils/wineIdentity';
 
 const SQRT2 = Math.SQRT2;
 const CANVAS_H = 380;
@@ -63,9 +68,12 @@ export default function BinDetailScreen() {
   // Arriving to find a bottle (Quick Command "Find a bottle") → highlight it.
   useEffect(() => { setHighlightedWineId(highlight ?? null); }, [binId, highlight]);
   const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
-  // Permanent delete of a multi-bottle wine → ask how many first.
-  const [deleteWine, setDeleteWine] = useState<{ id: string; name: string; qty: number; cellId: string } | null>(null);
+  // Permanent delete of several bottles in one diamond → ask how many first.
+  const [deleteWine, setDeleteWine] = useState<{ wine: CellarWine; cellId: string; qty: number } | null>(null);
   const [deleteCountStr, setDeleteCountStr] = useState('1');
+  // "Archive Wine" → the wine card's archive sheet (how many, when, a note).
+  const [archiveTarget, setArchiveTarget] = useState<{ wine: CellarWine; cellId: string } | null>(null);
+  const [archiving, setArchiving] = useState(false);
   const [movingWine, setMovingWine] = useState<{ id: string; name: string; fromCellId?: string; qty?: number } | null>(null);
   // Bottles moved into THIS bin (e.g. by Voice Command) that have no cell yet.
   const { wines: allWines } = useCellar();
@@ -140,12 +148,7 @@ export default function BinDetailScreen() {
   const filteredEntries = useMemo(() => {
     if (!q) return entries;
     return entries.filter(({ wine }) =>
-      foldAccents(wine.wine_name).includes(q) ||
-      foldAccents(wine.producer ?? '').includes(q) ||
-      foldAccents(wine.region ?? '').includes(q) ||
-      foldAccents(wine.grape_variety ?? '').includes(q) ||
-      foldAccents(String(wine.vintage ?? '')).includes(q)
-    );
+      matchesWineSearch([wine.producer, wine.wine_name, wine.region, wine.grape_variety, wine.vintage], q));
   }, [entries, q]);
 
   // Which diamonds glow: every search match while searching; otherwise the
@@ -182,23 +185,40 @@ export default function BinDetailScreen() {
     qc.invalidateQueries({ queryKey: ['cellar'] });
   }
 
-  // Permanent delete of `n` bottles FROM THIS CELL: free them from the cell's bin
-  // placement, then drop the row's quantity by n (deleting the row only when that
-  // empties the wine entirely — it may still sit in a rack / another cell).
-  async function runDeleteWine(n: number) {
-    const d = deleteWine;
-    if (!d) return;
+  // Permanently delete `n` bottles of a wine, this diamond's first. The wine's
+  // last bottles take the wine with them — and the reviews stored on it — so
+  // that always goes through the shared confirmation, which offers Archive
+  // instead. Fewer go straight away when the user has already been warned
+  // (the how-many modal says it can't be undone), else after the same prompt.
+  function deleteFromCell(w: CellarWine, cellId: string, n: number, warned = false) {
+    const whole = n >= (w.quantity ?? 1);
+    if (warned && !whole) { void runDelete(w.id, cellId, n); return; }
+    confirmWineDelete({
+      lead: whole ? undefined : `Permanently remove ${n === 1 ? 'this bottle' : `${n} bottles`} from your cellar.`,
+      reviewsLost: whole ? reviewsOn([w]) : 0,
+      deleteText: 'Delete',
+      onDelete: () => void runDelete(w.id, cellId, n),
+      onArchive: () => void archiveAllFromBin(w.id),
+    });
+  }
+
+  async function runDelete(wineId: string, cellId: string, n: number) {
     try {
-      await releaseFromBinCell(d.id, d.cellId, n);
-      const row = allWines.find((w) => w.id === d.id);
-      const newTotal = Math.max(0, (row?.quantity ?? n) - n);
-      if (newTotal <= 0) await deleteCellarWine(d.id);
-      else await updateCellarWine(d.id, { quantity: newTotal });
-      setDeleteWine(null);
-      invalidate();
-      qc.invalidateQueries({ queryKey: ['cellar'] });
+      const fresh = await getCellarWineById(wineId);
+      if (!fresh || fresh.archived_at) throw new Error('This wine is no longer in your cellar. Pull to refresh and try again.');
+      // Deleting the row removes its placements too (cascade).
+      if (n >= fresh.quantity) await deleteCellarWine(wineId);
+      else {
+        // This diamond's bottles leave first; releaseLeavingBottles then takes
+        // any shortfall from loose bottles or other storage, before the count drops.
+        await releaseFromBinCell(wineId, cellId, n);
+        await releaseLeavingBottles(wineId, fresh.quantity, n);
+        await updateCellarWine(wineId, { quantity: fresh.quantity - n });
+      }
     } catch (err) {
       showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      invalidateCellarViews(qc);
     }
   }
 
@@ -294,37 +314,31 @@ export default function BinDetailScreen() {
     }
   }
 
-  // Archive this cell's bottles of a wine: log the removal, drop the row quantity
-  // by the cell count (archive the whole row only when that empties it), and free
-  // the cell's bin placement. Bottles elsewhere (a rack / another cell) stay put.
-  async function archiveFromCell(w: CellarWine, cellId: string) {
-    const cellQty = Math.max(1, w.bin_cell_quantity ?? w.quantity ?? 1);
-    const total = w.quantity ?? cellQty;
-    const removedAt = new Date().toISOString();
+  // Archive from the sheet: this bin's bottles leave first.
+  async function archiveFromBin(input: { count: number; date: string; note: string }) {
+    const w = archiveTarget?.wine;
+    if (!w || archiving) return;
+    setArchiving(true);
     try {
-      await addCellarWineRemoval({ cellarWineId: w.id, removedAt, count: cellQty, note: 'Archived from a wine bin' });
-      await releaseFromBinCell(w.id, cellId, cellQty);
-      if (cellQty >= total) await updateCellarWine(w.id, { quantity: cellQty, archived_at: removedAt });
-      else {
-        // Some of the wine's bottles leave: lower the live row AND add an
-        // archive row for them, like every other archive flow — otherwise these
-        // bottles never reach the Cellar Archive or the wine's bottle history.
-        // Archive row FIRST (cloned from the stored row — the list entry carries
-        // per-cell display fields), then lower the live row: if the clone
-        // fails, no bottles have gone missing.
-        const real = await getCellarWineById(w.id);
-        if (real) {
-          const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = real;
-          await addCellarWine({ ...rest, quantity: cellQty, archived_at: removedAt });
-        }
-        await updateCellarWine(w.id, { quantity: total - cellQty });
-      }
-      qc.invalidateQueries({ queryKey: ['cellar-archive'] });
-      qc.invalidateQueries({ queryKey: ['archived-wines'] });
-      invalidate();
-      qc.invalidateQueries({ queryKey: ['cellar'] });
+      const { archived } = await archiveBottles(w.id, input.count, input.date, { fromUnit: { kind: 'bin', id: binId! }, note: input.note || undefined });
+      if (archived === 0) throw new Error('This wine is no longer in your cellar. Pull to refresh and try again.');
+      setArchiveTarget(null);
     } catch (err) {
       showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      invalidateCellarViews(qc);
+      setArchiving(false);
+    }
+  }
+
+  // "Archive instead" from the delete confirmation: every bottle, dated today.
+  async function archiveAllFromBin(wineId: string) {
+    try {
+      await archiveBottles(wineId, Infinity, todayYmd(), { fromUnit: { kind: 'bin', id: binId! } });
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      invalidateCellarViews(qc);
     }
   }
 
@@ -357,38 +371,13 @@ export default function BinDetailScreen() {
         { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
         { text: 'Highlight All Bottles', onPress: () => showWineCells(w) },
         { text: 'Move to Another Diamond', onPress: () => { setMovingWine({ id: w.id, name: w.wine_name, fromCellId: cellId, qty: cellQty }); setListOpen(false); setSearchQuery(''); setHighlightedWineId(null); } },
-        {
-          text: 'Archive Wine',
-          onPress: () => showAlert({
-            title: 'Archive this wine?',
-            body: 'It moves to Your Archive and leaves this bin. Your reviews and history stay.',
-            buttons: [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Archive', onPress: () => { void archiveFromCell(w, cellId); } },
-            ],
-          }),
-        },
+        { text: 'Archive Wine', onPress: () => setArchiveTarget({ wine: w, cellId }) },
         {
           text: 'Delete Wine (Permanent)',
           style: 'destructive',
           onPress: () => {
-            if (cellQty > 1) { setDeleteCountStr('1'); setDeleteWine({ id: w.id, name: w.wine_name, qty: cellQty, cellId }); return; }
-            showAlert({
-              title: 'Delete this wine?',
-              body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
-              buttons: [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: async () => {
-                  try {
-                    await releaseFromBinCell(w.id, cellId, 1);
-                    const total = w.quantity ?? 1;
-                    if (total <= 1) await deleteCellarWine(w.id); else await updateCellarWine(w.id, { quantity: total - 1 });
-                    invalidate();
-                    qc.invalidateQueries({ queryKey: ['cellar'] });
-                  } catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); }
-                } },
-              ],
-            });
+            if (cellQty > 1) { setDeleteCountStr('1'); setDeleteWine({ wine: w, cellId, qty: cellQty }); return; }
+            deleteFromCell(w, cellId, 1);
           },
         },
         { text: 'Cancel', style: 'cancel' },
@@ -755,14 +744,14 @@ export default function BinDetailScreen() {
       />
 
       {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={bin?.name ?? null} scope={binId ? { kind: 'bin', id: binId } : undefined} hereWineIds={Array.from(new Set(entries.map((e) => e.wine.id)))} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} locationName={bin?.name ?? null} scope={binId ? { kind: 'bin', id: binId } : undefined} hereWineIds={Array.from(new Set(entries.map((e) => e.wine.id)))} />
 
       {/* Permanent delete — how many bottles? Shown for multi-bottle wines. */}
       <Modal visible={deleteWine !== null} transparent animationType="fade" onRequestClose={() => setDeleteWine(null)}>
         <View style={styles.delOverlay}>
           <View style={styles.delSheet}>
             <Text style={styles.delTitle}>Delete how many?</Text>
-            <Text style={styles.delBody}>You have {deleteWine?.qty} bottle{deleteWine?.qty === 1 ? '' : 's'} of {deleteWine?.name}. How many would you like to permanently delete? This can't be undone.</Text>
+            <Text style={styles.delBody}>You have {deleteWine?.qty} bottle{deleteWine?.qty === 1 ? '' : 's'} of {deleteWine?.wine.wine_name}. How many would you like to permanently delete? This can't be undone.</Text>
             <TextInput
               style={styles.delInput}
               value={deleteCountStr}
@@ -773,10 +762,10 @@ export default function BinDetailScreen() {
               autoFocus
               selectTextOnFocus
             />
-            <TouchableOpacity style={styles.delBtn} onPress={() => { const q = deleteWine; if (!q) return; const n = Math.max(1, Math.min(q.qty, parseInt(deleteCountStr, 10) || 1)); void runDeleteWine(n); }}>
+            <TouchableOpacity style={styles.delBtn} onPress={() => { const q = deleteWine; if (!q) return; setDeleteWine(null); deleteFromCell(q.wine, q.cellId, Math.max(1, Math.min(q.qty, parseInt(deleteCountStr, 10) || 1)), true); }}>
               <Text style={styles.delBtnText}>Delete Bottles</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.delAll} onPress={() => { const q = deleteWine; if (!q) return; void runDeleteWine(q.qty); }}>
+            <TouchableOpacity style={styles.delAll} onPress={() => { const q = deleteWine; if (!q) return; setDeleteWine(null); deleteFromCell(q.wine, q.cellId, q.qty, true); }}>
               <Text style={styles.delAllText}>Delete all {deleteWine?.qty}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.delCancel} onPress={() => setDeleteWine(null)}>
@@ -785,6 +774,22 @@ export default function BinDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      {archiveTarget ? (
+        <ArchiveBottlesSheet
+          visible
+          wine={archiveTarget.wine}
+          initialCount={1}
+          working={archiving}
+          onArchive={(input) => void archiveFromBin(input)}
+          onDelete={(count) => {
+            const { wine, cellId } = archiveTarget;
+            setArchiveTarget(null);
+            deleteFromCell(wine, cellId, count);
+          }}
+          onClose={() => setArchiveTarget(null)}
+        />
+      ) : null}
     </View>
   );
 }

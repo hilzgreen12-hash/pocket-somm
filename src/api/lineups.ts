@@ -17,6 +17,11 @@ export interface LineupWine {
   cellar_wine_id: string | null;
   archived: boolean;
   count: number;
+  // Optional detail set from the lineup's Edit wine pop-up (the column is
+  // jsonb, so older rows simply lack these).
+  region?: string | null;
+  style?: string | null;
+  bottle_size_ml?: number | null;
 }
 
 export interface LineupArchive {
@@ -99,7 +104,9 @@ async function removeLineupPhoto(path: string | null | undefined): Promise<void>
 export async function saveLineupArchive(
   userId: string,
   localUri: string,
-  opts: { wines: LineupWine[]; city?: string | null },
+  // visit: a lineup added from a restaurant review is linked to that visit and
+  // carries its restaurant name and date.
+  opts: { wines: LineupWine[]; city?: string | null; visit?: { sessionId: string; venue: string | null; date: string | null } },
 ): Promise<LineupArchive> {
   const path = await uploadLineupPhoto(userId, localUri);
   const { data: row, error } = await supabase
@@ -110,6 +117,11 @@ export async function saveLineupArchive(
       bottle_count: lineupBottleTotal({ wines: opts.wines, bottle_count: null }),
       wines: opts.wines,
       city: opts.city ?? null,
+      ...(opts.visit ? {
+        restaurant_session_id: opts.visit.sessionId,
+        venue: opts.visit.venue,
+        ...(opts.visit.date ? { archived_at: opts.visit.date } : {}),
+      } : {}),
     })
     .select()
     .single();

@@ -197,7 +197,6 @@ export default function RootLayout() {
             <Stack.Screen name="cellar/list" />
             <Stack.Screen name="cellar/stats" />
             <Stack.Screen name="cellar/regions-map" />
-            <Stack.Screen name="cellar/add" />
             <Stack.Screen name="cellar/serve-market" />
             <Stack.Screen name="cellar/import-preview" />
             <Stack.Screen name="cellar/racks" />
@@ -206,7 +205,6 @@ export default function RootLayout() {
             <Stack.Screen name="cellar/running-low" />
             <Stack.Screen name="cellar/[wineId]" />
             <Stack.Screen name="cellar/edit-wine/[wineId]" />
-            <Stack.Screen name="cellar/archive" />
             <Stack.Screen name="cellar/mood-picks" />
             {/* Lineup routes (opened from the Review/Scan tab) — register as root
                 screens over the tabs so opening one doesn't switch the active tab. */}

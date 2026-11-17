@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrary } from '../../src/utils/imagePicker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useQueryClient } from '@tanstack/react-query';
@@ -30,8 +30,13 @@ export default function ArchiveNightScreen() {
   const { wines } = useCellar();
   const qc = useQueryClient();
   // ?upload=1 (the "upload instead" entry) uses the photo library, never the camera.
-  const params = useLocalSearchParams<{ upload?: string }>();
+  // ?session (+ venue, city, date) — opened from a restaurant review's "+ Add a
+  // lineup": the lineup is saved against that visit, with its place and date.
+  const params = useLocalSearchParams<{ upload?: string; session?: string; venue?: string; city?: string; date?: string }>();
   const isUpload = params.upload === '1';
+  const visit = params.session
+    ? { sessionId: params.session, venue: params.venue || null, date: params.date || null }
+    : undefined;
   const uploadTriggeredRef = useRef(false);
 
   const [stage, setStage] = useState<Stage>('capture');
@@ -73,7 +78,7 @@ export default function ArchiveNightScreen() {
   // cancelling a Retake keeps the current photo.
   async function pickFromLibrary(leaveOnCancel: boolean) {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      const result = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
       if (result.canceled || !result.assets.length) { if (leaveOnCancel) router.back(); return; }
       setImageUri(result.assets[0].uri);
       setStage('preview');
@@ -127,7 +132,7 @@ export default function ArchiveNightScreen() {
     if (!session?.user.id) return;
     setStage('analyzing');
     try {
-      const row = await saveLineupArchive(session.user.id, uri, { wines: lineupWines, city });
+      const row = await saveLineupArchive(session.user.id, uri, { wines: lineupWines, city: params.city || city, visit });
       qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
       router.replace(`/cellar/lineup/${row.id}` as any);
     } catch (err) {

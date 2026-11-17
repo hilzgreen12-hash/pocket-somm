@@ -21,7 +21,7 @@ export interface CellarCommandResult {
   action: CellarCommandAction;
   wineId: string | null;
   // Destination — a storage location (Alt Cellar) OR a placement unit
-  // (rack / fridge / bin). At most one is set for a move.
+  // (rack / fridge / bin). At most one is set.
   locationId: string | null;
   unitId: string | null;
   quantity: number | null;
@@ -35,9 +35,15 @@ export interface CellarCommandResult {
   message: string;
 }
 
-// Parse a dictated cellar command against the user's live cellar. The action
-// (move / archive) is inferred in the UI first; the parser resolves which wine,
-// where (an Alt Cellar or a rack/fridge/bin unit), and how many.
+const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+// Parse a typed or dictated cellar command. The verb is inferred in the app
+// first; the parser resolves which wine (from the shortlist in `wines`), where
+// (an Alt Cellar or a rack/fridge/bin unit) and how many. An Add sends no wines:
+// a new bottle isn't matched against the cellar.
+//
+// The model's answer is checked against what was sent: ids it wasn't given are
+// dropped, and the quantity must be a whole number of bottles.
 export async function parseCellarCommand(
   action: CellarCommandAction,
   transcript: string,
@@ -52,17 +58,25 @@ export async function parseCellarCommand(
     wines: wines.map((w) => toWinePayload(w, w.storage_location_id ? nameById.get(w.storage_location_id) : null)),
     locations: locations.map((l) => ({ id: l.id, name: l.name, isExternal: l.is_external })),
     units: units.map((u) => ({ id: u.id, name: u.name, type: u.storage_type ?? 'rack' })),
-  }) as Partial<CellarCommandResult>;
+  }) as Record<string, any>;
 
+  const wineIds = new Set(wines.map((w) => w.id));
+  const known = (ids: Set<string>, v: unknown) => (typeof v === 'string' && ids.has(v) ? v : null);
+  const qty = Number(data.quantity);
+  const add = data.add && typeof data.add === 'object'
+    ? { producer: str(data.add.producer), wineName: str(data.add.wineName), vintage: str(String(data.add.vintage ?? '')), region: str(data.add.region) }
+    : null;
+  const locationId = known(new Set(locations.map((l) => l.id)), data.locationId);
   return {
     action,
-    wineId: data.wineId ?? null,
-    locationId: data.locationId ?? null,
-    unitId: data.unitId ?? null,
-    quantity: data.quantity ?? null,
-    add: data.add ?? null,
-    candidates: Array.isArray(data.candidates) ? data.candidates : [],
-    needs: data.needs ?? null,
-    message: data.message ?? '',
+    wineId: known(wineIds, data.wineId),
+    locationId,
+    // One destination at most: an Alt Cellar wins over a unit.
+    unitId: locationId ? null : known(new Set(units.map((u) => u.id)), data.unitId),
+    quantity: Number.isInteger(qty) && qty > 0 ? qty : null,
+    add,
+    candidates: Array.isArray(data.candidates) ? Array.from(new Set(data.candidates.filter((c: unknown) => known(wineIds, c)))) as string[] : [],
+    needs: data.needs === 'wine' || data.needs === 'location' ? data.needs : null,
+    message: str(data.message) ?? '',
   };
 }

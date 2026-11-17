@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import * as ImagePicker from 'expo-image-picker';
+import { launchCamera, launchImageLibrary } from '../utils/imagePicker';
 import { showAlert } from '../components/AppAlert';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { uploadLabelImage } from '../api/labelPhotos';
@@ -45,8 +45,8 @@ export function useAttachLabelPhoto() {
     try {
       if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
       const res = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+        ? await launchCamera({ mediaTypes: ['images'], quality: 1 })
+        : await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
       if (res.canceled || !res.assets[0]) return;
       await attachLocal(kind, wineId, res.assets[0].uri);
     } catch (err) {

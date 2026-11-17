@@ -5,7 +5,9 @@
 // Priority: explicit style > region keywords (Champagne, Port, etc.) >
 // grape variety lookup > null.
 
-type WineStyle = 'Red' | 'White' | 'Rosé' | 'Sparkling' | 'Fortified';
+// The app's wine colours/styles, in the order they're offered as choices.
+export const WINE_STYLES = ['Red', 'White', 'Rosé', 'Sparkling', 'Fortified'] as const;
+export type WineStyle = typeof WINE_STYLES[number];
 
 const SPARKLING_REGION_HINTS = ['champagne', 'cava', 'prosecco', 'crémant', 'cremant', 'franciacorta', 'asti', 'sekt'];
 const FORTIFIED_REGION_HINTS = ['port', 'sherry', 'jerez', 'madeira', 'marsala', 'banyuls', 'rutherglen'];

@@ -17,6 +17,32 @@ function addedDate(w: Pick<CellarWine, 'date_received' | 'created_at'>): string 
   return w.date_received ?? w.created_at;
 }
 
+// The market price of a 75cl bottle of this wine: Wine-Searcher first, then
+// (mode 'full') Vinster's own estimate. Null when neither has one. Used to fill
+// a missing purchase price, and to pre-fill the price on the add forms.
+export async function marketValuePer75(
+  wine: Pick<CellarWine, 'producer' | 'wine_name' | 'region' | 'vintage' | 'grape_variety'>,
+  currency: string,
+  mode: 'full' | 'market',
+): Promise<{ value: number; currency: string; source: 'wine-searcher' | 'vinster' } | null> {
+  const vintage = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
+  const name = wineQueryName(wine.producer, wine.wine_name) || wine.wine_name || '';
+  if (!name) return null;
+  const p = await fetchPricing(name, Number.isFinite(vintage) ? vintage : null, currency);
+  if (p.source === 'wine-searcher' && p.matched !== false && p.averageMarketPrice != null) {
+    return { value: p.averageMarketPrice, currency: p.currency ?? currency, source: 'wine-searcher' };
+  }
+  if (mode !== 'full') return null;
+  try {
+    const v = await valueWine({
+      producer: wine.producer ?? '', wineName: wine.wine_name, region: wine.region ?? '',
+      vintage: wine.vintage ?? '', grape: wine.grape_variety ?? null,
+    } as unknown as WineDetailsComplete, currency);
+    if (v.estimatedValue != null) return { value: v.estimatedValue, currency: v.currency ?? currency, source: v.valueSource };
+  } catch { /* unknown wine: no estimate */ }
+  return null;
+}
+
 export async function estimatePurchasePriceOnAdd(saved: CellarWine, currency: string, mode: PurchaseEstimateMode): Promise<boolean> {
   if (mode === 'none' || saved.archived_at) return false;
   if (saved.purchase_price != null) return false;
@@ -33,37 +59,19 @@ export async function estimatePurchasePriceOnAdd(saved: CellarWine, currency: st
     return true;
   }
 
-  const vintage = saved.vintage && saved.vintage !== 'NV' ? Number(saved.vintage) : null;
-  const name = wineQueryName(saved.producer, saved.wine_name) || saved.wine_name || '';
-  let value: number | null = null;
-  let valueCurrency = currency;
-  let source: 'wine-searcher' | 'vinster' = 'wine-searcher';
-
-  const p = await fetchPricing(name, Number.isFinite(vintage) ? vintage : null, currency);
-  if (p.source === 'wine-searcher' && p.matched !== false && p.averageMarketPrice != null) {
-    value = p.averageMarketPrice;
-    valueCurrency = p.currency ?? currency;
-  } else if (mode === 'full') {
-    try {
-      const v = await valueWine({
-        producer: saved.producer ?? '', wineName: saved.wine_name, region: saved.region ?? '',
-        vintage: saved.vintage ?? '', grape: saved.grape_variety ?? null,
-      } as unknown as WineDetailsComplete, currency);
-      if (v.estimatedValue != null) { value = v.estimatedValue; valueCurrency = v.currency ?? currency; source = v.valueSource; }
-    } catch { /* unknown wine: leave the price blank */ }
-  }
-  if (value == null) return false;
+  const market = await marketValuePer75(saved, currency, mode);
+  if (!market) return false;
 
   await updateCellarWine(saved.id, {
     // The market value is a 75cl price; what this bottle cost scales with its size.
-    purchase_price: priceForSize(value, saved.bottle_size_ml),
-    purchase_price_currency: valueCurrency,
+    purchase_price: priceForSize(market.value, saved.bottle_size_ml),
+    purchase_price_currency: market.currency,
     purchase_price_estimated: true,
     purchase_price_at: at,
     // Seed the card's market value too when it has none, from the same lookup.
-    estimated_value: value,
-    estimated_value_currency: valueCurrency,
-    estimated_value_source: source,
+    estimated_value: market.value,
+    estimated_value_currency: market.currency,
+    estimated_value_source: market.source,
     estimated_value_at: new Date().toISOString(),
   } as Partial<CellarWine>);
   return true;

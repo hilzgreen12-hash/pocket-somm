@@ -68,6 +68,13 @@ export async function uploadLabelImage(userId: string, localUri: string, wineId:
   return path;
 }
 
+// Best-effort removal of a stored label nothing points at. A failure only
+// leaves an orphan file behind, so it never surfaces to the user.
+export async function removeLabelImage(path: string): Promise<void> {
+  evictCachedLabel(path);
+  try { await supabase.storage.from(BUCKET).remove([path]); } catch { /* best-effort */ }
+}
+
 // Download a web image (from "Find label online") to a local file, then run it
 // through the same resize/compress/upload pipeline as a user photo. Returns the
 // stored path to persist in cellar_wines.label_image_path. Native fetch/download

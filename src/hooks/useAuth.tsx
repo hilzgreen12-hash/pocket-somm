@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { AppState } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -84,7 +85,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       syncUser(session);
     });
 
-    return () => { clearTimeout(safety); unsubCellar(); listener.subscription.unsubscribe(); };
+    // Back in the foreground: re-read shared-cellar memberships, so an invite
+    // accepted, a member removed or a role changed elsewhere shows up without
+    // restarting the app.
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && prevUserId.current) void loadCellarContext(prevUserId.current);
+    });
+
+    return () => { clearTimeout(safety); unsubCellar(); listener.subscription.unsubscribe(); appState.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

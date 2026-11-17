@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { cellarOwner } from './cellarContext';
 import { fetchBinPlacementsForCells, clearBinCellPlacements, removeWineFromBinCell } from './placements';
+import { selectAllInChunks } from './paging';
 import type { WineRack, BinCell, CellarWine } from '../types/wine';
 
 // A bin is a wine_racks row with storage_type='bin'. It is a grid of diamonds:
@@ -177,6 +178,15 @@ export async function deleteBin(binId: string): Promise<void> {
 export async function renameBin(binId: string, name: string): Promise<void> {
   const { error } = await supabase.from('wine_racks').update({ name }).eq('id', binId);
   if (error) throw error;
+}
+
+// Which bin each cell belongs to. A 'bin' placement records only its cell, so
+// this is how a list traces a bottle back to its bin.
+export async function getBinOfCell(binIds: string[]): Promise<Map<string, string>> {
+  const cells = await selectAllInChunks<{ id: string; bin_id: string }>(binIds, (chunk, from, to) =>
+    supabase.from('bin_cells').select('id, bin_id').in('bin_id', chunk)
+      .order('id', { ascending: true }).range(from, to));
+  return new Map(cells.map((c) => [c.id, c.bin_id]));
 }
 
 // Empty every cell in a bin at once — the wines stay in the cellar (loose),

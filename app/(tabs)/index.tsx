@@ -8,7 +8,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { router, useFocusEffect } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
-import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrary } from '../../src/utils/imagePicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../src/components/AppAlert';
 import { CompareWinesModal } from '../../src/components/CompareWinesModal';
@@ -96,6 +96,13 @@ const MAX_SHARED_PDF_BYTES = 10 * 1024 * 1024;
 function sharedLink(webUrl: string | null | undefined, text: string | null | undefined): string | null {
   const raw = webUrl || (text ?? '').match(/https?:\/\/\S+/)?.[0];
   return raw ? raw.replace(/[)\].,;:!?'"’”>]+$/, '') : null;
+}
+
+// Run a pop-up button's action once the pop-up has gone. iOS swallows a picker
+// or pop-up opened while the previous one is still dismissing, so it waits;
+// Android doesn't need to.
+function afterAlertCloses(fn: () => void): () => void {
+  return () => { if (Platform.OS === 'ios') setTimeout(fn, 350); else fn(); };
 }
 
 export default function ScanLandingScreen() {
@@ -331,10 +338,15 @@ export default function ScanLandingScreen() {
   }
 
   async function handleUploadLabel() {
-    if (!(await ensureMediaPermission('library'))) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-    if (result.canceled || !result.assets[0]) return;
-    await scanLabelFromUri(result.assets[0].uri);
+    try {
+      if (!(await ensureMediaPermission('library'))) return;
+      const result = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
+      if (result.canceled || !result.assets[0]) return;
+      await scanLabelFromUri(result.assets[0].uri);
+    } catch (err) {
+      // Never fail silently — a picker that can't open must say so.
+      showAlert({ title: 'Could not open your photos', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
 
   // Read a label photo and open its Wine Intel — shared by "upload instead" and
@@ -450,11 +462,12 @@ export default function ScanLandingScreen() {
     });
   }
 
-  // Generate Wine Intel tile → choose how to find the wine. Each action waits
-  // for the pop-up to finish closing; opening a picker or another pop-up while
-  // it is still dismissing gets swallowed on iOS.
+  // Generate Wine Intel tile → choose how to find the wine. On iOS each action
+  // waits for the pop-up to finish closing (a picker or another pop-up opened
+  // while it is still dismissing gets swallowed); Android opens at once, as the
+  // other upload buttons do.
   function openWineIntelChoice() {
-    const after = (fn: () => void) => () => { setTimeout(fn, 350); };
+    const after = afterAlertCloses;
     showAlert({
       title: 'How would you like to search your wine?',
       showCloseX: true,
@@ -469,7 +482,7 @@ export default function ScanLandingScreen() {
   // Read A Wine List tile → choose how Vinster gets the list (Find Online
   // searches the web for the restaurant's list).
   function openWineListChoice() {
-    const after = (fn: () => void) => () => { setTimeout(fn, 350); };
+    const after = afterAlertCloses;
     showAlert({
       title: 'How should Vinster read the list?',
       showCloseX: true,

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCellar } from '../../../src/hooks/useCellar';
+import { useCellar, invalidateCellarViews } from '../../../src/hooks/useCellar';
 import { useAttachLabelPhoto } from '../../../src/hooks/useAttachLabelPhoto';
 import { usePreferences } from '../../../src/hooks/usePreferences';
-import { valueWine } from '../../../src/services/pricing';
+import { valueWine, isWineNotFound } from '../../../src/services/pricing';
+import { fetchPlacementsForWine, placedCount } from '../../../src/api/placements';
 import { fetchWineCandidates } from '../../../src/api/label';
 import { getCellarWineById, updateCellarWine, stampPurchasePriceDate } from '../../../src/api/cellar';
 import { showAlert } from '../../../src/components/AppAlert';
@@ -15,6 +16,16 @@ import { BottleSizePicker } from '../../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 import { priceForSize } from '../../../src/utils/bottleValue';
+import type { CellarWine } from '../../../src/types/wine';
+
+// What a wine Vinster has no intel for carries: no score, value, notes or window.
+const NO_INTEL: Partial<CellarWine> = {
+  critic_score: null, critic_score_note: null,
+  estimated_value: null, estimated_value_currency: null, estimated_value_at: null, estimated_value_source: null,
+  estimated_value_low: null, estimated_value_high: null, estimated_value_scope: null,
+  tasting_notes: null, drinking_window_from: null, drinking_window_to: null, drinking_window_status: 'unknown',
+  ws_wine_id: null, ws_wine_name: null,
+};
 
 // THE edit screen for an EXISTING cellar wine — the single surface reached from
 // both edit pathways (the wine card's identity block and the Full Cellar List
@@ -26,6 +37,7 @@ import { priceForSize } from '../../../src/utils/bottleValue';
 export default function EditWineScreen() {
   const { wineId } = useLocalSearchParams<{ wineId: string }>();
   const qc = useQueryClient();
+  const navigation = useNavigation();
   const { wines } = useCellar();
   const { preferences } = usePreferences();
   const attachPhoto = useAttachLabelPhoto();
@@ -105,12 +117,65 @@ export default function EditWineScreen() {
     });
   }
 
+  // Take the user to this wine's card, asking it to open a sheet: back to the
+  // card underneath when Edit was opened from it (rather than stacking a
+  // second copy), otherwise in place of this screen.
+  function openCard(open: 'place' | 'archive' | 'delete', count?: number) {
+    if (!wine) return;
+    const request = { open, t: String(Date.now()), ...(count ? { count: String(count) } : {}) };
+    const routes = navigation.getState()?.routes ?? [];
+    const below = routes[routes.length - 2];
+    const belowParams = (below?.params ?? {}) as Record<string, string>;
+    if (below?.name === 'cellar/[wineId]' && belowParams.wineId === wine.id) {
+      router.dismissTo({ pathname: '/cellar/[wineId]', params: { ...belowParams, ...request } });
+    } else {
+      router.replace({ pathname: '/cellar/[wineId]', params: { wineId: wine.id, ...request } });
+    }
+  }
+
+  // Bottles leave the cellar by being archived or deleted — that's what records
+  // when they went and frees the right spots — so the count here can't drop to
+  // 0, or below the bottles placed in storage. Returns whether `qty` can be saved.
+  async function bottleCountAllowed(qty: number): Promise<boolean> {
+    if (!wine) return false;
+    if (!Number.isFinite(qty) || qty < 0) {
+      showAlert({ title: 'Bottles needed', body: 'Enter how many bottles of this wine you hold.' });
+      return false;
+    }
+    if (qty >= (wine.quantity ?? 0)) return true;
+    const offer = (count: number) => (wine.archived_at ? [] : [
+      { text: 'Archive Bottles', onPress: () => openCard('archive', count) },
+      { text: 'Delete Bottles', style: 'destructive' as const, onPress: () => openCard('delete', count) },
+    ]);
+    if (qty === 0) {
+      showAlert({
+        title: 'Archive or delete instead',
+        body: wine.archived_at
+          ? 'An archived wine needs at least 1 bottle.'
+          : 'To take every bottle out of your cellar, archive the wine (it moves to your archive with its reviews) or delete it.',
+        buttons: [...offer(wine.quantity), { text: 'Cancel', style: 'cancel' }],
+      });
+      return false;
+    }
+    if (wine.archived_at) return true;
+    const placed = placedCount(await fetchPlacementsForWine(wine.id));
+    if (qty >= placed) return true;
+    showAlert({
+      title: 'Archive or delete instead',
+      body: `${placed} ${placed === 1 ? 'bottle of this wine is' : 'bottles of this wine are'} placed in your storage, so the count can't go below ${placed} here — Vinster wouldn't know which bottles had gone. Archive or delete the bottles instead, and they'll leave the right places.`,
+      buttons: [...offer(wine.quantity - qty), { text: 'Cancel', style: 'cancel' }],
+    });
+    return false;
+  }
+
   async function handleSave() {
     if (!wine || saving) return;
     if (!wineName.trim() && !producer.trim()) {
       showAlert({ title: 'Name needed', body: 'Add a wine name or producer.' });
       return;
     }
+    const qty = parseInt(quantity, 10);
+    if (!(await bottleCountAllowed(qty))) return;
     // Only when the producer/name actually changed, and a producer is given — no point
     // re-checking a wine whose identity the user didn't touch.
     const identityChanged = producer.trim() !== (wine.producer ?? '').trim() || wineName.trim() !== (wine.wine_name ?? '').trim();
@@ -118,26 +183,26 @@ export default function EditWineScreen() {
       const ok = await passesPlausibilityCheck();
       if (!ok) return;
     }
+    // A new producer, name or vintage makes it a different wine: nothing Vinster
+    // worked out for the old one may stay on it.
+    const newWine = identityChanged || vintage.trim() !== (wine.vintage ?? '').trim();
     // Bottles held and the spirit flag don't change what the wine IS, so when
     // they're the ONLY edit there's nothing for a re-lookup to improve. A save
     // with no field changes at all still re-derives (that's the way to repair a
     // wine stored with the wrong intel).
     const detailsChanged =
-      identityChanged ||
+      newWine ||
       region.trim() !== (wine.region ?? '').trim() ||
       grape.trim() !== (wine.grape_variety ?? '').trim() ||
-      vintage.trim() !== (wine.vintage ?? '').trim() ||
       style.trim() !== (wine.style ?? '').trim();
     // Bottle size doesn't change the wine either: its value is kept per 75cl and
     // scaled to the size wherever it's shown, so a size change needs no lookup.
-    const countSizeOrSpiritChanged =
-      isSpirit !== !!wine.is_spirit ||
-      (parseInt(quantity, 10) || 0) !== (wine.quantity ?? 0) ||
-      bottleSizeMl !== (wine.bottle_size_ml ?? 750);
+    const sizeChanged = bottleSizeMl !== (wine.bottle_size_ml ?? 750);
+    const countSizeOrSpiritChanged = isSpirit !== !!wine.is_spirit || qty !== (wine.quantity ?? 0) || sizeChanged;
     const shouldRevalue = detailsChanged || !countSizeOrSpiritChanged;
     setSaving(true);
     try {
-      const updates: Record<string, unknown> = {
+      const updates: Partial<CellarWine> = {
         producer: producer.trim() || null,
         region: region.trim() || null,
         wine_name: wineName.trim() || producer.trim(),
@@ -146,36 +211,30 @@ export default function EditWineScreen() {
         bottle_size_ml: bottleSizeMl,
         style: style.trim() || null,
         is_spirit: isSpirit,
+        quantity: qty,
+        ...(newWine ? { insider_note: null, market_vintage_note: null, serving_suggestion: null, wine_knowledge: null, wine_knowledge_at: null } : {}),
       };
-      // Bottles held.
-      const qty = parseInt(quantity, 10);
-      if (Number.isFinite(qty) && qty >= 0) updates.quantity = qty;
 
       // "Save & Update Wine Intel" re-derives value + intel from the details the
       // user just confirmed — feeding Claude the grape + colour so it pins the
       // right cuvée (e.g. Guigal Ex-Voto Blanc, previously mis-stored as the
-      // Syrah). It runs whenever ANY wine detail was touched, so correcting
-      // grape/colour alone refreshes the intel and a wine saved with the wrong
-      // intel can be fixed by simply re-saving. The one case it's skipped is an
-      // edit that ONLY moved the bottle count, bottle size or spirit flag — none
-      // can change the intel, so they shouldn't cost a Claude lookup. Wrapped in
-      // try/catch so a failed lookup still keeps the edit.
-      if (!shouldRevalue && wine.purchase_price_estimated && wine.estimated_value != null) {
-        // An auto-estimated purchase price follows a size change (a magnum is
-        // two bottles' worth); a price the user typed is never touched.
-        updates.purchase_price = priceForSize(Number(wine.estimated_value), bottleSizeMl);
-      }
+      // Syrah). It's skipped only for an edit that just moved the bottle count,
+      // size or spirit flag, which can't change the intel.
+      let lookupFailed: 'not-found' | 'failed' | null = null;
+      // A purchase price Vinster estimated (never one the user typed) follows the
+      // value: refreshed from a new one, rescaled for a new bottle size (a magnum
+      // is two bottles' worth), cleared when it belonged to a different wine.
+      let estimatedPrice: { price: number | null; currency: string | null } | null = null;
       if (shouldRevalue) {
         try {
           const currency = (preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP').toUpperCase();
           const v = await valueWine(
-            { producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || 'NV', grape: grape.trim() || null, style: style.trim() || null } as any,
+            { producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || 'NV', grape: grape.trim() || null, style: style.trim() || null },
             currency,
           );
-          // Wine-Searcher couldn't be asked: when the wine and vintage are
-          // unchanged, keep the existing value rather than a stand-in estimate.
-          const sameBottle = !identityChanged && vintage.trim() === (wine.vintage ?? '').trim();
-          const keepValue = !!v.wsUnavailable && sameBottle && wine.estimated_value != null;
+          // Wine-Searcher couldn't be asked: for the same wine and vintage, keep
+          // the existing value rather than a stand-in estimate.
+          const keepValue = !!v.wsUnavailable && !newWine && wine.estimated_value != null;
           Object.assign(updates, {
             ...(keepValue ? {} : {
               estimated_value: v.estimatedValue,
@@ -189,20 +248,32 @@ export default function EditWineScreen() {
               critic_score_note: v.criticScoreNote,
             }),
             tasting_notes: v.tastingNotes,
+            ...(v.insiderNote ? { insider_note: v.insiderNote } : {}),
             drinking_window_from: v.drinkingWindowFrom,
             drinking_window_to: v.drinkingWindowTo,
             drinking_window_status: v.drinkingWindowStatus,
-            // The user's typed grape wins; only fall back to the re-derived one
-            // when they left the field blank.
+            // The user's typed grape wins; the re-derived one only fills a blank.
             grape_variety: grape.trim() || v.grapeVariety,
             ws_wine_id: v.wsWineId ?? null,
             ws_wine_name: v.wsWineName ?? null,
-            // If the recorded purchase price was an auto-estimate (never a figure
-            // the user typed), refresh it to the new wine's value too.
-            ...(wine.purchase_price_estimated && !keepValue ? { purchase_price: v.estimatedValue != null ? priceForSize(v.estimatedValue, bottleSizeMl) : null, purchase_price_currency: v.currency } : {}),
           });
-          if (wine.purchase_price_estimated && !keepValue) void stampPurchasePriceDate(wine.id);
-        } catch { /* keep the identity edit even if the revalue lookup fails */ }
+          // Never refreshed from a stand-in made while Wine-Searcher was down.
+          if (!v.wsUnavailable) estimatedPrice = { price: v.estimatedValue != null ? priceForSize(v.estimatedValue, bottleSizeMl) : null, currency: v.currency };
+        } catch (e) {
+          lookupFailed = isWineNotFound(e) ? 'not-found' : 'failed';
+          // Never leave the old wine's score, value and notes on a different wine.
+          if (newWine) Object.assign(updates, NO_INTEL);
+        }
+      }
+      if (wine.purchase_price_estimated) {
+        if (!estimatedPrice && newWine) estimatedPrice = { price: null, currency: null };
+        else if (!estimatedPrice && sizeChanged && wine.estimated_value != null) {
+          estimatedPrice = { price: priceForSize(Number(wine.estimated_value), bottleSizeMl), currency: wine.purchase_price_currency };
+        }
+        if (estimatedPrice) {
+          updates.purchase_price = estimatedPrice.price;
+          updates.purchase_price_currency = estimatedPrice.currency;
+        }
       }
 
       // A spirit has no drinking window — strip whatever the revalue returned so
@@ -215,37 +286,40 @@ export default function EditWineScreen() {
       }
 
       await updateCellarWine(wine.id, updates);
+      if (wine.purchase_price_estimated && estimatedPrice?.price != null) void stampPurchasePriceDate(wine.id);
       // The wine's identity shows in every surface it's placed in — refresh them all.
-      qc.invalidateQueries({ queryKey: ['cellar'] });
-      qc.invalidateQueries({ queryKey: ['rack-slots'] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['bin-cells'] });
-      qc.invalidateQueries({ queryKey: ['bins'] });
-      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-      qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+      invalidateCellarViews(qc);
       qc.invalidateQueries({ queryKey: ['cellar-wine', wine.id] });
+      setSaving(false);
 
-      // Bottles were ADDED here, so they exist in the Full Cellar List but sit
-      // in no rack, fridge, diamond or alt cellar yet. Offer to file them now
-      // rather than letting them quietly become "awaiting placement".
-      const added = (typeof updates.quantity === 'number' ? updates.quantity : (wine.quantity ?? 0)) - (wine.quantity ?? 0);
-      if (added > 0 && !wine.archived_at) {
-        // The save itself is finished — drop the spinner before the popup, so
-        // dismissing it by tapping outside doesn't leave Save stuck saving.
-        setSaving(false);
-        showAlert({
-          title: 'Bottles Added',
-          body: `${added} ${added === 1 ? 'wine' : 'wines'} added to your bottle count. You can place the ${added === 1 ? 'wine' : 'wines'} in a home location now, or leave them in your Full Cellar List to place later.`,
-          buttons: [
-            // Straight to the wine card's placement chooser for the loose bottles.
-            { text: 'Place Now', onPress: () => router.replace(`/cellar/${wine.id}?place=1` as any) },
-            { text: 'Place Later', onPress: () => router.back() },
-            { text: 'Done', style: 'cancel', onPress: () => router.back() },
-          ],
-        });
-        return;
-      }
-      router.back();
+      const added = qty - (wine.quantity ?? 0);
+      const finish = () => {
+        // Bottles were ADDED, so they're in the Full Cellar List but in no rack,
+        // fridge, diamond or alt cellar yet. Offer to file them now rather than
+        // letting them quietly become "awaiting placement".
+        if (added > 0 && !wine.archived_at) {
+          showAlert({
+            title: 'Bottles Added',
+            body: `${added} ${added === 1 ? 'wine' : 'wines'} added to your bottle count. You can place the ${added === 1 ? 'wine' : 'wines'} in a home location now, or leave them in your Full Cellar List to place later.`,
+            buttons: [
+              { text: 'Place Now', onPress: () => openCard('place') },
+              { text: 'Place Later', onPress: () => router.back() },
+              { text: 'Done', style: 'cancel', onPress: () => router.back() },
+            ],
+          });
+        } else {
+          router.back();
+        }
+      };
+      if (!lookupFailed) { finish(); return; }
+      const cleared = newWine ? ' The intel for the wine it was before has been cleared.' : '';
+      showAlert({
+        title: lookupFailed === 'not-found' ? "Vinster couldn't find this wine" : 'Wine Intel not updated',
+        body: lookupFailed === 'not-found'
+          ? `Your changes are saved, but Vinster doesn't recognise this wine and Wine-Searcher has no listing for it, so there's no Wine Intel for it.${cleared} Check the producer, wine name and vintage.`
+          : `Your changes are saved, but Vinster couldn't update this wine's intel just now.${cleared} Tap Generate on the wine card to try again.`,
+        buttons: [{ text: 'OK', onPress: finish }],
+      });
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
       setSaving(false);
@@ -298,19 +372,16 @@ export default function EditWineScreen() {
 
           {/* Bottles held — the count shown as "Bottles in My Cellar" on the
               wine card. */}
-          <>
-            <Text style={styles.label}>Bottles in Your Cellar</Text>
-            <Text style={styles.qtyHelper}>How many bottles of this wine you hold.</Text>
-            <TextInput
-              style={styles.input}
-              value={quantity}
-              onChangeText={(t) => setQuantity(t.replace(/[^0-9]/g, '').slice(0, 4))}
-              keyboardType="number-pad"
-              placeholder="e.g. 6"
-              placeholderTextColor={colors.textMuted}
-            />
-          </>
-        
+          <Text style={styles.label}>Bottles in Your Cellar</Text>
+          <Text style={styles.qtyHelper}>How many bottles of this wine you hold.</Text>
+          <TextInput
+            style={styles.input}
+            value={quantity}
+            onChangeText={(t) => setQuantity(t.replace(/[^0-9]/g, '').slice(0, 4))}
+            keyboardType="number-pad"
+            placeholder="e.g. 6"
+            placeholderTextColor={colors.textMuted}
+          />
 
           <Text style={styles.label}>Style</Text>
           <TextInput style={styles.input} value={style} onChangeText={setStyle} placeholder="e.g. Red, White, Rosé, Sparkling, Fortified" placeholderTextColor={colors.textMuted} autoCapitalize="words" />

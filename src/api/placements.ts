@@ -1,9 +1,10 @@
 import { supabase } from './supabase';
-import { cellarOwner, canEditCellar } from './cellarContext';
+import { cellarOwner, canEditCellar, assertCanEditCellar, refusedWriteError } from './cellarContext';
 import { removeSlotsForWine } from './racks';
 import { deleteStorageLocation } from './storageLocations';
 import { deleteCellarWine } from './cellar';
 import { selectAllPages, selectAllInChunks, chunkIds } from './paging';
+import type { CellarWine } from '../types/wine';
 
 // A single placement of some of a wine's bottles in ONE spot — a rack slot, a
 // bin cell, or an alt cellar (optionally in a case). Introduced by the unified
@@ -79,11 +80,13 @@ export async function addLocationPlacement(
   const { data: existing, error: selErr } = await q.limit(1).maybeSingle();
   if (selErr) throw selErr;
   if (existing) {
-    const { error } = await supabase
+    const { data: changed, error } = await supabase
       .from('cellar_placements')
       .update({ quantity: (existing.quantity ?? 0) + quantity })
-      .eq('id', existing.id);
+      .eq('id', existing.id)
+      .select('id');
     if (error) throw error;
+    if (!changed?.length) throw refusedWriteError();
   } else {
     const { error } = await supabase.from('cellar_placements').insert({
       cellar_wine_id: wineId, kind: 'location', quantity, storage_location_id: locationId, case_id: caseId,
@@ -201,8 +204,9 @@ export async function releaseFromBinCell(wineId: string, cellId: string, n: numb
   );
   for (const p of bins) {
     if (toFree <= 0) break;
-    const take = Math.min(toFree, p.quantity ?? 0);
-    if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; freed += take; }
+    const removed = await decrementPlacement(p.id, Math.min(toFree, p.quantity ?? 0));
+    toFree -= removed;
+    freed += removed;
   }
   return freed;
 }
@@ -233,26 +237,23 @@ export async function removeWineFromBinCell(wineId: string, cellId: string): Pro
   if (error) throw error;
 }
 
-// Remove `by` bottles from ONE placement (a specific spot). Deletes the row when
-// that empties it. Used by the alt-cellar partial "Move Wine/Bottles" flow — the
-// moved bottles either become loose (Full Cellar List) or land in a new placement.
-// Free `n` bottles of a wine FROM wherever they're stored — rack/fridge slots
-// first, then alt-cellar location placements. Use when bottles leave the active
-// cellar (archive / removal) so a placement count (e.g. "3 bottles in Large Wine
-// Rack") never lingers above the wine's real quantity. Mirrors the freeing step of
-// moveBottlesToLocation. Returns how many bottles were actually freed.
+// Free `n` bottles of a wine FROM wherever they're stored: rack/fridge slots,
+// then bin cells, then home alt cellars, and external (offsite) cellars last —
+// a bottle that leaves the cellar is far likelier to have come from home. Use
+// when bottles leave the active cellar (archive / removal) so a placement count
+// (e.g. "3 bottles in Large Wine Rack") never lingers above the wine's real
+// quantity. Returns how many bottles were actually freed.
 export async function releaseBottlesFromPlacements(wineId: string, n: number): Promise<number> {
   if (n <= 0) return 0;
   let freed = await removeSlotsForWine(wineId, n);
-  let toFree = n - freed;
-  if (toFree > 0) {
-    // Then alt-cellar locations, then bins — all app-owned placement rows.
-    const rest = (await fetchPlacementsForWine(wineId)).filter((p) => p.kind === 'location' || p.kind === 'bin');
-    for (const p of rest) {
-      if (toFree <= 0) break;
-      const take = Math.min(toFree, p.quantity ?? 0);
-      if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; freed += take; }
-    }
+  if (freed >= n) return freed;
+  const rest = (await fetchPlacementsForWine(wineId)).filter((p) => p.kind === 'location' || p.kind === 'bin');
+  const external = await fetchExternalLocationIds(rest.map((p) => p.storage_location_id));
+  const order = (p: CellarPlacement) =>
+    (p.kind === 'bin' ? 0 : p.storage_location_id && external.has(p.storage_location_id) ? 2 : 1);
+  for (const p of [...rest].sort((a, b) => order(a) - order(b))) {
+    if (freed >= n) break;
+    freed += await decrementPlacement(p.id, Math.min(n - freed, p.quantity ?? 0));
   }
   return freed;
 }
@@ -269,36 +270,62 @@ export async function releaseFromLocation(wineId: string, locationId: string, n:
   );
   for (const p of locs) {
     if (toFree <= 0) break;
-    const take = Math.min(toFree, p.quantity ?? 0);
-    if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; freed += take; }
+    const removed = await decrementPlacement(p.id, Math.min(toFree, p.quantity ?? 0));
+    toFree -= removed;
+    freed += removed;
   }
   return freed;
 }
 
-export async function decrementPlacement(placementId: string, by: number): Promise<void> {
+// One home-storage unit: a rack or fridge, a bin, or an alt cellar.
+export type StorageUnitRef = { kind: 'rack' | 'bin' | 'location'; id: string };
+
+// Free up to `n` of a wine's bottles from ONE storage unit only — used when an
+// action starts from that unit's screen, so the bottles leave the place the user
+// is looking at. Returns how many were freed (the rest is the caller's to find).
+export async function releaseFromUnit(wineId: string, unit: StorageUnitRef, n: number): Promise<number> {
+  if (n <= 0) return 0;
+  if (unit.kind === 'rack') return removeSlotsForWine(wineId, n, unit.id);
+  if (unit.kind === 'location') return releaseFromLocation(wineId, unit.id, n);
+  const { data: cells, error } = await supabase.from('bin_cells').select('id').eq('bin_id', unit.id);
+  if (error) throw error;
+  const cellIds = new Set((cells ?? []).map((c: { id: string }) => c.id));
+  let freed = 0;
+  for (const p of await fetchPlacementsForWine(wineId)) {
+    if (freed >= n) break;
+    if (p.kind !== 'bin' || !p.bin_cell_id || !cellIds.has(p.bin_cell_id)) continue;
+    freed += await decrementPlacement(p.id, Math.min(n - freed, p.quantity ?? 0));
+  }
+  return freed;
+}
+
+// Remove up to `by` bottles from ONE placement (a specific spot), deleting the
+// row when that empties it. Returns how many were actually removed: fewer than
+// `by` when the placement held fewer than a cached count said (or is gone).
+export async function decrementPlacement(placementId: string, by: number): Promise<number> {
   const { data, error } = await supabase
     .from('cellar_placements')
     .select('quantity')
     .eq('id', placementId)
     .maybeSingle();
   if (error) throw error;
-  const remaining = (data?.quantity ?? 0) - Math.max(0, by);
-  if (remaining > 0) {
-    const { error: updErr } = await supabase
-      .from('cellar_placements')
-      .update({ quantity: remaining })
-      .eq('id', placementId);
-    if (updErr) throw updErr;
-  } else {
-    const { error: delErr } = await supabase.from('cellar_placements').delete().eq('id', placementId);
-    if (delErr) throw delErr;
-  }
+  const held = data?.quantity ?? 0;
+  const removed = Math.min(held, Math.max(0, by));
+  if (removed === 0) return 0;
+  const { data: changed, error: writeErr } = held > removed
+    ? await supabase.from('cellar_placements').update({ quantity: held - removed }).eq('id', placementId).select('id')
+    : await supabase.from('cellar_placements').delete().eq('id', placementId).select('id');
+  if (writeErr) throw writeErr;
+  if (!changed?.length) throw refusedWriteError();
+  return removed;
 }
 
 // A wine "row" as it appears inside an alt cellar: the wine's details but with
 // the quantity + case of its placement THERE (a wine can also be racked/binned
 // elsewhere). Shaped like a CellarWine so the alt-cellar screen renders it.
-export async function fetchLocationPlacementRows(locationId: string): Promise<any[]> {
+export type LocationWineRow = CellarWine & { placement_id: string };
+
+export async function fetchLocationPlacementRows(locationId: string): Promise<LocationWineRow[]> {
   // Paged + chunked: an imported external cellar can hold thousands of wines.
   const rows = await selectAllPages<CellarPlacement>((from, to) =>
     supabase
@@ -312,10 +339,10 @@ export async function fetchLocationPlacementRows(locationId: string): Promise<an
       .order('id', { ascending: true })
       .range(from, to) as any);
   if (rows.length === 0) return [];
-  const wines = await selectAllInChunks<any>(rows.map((p) => p.cellar_wine_id), (chunk, from, to) =>
+  const wines = await selectAllInChunks<CellarWine>(rows.map((p) => p.cellar_wine_id), (chunk, from, to) =>
     supabase.from('cellar_wines').select('*').in('id', chunk)
       .order('id', { ascending: true }).range(from, to) as any);
-  const wineById = new Map(wines.map((w: any) => [w.id, w]));
+  const wineById = new Map(wines.map((w) => [w.id, w]));
   return rows.flatMap((p) => {
     const w = wineById.get(p.cellar_wine_id);
     // Archived wines aren't physically stored here.
@@ -324,11 +351,6 @@ export async function fetchLocationPlacementRows(locationId: string): Promise<an
   });
 }
 
-// Delete ALL of a wine's alt-cellar (location) placements — used when a wine
-// leaves every alt cellar at once (e.g. a whole-wine move into a rack/fridge).
-// The DB no longer mirrors the legacy storage_location_id into these rows
-// (migration 106), so they must be cleared explicitly or the wine lingers as a
-// ghost line in the alt cellar it left.
 // File an existing alt-cellar placement into a case (or out of one with null).
 // Alt-cellar case membership lives on the placement, not the legacy
 // cellar_wines.case_id, so "Add from This Cellar List" sets it here.
@@ -340,6 +362,11 @@ export async function setPlacementCase(placementId: string, caseId: string | nul
   if (error) throw error;
 }
 
+// Delete ALL of a wine's alt-cellar (location) placements — used when a wine
+// leaves every alt cellar at once (e.g. a whole-wine move into a rack/fridge).
+// The DB no longer mirrors the legacy storage_location_id into these rows
+// (migration 106), so they must be cleared explicitly or the wine lingers as a
+// ghost line in the alt cellar it left.
 export async function clearLocationPlacements(wineId: string): Promise<void> {
   const { error } = await supabase
     .from('cellar_placements')
@@ -447,6 +474,20 @@ async function absorbWineRow(intoId: string, fromId: string): Promise<void> {
   await deleteCellarWine(fromId);
 }
 
+// Quantity writes for moves and location deletes. Each checks the row was really
+// updated: RLS (a view-only member, an expired session) turns a refused update
+// into a silent no-op, which must not read as success.
+async function setWineQuantity(wineId: string, quantity: number): Promise<void> {
+  const { data, error } = await supabase.from('cellar_wines').update({ quantity }).eq('id', wineId).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('That wine could not be updated — please pull to refresh (you may need to sign in again).');
+}
+async function addToWineQuantity(wineId: string, by: number): Promise<void> {
+  const { data, error } = await supabase.from('cellar_wines').select('quantity').eq('id', wineId).maybeSingle();
+  if (error) throw error;
+  await setWineQuantity(wineId, (data?.quantity ?? 0) + by);
+}
+
 // Move `count` bottles of a wine INTO an alt-cellar location — placement-native
 // and merge-aware. This is the correct path for any "move to an alt cellar"
 // (voice or manual): it frees the bottles from wherever they sit now and lands
@@ -460,6 +501,7 @@ async function absorbWineRow(intoId: string, fromId: string): Promise<void> {
 // when it carries no history (removals, notes, review, filters, posts); otherwise
 // the history-free twin is folded INTO the source instead, and if both carry
 // history the bottles stay on the source row (two lines, nothing lost).
+// `fromUnit`: the unit the move was started from — its bottles go first.
 export async function moveBottlesToLocation(
   source: {
     id: string; producer: string | null; wine_name: string | null;
@@ -467,15 +509,26 @@ export async function moveBottlesToLocation(
   },
   destLocationId: string,
   count: number,
+  opts?: { fromUnit?: StorageUnitRef },
 ): Promise<void> {
+  assertCanEditCellar();
   // Authoritative quantity from the DB (the caller's copy may be stale).
-  const { data: srcRow } = await supabase
+  const { data: srcRow, error: srcErr } = await supabase
     .from('cellar_wines').select('quantity').eq('id', source.id).maybeSingle();
+  if (srcErr) throw srcErr;
   const srcQtyNow = (srcRow?.quantity as number | undefined) ?? source.quantity ?? 1;
   const n = Math.max(1, Math.min(count, srcQtyNow));
+  // Loose = bottles with no placement, counted BEFORE anything is freed (freed
+  // bottles become loose too, and must not be counted twice).
+  const looseBefore = Math.max(0, srcQtyNow - placedCount(await fetchPlacementsForWine(source.id)));
 
   // 1. Free `n` bottles from the source's current storage.
-  let toFree = n - (await removeSlotsForWine(source.id, n));
+  let toFree = n;
+  const fromUnit = opts?.fromUnit;
+  if (fromUnit && !(fromUnit.kind === 'location' && fromUnit.id === destLocationId)) {
+    toFree -= await releaseFromUnit(source.id, fromUnit, toFree);
+  }
+  if (toFree > 0) toFree -= await removeSlotsForWine(source.id, toFree);
   if (toFree > 0) {
     const placements = await fetchPlacementsForWine(source.id);
     const external = await fetchExternalLocationIds(
@@ -485,19 +538,14 @@ export async function moveBottlesToLocation(
     const take = async (list: CellarPlacement[]) => {
       for (const p of list) {
         if (toFree <= 0) break;
-        const t = Math.min(toFree, p.quantity ?? 0);
-        if (t > 0) { await decrementPlacement(p.id, t); toFree -= t; }
+        toFree -= await decrementPlacement(p.id, Math.min(toFree, p.quantity ?? 0));
       }
     };
     // Bins, then home alt cellars other than the destination.
     await take(placements.filter((p) => p.kind === 'bin'));
     await take(placements.filter((p) => p.kind === 'location' && p.storage_location_id !== destLocationId && !isExt(p)));
     // Loose bottles need no freeing — use them before touching an external cellar.
-    if (toFree > 0) {
-      const after = await fetchPlacementsForWine(source.id);
-      const loose = Math.max(0, srcQtyNow - placedCount(after));
-      toFree -= Math.min(toFree, loose);
-    }
+    toFree -= Math.min(toFree, looseBefore);
     // Last resort: the wine only remains in an external cellar.
     if (toFree > 0) await take(placements.filter((p) => isExt(p) && p.storage_location_id !== destLocationId));
   }
@@ -523,11 +571,8 @@ export async function moveBottlesToLocation(
   if (srcQty > 0) {
     // Partial move: bump the twin's line + total, shed n from the source (row kept).
     await addLocationPlacement(twin.id, destLocationId, null, n);
-    const { data: twRow } = await supabase
-      .from('cellar_wines').select('quantity').eq('id', twin.id).maybeSingle();
-    await supabase.from('cellar_wines')
-      .update({ quantity: (twRow?.quantity ?? 0) + n }).eq('id', twin.id);
-    await supabase.from('cellar_wines').update({ quantity: srcQty }).eq('id', source.id);
+    await addToWineQuantity(twin.id, n);
+    await setWineQuantity(source.id, srcQty);
     return;
   }
 
@@ -535,10 +580,7 @@ export async function moveBottlesToLocation(
   // history, filter memberships and notes/review — so only do that when it has none.
   if (!(await wineRowHasHistory(source.id))) {
     await addLocationPlacement(twin.id, destLocationId, null, n);
-    const { data: twRow } = await supabase
-      .from('cellar_wines').select('quantity').eq('id', twin.id).maybeSingle();
-    await supabase.from('cellar_wines')
-      .update({ quantity: (twRow?.quantity ?? 0) + n }).eq('id', twin.id);
+    await addToWineQuantity(twin.id, n);
     await deleteCellarWine(source.id);
     return;
   }
@@ -678,6 +720,7 @@ export async function deleteLocationAndWines(
   // (deleting ~1000 rows one-by-one is slow; without this the screen looks frozen).
   onProgress?: (done: number, total: number) => void,
 ): Promise<{ deletedWines: number }> {
+  assertCanEditCellar();
   // Bottles filed in this location, summed per wine.
   const here = await fetchPlacementsForLocation(locationId);
   const hereByWine = new Map<string, number>();
@@ -689,6 +732,8 @@ export async function deleteLocationAndWines(
   const legacyRows = await selectAllPages<{ id: string; quantity: number }>((from, to) =>
     supabase.from('cellar_wines').select('id, quantity')
       .eq('storage_location_id', locationId)
+      // Archive records are history, not bottles in this location.
+      .is('archived_at', null)
       .order('id', { ascending: true })
       .range(from, to) as any);
   for (const w of legacyRows) {
@@ -705,14 +750,18 @@ export async function deleteLocationAndWines(
       if (p.storage_location_id === locationId) continue;
       otherByWine.set(p.cellar_wine_id, (otherByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
     }
-    const wineRows = await selectAllInChunks<{ id: string; quantity: number }>(wineIds, (chunk, from, to) =>
-      supabase.from('cellar_wines').select('id, quantity').in('id', chunk)
+    const wineRows = await selectAllInChunks<{ id: string; quantity: number; archived_at: string | null }>(wineIds, (chunk, from, to) =>
+      supabase.from('cellar_wines').select('id, quantity, archived_at').in('id', chunk)
         .order('id', { ascending: true }).range(from, to) as any);
     const qtyById = new Map(wineRows.map((w) => [w.id, w.quantity ?? 0]));
+    // An archive record is history, not a bottle here: a stray placement of one
+    // just goes with the location, and the record stays.
+    const archivedIds = new Set(wineRows.filter((w) => w.archived_at).map((w) => w.id));
 
     let processed = 0;
     onProgress?.(0, wineIds.length);
     for (const id of wineIds) {
+      if (archivedIds.has(id)) { onProgress?.(++processed, wineIds.length); continue; }
       const inHere = hereByWine.get(id) ?? 0;
       const total = qtyById.get(id) ?? 0;
       const otherPlaced = otherByWine.get(id) ?? 0;
@@ -726,7 +775,7 @@ export async function deleteLocationAndWines(
         // Its placement rows in this location cascade when the location is
         // deleted below.
         // Never below what's still placed elsewhere (mirrors trimOrDeleteWineOnUnitDelete).
-        await supabase.from('cellar_wines').update({ quantity: Math.max(otherPlaced, remaining, 1) }).eq('id', id);
+        await setWineQuantity(id, Math.max(otherPlaced, remaining, 1));
       }
       onProgress?.(++processed, wineIds.length);
     }

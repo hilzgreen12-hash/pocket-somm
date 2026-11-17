@@ -4,9 +4,12 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../../../src/hooks/useAuth';
+import { invalidateCellarViews } from '../../../../src/hooks/useCellar';
 import { ensureConnectionForUpload } from '../../../../src/utils/connectionGuard';
 import { getBins, getBinCell, removeWineFromCell, binCellLabel } from '../../../../src/api/bins';
-import { addCellarWine, updateCellarWine } from '../../../../src/api/cellar';
+import { addCellarWine, getCellarWineById, updateCellarWine } from '../../../../src/api/cellar';
+import { archiveBottles } from '../../../../src/services/archiveNight';
+import { todayYmd } from '../../../../src/utils/reviewDate';
 import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, decrementPlacement } from '../../../../src/api/placements';
 import { removeSlotsForWine, getSlotAssignments } from '../../../../src/api/racks';
 import { fetchStorageLocations } from '../../../../src/api/storageLocations';
@@ -27,6 +30,7 @@ import { colors, spacing } from '../../../../src/constants/theme';
 import { fonts } from '../../../../src/constants/fonts';
 import type { CellarWine } from '../../../../src/types/wine';
 import { findSameCellarWine } from '../../../../src/utils/wineMatch';
+import { launchImageLibrary } from '../../../../src/utils/imagePicker';
 
 type Draft = {
   id: string | null; // existing cellar_wine id when editing, null when adding
@@ -99,7 +103,7 @@ export default function BinCellScreen() {
   async function uploadForBin() {
     if (!(await ensureMediaPermission('library'))) return;
     try {
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
+      const res = await launchImageLibrary({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
       if (res.canceled || !res.assets[0]) return;
       if (!(await ensureConnectionForUpload())) return;
       setScanning(true);
@@ -202,7 +206,7 @@ export default function BinCellScreen() {
     if (!userId) return;
     if (!(await ensureMediaPermission('library'))) return;
     try {
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
+      const res = await launchImageLibrary({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
       if (res.canceled || !res.assets[0]) return;
       const path = await uploadLabelImage(userId, res.assets[0].uri, w.id);
       await updateCellarWine(w.id, { label_image_path: path });
@@ -279,24 +283,52 @@ export default function BinCellScreen() {
       if (!proceed) return;
     }
 
+    // Editing a wine already in this cell: `qty` is the per-cell count.
+    const row = draft.id ? wines.find((w) => w.id === draft.id) : undefined;
+    const oldCell = row?.bin_cell_quantity ?? 0;
+    const delta = draft.id ? qty - oldCell : 0;
+    // Bottles only leave the cellar by being archived or deleted — that dates
+    // them and keeps their history straight — so a lower count asks which.
+    let leaveAs: 'archive' | 'delete' | null = null;
+    if (delta < 0) {
+      const n = -delta;
+      leaveAs = await new Promise<'archive' | 'delete' | null>((resolve) => {
+        showAlert({
+          title: 'Archive or delete?',
+          body: `${n} ${n === 1 ? 'bottle leaves' : 'bottles leave'} this ${cell?.kind ?? 'diamond'}. Archive ${n === 1 ? 'it' : 'them'} (dated today, with your history), or delete ${n === 1 ? 'it' : 'them'} from your records?`,
+          buttons: [
+            { text: 'Archive', onPress: () => resolve('archive') },
+            { text: 'Delete (permanent)', style: 'destructive', onPress: () => resolve('delete') },
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+          ],
+        });
+      });
+      if (!leaveAs) return;
+    }
+
     setSaving(true);
     try {
       if (draft.id) {
-        // Editing a wine already in this cell. `qty` is the per-cell count, so
-        // adjust the row total by the delta and resize this cell's bin placement.
-        const row = wines.find((w) => w.id === draft.id);
-        const oldCell = row?.bin_cell_quantity ?? 0;
-        const delta = qty - oldCell;
         await updateCellarWine(draft.id, {
           producer: draft.producer.trim() || null,
           wine_name: name,
           region: draft.region.trim() || null,
           vintage: draft.vintage.trim() || null,
           bottle_size_ml: draft.bottleSizeMl,
-          quantity: Math.max(0, (row?.quantity ?? oldCell) + delta),
+          ...(delta > 0 ? { quantity: (row?.quantity ?? oldCell) + delta } : {}),
         });
         if (delta > 0) await addBinPlacement(draft.id, cellId, delta);
-        else if (delta < 0) await releaseFromBinCell(draft.id, cellId, -delta);
+        else if (delta < 0) {
+          // This cell's bottles are freed first, so the archive or delete takes
+          // them (as loose bottles) rather than ones stored elsewhere.
+          const n = -delta;
+          await releaseFromBinCell(draft.id, cellId, n);
+          if (leaveAs === 'archive') await archiveBottles(draft.id, n, todayYmd());
+          else {
+            const fresh = await getCellarWineById(draft.id);
+            if (fresh && !fresh.archived_at) await updateCellarWine(draft.id, { quantity: Math.max(0, fresh.quantity - n) });
+          }
+        }
       } else {
         // Merge into an existing row of the same wine + format already in this
         // cell, so "12 x Diamond Creek" stays one line (mirrors lineup batching).
@@ -335,8 +367,7 @@ export default function BinCellScreen() {
           if (saved?.id) await addBinPlacement(saved.id, cellId, qty);
         }
       }
-      invalidate();
-      qc.invalidateQueries({ queryKey: ['cellar'] });
+      invalidateCellarViews(qc);
       setDraft(null);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });

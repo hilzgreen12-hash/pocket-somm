@@ -1,6 +1,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { HOUSE_RULES } from '../_shared/houseRules.ts';
+import { signedInUserId } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -8,6 +9,12 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 // against a stuck client looping.
 const HOURLY_LIMIT = 60;
 const DAILY_LIMIT = 300;
+// The app sends a pre-filtered shortlist (up to about 180 wines), never a whole
+// cellar. Older builds sent everything; past this many the rest is ignored.
+const MAX_WINES = 250;
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 interface CmdWine {
   id: string;
@@ -37,7 +44,7 @@ function buildPrompt(transcript: string, wines: CmdWine[]): string {
 
 Their spoken mood / request: "${transcript}"
 
-Their cellar (choose ONLY from these — use the exact ids):
+Bottles from their cellar (choose ONLY from these — use the exact ids):
 ${wineBlock}
 
 Choose the THREE bottles from the list that best suit their mood tonight, ranked best-first. For each, write a warm, specific one-to-two sentence justification that ties THIS wine to what they described (weather, food, occasion, the style of wine they want). Do not invent wines or ids. If the cellar has fewer than three suitable wines, return as many as genuinely fit (1 or 2).
@@ -48,17 +55,17 @@ Return ONLY raw JSON, no markdown:
 
 Deno.serve(async (req) => {
   try {
+    // Picks come from the caller's own cellar, so this needs an account.
+    if (!(await signedInUserId(req))) return json({ error: 'Unauthorized', message: 'Sign in to choose from your cellar.' }, 401);
+
     const limited = await checkRateLimit(req, 'cellar-recommend', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     const { transcript, wines } = await req.json();
-    if (typeof transcript !== 'string' || !transcript.trim()) {
-      return new Response(JSON.stringify({ error: 'transcript required' }), {
-        status: 400, headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    if (typeof transcript !== 'string' || !transcript.trim()) return json({ error: 'transcript required' }, 400);
 
-    const prompt = buildPrompt(transcript, (wines ?? []) as CmdWine[]);
+    const list: CmdWine[] = Array.isArray(wines) ? wines.slice(0, MAX_WINES) : [];
+    const prompt = buildPrompt(transcript, list);
 
     const response = await client.messages.create({
       system: HOUSE_RULES,
@@ -71,16 +78,10 @@ Deno.serve(async (req) => {
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
 
-    const parsed = JSON.parse(match[0]);
-    return new Response(JSON.stringify(parsed), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return json(JSON.parse(match[0]));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('cellar-recommend error:', message);
-    return new Response(
-      JSON.stringify({ error: 'Something went wrong. Please try again.' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    );
+    return json({ error: 'Something went wrong. Please try again.' }, 500);
   }
 });

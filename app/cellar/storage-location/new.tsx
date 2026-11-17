@@ -12,6 +12,7 @@ import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
 import { showAlert } from '../../../src/components/AppAlert';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
+import { launchCamera, launchImageLibrary } from '../../../src/utils/imagePicker';
 
 // Create a non-grid home storage location: a photo of the space + a name.
 // The photo is taken as-is (any orientation) and displayed with the whole
@@ -32,8 +33,8 @@ export default function NewStorageLocationScreen() {
       quality: 1,
     };
     const res = source === 'camera'
-      ? await ImagePicker.launchCameraAsync(opts)
-      : await ImagePicker.launchImageLibraryAsync(opts);
+      ? await launchCamera(opts)
+      : await launchImageLibrary(opts);
     if (res.canceled || !res.assets.length) return;
     setPhotoUri(res.assets[0].uri);
   }

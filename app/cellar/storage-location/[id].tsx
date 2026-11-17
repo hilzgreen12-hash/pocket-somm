@@ -1,25 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import * as ImagePicker from 'expo-image-picker';
+import { launchCamera, launchImageLibrary } from '../../../src/utils/imagePicker';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, deleteStorageLocation, renameStorageLocation, assignWineToCase, fetchStorageLocationCases, createStorageCase, updateStorageCase, deleteStorageCase, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
+import { fetchStorageLocation, deleteStorageLocation, renameStorageLocation, fetchStorageLocationCases, createStorageCase, updateStorageCase, deleteStorageCase, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
 import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
-import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement, setPlacementCase, releaseFromLocation, moveBottlesToLocation, fetchPlacementsForWine } from '../../../src/api/placements';
+import { fetchLocationPlacementRows, type LocationWineRow, decrementPlacement, addLocationPlacement, setPlacementCase, releaseFromLocation, moveBottlesToLocation, fetchPlacementsForWine } from '../../../src/api/placements';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
-import { foldAccents } from '../../../src/utils/wineIdentity';
+import { foldAccents, matchesWineSearch } from '../../../src/utils/wineIdentity';
 import { WineSearchModal } from '../../../src/components/WineSearchModal';
 import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
-import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine, addCellarWineRemoval, getCellarWineById } from '../../../src/api/cellar';
+import { deleteCellarWine, updateCellarWine, getCellarWineById } from '../../../src/api/cellar';
 import { clearWineFromRacks } from '../../../src/api/racks';
 import { fetchStorageLocations } from '../../../src/api/storageLocations';
 import { useRacks } from '../../../src/hooks/useRacks';
+import { invalidateCellarViews } from '../../../src/hooks/useCellar';
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { PackagingPrompt, fileLocationBottlesIntoCase } from '../../../src/components/PackagingPrompt';
-import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
+import { CellarCommandModal } from '../../../src/components/CellarCommandModal';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
 import { useLabelStore } from '../../../src/stores/labelStore';
@@ -30,6 +31,10 @@ import { useRackStore } from '../../../src/stores/rackStore';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { effectiveMaturity } from '../../../src/utils/maturity';
 import { showAlert } from '../../../src/components/AppAlert';
+import { archiveBottles } from '../../../src/services/archiveNight';
+import { ArchiveBottlesSheet } from '../../../src/components/winecard/cellar/ArchiveBottlesSheet';
+import { todayYmd } from '../../../src/utils/reviewDate';
+import { confirmWineDelete, reviewsOn } from '../../../src/utils/confirmWineDelete';
 import { LabelThumb } from '../../../src/components/LabelThumb';
 import { bottleSizeCl } from '../../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../../src/constants/theme';
@@ -169,11 +174,11 @@ export default function StorageLocationScreen() {
   const wineSearchCaseRef = useRef<string | null>(null);
   // Permanent delete of a multi-bottle wine → ask how many first.
   // `row` is the per-location list row (its quantity = bottles HERE, not the total).
-  const [deleteWine, setDeleteWine] = useState<{ row: CellarWine; name: string; qty: number } | null>(null);
+  const [deleteWine, setDeleteWine] = useState<{ row: LocationWineRow; name: string; qty: number } | null>(null);
   const [deleteCountStr, setDeleteCountStr] = useState('1');
-  // Archive of a multi-bottle wine from this location → ask how many first.
-  const [archiveWine, setArchiveWine] = useState<{ row: CellarWine; name: string; qty: number } | null>(null);
-  const [archiveCountStr, setArchiveCountStr] = useState('1');
+  // "Archive Wine" → the wine card's archive sheet (how many of the bottles
+  // here, when, a note).
+  const [archiveTarget, setArchiveTarget] = useState<LocationWineRow | null>(null);
 
   // Move `count` of a cellar wine's bottles that are NOT already here into this
   // location. moveBottlesToLocation frees them from rack slots / other storage and
@@ -254,9 +259,8 @@ export default function StorageLocationScreen() {
       if (highlightOnly && w.id !== highlightOnly) return false;
       if (caseFilter && w.case_id !== caseFilter) return false;
       if (q) {
-        const hay = foldAccents([w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' '));
         const statusTerms = STATUS_SEARCH.find((s) => s.status === effectiveMaturity(w))?.terms ?? [];
-        if (!hay.includes(q) && !statusTerms.some((t) => t.includes(q))) return false;
+        if (!matchesWineSearch([w.producer, w.wine_name, w.region, w.vintage], q) && !statusTerms.some((t) => t.includes(q))) return false;
       }
       return true;
     });
@@ -274,13 +278,13 @@ export default function StorageLocationScreen() {
 
   // Place an awaiting bottle into a case here, or "ignore" it (an alt cellar
   // doesn't require placement, so a bottle can simply live loose here).
-  async function placeAwaiting(w: CellarWine, caseId: string | null) {
+  async function placeAwaiting(w: LocationWineRow, caseId: string | null) {
     try {
       // Case membership lives on this wine's placement HERE, not cellar_wines.case_id.
       if (caseId && id) {
         await fileLocationBottlesIntoCase({
           wineId: w.id, locationId: id, caseId,
-          placementId: (w as unknown as { placement_id?: string }).placement_id ?? null,
+          placementId: w.placement_id ?? null,
           count: w.quantity ?? null,
         });
       }
@@ -292,7 +296,7 @@ export default function StorageLocationScreen() {
       showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
-  function openPlaceAwaiting(w: CellarWine) {
+  function openPlaceAwaiting(w: LocationWineRow) {
     const label = wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'This wine');
     showAlert({
       title: 'Where should this go?',
@@ -345,7 +349,7 @@ export default function StorageLocationScreen() {
   async function handleUpload(caseId: string | null = null) {
     if (!id) return;
     if (!(await ensureMediaPermission('library'))) return;
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    const res = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
     if (res.canceled || !res.assets[0]) return;
     if (!(await ensureConnectionForUpload())) return;
     setPendingStorageLocationId(id);
@@ -418,8 +422,8 @@ export default function StorageLocationScreen() {
     if (!id || !userId) return;
     if (!(await ensureMediaPermission(fromCamera ? 'camera' : 'library'))) return;
     const res = fromCamera
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      ? await launchCamera({ mediaTypes: ['images'], quality: 1 })
+      : await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
     if (res.canceled || !res.assets[0]) return;
     setEditingImage(true);
     try {
@@ -494,15 +498,8 @@ export default function StorageLocationScreen() {
   function exitSelect() { setSelectMode(false); setSelectedIds(new Set()); }
 
   function invalidateAfterBulk() {
-    qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
+    invalidateCellarViews(qc);
     qc.invalidateQueries({ queryKey: ['storage-location', id] });
-    qc.invalidateQueries({ queryKey: ['storage-locations'] });
-    qc.invalidateQueries({ queryKey: ['cellar'] });
-    qc.invalidateQueries({ queryKey: ['cellar-archive'] });
-    qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-    qc.invalidateQueries({ queryKey: ['rack-slots'] });
-    qc.invalidateQueries({ queryKey: ['placements'] });
-    qc.invalidateQueries({ queryKey: ['placements-list'] });
   }
 
   // Run a per-wine action across the selection, tolerating a mid-way failure:
@@ -536,7 +533,11 @@ export default function StorageLocationScreen() {
       body: 'They move to Your Archive and leave this location. Your reviews and history stay.',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive Wines', onPress: () => runBulk('Archived', async (wid) => { const row = wines.find((x) => x.id === wid); if (row) await archiveWineFromLocation(row); }) },
+        // Every bottle of each wine HERE (all its rows in this cellar), dated today.
+        { text: 'Archive Wines', onPress: () => runBulk('Archived', async (wid) => {
+          const hereQty = wines.filter((x) => x.id === wid).reduce((sum, x) => sum + (x.quantity ?? 0), 0);
+          if (hereQty > 0) await archiveHere(wid, hereQty, todayYmd());
+        }) },
       ],
     });
   }
@@ -608,25 +609,42 @@ export default function StorageLocationScreen() {
     else if (id) await releaseFromLocation(wid, id, n);
     await updateCellarWine(wid, { quantity: total - n });
   }
-  async function runDeleteWine(n: number) {
-    const d = deleteWine;
-    if (!d) return;
-    setDeleteWine(null);
-    const placementId = (d.row as unknown as { placement_id?: string }).placement_id ?? null;
-    await runSingle('Deleted', d.row.id, async (wid) => {
-      await deleteBottlesFromLocation(wid, Math.max(1, Math.min(n, d.qty)), placementId);
+
+  // Permanently delete `n` of a wine's bottles HERE. When they're the wine's last
+  // bottles the wine itself goes, with the reviews stored on it, so that always
+  // asks first through the shared confirmation (which offers Archive instead).
+  // Fewer go straight away once the user has been warned (the how-many modal
+  // says it can't be undone), else after the same prompt.
+  async function deleteHere(w: LocationWineRow, n: number, warned = false) {
+    // This list shows only the bottles here; the wine's real total says
+    // whether these are its last.
+    const real = await getCellarWineById(w.id).catch(() => null);
+    const whole = n >= (real?.quantity ?? w.quantity ?? 1);
+    const run = () => runSingle('Deleted', w.id, (wid) => deleteBottlesFromLocation(wid, n, w.placement_id));
+    if (warned && !whole) { await run(); return; }
+    confirmWineDelete({
+      lead: whole ? undefined : `Permanently remove ${n === 1 ? 'this bottle' : `${n} bottles`} from your cellar.`,
+      reviewsLost: whole ? reviewsOn([real ?? w]) : 0,
+      onDelete: () => void run(),
+      onArchive: () => void runSingle('Archived', w.id, (wid) => archiveHere(wid, Infinity, todayYmd())),
     });
+  }
+
+  // Archive bottles of a wine, this location's first.
+  async function archiveHere(wid: string, count: number, date: string, note?: string): Promise<void> {
+    const { archived } = await archiveBottles(wid, count, date, { fromUnit: { kind: 'location', id: id! }, note });
+    if (archived === 0) throw new Error('This wine is no longer in your cellar. Pull to refresh and try again.');
   }
 
   // Long-press a wine → a per-wine action pop-up (replaces the select-mode dark
   // bar), for consistency with the rack/fridge grids.
   // "Highlight All Bottles" — filter the list to this wine and list where its
   // bottles sit here, e.g. "2x75cl in XX Mixed Case", "6x75cl Loose".
-  function showWineHere(w: CellarWine) {
+  function showWineHere(w: LocationWineRow) {
     const rowsHere = wines.filter((r) => r.id === w.id);
     const byCase = new Map<string | null, number>();
     for (const r of rowsHere) {
-      const k = (r as any).case_id ?? null;
+      const k = r.case_id ?? null;
       byCase.set(k, (byCase.get(k) ?? 0) + (r.quantity ?? 0));
     }
     const total = Array.from(byCase.values()).reduce((s, n) => s + n, 0);
@@ -645,7 +663,7 @@ export default function StorageLocationScreen() {
     });
   }
 
-  function openWineActions(w: CellarWine) {
+  function openWineActions(w: LocationWineRow) {
     const qty = w.quantity ?? 1;
     const cl = bottleSizeCl(w.bottle_size_ml ?? 750);
     const region = (w.region ?? '').trim();
@@ -658,21 +676,11 @@ export default function StorageLocationScreen() {
         { text: 'Move Bottles', onPress: () => openMoveBottlesMenu(w) },
         { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
         { text: 'Highlight All Bottles', onPress: () => showWineHere(w) },
-        { text: 'Archive Wine', onPress: () => openArchiveWine(w) },
+        { text: 'Archive Wine', onPress: () => setArchiveTarget(w) },
         { text: 'Delete Wine', style: 'destructive', onPress: () => {
           const qty = w.quantity ?? 1;
           if (qty > 1) { setDeleteCountStr('1'); setDeleteWine({ row: w, name: w.wine_name, qty }); return; }
-          showAlert({
-            title: 'Delete this wine?',
-            body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
-            buttons: [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete (permanent)', style: 'destructive', onPress: () => runSingle('Deleted', w.id, async (wid) => {
-                // Just this location's bottle — the wine's bottles elsewhere stay.
-                await deleteBottlesFromLocation(wid, 1, (w as unknown as { placement_id?: string }).placement_id ?? null);
-              }) },
-            ],
-          });
+          void deleteHere(w, 1);
         } },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -681,7 +689,7 @@ export default function StorageLocationScreen() {
 
   // "Move Bottles" → a submenu: file this wine into / out of a case here, or move
   // it (some or all bottles) to a different storage location.
-  function openMoveBottlesMenu(w: CellarWine) {
+  function openMoveBottlesMenu(w: LocationWineRow) {
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
       buttons: [
@@ -693,8 +701,8 @@ export default function StorageLocationScreen() {
     });
   }
   // Pick a case in this cellar to file the wine into (setting its placement case).
-  function openMoveToCase(w: CellarWine) {
-    const current = (w as any).case_id as string | null | undefined;
+  function openMoveToCase(w: LocationWineRow) {
+    const current = w.case_id;
     const targets = cases.filter((c) => c.id !== current);
     if (targets.length === 0) {
       showAlert({ title: cases.length === 0 ? 'No cases yet' : 'Already filed', body: cases.length === 0 ? 'Create a case first from the case carousel (+ Add Case).' : 'This wine is already in your only case.' });
@@ -708,8 +716,8 @@ export default function StorageLocationScreen() {
       ],
     });
   }
-  function removeFromCase(w: CellarWine) {
-    if (!(w as any).case_id) {
+  function removeFromCase(w: LocationWineRow) {
+    if (!w.case_id) {
       showAlert({ title: 'Not in a case', body: `${wineHeaderLine(w.producer, w.wine_name, w.vintage) || 'This wine'} is loose in ${location?.name ?? 'this cellar'} — it isn't in a case.` });
       return;
     }
@@ -720,7 +728,7 @@ export default function StorageLocationScreen() {
   // (skipped when there's only one), then WHERE: back to the Full Cellar List as
   // loose bottles, or into a different location. Archiving is its own top-level
   // action now, not a move destination.
-  function openMoveWine(w: CellarWine) {
+  function openMoveWine(w: LocationWineRow) {
     const total = w.quantity ?? 1;
     if (total <= 1) { promptMoveDestination(w, 1); return; }
     // One button per count (capped for a tidy sheet), plus an explicit "All".
@@ -742,8 +750,8 @@ export default function StorageLocationScreen() {
   }
 
   // Second step of the move: pick a destination for the chosen `count` bottles.
-  function promptMoveDestination(w: CellarWine, count: number) {
-    const placementId = (w as any).placement_id as string | undefined;
+  function promptMoveDestination(w: LocationWineRow, count: number) {
+    const placementId = w.placement_id;
     const noun = count === (w.quantity ?? 1) ? 'this wine' : `${count} bottle${count === 1 ? '' : 's'}`;
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
@@ -765,60 +773,6 @@ export default function StorageLocationScreen() {
     });
   }
 
-  // Archive a wine FROM THIS LOCATION only — scoped to the bottles physically
-  // here (the list row's quantity is the per-location count, not the wine's true
-  // total). A wine split across this alt cellar and another spot only loses the
-  // bottles stored here; it becomes a full archive only when this location holds
-  // all of them. (Previously this ran archiveCellarWine, archiving the WHOLE wine
-  // and clearing every placement — wrongly taking bottles from other locations.)
-  async function archiveWineFromLocation(row: CellarWine, count?: number): Promise<void> {
-    const wid = row.id;
-    const here = row.quantity ?? 1;                        // per-location count (placement qty)
-    const n = Math.max(1, Math.min(count ?? here, here));  // bottles to archive from here
-    const placementId = (row as unknown as { placement_id?: string }).placement_id;
-    const today = new Date().toISOString().split('T')[0];
-    const real = await getCellarWineById(wid);
-    const total = real?.quantity ?? here;
-    await addCellarWineRemoval({ cellarWineId: wid, removedAt: today, count: Math.min(n, total), note: null });
-    if (n >= total || !placementId) {
-      // Archiving every bottle the wine has → full archive (clears all placements).
-      await clearWineFromRacks(wid);
-      await assignWineToCase(wid, null);
-      await archiveCellarWine(wid);
-    } else {
-      // Only `n` of this location's bottles leave: release them FIRST (so the
-      // mig-107 quantity-trim trigger doesn't nuke the wrong placement), decrement
-      // the live row, then clone an archive row for the removed bottles.
-      await decrementPlacement(placementId, n);
-      await updateCellarWine(wid, { quantity: total - n });
-      if (real) {
-        const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = real;
-        await addCellarWine({ ...rest, quantity: n, archived_at: `${today}T12:00:00.000Z` });
-      }
-    }
-  }
-
-  // Archive this wine — scoped to the bottles in THIS location (see above).
-  function openArchiveWine(w: CellarWine) {
-    const here = w.quantity ?? 1;
-    if (here > 1) { setArchiveCountStr('1'); setArchiveWine({ row: w, name: w.wine_name, qty: here }); return; }
-    showAlert({
-      title: 'Archive this wine?',
-      body: 'The bottle in this location moves to Your Archive. Any bottles of this wine stored elsewhere stay put. Your reviews and history stay.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive', onPress: () => runSingle('Archived', w.id, async () => { await archiveWineFromLocation(w, 1); }) },
-      ],
-    });
-  }
-  // Archive `n` bottles from this location (n chosen in the count modal).
-  async function runArchiveWine(n: number) {
-    const a = archiveWine;
-    if (!a) return;
-    setArchiveWine(null);
-    await runSingle('Archived', a.row.id, async () => { await archiveWineFromLocation(a.row, n); });
-  }
-
   // Send `count` bottles of this wine to a rack/fridge — a rack needs a physical
   // slot, so route to the rack screen's "place unplaced bottles" mode
   // (placeWine + placeLimit, as the wine card does): it assigns EXISTING bottles
@@ -833,12 +787,12 @@ export default function StorageLocationScreen() {
     router.push(`/cellar/rack/${rackId}?placeWine=${w.id}&placeLimit=${Math.max(1, count)}` as any);
   }
 
-  function openMoveToDifferentLocation(w: CellarWine, count: number) {
+  function openMoveToDifferentLocation(w: LocationWineRow, count: number) {
     // Destinations are every OTHER home-storage place: racks & fridges (which
     // need slot placement) plus other Alt Cellars (a placement here). Previously
     // only Alt Cellars were offered, so a user whose only other storage was a
     // rack saw a wrong "No other locations".
-    const placementId = (w as any).placement_id as string | undefined;
+    const placementId = w.placement_id;
     // Home bottles never move OUT to external storage: from a home cellar only
     // other home cellars are offered (an external cellar can still send bottles
     // anywhere, including home).
@@ -949,7 +903,7 @@ export default function StorageLocationScreen() {
   // "Add from This Cellar List" — file a wine already in this alt cellar into the
   // case by setting its placement's case (no new bottle created).
   function openAddExistingToCase(c: StorageCase) {
-    const candidates = wines.filter((w) => (w as any).case_id !== c.id);
+    const candidates = wines.filter((w) => w.case_id !== c.id);
     if (candidates.length === 0) {
       showAlert({ title: 'Nothing to add', body: `Every wine in ${location?.name ?? 'this cellar'} is already in ${c.name}.` });
       return;
@@ -970,7 +924,7 @@ export default function StorageLocationScreen() {
 
   // When the chosen wine has more than one bottle in this cellar, ask how many to
   // file into the case; a single bottle moves straight away.
-  function promptCaseMoveQty(w: CellarWine, c: StorageCase) {
+  function promptCaseMoveQty(w: LocationWineRow, c: StorageCase) {
     const max = w.quantity ?? 1;
     if (max <= 1) { void moveBottlesIntoCase(w, c, 1); return; }
     showAlert({
@@ -988,10 +942,10 @@ export default function StorageLocationScreen() {
   // File `n` of a wine's bottles into a case. Moving all of a placement just
   // re-cases it; a partial move splits (decrement the source placement, add the
   // moved bottles to the case). Confirms where the bottles came from and went.
-  async function moveBottlesIntoCase(w: CellarWine, c: StorageCase, n: number) {
-    const sourceCaseId = (w as unknown as { case_id?: string | null }).case_id ?? null;
+  async function moveBottlesIntoCase(w: LocationWineRow, c: StorageCase, n: number) {
+    const sourceCaseId = w.case_id ?? null;
     const sourceName = sourceCaseId ? (cases.find((cc) => cc.id === sourceCaseId)?.name ?? 'another case') : 'loose bottles';
-    const placementId = (w as unknown as { placement_id?: string }).placement_id;
+    const placementId = w.placement_id;
     const total = w.quantity ?? 1;
     try {
       if (n >= total && placementId) {
@@ -1016,9 +970,9 @@ export default function StorageLocationScreen() {
   // case — the alt-cellar case membership lives on the placement, not the legacy
   // cellar_wines.case_id. Shared by "Add from This Cellar List" and the per-wine
   // Move Bottles → Add/Move to Case / Remove from Case menu.
-  async function fileWineIntoCase(w: CellarWine, caseId: string | null) {
+  async function fileWineIntoCase(w: LocationWineRow, caseId: string | null) {
     try {
-      const placementId = (w as any).placement_id as string | undefined;
+      const placementId = w.placement_id;
       if (placementId) await setPlacementCase(placementId, caseId);
       else if (id) await fileLocationBottlesIntoCase({ wineId: w.id, locationId: id, caseId });
       qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
@@ -1028,7 +982,7 @@ export default function StorageLocationScreen() {
       showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
-  function addExistingToCase(w: CellarWine, c: StorageCase) { void fileWineIntoCase(w, c.id); }
+  function addExistingToCase(w: LocationWineRow, c: StorageCase) { void fileWineIntoCase(w, c.id); }
 
   async function confirmAddBottles() {
     const c = addBottlesCase;
@@ -1106,7 +1060,7 @@ export default function StorageLocationScreen() {
     .map((c) => ({ box: c, wines: filtered.filter((w) => w.case_id === c.id) })));
   const looseFiltered = filtered.filter((w) => !w.case_id);
 
-  const renderWine = (w: CellarWine) => {
+  const renderWine = (w: LocationWineRow) => {
     const isSelected = selectedIds.has(w.id);
     return (
       <TouchableOpacity
@@ -1544,10 +1498,10 @@ export default function StorageLocationScreen() {
               autoFocus
               selectTextOnFocus
             />
-            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = deleteWine; if (!q) return; const n = Math.max(1, Math.min(q.qty, parseInt(deleteCountStr, 10) || 1)); void runDeleteWine(n); }}>
+            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = deleteWine; if (!q) return; setDeleteWine(null); void deleteHere(q.row, Math.max(1, Math.min(q.qty, parseInt(deleteCountStr, 10) || 1)), true); }}>
               <Text style={styles.caseModalSaveText}>Delete Bottles</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = deleteWine; if (!q) return; void runDeleteWine(q.qty); }}>
+            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = deleteWine; if (!q) return; setDeleteWine(null); void deleteHere(q.row, q.qty, true); }}>
               <Text style={styles.caseModalSaveText}>Delete all {deleteWine?.qty}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.caseModalCancel} onPress={() => setDeleteWine(null)}>
@@ -1557,37 +1511,28 @@ export default function StorageLocationScreen() {
         </View>
       </Modal>
 
-      {/* Archive — how many bottles from this location? Shown for multi-bottle wines. */}
-      <Modal visible={archiveWine !== null} transparent animationType="fade" onRequestClose={() => setArchiveWine(null)}>
-        <View style={styles.caseModalOverlay}>
-          <View style={[styles.caseModalSheet, { marginHorizontal: spacing.xl }]}>
-            <Text style={styles.caseModalTitle}>Archive how many?</Text>
-            <Text style={styles.caseModalHint}>You have {archiveWine?.qty} bottle{archiveWine?.qty === 1 ? '' : 's'} of {archiveWine?.name} in this location. How many to move to Your Archive? Bottles elsewhere stay put.</Text>
-            <TextInput
-              style={styles.caseModalInput}
-              value={archiveCountStr}
-              onChangeText={(t) => setArchiveCountStr(t.replace(/[^0-9]/g, '').slice(0, 3))}
-              keyboardType="number-pad"
-              placeholder="1"
-              placeholderTextColor={colors.textSubtle}
-              autoFocus
-              selectTextOnFocus
-            />
-            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = archiveWine; if (!q) return; const n = Math.max(1, Math.min(q.qty, parseInt(archiveCountStr, 10) || 1)); void runArchiveWine(n); }}>
-              <Text style={styles.caseModalSaveText}>Archive Bottles</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = archiveWine; if (!q) return; void runArchiveWine(q.qty); }}>
-              <Text style={styles.caseModalSaveText}>Archive all {archiveWine?.qty}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setArchiveWine(null)}>
-              <Text style={styles.caseModalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {archiveTarget ? (
+        <ArchiveBottlesSheet
+          visible
+          wine={archiveTarget}
+          initialCount={1}
+          working={busy}
+          onArchive={({ count, date, note }) => {
+            const w = archiveTarget;
+            setArchiveTarget(null);
+            void runSingle('Archived', w.id, (wid) => archiveHere(wid, count, date, note || undefined));
+          }}
+          onDelete={(count) => {
+            const w = archiveTarget;
+            setArchiveTarget(null);
+            void deleteHere(w, count);
+          }}
+          onClose={() => setArchiveTarget(null)}
+        />
+      ) : null}
 
       {/* Voice Command — same engine as the Cellar tab, scoped copy for home storage. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} locationName={location?.name ?? null} scope={id ? { kind: 'location', id } : undefined} hereWineIds={Array.from(new Set(wines.map((w) => w.id)))} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} locationName={location?.name ?? null} scope={id ? { kind: 'location', id } : undefined} hereWineIds={Array.from(new Set(wines.map((w) => w.id)))} />
 
       {/* "How is this wine packaged?" — on move-in and on Update Packaging. */}
       <PackagingPrompt

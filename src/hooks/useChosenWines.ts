@@ -41,12 +41,15 @@ export function useChosenWines() {
           if (!uri) return;
           path = await uploadLabelImage(userId, uri, `review-${row.id}`);
         }
-        // Only fill a still-empty photo: the caller may have attached the
-        // user's own photo while this lookup ran — never overwrite it.
-        const { data: cur } = await supabase.from('chosen_wines').select('label_image_path').eq('id', row.id).maybeSingle();
-        if (cur?.label_image_path) return;
-        await patchChosenWine(row.id, { label_image_path: path });
-        qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+        // Fill the photo only while it's still empty, in ONE conditional write:
+        // the user's own photo may land while this lookup runs, and a separate
+        // check-then-write could slip in between and overwrite it.
+        const { data: filled } = await supabase.from('chosen_wines')
+          .update({ label_image_path: path })
+          .eq('id', row.id)
+          .is('label_image_path', null)
+          .select('id');
+        if (filled?.length) qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
       } catch { /* best-effort: the review stands without a photo */ }
     })();
   }
@@ -72,10 +75,12 @@ export function useChosenWines() {
     onSuccess: invalidate,
   });
 
+  // ownPhoto: the caller is about to upload the user's own label photo, so no
+  // background stand-in image is looked up for this review.
   const saveManual = useMutation({
-    mutationFn: async (input: ManualSaveChosenWineInput) => {
+    mutationFn: async ({ ownPhoto, ...input }: ManualSaveChosenWineInput & { ownPhoto?: boolean }) => {
       const row = await saveManualChosenWine(userId!, input);
-      attachLabelPhoto(row);
+      if (!ownPhoto) attachLabelPhoto(row);
       return row;
     },
     onSuccess: invalidate,

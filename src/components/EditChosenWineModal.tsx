@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, Keyboard, Image } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import * as ImagePicker from 'expo-image-picker';
+import { launchCamera, launchImageLibrary } from '../utils/imagePicker';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
@@ -235,8 +235,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   async function pickIdentityPhoto(source: 'camera' | 'library') {
     if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
     const res = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      ? await launchCamera({ mediaTypes: ['images'], quality: 1 })
+      : await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
     if (res.canceled || !res.assets[0]) return;
     setEditImageUri(res.assets[0].uri);
   }

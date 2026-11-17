@@ -47,10 +47,11 @@ export default function LabelCameraScreen() {
   if (!permission.granted) return <PermissionScreen onRequest={requestPermission} />;
 
   // Outside Wine Intel (adding to the cellar, a review…), a failed read can fall
-  // back to typing the wine in; Wine Intel just retakes the photo.
+  // back to typing the wine in — on a blank form, without the photo that
+  // couldn't be read. Wine Intel just retakes the photo.
   const enterManually = context === 'intel'
     ? undefined
-    : { text: 'Enter Manually', onPress: () => router.replace(`/label/confirm${contextQuery}`) };
+    : { text: 'Enter Manually', onPress: () => router.replace(`/label/confirm?manual=1${context ? `&context=${context}` : ''}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}`) };
 
   async function handleCapture() {
     if (capturingRef.current) return;

@@ -35,6 +35,7 @@ import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { WineRecommendation } from '../../src/types/wine';
+import { lineupForVisitHref } from '../../src/utils/restaurantReview';
 
 // Shown by the "(what's this)" link next to Vinster's Review — mirrors the
 // explainer on the wine card so the two surfaces read consistently.
@@ -1362,6 +1363,22 @@ export default function ResultsScreen() {
               const backTo = encodeURIComponent(resultsHref());
               setTimeout(() => router.push(`/wines/chosen?openReview=${cw.id}&backTo=${backTo}` as any), DISMISS_DELAY_MS);
             }}
+            onAddLineup={async (upload, name, city, saveDraft) => {
+              const sid = reviewSessionId ?? (await getOrCreateSession());
+              if (!sid) return; // getOrCreateSession has already said why
+              await saveDraft();
+              // The form reopens from this screen's state, so carry the edits.
+              if (name) setRestaurantName(name);
+              setCityOverride(city || null);
+              leaveForm();
+              setTimeout(() => router.push(lineupForVisitHref({
+                sessionId: sid,
+                venue: name || restaurantName || null,
+                city: city || stampCity || null,
+                capturedAt: item?.capturedAt ?? stampDateSource,
+                upload,
+              }) as any), DISMISS_DELAY_MS);
+            }}
             onAddPhoto={async (name, city, saveDraft) => {
               const sid = reviewSessionId ?? (await getOrCreateSession());
               if (!sid) return; // getOrCreateSession has already said why
@@ -1371,11 +1388,14 @@ export default function ResultsScreen() {
                 city: city || null,
                 hasPhoto: !!item?.restaurantPhotoPath,
                 leaveModal: async () => {
-                  await saveDraft();
-                  // The form reopens from this screen's state, so carry the edits.
+                  // The draft saves in the background so the photo search opens
+                  // at once; the form reopens from this screen's state, so carry
+                  // the edits.
+                  const saving = saveDraft();
                   if (name) setRestaurantName(name);
                   setCityOverride(city || null);
                   leaveForm();
+                  saving.catch((err) => showAlert({ title: 'Could not save your review', body: err instanceof Error ? err.message : 'Please try again.' }));
                 },
               });
             }}

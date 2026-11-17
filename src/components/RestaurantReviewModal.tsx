@@ -13,11 +13,11 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
 import { listLineupArchives } from '../api/lineups';
 import { addSessionBottle, patchChosenWine, updateSessionRestaurant } from '../api/chosenWines';
-import { archiveCellarWine } from '../api/cellar';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { prepareImageBase64, detectLineup } from '../api/label';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
-import { useCellar } from '../hooks/useCellar';
+import { useCellar, invalidateCellarViews } from '../hooks/useCellar';
+import { archiveBottles } from '../services/archiveNight';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { StarRating } from './StarRating';
@@ -31,10 +31,12 @@ import { ensureConnectionForUpload } from '../utils/connectionGuard';
 import { MicButton } from './MicButton';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
-import { isoToYmd, ymdToIso } from '../utils/reviewDate';
+import { isoToYmd, todayYmd, ymdToIso } from '../utils/reviewDate';
 import { noteHappyMoment } from '../services/ratingPrompt';
 import { wineHeaderLine } from '../utils/wineHeader';
 import { formatVisitDate } from '../utils/restaurantReview';
+import { matchesWineSearch } from '../utils/wineIdentity';
+import { launchCamera, launchImageLibrary } from '../utils/imagePicker';
 
 interface WineLine {
   producer: string | null;
@@ -91,6 +93,9 @@ interface Props {
   // for that restaurant, not the stale saved value. saveDraft persists unsaved
   // edits, for a parent that must close this modal to navigate.
   onAddPhoto?: (name: string, city: string, saveDraft: () => Promise<void>) => void;
+  // "+ Add a lineup": photograph (or upload, `upload`) a lineup from this visit.
+  // Same contract as onAddPhoto — the parent closes this modal to navigate.
+  onAddLineup?: (upload: boolean, name: string, city: string, saveDraft: () => Promise<void>) => void;
 }
 
 type Place = { restaurant_name: string | null; city: string | null };
@@ -110,7 +115,7 @@ async function writeVisit(sessionId: string, payload: Place, before: Place) {
 export function RestaurantReviewModal({
   visible, sessionId, initialName, initialNote, initialRatings, initialFavourite,
   city, date, capturedAt, wines, onReviewWine, onViewIntel, onEditWine, onDeleteWine, onClose, onSaved,
-  sessionError, onRetrySession, restaurantPhotoPath, onViewPhoto, onAddPhoto,
+  sessionError, onRetrySession, restaurantPhotoPath, onViewPhoto, onAddPhoto, onAddLineup,
 }: Props) {
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -283,8 +288,8 @@ export function RestaurantReviewModal({
     try {
       const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
       const res = source === 'camera'
-        ? await ImagePicker.launchCameraAsync(opts)
-        : await ImagePicker.launchImageLibraryAsync(opts);
+        ? await launchCamera(opts)
+        : await launchImageLibrary(opts);
       if (res.canceled || !res.assets.length) return;
       if (!(await ensureConnectionForUpload())) return;
       setBottleBusy(true);
@@ -322,20 +327,16 @@ export function RestaurantReviewModal({
   }
 
   const cellarMatches = useMemo(() => {
-    const q = cellarSearch.trim().toLowerCase();
-    const list = q
-      ? cellarWines.filter((w) => [w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' ').toLowerCase().includes(q))
-      : cellarWines;
+    const list = cellarWines.filter((w) => matchesWineSearch([w.producer, w.wine_name, w.region, w.vintage], cellarSearch));
     return list.slice(0, 50);
   }, [cellarWines, cellarSearch]);
 
   // Reviews the user can link to this visit — their wine reviews not already
   // tied to a restaurant visit (scan_session_id null), newest first. Searchable.
   const reviewMatches = useMemo(() => {
-    const q = reviewSearch.trim().toLowerCase();
     const list = chosenWines
       .filter((w) => !w.scan_session_id)
-      .filter((w) => (q ? [w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' ').toLowerCase().includes(q) : true))
+      .filter((w) => matchesWineSearch([w.producer, w.wine_name, w.region, w.vintage], reviewSearch))
       .slice()
       .sort((a, b) => new Date(b.chosen_at).getTime() - new Date(a.chosen_at).getTime());
     return list.slice(0, 100);
@@ -485,11 +486,13 @@ export function RestaurantReviewModal({
       qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       setConfirmOpen(false);
-      // Added from the cellar → offer to move that bottle to the archive (it's
-      // been drunk, after all). Capture the id before clearing state.
+      // Added from the cellar → offer to archive the bottle (it's been drunk,
+      // after all): one bottle, dated the visit, noted with the restaurant.
+      // Capture the id before clearing state.
       const cellarId = cbCellarWineId;
       setCbCellarWineId(null);
       if (cellarId) {
+        const day = ymdToIso(dateValue) ? dateValue.trim() : todayYmd();
         showAlert({
           title: 'Move to your archive?',
           body: 'Would you like Vinster to move this wine from your cellar list to your archive?',
@@ -498,9 +501,9 @@ export function RestaurantReviewModal({
             {
               text: 'Move to archive',
               onPress: () => {
-                archiveCellarWine(cellarId)
-                  .then(() => qc.invalidateQueries({ queryKey: ['cellar', session.user.id] }))
-                  .catch((e) => showAlert({ title: 'Could not archive', body: e instanceof Error ? e.message : 'Please try again.' }));
+                archiveBottles(cellarId, 1, day, { note: restaurantName.trim() || undefined })
+                  .catch((e) => showAlert({ title: 'Could not archive', body: e instanceof Error ? e.message : 'Please try again.' }))
+                  .finally(() => invalidateCellarViews(qc));
               },
             },
           ],
@@ -525,6 +528,20 @@ export function RestaurantReviewModal({
 
   // Unsaved edits are written before the parent closes this modal to open
   // another screen (Find Online), so nothing typed is lost on the way.
+  // "+ Add a lineup" → camera or library, then the parent opens the lineup flow
+  // for this visit (the draft is saved first, as for a photo search).
+  function chooseLineupSource() {
+    const go = (upload: boolean) => onAddLineup?.(upload, restaurantName.trim(), cityValue.trim(), saveDraft);
+    showAlert({
+      title: 'Add a lineup',
+      buttons: [
+        { text: 'Photograph a Lineup', onPress: () => go(false) },
+        { text: 'Upload a Lineup', onPress: () => go(true) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
   async function saveDraft() {
     if (dirtyRef.current && sessionId) await persist();
   }
@@ -817,6 +834,11 @@ export function RestaurantReviewModal({
               <TouchableOpacity style={[styles.addBottleBtn, !sessionId && styles.btnDisabled]} onPress={() => setBottleChooserOpen(true)} disabled={!sessionId} activeOpacity={0.8}>
                 <Text style={styles.addBottleText}>+ Add a bottle</Text>
               </TouchableOpacity>
+              {onAddLineup ? (
+                <TouchableOpacity style={[styles.addBottleBtn, !sessionId && styles.btnDisabled]} onPress={chooseLineupSource} disabled={!sessionId} activeOpacity={0.8}>
+                  <Text style={styles.addBottleText}>+ Add a lineup</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             {!sessionId && sessionError ? (

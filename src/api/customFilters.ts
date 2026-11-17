@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { cellarOwner } from './cellarContext';
+import { cellarOwner, assertCanEditCellar, refusedWriteError } from './cellarContext';
 
 export interface CustomFilter {
   id: string;
@@ -68,6 +68,7 @@ export async function fetchCellarLocations(userId: string): Promise<CustomFilter
 }
 
 export async function createCellarLocation(userId: string, name: string, wineIds: string[]): Promise<void> {
+  assertCanEditCellar();
   const { data, error } = await supabase
     .from('custom_filters')
     .insert({ user_id: cellarOwner(userId), name: name.trim(), rack_id: null })
@@ -93,6 +94,9 @@ export async function createCustomFilter(userId: string, name: string, wineIds: 
 // cached list — use the incremental helpers below, which can't drop other
 // members if the cache is stale and have no empty-set window.
 export async function setCustomFilterWines(filterId: string, wineIds: string[]): Promise<void> {
+  // The clear below can't tell a refused delete from an empty filter, so check
+  // access up front.
+  assertCanEditCellar();
   // Must throw: if the delete silently fails, the insert below collides with
   // the composite primary key (050_custom_filters.sql:22) and surfaces a raw
   // duplicate-key error instead of the intended replace.
@@ -127,11 +131,13 @@ export async function removeWineFromFilter(filterId: string, wineId: string): Pr
 }
 
 export async function renameCustomFilter(filterId: string, name: string): Promise<void> {
-  const { error } = await supabase.from('custom_filters').update({ name: name.trim() }).eq('id', filterId);
+  const { data, error } = await supabase.from('custom_filters').update({ name: name.trim() }).eq('id', filterId).select('id');
   if (error) throw new Error(error.message);
+  if (!data?.length) throw refusedWriteError();
 }
 
 export async function deleteCustomFilter(filterId: string): Promise<void> {
-  const { error } = await supabase.from('custom_filters').delete().eq('id', filterId);
+  const { data, error } = await supabase.from('custom_filters').delete().eq('id', filterId).select('id');
   if (error) throw new Error(error.message);
+  if (!data?.length) throw refusedWriteError();
 }

@@ -19,7 +19,7 @@ import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
-import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
+import { EditCellarReviewModal, type NewReviewSeed } from '../../src/components/EditCellarReviewModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { ReviewDetailModal } from '../../src/components/ReviewDetailModal';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
@@ -39,12 +39,15 @@ import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { isMonthFirstCurrency } from '../../src/utils/vivinoCsv';
 import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { isoToYmd } from '../../src/utils/reviewDate';
 import { normaliseCity } from '../../src/utils/city';
-import { foldAccents } from '../../src/utils/wineIdentity';
+import { foldAccents, matchesWineSearch } from '../../src/utils/wineIdentity';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ChosenWine, CellarWine } from '../../src/types/wine';
+import { findCellarHoldings } from '../../src/services/archiveNight';
+import { launchCamera, launchImageLibrary } from '../../src/utils/imagePicker';
 
 function formatDate(date: string | null | undefined): string {
   const t = drinkingDateTime(date);
@@ -125,6 +128,9 @@ export default function ChosenWinesScreen() {
     openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; openCellarReviewEdit?: string;
     seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; sg?: string; slp?: string; slu?: string; sd?: string;
     backTo?: string; savedToast?: string; fromIntel?: string;
+    // With openCellarReviewInput, from the archived-wines prompt: the new
+    // review is dated the archive day, at the place its Archive Note names.
+    fromArchive?: string;
   }>();
 
   // The user's own bottles. In a shared household cellar the cellar queries
@@ -148,7 +154,7 @@ export default function ChosenWinesScreen() {
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const detailCard = detailKey ? cards.find((c) => c.key === detailKey) ?? null : null;
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
-  const [editingCellar, setEditingCellar] = useState<{ wine: CellarWine; entryId: string | null } | null>(null);
+  const [editingCellar, setEditingCellar] = useState<{ wine: CellarWine; entryId: string | null; seed?: NewReviewSeed } | null>(null);
   // The card an editor was opened from, reopened when the editor closes.
   const returnToDetailRef = useRef<string | null>(null);
   // Hidden twins of the entry being edited (see UnifiedEntry.twins). Removed
@@ -253,9 +259,9 @@ export default function ChosenWinesScreen() {
   }
 
   // A new entry on a cellar bottle (entryId null), or edit one of its entries.
-  function openCellarEditor(wine: CellarWine, entryId: string | null) {
+  function openCellarEditor(wine: CellarWine, entryId: string | null, seed?: NewReviewSeed) {
     pendingCopiesRef.current = [];
-    setEditingCellar({ wine, entryId });
+    setEditingCellar({ wine, entryId, seed });
   }
 
   // Wait for fresh data before opening a card a save may have just created.
@@ -337,7 +343,11 @@ export default function ChosenWinesScreen() {
       const card = cards.find((c) => c.cellarWines.some((w) => w.id === bottleId));
       if (params.openCellarReview && card) { setDetailKey(card.key); return; }
       const latest = params.openCellarReviewEdit ? latestEntry(entriesOf(bottle)) : null;
-      if (!latest) { openCellarEditor(bottle, null); return; }
+      if (!latest) {
+        const seed = params.fromArchive === '1' ? { date: isoToYmd(bottle.archived_at), venue: bottle.archive_note ?? null } : undefined;
+        openCellarEditor(bottle, null, seed);
+        return;
+      }
       const entry = card?.entries.find((e) => refsOf(e).some((r) => r.kind === 'cellar' && r.entryId === latest.id));
       const self: EntryRef = { kind: 'cellar', wine: bottle, entryId: latest.id };
       openEntryEditor(self, entry ? refsOf(entry).filter((r) => !(r.kind === 'cellar' && r.entryId === latest.id)) : []);
@@ -427,8 +437,7 @@ export default function ChosenWinesScreen() {
     if (activeFolder && !itemMemberIds(it).some((id) => activeFolder.itemIds.includes(id))) return false;
     if (q) {
       const w = itemIdentity(it);
-      const hay = foldAccents([w.producer, w.wine_name, w.region, w.grape, w.vintage != null ? String(w.vintage) : null].filter(Boolean).join(' '));
-      if (!hay.includes(q)) return false;
+      if (!matchesWineSearch([w.producer, w.wine_name, w.region, w.grape, w.vintage], q)) return false;
     }
     return true;
   });
@@ -727,8 +736,8 @@ export default function ChosenWinesScreen() {
       if (!(await ensureMediaPermission(source))) return;
       const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
       const picked = source === 'camera'
-        ? await ImagePicker.launchCameraAsync(opts)
-        : await ImagePicker.launchImageLibraryAsync(opts);
+        ? await launchCamera(opts)
+        : await launchImageLibrary(opts);
       if (picked.canceled || !picked.assets?.[0]) return;
       const uri = picked.assets[0].uri;
       // Close any open Add modal so it re-seeds cleanly when reopened.
@@ -738,7 +747,14 @@ export default function ChosenWinesScreen() {
       setUploading(true);
       try {
         const details = await scanLabel(await prepareImageBase64(uri));
-        ocr = { producer: details.producer, wineName: details.wineName, vintage: details.vintage, region: details.region };
+        ocr = { producer: details.producer, wineName: details.wineName, vintage: details.vintage, region: details.region, grape: details.grape ?? null };
+        // A wine the user holds takes their cellar's naming, so the review and
+        // the bottle are recognised as the same wine (one card, and the
+        // "exists in your cellar" offer on save).
+        if (userId) {
+          const own = (await findCellarHoldings(userId, { producer: ocr.producer ?? null, wineName: ocr.wineName ?? null, vintage: ocr.vintage ?? null }).catch(() => []))[0]?.wine;
+          if (own) ocr = { ...ocr, producer: own.producer, wineName: own.wine_name, region: own.region ?? ocr.region, grape: own.grape_variety ?? ocr.grape };
+        }
       } catch {
         // OCR failed — still open the input so the user can type the wine in.
       } finally {
@@ -747,6 +763,10 @@ export default function ChosenWinesScreen() {
       resetAdd();
       setAddInitial(ocr);
       setPendingReviewLabelUri(uri);
+      // A label Vinster could read opens straight on the review card, headed by
+      // the wine it read (Edit, top right, corrects it). Only an unreadable
+      // photo falls back to the "Find Your Wine" step.
+      setAddConfirmed(!!(ocr && (ocr.producer?.trim() || ocr.wineName?.trim())));
       setAddOpen(true);
     } catch (err) {
       showAlert({ title: 'Could not open photo', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -787,6 +807,7 @@ export default function ChosenWinesScreen() {
         wine={editingCellarWine}
         visible={!!editingCellar}
         editEntryId={editingCellar?.entryId ?? null}
+        seed={editingCellar?.seed}
         onEditWine={(w) => {
           reopenCellarEditorRef.current = { id: w.id, entryId: editingCellar?.entryId ?? null };
           setEditingCellar(null);

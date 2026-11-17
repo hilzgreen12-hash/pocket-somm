@@ -1,8 +1,10 @@
 import { View, Text, TouchableOpacity, Pressable, Modal, ActivityIndicator, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
-import { useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useCellarContext } from '../../src/hooks/useCellarContext';
+import { loadCellarContext } from '../../src/api/cellarContext';
 import { useStorageLocationNav, type StorageNavEntry } from '../../src/hooks/useStorageLocationNav';
 import { fetchPlacementsForWines } from '../../src/api/placements';
 import { getBinCells } from '../../src/api/bins';
@@ -16,44 +18,65 @@ import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HomeStorageSection } from '../../src/components/HomeStorageSection';
 import { CellarCommandModal } from '../../src/components/CellarCommandModal';
 import { ArchivedReviewPrompt } from '../../src/components/ArchivedReviewPrompt';
+import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 const CELLAR_HELP = `Your cellar, brought to life. Scan a label — or add a bottle by hand — and Vinster fills in the details for you: critic scores, tasting notes, drinking windows, and what each bottle is worth today.
 
 Build virtual racks and fridges that mirror your real storage, so you always know where a bottle is and what's ready to open.
 
 Dictate your wine reviews while enjoying easy access to your full cellar stats. Truly a masterpiece in Cellar management.`;
-import { colors, spacing } from '../../src/constants/theme';
-import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 export default function CellarTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
   const { wines } = useCellar();
+  // A view-only member of a shared cellar can browse it but not add to it.
+  const canEdit = useCellarContext().role !== 'view';
   const { locations: storageLocs } = useStorageLocationNav();
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
+  // The sign-in prompt: 'soft' offers "Continue without an account" (the
+  // pending action then runs as a guest); 'account' is for account-only
+  // features, where signing in is the only way forward.
+  const [signInPrompt, setSignInPrompt] = useState<'soft' | 'account' | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
 
+  // Re-read shared-cellar memberships whenever the tab comes into view, so a
+  // new invite, a removal or a role change shows without restarting the app.
+  const userId = session?.user.id ?? null;
+  useFocusEffect(useCallback(() => { if (userId) void loadCellarContext(userId); }, [userId]));
+
   function requireAuth(action: () => void) {
     if (!session) {
       pendingActionRef.current = action;
-      setSignInPromptVisible(true);
+      setSignInPrompt('soft');
+      return;
+    }
+    action();
+  }
+
+  // Quick Command, Add Wines and Export work on the user's own cellar, so a
+  // guest must sign in first.
+  function requireAccount(action: () => void) {
+    if (!session) {
+      pendingActionRef.current = null;
+      setSignInPrompt('account');
       return;
     }
     action();
   }
 
   function dismissSignInPrompt() {
-    setSignInPromptVisible(false);
+    setSignInPrompt(null);
     pendingActionRef.current = null;
   }
 
-  // "Import Cellar Document" → choose the source: a photo or screenshot (OCR),
-  // or a spreadsheet file (CSV/TSV). Vivino & CellarTracker have their own
-  // dedicated buttons beneath this one.
+  // "Import Cellar" → choose the source: a photo or screenshot (OCR), or a
+  // spreadsheet file (CSV/TSV). Reviews (Vivino etc.) are imported from Your
+  // Wine Reviews, not here — they're not cellar stock.
   function openImportChooser() {
     showAlert({
       title: 'Import Cellar Document',
@@ -65,13 +88,6 @@ export default function CellarTab() {
         { text: 'Cancel', style: 'cancel' },
       ],
     });
-  }
-
-  // "Import Cellar" (bottom of the tab) — bring in an existing CELLAR list (photo /
-  // screenshot / file). Reviews (Vivino etc.) are imported from Your Wine Reviews,
-  // not here — they're not cellar stock.
-  function openImportMenu() {
-    openImportChooser();
   }
 
   // "Export Cellar" (bottom of the tab) — the whole list, or one location.
@@ -133,7 +149,7 @@ export default function CellarTab() {
   }
 
   function continueWithoutAccount() {
-    setSignInPromptVisible(false);
+    setSignInPrompt(null);
     const action = pendingActionRef.current;
     pendingActionRef.current = null;
     action?.();
@@ -154,12 +170,14 @@ export default function CellarTab() {
       <CellarSwitcher />
 
       {/* Add Wines (white outline, opens the scan/upload/manual chooser) and
-          Quick Command (gold outline, the cellar voice command) side by side. */}
-      <View style={[styles.actionRow, styles.buttonRow, { gap: spacing.sm }]}>
-        <TouchableOpacity onPress={() => requireAuth(() => router.push('/cellar/list?add=1' as any))} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1 }]}>
-          <Text style={styles.buttonText}>Add Wines</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1, borderColor: colors.gold }]}>
+          Quick Command (gold outline) side by side. */}
+      <View style={styles.actionRow}>
+        {canEdit ? (
+          <TouchableOpacity onPress={() => requireAccount(() => router.push('/cellar/list?add=1' as any))} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1 }]}>
+            <Text style={styles.buttonText}>Add Wines</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity onPress={() => requireAccount(() => setVoiceOpen(true))} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1, borderColor: colors.gold }]}>
           <Text style={[styles.buttonText, { color: colors.gold }]}>Quick Command</Text>
         </TouchableOpacity>
       </View>
@@ -167,8 +185,7 @@ export default function CellarTab() {
       {/* Rule beneath Add Wines. */}
       <View style={styles.divider} />
 
-      {/* Your Wines At Home — the home-storage carousel, embedded here (replaces
-          the old standalone Home Wine Storage page). */}
+      {/* Your Wines At Home — the home-storage carousel. */}
       <HomeStorageSection requireAuth={requireAuth} />
 
       {/* Rule between the home-storage carousel and the buttons below it. */}
@@ -187,23 +204,21 @@ export default function CellarTab() {
         </TouchableOpacity>
       </View>
 
-      {/* Import / Export the whole cellar — the same inset rule as the others,
-          then the gold buttons. */}
+      {/* Import / Export the whole cellar, and Share Cellar (invite someone in). */}
       <View style={styles.divider} />
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAuth(openImportMenu)} activeOpacity={0.85}>
-          <Text style={styles.buttonVivinoText}>Import Cellar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.buttonVivino, { marginTop: spacing.xs }]} onPress={() => requireAuth(openExportMenu)} activeOpacity={0.85}>
+        {canEdit ? (
+          <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAuth(openImportChooser)} activeOpacity={0.85}>
+            <Text style={styles.buttonVivinoText}>Import Cellar</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity style={[styles.buttonVivino, canEdit && { marginTop: spacing.xs }]} onPress={() => requireAccount(openExportMenu)} activeOpacity={0.85}>
           <Text style={styles.buttonVivinoText}>Export Cellar</Text>
         </TouchableOpacity>
-        {/* Share Cellar — invite someone into this cellar (moved here from You). */}
         <TouchableOpacity style={[styles.buttonVivino, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/profile/share-cellar' as any))} activeOpacity={0.85}>
           <Text style={styles.buttonVivinoText}>Share Cellar</Text>
         </TouchableOpacity>
       </View>
-
-      {/* "Archive a Lineup" and "Your Lineups" now live on the Review tab. */}
 
       {/* Export by Location — pick one of the user's storage locations. */}
       <Modal visible={exportPickerOpen} transparent animationType="fade" onRequestClose={() => setExportPickerOpen(false)}>
@@ -242,7 +257,8 @@ export default function CellarTab() {
       <ArchivedReviewPrompt />
 
       <SignInPromptModal
-        visible={signInPromptVisible}
+        visible={signInPrompt !== null}
+        allowContinue={signInPrompt === 'soft'}
         onDismiss={dismissSignInPrompt}
         onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
         onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
@@ -270,18 +286,15 @@ const styles = StyleSheet.create({
   exportingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
   exportingText: { fontFamily: fonts.bodyItalic, fontSize: 15, color: '#FFFFFF' },
 
-  // Wrapper for the full-width gold "Add Wines" button (same padding as the
-  // sections below, so it lines up exactly with "Your Cellar List").
-  actionRow: { paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  // The Add Wines / Quick Command row — same side padding as the sections
+  // below, so it lines up with "Your Cellar List".
+  actionRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
 
-  // Italic blurb under the "Cellar" title — kept Cormorant per spec
-  // ("blurbs below the headers on the tab screens").
+  // Blurb under the "Cellar" title (Cormorant, like every tab-screen blurb).
   subtitle: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 26, paddingHorizontal: spacing.xl, marginBottom: 0 },
   // 18pt either side — matches the Home header separator and keeps the tab compact.
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: 18 },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
-
-  buttonRow: { flexDirection: 'row', gap: spacing.xs },
 
   buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   buttonVivino: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },

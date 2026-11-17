@@ -18,6 +18,15 @@ type VintageVerdict = {
 
 // Price-per-point for each vintage, the best-value year, and where the user's own
 // vintage ranks for quality and value — plus a short plain-English rundown.
+// Shown under the comparison table when it can't support a verdict — fewer than
+// two vintages near this one have both a Wine-Searcher price and a score.
+export function tooFewVintagesNote(comparable: number, vintage: string | number | null | undefined): string {
+  const near = vintage ? ` near the ${vintage}` : '';
+  return comparable === 1
+    ? `Wine-Searcher has a price and a critic score for only one vintage of this wine${near}, so there's nothing yet to compare it with.`
+    : `Wine-Searcher doesn't have both a price and a critic score for vintages of this wine${near}, so there's nothing yet to compare.`;
+}
+
 export function vintageVerdict(rows: VintageComparisonRow[], thisVintage: string | number | null | undefined, fmt: (n: number) => string): VintageVerdict {
   const withPpt = rows.map((r) => ({ ...r, ppt: r.price != null && r.score ? r.price / r.score : null }));
   const scored = withPpt.filter((r) => r.ppt != null);

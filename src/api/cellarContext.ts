@@ -38,6 +38,15 @@ export function assertCanEditCellar(): void {
   if (!canEditCellar()) throw new Error(VIEW_ONLY_MESSAGE);
 }
 
+// A write that RLS refuses (view-only access, an expired session) affects no
+// rows and returns no error. Write paths throw this instead, so a refused
+// change never reads as success.
+export function refusedWriteError(): Error {
+  return new Error(canEditCellar()
+    ? 'That change could not be saved — please pull to refresh (you may need to sign in again).'
+    : VIEW_ONLY_MESSAGE);
+}
+
 function apply(next: Ctx) {
   const sig = (c: Ctx) => `${c.userId}|${c.ownerId}|${c.role}|${c.shared.map((s) => `${s.ownerId}:${s.role}`).join(',')}`;
   const changed = sig(ctx) !== sig(next);

@@ -9,70 +9,42 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { normaliseVintage } from '../../src/utils/wineIdentity';
 import { fetchAutoLabelUri, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
-import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrary } from '../../src/utils/imagePicker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
-import { findSameCellarWine } from '../../src/utils/wineMatch';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { generateWineIntel, isWineNotFound } from '../../src/services/pricing';
+import { marketValuePer75 } from '../../src/services/purchaseEstimate';
+import { newCellarWinePayload, findSameWineLive, purchaseOnMerge, attachLabelIfMissing, type PurchaseInput } from '../../src/services/cellarAdd';
+import { priceForSize } from '../../src/utils/bottleValue';
+import { freeSlotsFrom } from '../../src/utils/rackSlots';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { useRackStore } from '../../src/stores/rackStore';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useCellar, invalidateCellarViews } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { getBinCell } from '../../src/api/bins';
 import { addBinPlacement } from '../../src/api/placements';
-import { uploadLabelImage } from '../../src/api/labelPhotos';
-import { BottleSizePicker } from '../../src/components/BottleSizePicker';
+import { BottleSizePicker, detectPlacementMismatch, placementWarningBody } from '../../src/components/BottleSizePicker';
 import { WineSearchInput } from '../../src/components/WineSearchInput';
 import { StartAlignedInput } from '../../src/components/StartAlignedInput';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
-import type { WineDetailsComplete } from '../../src/types/wine';
-
-// Walk the rack grid from (startRow,startCol) in the given orientation, skipping
-// occupied slots, collecting up to `count` FREE positions. Vertical runs down a
-// column then to the next; Horizontal runs across a row then to the next. The
-// large-format band (row -1) stays on its own row. Mirrors the helper used by
-// the lineup placement flow.
-function computeFreeSlots(
-  startRow: number, startCol: number, rows: number, cols: number,
-  count: number, orient: 'Vertical' | 'Horizontal',
-  occupied: Set<string>, largeFormatCols?: number | null,
-): Array<{ row: number; col: number }> {
-  const result: Array<{ row: number; col: number }> = [];
-  if (startRow === -1) {
-    const lfCols = largeFormatCols ?? 0;
-    let col = startCol;
-    while (result.length < count && col < lfCols) {
-      if (!occupied.has(`-1,${col}`)) result.push({ row: -1, col });
-      col++;
-    }
-    return result;
-  }
-  let row = startRow;
-  let col = startCol;
-  while (result.length < count && row >= 0 && row < rows && col >= 0 && col < cols) {
-    if (!occupied.has(`${row},${col}`)) result.push({ row, col });
-    if (orient === 'Horizontal') { col++; if (col >= cols) { col = 0; row++; } }
-    else { row++; if (row >= rows) { row = 0; col++; } }
-  }
-  return result;
-}
+import type { CellarWine, WineDetailsComplete } from '../../src/types/wine';
 
 export default function LabelConfirmScreen() {
   useKeepAwake();
   const { context, manual, mode, backTo, via, seed } = useLocalSearchParams<{ context?: string; manual?: string; mode?: string; backTo?: string; via?: string; seed?: string }>();
-  // Reached by uploading a photo (not the camera): the bottom link is "Cancel"
-  // and returns to the Scan screen — "Scan Again" (reopen camera) only belongs
-  // to the camera flow.
+  // Reached by uploading a photo (not the camera): the bottom link is "Upload
+  // Again" and Back leaves the flow — "Scan Again" (reopen the camera) only
+  // belongs to the camera flow.
   const isUpload = via === 'upload';
   // Forward any context (reviews / lineup / …) so /label/results knows
   // which flow we're in for back routing and which action set to show.
   const contextQuery = context ? `?context=${context}${via ? `&via=${via}` : ''}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` : '';
-  // Reached straight from Cellar → Add Wine → Manual Input: no scan
-  // happened, so the form opens blank and there's nothing to "scan again".
+  // Search/Manual Input: no scan happened, so the form opens blank and there's
+  // nothing to "scan again".
   const isManual = manual === '1';
   // Pure manual input (Scan → Manual Input): the user explicitly chose to type,
   // not search — so no predictive search bar, and the screen reads "Input Wine
@@ -87,8 +59,8 @@ export default function LabelConfirmScreen() {
   // slot, we skip Wine Intel and drop the bottle straight into the slot.
   const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, pendingBinCell, setPendingBinCell } = useRackStore();
   const isMultiSlot = (pendingSlots?.length ?? 0) > 1;
-  // Bin-diamond placement (context=place-bin): quantity + bottle format are
-  // collected inline on this screen so the whole add is one step.
+  // Bin-diamond placement (context=place-bin): bottles, format and price are
+  // collected in a popup once the wine is confirmed.
   const isPlaceBin = context === 'place-bin' && !!pendingBinCell;
   // The target cell — drives the "This diamond/half diamond fits X bottles" blurb.
   const { data: binCellData } = useQuery({
@@ -143,20 +115,24 @@ export default function LabelConfirmScreen() {
       ? (pendingSlot!.largeFormatBottleSizeMl ?? wineDetails?.bottleSizeMl ?? 1500)
       : (wineDetails?.bottleSizeMl ?? 750),
   );
-  const placeOrientation: 'Vertical' | 'Horizontal' = 'Vertical';
   const [placing, setPlacing] = useState(false);
-  // Inline bin-diamond quantity + format (place-bin context only).
+  // Set from the first tap until the add finishes, so a double tap can't add twice.
+  const placingRef = useRef(false);
+  // Bin popup (place-bin context): bottles, format and purchase price.
   const [binQty, setBinQty] = useState('1');
   const [binFormat, setBinFormat] = useState(wineDetails?.bottleSizeMl ?? 750);
-  // Bin placement details are collected in a popup AFTER the wine is confirmed:
-  // bottles + format + purchase price.
   const [binPrice, setBinPrice] = useState('');
   const [binPriceEstimating, setBinPriceEstimating] = useState(false);
-  // True while the price field holds Vinster's estimate (not something typed),
-  // so the saved price is flagged as an estimate, not "Entered by you".
-  const [binPriceIsEstimate, setBinPriceIsEstimate] = useState(false);
+  // Vinster's 75cl market price for the confirmed wine. The price field shows it
+  // scaled to the chosen format until the user types their own — an untouched
+  // price is saved as an estimate, not "Entered by you".
+  const [binPer75, setBinPer75] = useState<{ value: number; currency: string; source: string } | null>(null);
+  const [binPriceEdited, setBinPriceEdited] = useState(false);
   const [binPopupOpen, setBinPopupOpen] = useState(false);
   const [binConfirmed, setBinConfirmed] = useState<WineDetailsComplete | null>(null);
+  useEffect(() => {
+    if (binPer75 && !binPriceEdited) setBinPrice(String(priceForSize(binPer75.value, binFormat)));
+  }, [binPer75, binFormat, binPriceEdited]);
 
   // Bottling picker — "Not this wine? Choose from other bottlings". Lists the
   // real, distinct wines this producer makes so the user can correct a misread
@@ -251,15 +227,12 @@ export default function LabelConfirmScreen() {
     setCandidatesOpen(false);
   }
 
-  // Manually-entered wines have no photo. Auto-fetch a label from the web so the
-  // Wine Intel card (and the saved cellar wine) still gets a thumbnail — the
-  // best web match, no picker (the wine-card "Find Label Online" keeps its
-  // picker for deliberate choice). Best-effort: never blocks the flow.
+  // A wine with no photo still gets a thumbnail on its Wine Intel card: the best
+  // web match, no picker (the wine-card "Find Label Online" keeps its picker for
+  // deliberate choice). Best-effort: never blocks the flow.
   async function ensureAutoLabel(pProducer: string, pWineName: string | null) {
-    // Manual entries into the CELLAR keep a blank "+ Add" thumbnail (the user
-    // picks the photo deliberately from the wine card). But a manual entry headed
-    // to the Wine Intel card should still show a label — fetch one so the intel
-    // screen isn't photo-less.
+    // A manual entry headed for the cellar (not the Wine Intel card) carries no
+    // picture forward; the add gives it a web label instead.
     if (isManual && context !== 'intel') return;
     if (useLabelStore.getState().imageUri) return;
     if (!pProducer.trim()) return;
@@ -310,54 +283,36 @@ export default function LabelConfirmScreen() {
     if (isPlaceBin) {
       setBinConfirmed(confirmed);
       setBinPopupOpen(true);
-      // Pre-fill the purchase price with Vinster's estimate (labelled as an
-      // estimate in the popup). Non-blocking — the popup opens straight away and
-      // the field fills in a moment later; the user can overwrite it.
-      if (!binPrice.trim()) {
+      // Pre-fill the price with Vinster's estimate for THIS wine (it may have
+      // been edited since the last Confirm). Non-blocking — the popup opens
+      // straight away and the field fills in a moment later.
+      if (!binPriceEdited) {
+        setBinPer75(null);
+        setBinPrice('');
         setBinPriceEstimating(true);
-        void (async () => {
-          try {
-            const intel = await generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP');
-            if (intel.estimatedValue != null) setBinPrice((prev) => { if (prev.trim()) return prev; setBinPriceIsEstimate(true); return String(Math.round(intel.estimatedValue!)); });
-          } catch { /* leave the field blank on failure */ }
-          finally { setBinPriceEstimating(false); }
-        })();
+        const currency = preferences?.defaultCurrency ?? 'GBP';
+        marketValuePer75({ producer: confirmed.producer, wine_name: confirmed.wineName || confirmed.producer, region: confirmed.region, vintage: confirmed.vintage, grape_variety: confirmed.grape ?? null }, currency, 'full')
+          .then(setBinPer75)
+          .catch(() => { /* leave the field blank */ })
+          .finally(() => setBinPriceEstimating(false));
       }
       return;
     }
 
-    // Rack placement: arrived from an empty rack slot (context=place guards
-    // against a stale pendingSlot hijacking an unrelated add). Instead of saving
-    // immediately, confirm the format, bottle count and fill direction in a
-    // popup — the save + slot assignment happens in handlePlaceConfirm. No
-    // Location step: the tapped slot already fixes where the wine lives.
+    // Rack placement from an empty slot (context=place, so a stale pendingSlot
+    // can't hijack an unrelated add). The format was picked inline above; a
+    // short tap places one bottle, multi-select fills the chosen slots.
     if (pendingSlot && context === 'place') {
-      // Bottle format was set inline above — place straight in. Short tap = one
-      // bottle in the tapped slot; multi-select fills the chosen slots. No popup.
-      await handlePlaceConfirm();
+      await handlePlaceConfirm(confirmed);
       return;
     }
 
-    // Cellar List "Add Wine" (no explicit context): no Wine Intel card — intel
-    // is only generated from the Cellar tab's Generate Wine Intel. Go straight
-    // to the add confirmation (size / quantity / orientation / location) on
-    // results, with no intel generated.
-    if (!context) {
+    // Cellar List "Add Wine" (no explicit context) and adds into a home storage
+    // location: no Wine Intel card — go straight to the Add form on results.
+    // A wine saved without a photo gets a web label from the add itself.
+    if (!context || context === 'add-location') {
       setIntelligence(null);
-      // Fetch a label in the background so the Add-to-Cellar save carries a
-      // thumbnail even for a manual entry (imageUri is read at save time).
-      void ensureAutoLabel(confirmed.producer, confirmed.wineName);
-      router.replace('/label/results?context=add');
-      return;
-    }
-
-    // Home storage location add: the wine is being filed into a location (and
-    // maybe a case) — generating Wine Intel here is both unwanted and often
-    // wrong for a case label, so skip straight to the add card.
-    if (context === 'add-location') {
-      setIntelligence(null);
-      void ensureAutoLabel(confirmed.producer, confirmed.wineName);
-      router.replace('/label/results?context=add-location');
+      router.replace(`/label/results?context=${context === 'add-location' ? 'add-location' : 'add'}`);
       return;
     }
 
@@ -443,232 +398,196 @@ export default function LabelConfirmScreen() {
     });
   }
 
-  // Save the wine and drop it into the tapped slot (and the slots that follow,
-  // per the chosen count + direction). Quantity is set to the number of slots
-  // actually filled, so the rack and cellar counts can't drift apart.
-  async function handlePlaceConfirm() {
-    if (!pendingSlot) return;
+  // "Already in your cellar": add these bottles to that line, keep them as a
+  // separate line, or cancel. Same question for the rack and bin adds.
+  function askAddToExisting(existing: CellarWine): Promise<'merge' | 'separate' | 'cancel'> {
+    const name = [existing.producer, existing.wine_name !== existing.producer ? existing.wine_name : '', existing.vintage].filter(Boolean).join(' ');
+    const have = existing.quantity ?? 0;
+    return new Promise((resolve) => {
+      showAlert({
+        title: 'YOU ALREADY HAVE THIS WINE IN YOUR CELLAR',
+        body: `${name}\n\nYou already have ${have} bottle${have === 1 ? '' : 's'} of this wine in your cellar. Should Vinster add these to your overall bottle count or keep these bottles as a separate listing?`,
+        dismissable: false,
+        buttons: [
+          { text: 'Add to Existing', onPress: () => resolve('merge') },
+          { text: 'Keep Separate', onPress: () => resolve('separate') },
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve('cancel') },
+        ],
+      });
+    });
+  }
+
+  // The bottles are saved but filing them failed. Say so and leave, so a retry
+  // can't add them a second time.
+  function savedButNotPlaced(leave: () => void) {
+    showAlert({
+      title: "Saved to your cellar, but couldn't place it",
+      body: "You'll find it in your Full Cellar List — place it from there.",
+      buttons: [{ text: 'OK', onPress: leave }],
+    });
+  }
+
+  // Save the wine and drop it into the tapped slot, or into each slot picked in
+  // multi-select. Quantity follows the slots actually filled, so the rack and
+  // cellar counts can't drift apart.
+  async function handlePlaceConfirm(confirmed: WineDetailsComplete) {
+    const slot = pendingSlot;
+    if (!slot || placingRef.current) return;
     const userId = session?.user.id;
     if (!userId) { showAlert({ title: 'Sign in required', body: 'Please sign in and try again.' }); return; }
-    // Short tap = exactly one bottle; multi-select fills the hand-picked slots.
-    const requested = isMultiSlot ? (pendingSlots?.length ?? 1) : 1;
+    placingRef.current = true;
     setPlacing(true);
+    let savedId: string | null = null;
     try {
-      const existing = await getRackSlots(pendingSlot.rackId);
-      const occupied = new Set(existing.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`));
-      const free = isMultiSlot
-        // Multi-slot: fill exactly the hand-picked slots, skipping any now taken.
-        ? pendingSlots!.filter((s) => !occupied.has(`${s.row},${s.col}`))
-        : computeFreeSlots(
-            pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols,
-            requested, placeOrientation, occupied, pendingSlot.largeFormatCols,
-          );
-      if (free.length === 0) {
-        showAlert({ title: 'No room here', body: 'There are no free slots from this position in that direction. Try the other orientation or a different slot.' });
-        setPlacing(false);
-        return;
-      }
-      // Duplicate check across the WHOLE cellar (any rack / fridge / location) —
-      // same wine + vintage. If the user already owns it, offer to add these
-      // bottles to that entry so the total stays correct, instead of spawning a
-      // second listing (the "split across two locations" bug).
-      const dupe = producer.trim()
-        ? findSameCellarWine(cellarWines, { producer, wineName: wineName.trim() || producer.trim(), region, vintage: vintage.trim(), grape_variety: grape.trim() || null })
-        : undefined;
-
-      let merge = false;
-      if (dupe) {
-        const fullName = [producer.trim(), (wineName.trim() && wineName.trim() !== producer.trim()) ? wineName.trim() : '', vintage.trim()].filter(Boolean).join(' ');
-        const have = dupe.quantity ?? 0;
-        const choice = await new Promise<'merge' | 'separate' | 'cancel'>((resolve) => {
+      // A bottle that doesn't suit the slot (a magnum in a 75cl slot, a half
+      // bottle in the large-format band): warn once, the user decides.
+      const mismatch = detectPlacementMismatch(placeFormat, slot.row, slot.largeFormatBottleSizeMl);
+      if (mismatch) {
+        const proceed = await new Promise<boolean>((resolve) => {
           showAlert({
-            title: 'YOU ALREADY HAVE THIS WINE IN YOUR CELLAR',
-            body: `${fullName}\n\nYou already have ${have} bottle${have === 1 ? '' : 's'} of this wine in your cellar. Should Vinster add these to your overall bottle count or keep these bottles as a separate listing?`,
-            dismissable: false,
+            title: 'Bottle size mismatch',
+            body: placementWarningBody(mismatch),
             buttons: [
-              // Both are real choices (equal weight), with a true Cancel below.
-              { text: 'Add to Existing', onPress: () => resolve('merge') },
-              { text: 'Keep Separate', onPress: () => resolve('separate') },
-              { text: 'Cancel', style: 'cancel', onPress: () => resolve('cancel') },
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Place anyway', onPress: () => resolve(true) },
             ],
           });
         });
-        if (choice === 'cancel') { setPlacing(false); return; }
-        merge = choice === 'merge';
+        if (!proceed) return;
+      }
+      const requested = isMultiSlot ? pendingSlots!.length : 1;
+      const taken = await getRackSlots(slot.rackId);
+      const occupied = new Set(taken.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`));
+      const free = isMultiSlot
+        // Multi-slot: fill exactly the hand-picked slots, skipping any now taken.
+        ? pendingSlots!.filter((s) => !occupied.has(`${s.row},${s.col}`))
+        : freeSlotsFrom(slot.row, slot.col, slot.rows, slot.cols, 1, 'Vertical', occupied, slot.largeFormatCols);
+      if (free.length === 0) {
+        showAlert({ title: 'No room here', body: 'There are no free slots left from this position. Try a different slot.' });
+        return;
       }
 
+      // Already own this wine, vintage and size (anywhere in the cellar)? Offer
+      // to add these bottles to that line so the total stays right.
+      const payload = newCellarWinePayload({ userId, wine: confirmed, quantity: free.length, bottleSizeMl: placeFormat });
+      const existing = await findSameWineLive(userId, cellarWines, payload);
+      const choice = existing ? await askAddToExisting(existing) : 'separate';
+      if (choice === 'cancel') return;
+
       const labelUri = useLabelStore.getState().imageUri;
-      if (merge && dupe) {
-        // Merge: the new slots point at the EXISTING wine and its quantity grows
-        // by what we placed — so the wine now spans both locations, one total.
-        if (labelUri && !dupe.label_image_path) {
-          try {
-            const path = await uploadLabelImage(userId, labelUri, dupe.id);
-            await updateWine.mutateAsync({ id: dupe.id, updates: { label_image_path: path } });
-          } catch { /* non-fatal */ }
-        }
-        await assignSlots(pendingSlot.rackId, free, dupe.id);
-        await updateWine.mutateAsync({ id: dupe.id, updates: { quantity: (dupe.quantity ?? 0) + free.length } });
+      if (existing && choice === 'merge') {
+        await updateWine.mutateAsync({ id: existing.id, updates: { quantity: (existing.quantity ?? 0) + free.length } });
+        savedId = existing.id;
+        await attachLabelIfMissing(userId, existing, labelUri);
       } else {
-        const saved = await addWine.mutateAsync({
-          user_id: userId,
-          wine_name: wineName.trim() || producer.trim(),
-          producer: producer.trim(),
-          region: region.trim(),
-          vintage: vintage.trim(),
-          quantity: free.length,
-          storage_location: null,
-          date_received: new Date().toISOString().split('T')[0],
-          critic_score: null,
-          critic_score_note: null,
-          drinking_window_from: null,
-          drinking_window_to: null,
-          drinking_window_status: 'unknown',
-          tasting_notes: null,
-          grape_variety: grape.trim() || null,
-          label_image_path: null,
-          user_notes: null,
-          estimated_value: null,
-          estimated_value_currency: null,
-          estimated_value_at: null,
-          estimated_value_source: null,
-          purchase_price: null,
-          purchase_price_currency: null,
-          bottle_size_ml: placeFormat,
-        } as any);
-        // Upload the scanned label photo so the slot shows the bottle thumbnail.
-        // Manual entries have no image; a failed upload is non-fatal.
-        if (labelUri) {
-          try {
-            const path = await uploadLabelImage(userId, labelUri, saved.id);
-            await updateWine.mutateAsync({ id: saved.id, updates: { label_image_path: path } });
-          } catch { /* non-fatal — placed without a thumbnail */ }
-        }
-        await assignSlots(pendingSlot.rackId, free, saved.id);
+        const saved = await addWine.mutateAsync({ ...payload, hasOwnPhoto: !!labelUri });
+        savedId = saved.id;
+        await attachLabelIfMissing(userId, saved, labelUri);
       }
-      const rackId = pendingSlot.rackId;
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['cellar'] });
+      await assignSlots(slot.rackId, free, savedId);
+      invalidateCellarViews(qc);
       setPendingSlot(null);
       setPendingSlots(null);
       if (free.length < requested) {
         showAlert({
           title: 'Placed what fit',
           body: `Only ${free.length} of ${requested} bottles fit from here — the rest weren't placed. What did fit is in your Full Cellar List.`,
-          buttons: [{ text: 'OK', onPress: () => router.replace(`/cellar/rack/${rackId}`) }],
+          buttons: [{ text: 'OK', onPress: () => router.replace(`/cellar/rack/${slot.rackId}`) }],
         });
       } else {
         // Land on the rack (bottles visibly placed) with a brief auto-fading
         // "Added to your cellar" banner — no popup with commands to dismiss.
-        router.replace(`/cellar/rack/${rackId}?placed=1`);
+        router.replace(`/cellar/rack/${slot.rackId}?placed=1`);
       }
     } catch (err) {
-      showAlert({ title: 'Could not place wine', body: err instanceof Error ? err.message : 'Please try again.' });
+      if (savedId) {
+        invalidateCellarViews(qc);
+        setPendingSlot(null);
+        setPendingSlots(null);
+        savedButNotPlaced(() => router.replace(`/cellar/rack/${slot.rackId}`));
+      } else {
+        showAlert({ title: 'Could not place wine', body: err instanceof Error ? err.message : 'Please try again.' });
+      }
+    } finally {
+      placingRef.current = false;
       setPlacing(false);
     }
   }
 
-  // Save the wine straight into the bin diamond with the inline quantity +
-  // format. Merges into an existing same-wine+format entry in the cell rather
-  // than spawning a duplicate row (mirrors the old inline form).
+  // Save the wine into the bin diamond with the popup's bottles, format and
+  // price. A bin is just another home storage location (mig 116): a wine the
+  // user already owns (same wine, vintage and size, anywhere in the cellar) can
+  // join that line, and the bin membership is recorded as a placement.
   async function handlePlaceBinConfirm(confirmed: WineDetailsComplete) {
-    if (!pendingBinCell) return;
+    if (!pendingBinCell || placingRef.current) return;
     const userId = session?.user.id;
     if (!userId) { showAlert({ title: 'Sign in required', body: 'Please sign in and try again.' }); return; }
-    const cellId = pendingBinCell.cellId;
-    const binId = pendingBinCell.binId;
-    const qty = Math.max(1, parseInt(binQty) || 1);
+    const { cellId } = pendingBinCell;
+    const qty = Math.max(1, parseInt(binQty, 10) || 1);
     const priceNum = binPrice.trim() ? parseFloat(binPrice.replace(/[^0-9.]/g, '')) : NaN;
-    const purchasePrice = Number.isFinite(priceNum) ? priceNum : null;
-    // A bin is just another home storage location now (mig 116): one wine = one
-    // cellar line, distributable across placements. So merge into an EXISTING
-    // same-identity + format row ANYWHERE in the cellar (not just this cell) and
-    // record the bin membership as a placement — never spawn a second listing.
-    const existing = findSameCellarWine(cellarWines, { producer: confirmed.producer, wineName: confirmed.wineName ?? confirmed.producer, region: confirmed.region, vintage: confirmed.vintage, grape_variety: grape.trim() || null }, binFormat);
+    const currency = preferences?.defaultCurrency ?? 'GBP';
+    const purchase: PurchaseInput = { price: Number.isFinite(priceNum) ? priceNum : null, currency, estimated: !binPriceEdited };
+    const payload = newCellarWinePayload({
+      userId, wine: confirmed, quantity: qty, bottleSizeMl: binFormat, purchase,
+      marketValue: binPer75 ? { per75: binPer75.value, currency: binPer75.currency, source: binPer75.source } : null,
+    });
 
-    const commit = async (mergeInto: typeof existing | null) => {
+    const commit = async (mergeInto: CellarWine | null) => {
+      placingRef.current = true;
       setPlacing(true);
+      let savedId: string | null = null;
       try {
-        let savedId: string;
+        const labelUri = useLabelStore.getState().imageUri;
         if (mergeInto) {
-          await updateWine.mutateAsync({ id: mergeInto.id, updates: { quantity: (mergeInto.quantity ?? 0) + qty } });
+          await updateWine.mutateAsync({ id: mergeInto.id, updates: { quantity: (mergeInto.quantity ?? 0) + qty, ...purchaseOnMerge(mergeInto, purchase) } });
           savedId = mergeInto.id;
+          await attachLabelIfMissing(userId, mergeInto, labelUri);
         } else {
-          const saved = await addWine.mutateAsync({
-            user_id: userId,
-            wine_name: confirmed.wineName?.trim() || confirmed.producer,
-            producer: confirmed.producer,
-            region: confirmed.region,
-            vintage: confirmed.vintage,
-            style: confirmed.style ?? null,
-            quantity: qty,
-            storage_location: null,
-            date_received: new Date().toISOString().split('T')[0],
-            critic_score: null,
-            critic_score_note: null,
-            drinking_window_from: null,
-            drinking_window_to: null,
-            drinking_window_status: 'unknown',
-            tasting_notes: null,
-            grape_variety: grape.trim() || null,
-            label_image_path: null,
-            user_notes: null,
-            estimated_value: null,
-            estimated_value_currency: null,
-            estimated_value_at: null,
-            estimated_value_source: null,
-            purchase_price: purchasePrice,
-            purchase_price_currency: purchasePrice != null ? (preferences?.defaultCurrency ?? 'GBP') : null,
-            purchase_price_estimated: purchasePrice != null && binPriceIsEstimate,
-            storage_location_id: null,
-            case_id: null,
-            bottle_size_ml: binFormat,
-          } as any);
+          const saved = await addWine.mutateAsync({ ...payload, hasOwnPhoto: !!labelUri });
           savedId = saved.id;
-          const labelUri = useLabelStore.getState().imageUri;
-          if (labelUri) {
-            try {
-              const path = await uploadLabelImage(userId, labelUri, savedId);
-              await updateWine.mutateAsync({ id: savedId, updates: { label_image_path: path } });
-            } catch { /* placed without a thumbnail */ }
-          }
+          await attachLabelIfMissing(userId, saved, labelUri);
         }
-        // Record the bin membership as a placement (kind='bin'), NOT via bin_cell_id.
+        // Bin membership is a placement (kind='bin'), NOT bin_cell_id.
         await addBinPlacement(savedId, cellId, qty);
-        qc.invalidateQueries({ queryKey: ['bin-cell', cellId] });
-        qc.invalidateQueries({ queryKey: ['bin-cells', binId] });
-        qc.invalidateQueries({ queryKey: ['bins'] });
-        qc.invalidateQueries({ queryKey: ['cellar'] });
-        qc.invalidateQueries({ queryKey: ['placements', savedId] });
+        invalidateCellarViews(qc);
         setPendingBinCell(null);
         setBinPopupOpen(false);
-        if (router.canGoBack()) router.back();
-        else router.replace(`/cellar/bin/cell/${cellId}` as any);
+        leaveBinAdd();
       } catch (err) {
-        showAlert({ title: 'Could not add wine', body: err instanceof Error ? err.message : 'Please try again.' });
+        if (savedId) {
+          invalidateCellarViews(qc);
+          setPendingBinCell(null);
+          setBinPopupOpen(false);
+          savedButNotPlaced(leaveBinAdd);
+        } else {
+          showAlert({ title: 'Could not add wine', body: err instanceof Error ? err.message : 'Please try again.' });
+        }
+      } finally {
+        placingRef.current = false;
         setPlacing(false);
       }
     };
-
-    if (existing) {
-      // Same choice as the rack flow: merge into the existing listing, keep a
-      // separate one, or cancel.
-      const name = [existing.producer, existing.wine_name, existing.vintage].filter(Boolean).join(' ');
-      const have = existing.quantity ?? 0;
-      setBinPopupOpen(false);
-      showAlert({
-        title: 'YOU ALREADY HAVE THIS WINE IN YOUR CELLAR',
-        body: `${name}\n\nYou already have ${have} bottle${have === 1 ? '' : 's'} of this wine in your cellar. Should Vinster add these to your overall bottle count or keep these bottles as a separate listing?`,
-        buttons: [
-          { text: 'Add to Existing', onPress: () => { void commit(existing); } },
-          { text: 'Keep Separate', onPress: () => { void commit(null); } },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-      });
-      return;
+    function leaveBinAdd() {
+      if (router.canGoBack()) router.back();
+      else router.replace(`/cellar/bin/cell/${cellId}` as any);
     }
-    await commit(null);
+
+    placingRef.current = true;
+    setPlacing(true);
+    let existing: CellarWine | null = null;
+    try {
+      existing = await findSameWineLive(userId, cellarWines, payload);
+    } catch (err) {
+      showAlert({ title: 'Could not add wine', body: err instanceof Error ? err.message : 'Please try again.' });
+      return;
+    } finally {
+      placingRef.current = false;
+      setPlacing(false);
+    }
+    if (!existing) { await commit(null); return; }
+    setBinPopupOpen(false);
+    const choice = await askAddToExisting(existing);
+    if (choice !== 'cancel') await commit(choice === 'merge' ? existing : null);
   }
 
   // "Upload Again" — reopen the photo library, rescan a new label, and refresh
@@ -676,7 +595,7 @@ export default function LabelConfirmScreen() {
   async function handleUploadAgain() {
     if (scanning) return;
     if (!(await ensureMediaPermission('library'))) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    const result = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
     if (!(await ensureConnectionForUpload())) return;
@@ -699,13 +618,18 @@ export default function LabelConfirmScreen() {
     }
   }
 
-  // The header's back arrow leaves by the same route as this mode's bottom
-  // link, so the new header bar replaces the old floating "← Back" (upload only)
-  // without changing where any flow returns to.
+  // Leave an upload or manual entry: to the screen the caller named (backTo),
+  // else the one it came from — a rack slot, a bin, the Cellar List.
+  function leaveFlow() {
+    if (backTo) router.dismissTo(backTo as any);
+    else if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/scan');
+  }
+
+  // The header's back arrow leaves by the same route as this mode's bottom link.
   function goBack() {
     if (isLineup) router.replace('/cellar/scan-lineup');
-    else if (isUpload) router.replace('/(tabs)/scan');
-    else if (isManual) router.dismissTo(((backTo as string) || '/(tabs)/scan') as any);
+    else if (isUpload || isManual) leaveFlow();
     else router.replace(`/label/camera${contextQuery}`);
   }
 
@@ -869,7 +793,7 @@ export default function LabelConfirmScreen() {
           <Text style={styles.backText}>{scanning ? 'Reading…' : 'Upload Again'}</Text>
         </TouchableOpacity>
       ) : isManual ? (
-        <TouchableOpacity style={styles.backButton} onPress={() => router.dismissTo(((backTo as string) || '/(tabs)/scan') as any)}>
+        <TouchableOpacity style={styles.backButton} onPress={leaveFlow}>
           <Text style={styles.backText}>Cancel</Text>
         </TouchableOpacity>
       ) : (
@@ -948,7 +872,7 @@ export default function LabelConfirmScreen() {
               <TextInput
                 style={[styles.binQtyInput, styles.binPriceInput]}
                 value={binPrice}
-                onChangeText={(t) => { setBinPriceIsEstimate(false); setBinPrice(t.replace(/[^0-9.]/g, '').slice(0, 10)); }}
+                onChangeText={(t) => { setBinPriceEdited(true); setBinPrice(t.replace(/[^0-9.]/g, '').slice(0, 10)); }}
                 keyboardType="decimal-pad"
                 placeholder={binPriceEstimating ? 'Estimating…' : 'e.g. 45'}
                 placeholderTextColor={colors.textMuted}

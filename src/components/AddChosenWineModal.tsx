@@ -4,7 +4,7 @@ import {
   StyleSheet, Keyboard, Image, ActivityIndicator,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import * as ImagePicker from 'expo-image-picker';
+import { launchCamera, launchImageLibrary } from '../utils/imagePicker';
 import { useQueryClient } from '@tanstack/react-query';
 import { showAlert } from './AppAlert';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
@@ -16,6 +16,7 @@ import { WineReviewFields } from './WineReviewFields';
 import { WineSearchInput } from './WineSearchInput';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
+import { invalidateCellarViews } from '../hooks/useCellar';
 import { usePreferences } from '../hooks/usePreferences';
 import { patchChosenWine } from '../api/chosenWines';
 import { uploadLabelImage } from '../api/labelPhotos';
@@ -25,9 +26,12 @@ import { findExistingReview } from '../utils/reviewDedup';
 import { chosenHasReview, chosenGroupId } from '../utils/reviewModel';
 import { todayYmd, ymdToIso } from '../utils/reviewDate';
 import { captureCity } from '../utils/captureCity';
+import { archiveBottles, findCellarHoldings } from '../services/archiveNight';
+import { bottleSizeCl } from './BottleSizePicker';
+import { wineHeaderLine } from '../utils/wineHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
-import type { ChosenWine } from '../types/wine';
+import type { CellarWine, ChosenWine } from '../types/wine';
 
 // Manual-entry counterpart to ChosenWineModal. Used by the +Add link on Your
 // Wine Reviews. The wine-identity fields (producer/name/vintage/region) stay
@@ -131,8 +135,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   async function pickIdentityPhoto(source: 'camera' | 'library') {
     if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
     const res = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      ? await launchCamera({ mediaTypes: ['images'], quality: 1 })
+      : await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
     if (res.canceled || !res.assets[0]) return;
     setEditImageUri(res.assets[0].uri);
   }
@@ -342,13 +346,62 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           // An added entry stays in the review's original collection.
           source: mode === 'append' && existing ? existing.source : source,
           ...(mode === 'append' ? { reviewGroupId: addToGroupId ?? (existing ? chosenGroupId(existing) : null) } : {}),
+          ownPhoto: !!(editImageUri ?? labelImageUri),
         });
         await saveExtras(row, { fillingPick: false });
       }
       onSaved();
       setSaved(true);
+      void offerCellarArchive();
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // The reviewed wine is still in the cellar: the user has just drunk a bottle,
+  // so offer to archive one (dated the review's date). Best-effort — the review
+  // is already saved, so a failed lookup simply skips the offer.
+  async function offerCellarArchive() {
+    if (!session) return;
+    const userId = session.user.id;
+    try {
+      const holdings = await findCellarHoldings(userId, {
+        producer: producer.trim() || null,
+        wineName: wineName.trim() || null,
+        vintage: vintage.trim() || null,
+      });
+      if (!holdings.length) return;
+      const lines = holdings.flatMap(({ wine, home, external }) => {
+        const size = `${bottleSizeCl(wine.bottle_size_ml ?? 750)}cl`;
+        return [
+          home ? `${home}x${size} in Home Storage` : null,
+          external ? `${external}x${size} in External Storage` : null,
+        ].filter((l): l is string => !!l);
+      });
+      // Archive from Home Storage when there's a bottle there.
+      const target = (holdings.find((h) => h.home > 0) ?? holdings[0]).wine;
+      showAlert({
+        title: 'This wine exists in your cellar',
+        body: `${lines.join('\n')}\n\nWould you like Vinster to archive this bottle for you?`,
+        buttons: [
+          { text: 'Not Now', style: 'cancel' },
+          { text: 'Archive Bottle', onPress: () => { void archiveOneBottle(target); } },
+        ],
+      });
+    } catch { /* no offer */ }
+  }
+
+  // Dated the review's drinking day. With no unit given, archiveBottles takes a
+  // loose or Home Storage bottle before an external one.
+  async function archiveOneBottle(wine: CellarWine) {
+    if (!session) return;
+    try {
+      await archiveBottles(wine.id, 1, reviewDate);
+      showAlert({ title: 'Bottle archived', body: `One bottle of ${wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)} has moved to Your Cellar Archive.` });
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      invalidateCellarViews(qc);
     }
   }
 
@@ -373,7 +426,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     try {
       if (photoUri) patch.label_image_path = await uploadLabelImage(session.user.id, photoUri, row.id);
       else if (labelImagePath && !row.label_image_path) patch.label_image_path = labelImagePath;
-    } catch { /* the review stands without a photo */ }
+    } catch {
+      // The review is saved; say so rather than leaving it silently photo-less.
+      showAlert({ title: "Your photo wasn't saved", body: 'The review is saved, but the label photo could not be uploaded. Add it again from Edit on the review.' });
+    }
     if (Object.keys(patch).length === 0) return;
     try {
       await patchChosenWine(row.id, patch);

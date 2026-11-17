@@ -11,14 +11,14 @@ import { PairMasthead } from '../../src/components/PairMasthead';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation, type PriceBandExample, type ServingSuggestion, type ComplementaryWine } from '../../src/stores/foodPairingStore';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useCellar, invalidateCellarViews } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
 import { useRacks } from '../../src/hooks/useRacks';
-import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { fetchPlacementsForWine, placedCount, clearAppPlacementsForWine, releaseBottlesFromPlacements } from '../../src/api/placements';
+import { getSlotAssignments } from '../../src/api/racks';
+import { archiveBottles, ARCHIVE_NOTE_MAX } from '../../src/services/archiveNight';
+import { todayYmd } from '../../src/utils/reviewDate';
 import { findFoodWinePairing } from '../../src/api/label';
 import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
@@ -272,7 +272,7 @@ export default function PairingResultsScreen() {
   const [bottleCount, setBottleCount] = useState('1');
   // Cellar Note carried onto the archived bottle — prefilled "Opened with <the
   // recipe> · <date>" so the archive records why/when it was opened.
-  const [cellarNote, setCellarNote] = useState('');
+  const [archiveNote, setArchiveNote] = useState('');
   const [archiving, setArchiving] = useState(false);
   const [archivedSuccess, setArchivedSuccess] = useState<{ count: number; recName: string } | null>(null);
 
@@ -291,18 +291,19 @@ export default function PairingResultsScreen() {
   function openSelect(wine: CellarWine, recName: string) {
     setSelecting({ wine, recName });
     setBottleCount('1');
-    const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-    setCellarNote(`Opened with ${titleCase(dish)} · ${today}`);
+    setArchiveNote(`Opened with ${titleCase(dish)}`.slice(0, ARCHIVE_NOTE_MAX));
     setArchivedSuccess(null);
   }
 
   function closeSelect() {
     setSelecting(null);
     setBottleCount('1');
-    setCellarNote('');
+    setArchiveNote('');
     setArchivedSuccess(null);
   }
 
+  // Archive the chosen bottles, dated today, with the note as their Archive Note
+  // (the wine's own Cellar Note is left alone).
   async function handleArchiveWine() {
     if (!selecting || !session?.user.id) return;
     const count = Math.max(1, parseInt(bottleCount, 10) || 0);
@@ -313,59 +314,13 @@ export default function PairingResultsScreen() {
     }
     setArchiving(true);
     try {
-      const removedAt = new Date().toISOString();
-      await addCellarWineRemoval({
-        cellarWineId: wine.id,
-        removedAt,
-        count,
-        note: 'Selected for a Chef pairing',
-      });
-
-      const note = cellarNote.trim() || null;
-      if (count >= wine.quantity) {
-        // Archive the row directly with the actual count removed so the
-        // Bottles in My Archive stat sums correctly.
-        await updateCellarWine(wine.id, {
-          quantity: count,
-          archived_at: removedAt,
-          cellar_note: note,
-        });
-        // Detach the archived wine from ALL storage — rack/fridge slots + every
-        // cellar_placement — or its bottles linger as ghosts in racks/alt cellars
-        // (this path set archived_at via updateCellarWine, bypassing the central
-        // clear in archiveCellarWine).
-        await clearWineFromRacks(wine.id);
-        await clearAppPlacementsForWine(wine.id);
-      } else {
-        // Decrement the live row and clone an archived row carrying the
-        // selected bottles so the user can edit/note them later.
-        await updateCellarWine(wine.id, { quantity: wine.quantity - count });
-        const { id, created_at, updated_at, ...rest } = wine;
-        await addCellarWine({
-          ...rest,
-          quantity: count,
-          archived_at: removedAt,
-          cellar_note: note,
-        });
-        // Free the selected bottles from storage — loose first, then racks, then
-        // alt-cellar placements — so counts don't drift above the reduced quantity.
-        const wp = await fetchPlacementsForWine(wine.id);
-        const unplaced = Math.max(0, wine.quantity - placedCount(wp));
-        const toFree = Math.max(0, count - unplaced);
-        if (toFree > 0) await releaseBottlesFromPlacements(wine.id, toFree);
-      }
-
-      qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-      qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-      qc.invalidateQueries({ queryKey: ['cellar-removals', wine.id] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['rack-slots'] });
-      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
-
-      setArchivedSuccess({ count, recName: selecting.recName });
+      const { archived } = await archiveBottles(wine.id, count, todayYmd(), { note: archiveNote.trim() || undefined });
+      if (archived === 0) throw new Error('This wine is no longer in your cellar. Go back and try again.');
+      setArchivedSuccess({ count: archived, recName: selecting.recName });
     } catch (err) {
       showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
+      invalidateCellarViews(qc);
       setArchiving(false);
     }
   }
@@ -464,13 +419,14 @@ export default function PairingResultsScreen() {
                   {selecting.wine.quantity} in cellar
                 </Text>
 
-                <Text style={styles.fieldLabel}>Cellar Note</Text>
+                <Text style={styles.fieldLabel}>Archive Note</Text>
                 <TextInput
                   style={[styles.input, styles.noteInput]}
-                  value={cellarNote}
-                  onChangeText={setCellarNote}
+                  value={archiveNote}
+                  onChangeText={(t) => setArchiveNote(t.slice(0, ARCHIVE_NOTE_MAX))}
                   placeholder="e.g. Opened with Coq au Vin"
                   placeholderTextColor={colors.textMuted}
+                  maxLength={ARCHIVE_NOTE_MAX}
                   multiline
                 />
                 <Text style={styles.fieldHint}>Saved to this wine's card in your archive.</Text>
@@ -484,11 +440,6 @@ export default function PairingResultsScreen() {
                   <Text style={styles.archiveBtnText}>{archiving ? 'Archiving…' : 'Archive Wine'}</Text>
                 </TouchableOpacity>
 
-                {/* "Back to wine results" used to sit above this — it
-                    fired the same closeSelect handler, so the two prompts
-                    were duplicates. Removed the upper one; the underlined
-                    Cancel selection now does the same job at the size
-                    "Back to wine results" used to use. */}
                 <TouchableOpacity onPress={closeSelect} style={styles.cancelLink}>
                   <Text style={styles.cancelLinkText}>Cancel selection</Text>
                 </TouchableOpacity>

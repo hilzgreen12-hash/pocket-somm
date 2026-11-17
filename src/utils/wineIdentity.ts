@@ -46,6 +46,16 @@ export function foldAccents(s: string | null | undefined): string {
   return (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
+// Search a wine's details the way people type: every word of the query must
+// appear somewhere in the fields, in any order — "Stella Rosa" finds "Stella di
+// Campalto Brunello di Montalcino Rosa". Accent- and case-insensitive.
+export function matchesWineSearch(fields: ReadonlyArray<string | number | null | undefined>, query: string): boolean {
+  const words = foldAccents(query).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const hay = foldAccents(fields.filter((f) => f != null && f !== '').join(' '));
+  return words.every((w) => hay.includes(w));
+}
+
 // Canonical search string for the Wine-Searcher API and any external lookup —
 // the SAME producer/name identity the header displays, collapsed to one query
 // string. Producer + wine name, but never repeating the producer when the name

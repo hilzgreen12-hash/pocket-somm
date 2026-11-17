@@ -10,7 +10,7 @@ if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 import { router } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
+import { launchImageLibrary } from '../../src/utils/imagePicker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useScanStore } from '../../src/stores/scanStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -211,7 +211,7 @@ export default function WineListScreen() {
       if (!(await ensureMediaPermission('library'))) return;
       setIsUploading(true);
       try {
-        const result = await ImagePicker.launchImageLibraryAsync({
+        const result = await launchImageLibrary({
           mediaTypes: ['images'],
           allowsMultipleSelection: true,
           // Up to 4 pages (each may be sent as a few tiles; see prepareScanTiles).

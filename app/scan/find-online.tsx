@@ -3,6 +3,8 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Activi
 import { useAuth } from '../../src/hooks/useAuth';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import * as IntentLauncher from 'expo-intent-launcher';
+import { File, Paths } from 'expo-file-system';
 import { useScanStore } from '../../src/stores/scanStore';
 import { searchWineListsOnline, type OnlineListResult } from '../../src/api/findWineList';
 import { isNetworkError } from '../../src/api/invokeResilient';
@@ -17,13 +19,32 @@ export default function FindOnlineScreen() {
   const setOnlineSource = useScanStore((s) => s.setOnlineSource);
   const { session } = useAuth();
 
-  // Show the list before choosing it. Android's in-app browser downloads PDFs
-  // rather than showing them, so there a PDF opens in a PDF viewer page.
-  function viewList(r: OnlineListResult) {
-    const url = Platform.OS === 'android' && r.isPdf
-      ? `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(r.url)}`
-      : r.url;
-    WebBrowser.openBrowserAsync(url).catch(() => Linking.openURL(r.url).catch(() => {}));
+  // Show the list before choosing it. Android's in-app browser downloads a PDF
+  // rather than showing it, so there the PDF is downloaded and opened in the
+  // phone's own PDF viewer. (Google's online viewer, used before, now asks the
+  // user to pick a Google account first.) Anything else opens in the in-app
+  // browser; if all else fails, the system browser.
+  const [opening, setOpening] = useState<string | null>(null);
+  async function viewList(r: OnlineListResult) {
+    if (opening) return;
+    const openInBrowser = () => WebBrowser.openBrowserAsync(r.url).catch(() => Linking.openURL(r.url).catch(() => {}));
+    if (Platform.OS !== 'android' || !r.isPdf) { void openInBrowser(); return; }
+    setOpening(r.url);
+    try {
+      const dest = new File(Paths.cache, 'wine-list-preview.pdf');
+      if (dest.exists) dest.delete();
+      const file = await File.downloadFileAsync(r.url, dest);
+      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: file.contentUri,
+        type: 'application/pdf',
+        flags: 1, // FLAG_GRANT_READ_URI_PERMISSION — lets the viewer read our cached file
+      });
+    } catch {
+      // No PDF viewer on the phone, or the download failed — the browser copes.
+      void openInBrowser();
+    } finally {
+      setOpening(null);
+    }
   }
   const [restaurant, setRestaurant] = useState('');
   const [city, setCity] = useState('');
@@ -144,8 +165,8 @@ export default function FindOnlineScreen() {
                   {/* View List opens the page in the in-app browser to check it;
                       Use List picks it and moves on to the preferences. */}
                   <View style={styles.resultBtns}>
-                    <TouchableOpacity style={styles.resultBtn} onPress={() => viewList(r)} activeOpacity={0.8}>
-                      <Text style={styles.resultBtnText}>View List</Text>
+                    <TouchableOpacity style={styles.resultBtn} onPress={() => { void viewList(r); }} disabled={!!opening} activeOpacity={0.8}>
+                      <Text style={styles.resultBtnText}>{opening === r.url ? 'Opening…' : 'View List'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.resultBtn, styles.resultBtnGold]} onPress={() => read(r.url, r.title, r.domain)} activeOpacity={0.8}>
                       <Text style={[styles.resultBtnText, { color: colors.gold }]}>Use List</Text>

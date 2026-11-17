@@ -9,6 +9,7 @@ import { LabelThumb } from './LabelThumb';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
+import { matchesWineSearch } from '../utils/wineIdentity';
 
 // Picker for dropping an EXISTING cellar wine into a rack slot. Lists only
 // UNPLACED wines (not already in any rack), with a search box.
@@ -40,10 +41,9 @@ export function CellarWinePicker({
 
   const unplaced = useMemo(() => {
     const placed = new Set(slotAssignments.map((s) => s.cellar_wine_id));
-    const q = query.trim().toLowerCase();
     return wines
       .filter((w) => allowPlaced || !placed.has(w.id))
-      .filter((w) => !q || `${w.producer ?? ''} ${w.wine_name} ${w.vintage ?? ''}`.toLowerCase().includes(q));
+      .filter((w) => matchesWineSearch([w.producer, w.wine_name, w.vintage], query));
   }, [wines, slotAssignments, query, allowPlaced]);
 
   return (

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import * as ImagePicker from 'expo-image-picker';
+import { launchCamera, launchImageLibrary } from '../utils/imagePicker';
 import { showAlert } from '../components/AppAlert';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { uploadRestaurantPhoto } from '../api/labelPhotos';
@@ -31,8 +31,8 @@ export function useAttachRestaurantPhoto() {
     try {
       if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
       const res = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+        ? await launchCamera({ mediaTypes: ['images'], quality: 1 })
+        : await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
       if (res.canceled || !res.assets[0]) return;
       const path = await uploadRestaurantPhoto(userId, res.assets[0].uri, sessionId);
       await setRestaurantPhotoPath(sessionId, path);
@@ -69,9 +69,15 @@ export function useAttachRestaurantPhoto() {
     }
   }
 
-  // Presents the sheet for a visit. `hasPhoto` adds a Remove option.
+  // Presents the sheet for a visit. `hasPhoto` adds a Remove option. A photo
+  // belongs to a named visit (and Find Online searches by the name), so the
+  // restaurant name comes first.
   function present(opts: { sessionId: string; restaurant: string | null; city: string | null; hasPhoto?: boolean; leaveModal?: () => Promise<void> }) {
     const { sessionId, restaurant, city, hasPhoto, leaveModal } = opts;
+    if (!restaurant?.trim()) {
+      showAlert({ title: 'Add the restaurant name first', body: 'Enter a restaurant name in the review before selecting a photo.' });
+      return;
+    }
     showAlert({
       title: hasPhoto ? 'Change photo' : 'Add a photo of the night',
       body: hasPhoto ? 'Replace or remove this restaurant photo.' : 'Add a photo of your evening, or find one of the restaurant online.',

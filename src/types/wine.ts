@@ -354,6 +354,9 @@ export interface CellarWine {
   // Cellar List "Locations" filter. Optional (nullable column, DB-defaulted) so
   // wine-insert call sites don't all need to set it.
   storage_location_id?: string | null;
+  // How the wine arrived (migration 136): 'import' for Import Cellar, null when
+  // added in the app. Imported wines get no automatic Wine Intel.
+  added_via?: string | null;
   // Migration 069. The case (single-wine OWC or a mixed case) this wine is
   // boxed in, within its storage location. Optional/nullable — loose bottles
   // have no case.

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { launchCamera } from '../utils/imagePicker';
 import { searchWines, scanLabel, prepareImageBase64, type WineSearchResult } from '../api/label';
 import type { CompareWineInput } from '../api/compareWines';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
@@ -85,7 +85,7 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
   async function scan(i: number) {
     if (rows[i].scanning) return;
     if (!(await ensureMediaPermission('camera'))) return;
-    const shot = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 }).catch(() => null);
+    const shot = await launchCamera({ mediaTypes: ['images'], quality: 1 }).catch(() => null);
     if (!shot || shot.canceled || !shot.assets[0]) return;
     update(i, { scanning: true });
     try {

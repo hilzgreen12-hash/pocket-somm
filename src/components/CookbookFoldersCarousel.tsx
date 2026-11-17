@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
+import { launchCamera, launchImageLibrary } from '../utils/imagePicker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FAVOURITES_ID, getFavouritesCover, setFavouritesCover } from '../api/cookbookFavouritesCover';
 import { useChefArchiveCollections } from '../hooks/useChefArchiveCollections';
@@ -99,8 +99,8 @@ export function CookbookFoldersCarousel() {
       if (!userId) return;
       if (!(await ensureMediaPermission(source))) return;
       const res = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+        ? await launchCamera({ mediaTypes: ['images'], quality: 1 })
+        : await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
       if (res.canceled || !res.assets[0]) return;
       const path = await uploadCookbookPhoto(userId, res.assets[0].uri, c.id);
       await setImage(c, path);

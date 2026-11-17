@@ -42,3 +42,19 @@ export function visitStats(visits: RestaurantVisit[]): { restaurants: number; re
 export function formatVisitDate(iso: string | null | undefined, month: 'short' | 'long' = 'short'): string {
   return iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month, year: 'numeric' }) : '';
 }
+
+// The lineup flow for a restaurant visit ("+ Add a lineup" on its review): the
+// lineup is saved against the visit, with its restaurant, city and date.
+export function lineupForVisitHref(v: {
+  sessionId: string;
+  venue?: string | null;
+  city?: string | null;
+  capturedAt?: string | null;
+  upload: boolean;
+}): string {
+  const params: [string, string | null | undefined][] = [
+    ['session', v.sessionId], ['venue', v.venue], ['city', v.city], ['date', v.capturedAt], ['upload', v.upload ? '1' : null],
+  ];
+  const query = params.filter(([, val]) => !!val).map(([k, val]) => `${k}=${encodeURIComponent(val!)}`).join('&');
+  return `/cellar/archive-night?${query}`;
+}

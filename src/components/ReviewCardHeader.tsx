@@ -75,20 +75,23 @@ export function ReviewedStamp({ dateIso, location }: { dateIso?: string | null; 
 
 // The line under the wine header on the review input screens: date · city ·
 // venue, each editable in place (replaces "Reviewed <date> · <location>" plus the
-// separate Date and Location fields).
-export function ReviewedLineEditable({ date, onDate, city, onCity, venue, onVenue, currency }: {
+// separate Date and Location fields). Also used under a lineup's title.
+// onEndEditing fires when any of the three loses focus, for screens that save
+// on blur rather than with a Save button.
+export function ReviewedLineEditable({ date, onDate, city, onCity, venue, onVenue, currency, onEndEditing }: {
   date: string; onDate: (iso: string) => void;
   city: string; onCity: (v: string) => void;
   venue: string; onVenue: (v: string) => void;
   currency?: string | null;
+  onEndEditing?: () => void;
 }) {
   return (
     <View style={styles.editLine}>
-      <DateInput style={[styles.editField, styles.editDate]} valueIso={date} onChangeIso={onDate} currency={currency ?? undefined} placeholderTextColor={colors.textMuted} />
+      <DateInput style={[styles.editField, styles.editDate]} valueIso={date} onChangeIso={onDate} currency={currency ?? undefined} placeholderTextColor={colors.textMuted} onEndEditing={onEndEditing} />
       <Text style={styles.editDot}>·</Text>
-      <TextInput style={styles.editField} value={city} onChangeText={onCity} placeholder="City" placeholderTextColor={colors.textMuted} />
+      <TextInput style={styles.editField} value={city} onChangeText={onCity} placeholder="City" placeholderTextColor={colors.textMuted} onEndEditing={onEndEditing} />
       <Text style={styles.editDot}>·</Text>
-      <TextInput style={[styles.editField, styles.editVenue]} value={venue} onChangeText={onVenue} placeholder="Venue" placeholderTextColor={colors.textMuted} />
+      <TextInput style={[styles.editField, styles.editVenue]} value={venue} onChangeText={onVenue} placeholder="Venue" placeholderTextColor={colors.textMuted} onEndEditing={onEndEditing} />
     </View>
   );
 }

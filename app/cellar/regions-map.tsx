@@ -1,3 +1,4 @@
+// Not linked from anywhere yet, on purpose: groundwork for the planned Cellar Statistics region map.
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';

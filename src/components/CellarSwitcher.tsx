@@ -1,13 +1,8 @@
-import { useSyncExternalStore } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { getCellarContext, subscribeCellarContext, setActiveCellar } from '../api/cellarContext';
+import { setActiveCellar } from '../api/cellarContext';
+import { useCellarContext } from '../hooks/useCellarContext';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
-
-// Live cellar context for components (re-renders on switch / join / leave).
-function useCellarContext() {
-  return useSyncExternalStore(subscribeCellarContext, getCellarContext, getCellarContext);
-}
 
 const possessive = (name: string | null) => {
   const n = (name ?? '').trim();

@@ -26,6 +26,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import { per75From } from '../../src/utils/bottleValue';
+import { launchCamera, launchImageLibrary } from '../../src/utils/imagePicker';
 
 type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'location' | 'adding' | 'done' | 'reviews-done';
 
@@ -190,8 +191,8 @@ export default function ImportCellarScreen() {
     try {
       const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1, allowsMultipleSelection: source === 'library' };
       const result = source === 'camera'
-        ? await ImagePicker.launchCameraAsync(opts)
-        : await ImagePicker.launchImageLibraryAsync(opts);
+        ? await launchCamera(opts)
+        : await launchImageLibrary(opts);
       if (result.canceled || !result.assets.length) return;
       await analyze(result.assets.map((a) => a.uri));
     } catch (err) {
@@ -603,6 +604,8 @@ export default function ImportCellarScreen() {
           purchase_price: w.purchasePricePerBottle ?? null,
           purchase_price_currency: w.purchasePricePerBottle != null ? (w.currency ?? defaultCurrency) : null,
           bottle_size_ml: w.bottleSizeMl ?? 750,
+          // Marks it as imported, so no Wine Intel is generated in the background.
+          added_via: 'import',
         } as any);
         // Cased holding + a chosen location → create the OWC/non-OWC case and
         // file the wine into it. Non-fatal: a failure still leaves the wine

@@ -21,6 +21,13 @@ import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
 
+// What a NEW entry starts with instead of today and a blank place (a review of
+// an archived bottle: the day it was archived, at its Archive Note's place).
+export interface NewReviewSeed {
+  date?: string | null;
+  venue?: string | null;
+}
+
 interface Props {
   wine: CellarWine | null;
   visible: boolean;
@@ -33,12 +40,13 @@ interface Props {
   // Details screen (fix the name / add a vintage). The parent hides this modal,
   // opens the screen, and re-opens the modal for the same wine on return.
   onEditWine?: (wine: CellarWine) => void;
+  seed?: NewReviewSeed;
 }
 
 // The review input for a cellar bottle — the sibling of EditChosenWineModal.
 // A cellar review is a list of dated entries on the cellar_wines row
 // (review_entries); this writes one entry, new or edited, and nothing else.
-export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEntryId = null, onEditWine }: Props) {
+export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEntryId = null, onEditWine, seed }: Props) {
   const { updateWine } = useCellar();
   const { session } = useAuth();
 
@@ -84,8 +92,8 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEnt
     setReviewNote('');
     setPersonalNotes('');
     setScore('');
-    setReviewDate(todayYmd());
-    setLocName('');
+    setReviewDate(seed?.date || todayYmd());
+    setLocName(seed?.venue ?? '');
     setLocCity('');
     captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
     setDrinkingWindow('');

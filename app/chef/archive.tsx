@@ -12,7 +12,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ChefLabelSession } from '../../src/api/chef';
 import { setChefLabelSessionImage, renameChefLabelSession } from '../../src/api/chef';
-import * as ImagePicker from 'expo-image-picker';
+import { launchCamera, launchImageLibrary } from '../../src/utils/imagePicker';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useLabels } from '../../src/hooks/useLabels';
@@ -86,8 +86,8 @@ export default function ChefArchiveScreen() {
       if (!session?.user.id) return;
       if (!(await ensureMediaPermission(source))) return;
       const res = source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+        ? await launchCamera({ mediaTypes: ['images'], quality: 1 })
+        : await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
       if (res.canceled || !res.assets[0]) return;
       const path = await uploadCookbookPhoto(session.user.id, res.assets[0].uri, `recipe-${id}`);
       await saveRecipeImage(id, path);

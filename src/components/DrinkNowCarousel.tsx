@@ -1,9 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { useCellar } from '../hooks/useCellar';
-import { useAuth } from '../hooks/useAuth';
-import { getArchivedWines } from '../api/cellar';
+import { useCellar, useArchive } from '../hooks/useCellar';
 import { wineNameKey } from '../utils/wineIdentity';
 import { effectiveMaturity } from '../utils/maturity';
 import { WineCardThumb } from './WineCardThumb';
@@ -83,16 +80,10 @@ function buildCellarInsights(wines: CellarWine[]): InsightTile[] {
 // The cellar wines Cellar Insights looks at: the whole cellar, including wines
 // kept in external storage.
 function useInsightWines(): { cellarWines: CellarWine[]; archived: CellarWine[] } {
-  const { session } = useAuth();
-  const userId = session?.user.id;
   const { wines: cellarWines } = useCellar();
   // Archived bottles (each removal is saved as an archived row), so Running Low
   // knows how many bottles of a wine there were to begin with.
-  const { data: archived = [] } = useQuery({
-    queryKey: ['archived-wines', userId],
-    queryFn: () => getArchivedWines(userId!),
-    enabled: !!userId,
-  });
+  const { wines: archived } = useArchive();
   return { cellarWines, archived };
 }
 

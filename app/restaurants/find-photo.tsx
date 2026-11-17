@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { SearchProgress } from '../../src/components/SearchProgress';
 import { showAlert } from '../../src/components/AppAlert';
 import { useAuth } from '../../src/hooks/useAuth';
 import { searchRestaurantImages, type LabelImageCandidate } from '../../src/api/label';
@@ -55,14 +54,15 @@ export default function FindRestaurantPhotoScreen() {
     }
   }
 
+  // A short wait either way, so a plain spinner rather than a progress counter.
   if (stage === 'searching' || stage === 'saving') {
     return (
-      <SearchProgress
-        title={stage === 'saving' ? 'Saving your photo…' : 'Finding photos…'}
-        subtitle="Vinster needs a few seconds"
-        body={`Vinster is searching for photos of ${restaurant?.trim() || 'this restaurant'}.`}
-        durationMs={12000}
-      />
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.gold} />
+        <Text style={styles.spinnerText}>
+          {stage === 'saving' ? 'Adding your photo…' : `Finding photos of ${restaurant?.trim() || 'the restaurant'}…`}
+        </Text>
+      </View>
     );
   }
 
@@ -118,6 +118,7 @@ const styles = StyleSheet.create({
   source: { fontSize: 10, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: spacing.xl },
   title: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
+  spinnerText: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
   body: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
   btn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   btnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
