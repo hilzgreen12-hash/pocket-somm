@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { getCellarWines, addCellarWine, updateCellarWine, getArchivedWines, shareCellar, getCellarShares, removeCellarShare, setAutoLabelIfMissing, type NewCellarWine } from '../api/cellar';
+import { getCellarWines, addCellarWine, updateCellarWine, getArchivedWines, setAutoLabelIfMissing, type NewCellarWine } from '../api/cellar';
 import { fetchAutoLabelUri } from '../api/label';
 import { uploadLabelImage, removeLabelImage } from '../api/labelPhotos';
 import type { CellarWine } from '../types/wine';
@@ -9,13 +9,15 @@ import { noteHappyMoment } from '../services/ratingPrompt';
 
 // Refresh every cached view of the cellar's bottles and where they sit: the
 // lists, the archive (and Cellar Insights' month of it), placements,
-// racks/fridges, bins and alt cellars. For actions that can touch any of them —
-// every archive, return, move, add or delete. Prefix keys, so each screen's
-// per-id variants refetch too.
+// racks/fridges, bins and alt cellars (with their cases and the Cellar tab's
+// tile collages). For actions that can touch any of them — every archive,
+// return, move, add or delete. Prefix keys, so each screen's per-id variants
+// refetch too.
 const CELLAR_VIEW_KEYS = [
   'cellar', 'cellar-archive', 'insights-archived-month', 'placements', 'placements-list',
   'rack-slots', 'slot-assignments', 'awaiting-placed-elsewhere', 'bins', 'bin-cells', 'bin-cell',
-  'storage-locations', 'storage-location-wines',
+  'storage-locations', 'storage-location', 'storage-location-wines', 'storage-location-cases',
+  'home-storage-thumbs',
 ];
 export function invalidateCellarViews(qc: QueryClient): void {
   for (const key of CELLAR_VIEW_KEYS) void qc.invalidateQueries({ queryKey: [key] });
@@ -32,12 +34,6 @@ export function useCellar() {
   const { data: wines = [], isLoading, isError } = useQuery({
     queryKey: ['cellar', userId],
     queryFn: () => getCellarWines(userId),
-    enabled: !!userId,
-  });
-
-  const { data: shares = [] } = useQuery({
-    queryKey: ['cellar-shares', userId],
-    queryFn: () => getCellarShares(userId),
     enabled: !!userId,
   });
 
@@ -103,17 +99,7 @@ export function useCellar() {
     },
   });
 
-  const share = useMutation({
-    mutationFn: (email: string) => shareCellar(userId, email),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar-shares', userId] }),
-  });
-
-  const removeShare = useMutation({
-    mutationFn: (email: string) => removeCellarShare(userId, email),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar-shares', userId] }),
-  });
-
-  return { wines, isLoading, isError, shares, addWine, updateWine, share, removeShare };
+  return { wines, isLoading, isError, addWine, updateWine };
 }
 
 // The cellar archive. `enabled: false` skips the fetch for screens that only

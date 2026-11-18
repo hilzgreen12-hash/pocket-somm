@@ -7,6 +7,7 @@ import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { PER_75CL } from '../../src/utils/bottleValue';
+import { effectiveMaturity } from '../../src/utils/maturity';
 
 const WINDOW_LABEL: Record<string, string> = {
   too_young: 'Too Young',
@@ -30,7 +31,8 @@ function PickCard({ pick }: { pick: MoodPickView }) {
   const value = w.estimated_value != null
     ? `${currencySymbol(w.estimated_value_currency ?? 'GBP')}${Math.round(w.estimated_value)}${PER_75CL}`
     : '—';
-  const winLabel = WINDOW_LABEL[w.drinking_window_status] ?? '';
+  // Derived from the window against this year, as everywhere else in the cellar.
+  const winLabel = WINDOW_LABEL[effectiveMaturity(w)] ?? '';
 
   return (
     <View style={styles.card}>

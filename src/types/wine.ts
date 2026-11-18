@@ -349,23 +349,18 @@ export interface CellarWine {
   // "Find label online" rather than the user's own photo — kept private
   // (excluded from shareable/community cards) as it's third-party imagery.
   label_image_fetched?: boolean;
-  // Migration 064. The home-storage location (non-grid, e.g. "the shed") this
-  // wine physically lives in, if any. Distinct from rack placement and from the
-  // Cellar List "Locations" filter. Optional (nullable column, DB-defaulted) so
-  // wine-insert call sites don't all need to set it.
+  // Migration 064. Retired by migration 139 — where bottles are stored lives in
+  // cellar_placements. The column is kept (always null) until it's dropped.
   storage_location_id?: string | null;
   // How the wine arrived (migration 136): 'import' for Import Cellar, null when
   // added in the app. Imported wines get no automatic Wine Intel.
   added_via?: string | null;
-  // Migration 069. The case (single-wine OWC or a mixed case) this wine is
-  // boxed in, within its storage location. Optional/nullable — loose bottles
-  // have no case.
+  // Migration 069's case link, retired by migration 139: a case holds
+  // placements now. Only set here on an alt cellar's rows (LocationWineRow),
+  // where it carries the case of that row's placement.
   case_id?: string | null;
-  // Migration 072. The bin diamond/triangle cell this wine is filed into, if
-  // any. Count-based (the row's quantity is how many bottles are in the cell).
-  // Optional/nullable — non-bin wines have none. NB since mig 116 bin membership
-  // lives in cellar_placements (kind='bin'), not here — this legacy column is
-  // only kept for back-compat read hints; the lattice reads placements.
+  // Migration 072's bin cell link, unused since migration 116 (bin membership
+  // is a 'bin' placement). The column is kept until it's dropped.
   bin_cell_id?: string | null;
   // Transient (NOT DB columns): set by the bin read helpers so a cell row knows
   // which 'bin' placement it came from (for per-cell remove/archive/decrement)
@@ -376,8 +371,8 @@ export interface CellarWine {
   // Migration 100. True when the bottle was moved here (e.g. by Voice Command)
   // but not yet filed into its real slot/cell/case — shown distinctly until
   // placed. awaiting_placement_unit_id is the target rack/fridge/bin (a
-  // wine_racks row) when the destination is one; null for an alt-cellar
-  // destination (which uses storage_location_id and can be "ignored").
+  // wine_racks row) when the destination is one, else the alt cellar it's
+  // waiting in (or null: anywhere), where it can simply be left loose.
   awaiting_placement?: boolean;
   awaiting_placement_unit_id?: string | null;
   user_notes: string | null;
@@ -462,8 +457,8 @@ export interface ReviewEntry {
   drinkingWindow: string | null;
 }
 
-// Home storage location (migration 064) — a non-grid space the user photographs
-// and fills with a loose list of wines (via cellar_wines.storage_location_id).
+// An alt cellar (migration 064) — a non-grid space the user photographs and
+// fills with wines ('location' placements).
 export interface StorageLocation {
   id: string;
   user_id: string;
@@ -473,8 +468,6 @@ export interface StorageLocation {
   // Migration 097 — an Alt Cellar marked as external (offsite / bonded /
   // merchant) rather than at home. Racks, fridges and bins are always home.
   is_external: boolean;
-  // Convenience count of wines filed here, when the query provides it.
-  wineCount?: number;
 }
 
 // A case of bottles boxed together inside a storage location (migration 069).

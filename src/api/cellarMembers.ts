@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { loadCellarContext } from './cellarContext';
+import { getCellarContext, loadCellarContext, setActiveCellar } from './cellarContext';
 
 // Shared household cellar invites (migration 123). The owner invites a Vinster
 // account by email with view or edit access; the invitee sees the invite in
@@ -47,15 +47,21 @@ export async function inviteToMyCellar(email: string, role: CellarMemberRole): P
   }
 }
 
+// RLS turns a change to someone else's row (or one already gone) into a
+// silent no-op, so each write checks a row was actually changed.
+const NOT_CHANGED = 'That change could not be saved — please go back and try again.';
+
 export async function setMemberRole(id: string, role: CellarMemberRole): Promise<void> {
-  const { error } = await supabase.from('cellar_members').update({ role }).eq('id', id);
+  const { data, error } = await supabase.from('cellar_members').update({ role }).eq('id', id).select('id');
   if (error) throw error;
+  if (!data?.length) throw new Error(NOT_CHANGED);
 }
 
 // Owner removes someone (or cancels a pending invite).
 export async function removeCellarMember(id: string): Promise<void> {
-  const { error } = await supabase.from('cellar_members').delete().eq('id', id);
+  const { data, error } = await supabase.from('cellar_members').delete().eq('id', id).select('id');
   if (error) throw error;
+  if (!data?.length) throw new Error(NOT_CHANGED);
 }
 
 // Invites addressed to me that I haven't accepted yet, plus my accepted one.
@@ -73,10 +79,14 @@ export async function acceptCellarInvite(id: string): Promise<void> {
   await loadCellarContext(user.id);
 }
 
-// Decline a pending invite, or leave a shared cellar I've joined.
-export async function leaveOrDeclineCellar(id: string): Promise<void> {
+// Decline a pending invite, or leave a shared cellar I've joined (moving back
+// to My Cellar first if it's the one open, so leaving isn't reported as access
+// being taken away).
+export async function leaveOrDeclineCellar(invite: CellarMember): Promise<void> {
   const user = await me();
-  const { error } = await supabase.from('cellar_members').delete().eq('id', id);
+  const { data, error } = await supabase.from('cellar_members').delete().eq('id', invite.id).select('id');
   if (error) throw error;
+  if (!data?.length) throw new Error(NOT_CHANGED);
+  if (getCellarContext().ownerId === invite.owner_id) setActiveCellar(null);
   await loadCellarContext(user.id);
 }

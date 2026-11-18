@@ -5,14 +5,30 @@
 // "Quantity in Bottles" column, headers aren't always the first row, names come
 // as one long description, and a single workbook can hold several unrelated
 // lists. Rather than hand-code rules per format, we hand ONE already-decoded
-// list (clean rows, encoding fixed on the client) to Claude and get back
-// normalized wines with the case structure preserved.
+// list (clean rows, encoding fixed on the client; a long one ~100 rows at a
+// time) to Claude and get back normalized wines with the case structure preserved.
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { signedInUserId } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-const SYSTEM = `You are a meticulous wine-cellar data extractor. You are given ONE cellar/merchant/broker list — EITHER the raw rows of a spreadsheet export (tab-separated, one row per line) OR a storage invoice / annual reserves statement as a PDF document. Extract every real wine holding as structured JSON.
+// Usage limits per account. The app sends a big spreadsheet ~100 rows per call,
+// so a ~9,000-row cellar is ~90 calls in one sitting: the hourly limit lets one
+// such import finish with room for retries, the daily one allows about two and
+// a half. Files from a known merchant are read on the phone and never get here.
+const HOURLY_LIMIT = 120;
+const DAILY_LIMIT = 240;
+
+// A storage statement PDF is a few hundred KB; anything near Claude's request
+// cap isn't one. Text arrives in ~100-row chunks, well under the text cap.
+const MAX_PDF_CHARS = 14_000_000; // ≈ 10 MB decoded
+const MAX_TEXT_CHARS = 120_000;
+const MAX_BODY_BYTES = MAX_PDF_CHARS + 64 * 1024;
+const TOO_LARGE = 'That file is too large to read. Please try a smaller file, or a spreadsheet export.';
+
+const SYSTEM = `You are a meticulous wine-cellar data extractor. You are given ONE cellar/merchant/broker list — EITHER the raw rows of a spreadsheet export (tab-separated, one row per line) OR a storage invoice / annual reserves statement as a PDF document. Extract every real wine holding as structured JSON. A long spreadsheet arrives in parts: you may be given one part, with the lines above its header (titles, column names) repeated at the top.
 
 The lists vary enormously — read them intelligently:
 - The header row (or invoice column layout) is often NOT at the very top (there may be titles, logos, addresses, account numbers, or blank rows above it). Find the real columns.
@@ -57,17 +73,26 @@ Return ONLY a JSON object: {"wines": [ ... ]}. No markdown, no commentary.`;
 
 Deno.serve(async (req) => {
   try {
+    // Imported wines go into the caller's own cellar, so this needs an account.
+    if (!(await signedInUserId(req))) return json({ error: 'Unauthorized', message: 'Sign in to import a cellar.' }, 401);
+    if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return jsonError(TOO_LARGE, 413);
+
+    const limited = await checkRateLimit(req, 'parse-cellar-import', HOURLY_LIMIT, DAILY_LIMIT);
+    if (limited) return limited;
+
     const { text, pdfBase64, source, stream } = await req.json().catch(() => ({}));
+    if (typeof pdfBase64 === 'string' && pdfBase64.length > MAX_PDF_CHARS) return jsonError(TOO_LARGE, 413);
     const hint = typeof source === 'string' && source ? source : 'unknown';
 
     // The whole parse (input selection → Claude read → normalisation). Extracted
-    // so the buffered and streamed paths produce the identical { wines } result
-    // for EITHER input (pdfBase64 or text). Returns the exact object the buffered
-    // path returned today.
-    async function run(): Promise<{ wines: any[] }> {
+    // so the buffered and streamed paths produce the identical result for EITHER
+    // input (pdfBase64 or text). `truncated` means some of the list wasn't read:
+    // the text was over the cap, or the reply ran out of room part-way.
+    async function run(): Promise<{ wines: any[]; truncated: boolean }> {
     // Two inputs: a PDF invoice/statement (sent as a document block Claude reads
     // directly) or decoded spreadsheet rows as text.
     let content: unknown;
+    let truncated = false;
     if (typeof pdfBase64 === 'string' && pdfBase64) {
       content = [
         { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
@@ -75,9 +100,9 @@ Deno.serve(async (req) => {
       ];
     } else {
       const body = typeof text === 'string' ? text : '';
-      if (!body.trim()) return { wines: [] };
-      // Guard against a runaway payload — cap the characters we forward.
-      content = `Source hint: ${hint}\n\nList rows:\n${body.length > 120000 ? body.slice(0, 120000) : body}`;
+      if (!body.trim()) return { wines: [], truncated: false };
+      truncated = body.length > MAX_TEXT_CHARS;
+      content = `Source hint: ${hint}\n\nList rows:\n${truncated ? body.slice(0, MAX_TEXT_CHARS) : body}`;
     }
 
     const resp = await client.messages.create({
@@ -87,15 +112,11 @@ Deno.serve(async (req) => {
       system: SYSTEM,
       messages: [{ role: 'user', content: content as any }],
     });
+    if (resp.stop_reason === 'max_tokens') truncated = true;
 
-    const raw = resp.content[0]?.type === 'text' ? resp.content[0].text : '';
-    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) return { wines: [] };
-
-    let parsed: any;
-    try { parsed = JSON.parse(match[0]); } catch { return { wines: [] }; }
-    const winesIn = Array.isArray(parsed?.wines) ? parsed.wines : [];
+    // With thinking on, the reply's first block isn't necessarily the text.
+    const raw = resp.content.find((b) => b.type === 'text')?.text ?? '';
+    const winesIn = winesFromReply(raw);
 
     // Normalise + sanity-clamp every field so the client can trust the shape.
     const wines = winesIn.map((w: any) => {
@@ -137,15 +158,12 @@ Deno.serve(async (req) => {
       };
     }).filter((w: any) => w.producer || w.wineName);
 
-      return { wines };
+      return { wines, truncated };
     }
 
-    // Buffered path (stream !== true): unchanged single-JSON response. Kept as
-    // the fallback the current app build uses when streaming isn't available.
-    if (stream !== true) {
-      const result = await run();
-      return json(result, 200);
-    }
+    // Buffered path (stream !== true): one JSON response. The fallback when
+    // streaming isn't available.
+    if (stream !== true) return json(await run());
 
     // Streamed path: parsing a long import list/PDF can take long enough for a
     // mobile connection to be severed mid-flight. Keep the connection alive with
@@ -180,9 +198,26 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error('parse-cellar-import error:', err instanceof Error ? err.message : String(err));
-    return json({ error: 'Something went wrong. Please try again.' }, 500);
+    return jsonError('Something went wrong. Please try again.', 500);
   }
 });
+
+// The { wines: [...] } object in Claude's reply. A reply cut off at max_tokens
+// ends part-way through a wine; the wines are flat objects, so cutting back to
+// the last closing brace and closing the array keeps every complete one.
+function winesFromReply(raw: string): any[] {
+  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const start = cleaned.indexOf('{');
+  if (start < 0) return [];
+  const body = cleaned.slice(start, cleaned.lastIndexOf('}') + 1);
+  for (const candidate of [body, `${body}]}`]) {
+    try {
+      const parsed = JSON.parse(candidate);
+      return Array.isArray(parsed?.wines) ? parsed.wines : [];
+    } catch { /* try the next */ }
+  }
+  return [];
+}
 
 function str(v: unknown): string | null {
   if (typeof v !== 'string') return null;
@@ -204,6 +239,10 @@ function year(v: unknown): string | null {
   return m ? m[0] : null;
 }
 
-function json(payload: unknown, status: number): Response {
+function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
+}
+// { error, message } — the shape the app's edge clients read a reason from.
+function jsonError(message: string, status: number): Response {
+  return json({ error: message, message }, status);
 }

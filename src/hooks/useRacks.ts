@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { getRacks, createRack, deleteRack, renameRack, resizeRack, wipeRackContents, getRackSlots, assignSlot, clearSlot, type LargeFormatRowSpec } from '../api/racks';
+import { invalidateCellarViews } from './useCellar';
+import { getRacks, createRack, deleteRack, renameRack, resizeRack, wipeRackContents, getRackSlots, type LargeFormatRowSpec } from '../api/racks';
 
 export function useRacks() {
   const { session } = useAuth();
@@ -19,11 +20,12 @@ export function useRacks() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['racks', userId] }),
   });
 
+  // Delete, wipe and resize unplace bottles, so every placement view refreshes.
   const remove = useMutation({
     mutationFn: (id: string) => deleteRack(id),
-    onSuccess: () => {
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['racks', userId] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      invalidateCellarViews(qc);
     },
   });
 
@@ -34,19 +36,14 @@ export function useRacks() {
 
   const wipe = useMutation({
     mutationFn: (id: string) => wipeRackContents(id),
-    onSuccess: (_data, rackId) => {
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-    },
+    onSettled: () => invalidateCellarViews(qc),
   });
 
   const resize = useMutation({
     mutationFn: ({ id, rows, cols }: { id: string; rows: number; cols: number }) => resizeRack(id, rows, cols),
-    onSuccess: (_data, { id }) => {
-      // rows/cols live on the rack row; freed slots come out of rack_slots.
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ['racks', userId] });
-      qc.invalidateQueries({ queryKey: ['rack-slots', id] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      invalidateCellarViews(qc);
     },
   });
 
@@ -54,25 +51,10 @@ export function useRacks() {
 }
 
 export function useRack(rackId: string) {
-  const qc = useQueryClient();
-
   const { data: slots = [], isLoading } = useQuery({
     queryKey: ['rack-slots', rackId],
     queryFn: () => getRackSlots(rackId),
     enabled: !!rackId,
   });
-
-  const assign = useMutation({
-    mutationFn: ({ row, col, wineId }: { row: number; col: number; wineId: string }) =>
-      assignSlot(rackId, row, col, wineId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rack-slots', rackId] }),
-  });
-
-  const clear = useMutation({
-    mutationFn: ({ row, col }: { row: number; col: number }) =>
-      clearSlot(rackId, row, col),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rack-slots', rackId] }),
-  });
-
-  return { slots, isLoading, assign, clear };
+  return { slots, isLoading };
 }

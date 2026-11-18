@@ -1,10 +1,41 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { signedInUserId } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
+// Usage limits per account: a Sonnet vision read per screenshot. A cellar
+// photographed screen by screen runs to a few dozen reads, so this leaves room
+// for that while stopping a loop.
+const HOURLY_LIMIT = 40;
+const DAILY_LIMIT = 120;
+
+// The app sends a JPEG resized to ~1600px on its long side — comfortably under
+// this. Anything bigger isn't from the app; refuse it before it reaches Claude.
+const MAX_IMAGE_CHARS = 7_000_000; // ≈ 5 MB decoded, Claude's per-image cap
+const MAX_BODY_BYTES = MAX_IMAGE_CHARS + 64 * 1024;
+const TOO_LARGE = 'That image is too large. Please try a smaller screenshot.';
+
+function json(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
+}
+// { error, message } — the shape the app's edge clients read a reason from.
+function jsonError(message: string, status: number): Response {
+  return json({ error: message, message }, status);
+}
+
 Deno.serve(async (req) => {
   try {
+    // Imported wines go into the caller's own cellar, so this needs an account.
+    if (!(await signedInUserId(req))) return json({ error: 'Unauthorized', message: 'Sign in to import a cellar.' }, 401);
+    if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return jsonError(TOO_LARGE, 413);
+
+    const limited = await checkRateLimit(req, 'import-cellar', HOURLY_LIMIT, DAILY_LIMIT);
+    if (limited) return limited;
+
     const { base64Image, stream } = await req.json();
+    if (typeof base64Image !== 'string' || !base64Image) return jsonError('No image was received. Please try again.', 400);
+    if (base64Image.length > MAX_IMAGE_CHARS) return jsonError(TOO_LARGE, 413);
 
     // The single Claude round-trip for this import. Extracted so the buffered
     // and streamed paths run the identical read + JSON extraction.
@@ -71,12 +102,7 @@ Return raw JSON only. No markdown. No explanation.`,
 
     // Buffered path (stream !== true): unchanged single-JSON response. Kept as
     // the fallback the current app build uses when streaming isn't available.
-    if (stream !== true) {
-      const parsed = await run();
-      return new Response(JSON.stringify(parsed), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    if (stream !== true) return json(await run());
 
     // Streamed path: a long cellar screenshot/list can take long enough for a
     // mobile connection to be severed mid-flight. Keep the connection alive with
@@ -115,9 +141,6 @@ Return raw JSON only. No markdown. No explanation.`,
     // Logged above with full detail. The client gets a generic message:
     // raw exception text can carry Anthropic SDK request/response detail or
     // echo back model output on a JSON parse failure.
-    return new Response(
-      JSON.stringify({ error: 'Something went wrong. Please try again.' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } },
-    );
+    return jsonError('Something went wrong. Please try again.', 500);
   }
 });

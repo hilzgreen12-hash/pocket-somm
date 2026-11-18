@@ -157,7 +157,7 @@ export function DrinkNowCarousel() {
     const code = (w.estimated_value_currency ?? 'GBP').toUpperCase();
     valueByCurrency[code] = (valueByCurrency[code] ?? 0) + (holdingValue(w) ?? 0);
   }
-  const valueText = Object.entries(valueByCurrency).map(([code, amt]) => formatCurrency(amt, code, { decimals: 2 })).join(' · ');
+  const valueText = Object.entries(valueByCurrency).map(([code, amt]) => formatCurrency(amt, code, { decimals: 0 })).join(' · ');
   const valuable = [...owned].filter((w) => w.estimated_value != null).sort((a, b) => (bottleValue(b) ?? 0) - (bottleValue(a) ?? 0));
   const statsPicture = valuable.length ? valuable : owned;
   // Bottle Count picture: the best-stocked wines.

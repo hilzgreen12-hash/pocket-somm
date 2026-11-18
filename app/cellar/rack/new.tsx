@@ -23,7 +23,7 @@ const CANVAS_H = 360;       // fixed canvas height; grid fits within it
 const MAX_CELL = 54;        // cap so a small 6-bottle rack doesn't render huge
 const HANDLE = 44;
 
-export default function RackResizeScreen() {
+export default function NewRackScreen() {
   const { pendingStorageType, reset } = useRackStore();
   const isFridge = pendingStorageType === 'fridge';
   const { create } = useRacks();

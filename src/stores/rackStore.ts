@@ -19,7 +19,8 @@ interface PendingSlot {
 // An in-progress "move this bottle" action. Held in the store (not local
 // component state) so a move started on one rack survives navigating to a
 // different rack — letting the user pick up a bottle on rack A and drop it on
-// rack B. sourceRackId remembers where it came from.
+// rack B. sourceRackId/row/col say where it was picked up; the drop is refused
+// if the bottle is no longer there.
 interface PendingMove {
   sourceRackId: string;
   row: number;
@@ -40,24 +41,22 @@ interface RackStore {
   pendingStorageType: 'rack' | 'fridge';
   pendingMove: PendingMove | null;
   // Set when the label flow was entered from a home storage location's "add a
-  // wine" button, so the saved wine gets filed into that location (via
-  // cellar_wines.storage_location_id) instead of a rack/loose.
+  // wine" button, so the saved wine gets filed into that location (a 'location'
+  // placement) instead of a rack/loose.
   pendingStorageLocationId: string | null;
   // Set when the add flow was entered via "Add a wine to this case" on a
   // storage location — the saved wine is filed straight into this existing
   // case (migration 069) instead of prompting for a new one.
   pendingCaseId: string | null;
   // Set when the add flow was entered from a bin diamond's "+ Add wine" — the
-  // saved wine is filed straight into that bin cell (via cellar_wines.bin_cell_id)
+  // saved wine is filed straight into that bin cell (a 'bin' placement)
   // through the shared Confirm screen (context=place-bin), which also collects
   // the quantity + bottle format inline.
   pendingBinCell: { binId: string; cellId: string } | null;
   // True when the user entered the rack placement flow via "+ Add bottles"
-  // on the wine card. The placement modal uses this to INCREMENT the
-  // wine's quantity rather than overwrite it (the default behaviour for
-  // brand-new wines being placed for the first time), and to dismiss two
-  // screens after confirm so the user returns to where they came from
-  // rather than the wine card.
+  // (a new rack set up for an existing wine). Placing then ADDS the placed
+  // bottles to the wine's quantity, rather than backfilling the count of a
+  // brand-new wine.
   pendingAddMode: boolean;
   setImage: (uri: string) => void;
   setPendingSlot: (slot: PendingSlot | null) => void;

@@ -85,6 +85,31 @@ function toTsv(rows: string[][]): string {
     .join('\n');
 }
 
+// A long list is read in parts of this many rows: one read of thousands of rows
+// runs out of reply room part-way through.
+const CHUNK_ROWS = 100;
+
+// The sheet as TSV parts of up to CHUNK_ROWS data rows. Every part repeats the
+// lines down to the header row (titles, account lines, the column names), so
+// each read sees what the columns mean.
+export function sheetChunks(sheet: ImportSheet): string[] {
+  const lead = sheet.rows.slice(0, headerRowIndex(sheet.rows) + 1);
+  const body = sheet.rows.slice(lead.length);
+  if (body.length <= CHUNK_ROWS) return [sheet.tsv];
+  const parts: string[] = [];
+  for (let i = 0; i < body.length; i += CHUNK_ROWS) parts.push(toTsv([...lead, ...body.slice(i, i + CHUNK_ROWS)]));
+  return parts;
+}
+
+// The header row: the first of the top 25 rows filled about as fully as the
+// widest rows — titles and account lines above it have fewer cells.
+function headerRowIndex(rows: string[][]): number {
+  const filled = (r: string[]) => r.filter((c) => c.trim() !== '').length;
+  const widest = Math.max(0, ...rows.slice(0, 50).map(filled));
+  const i = rows.slice(0, 25).findIndex((r) => filled(r) >= Math.max(2, Math.ceil(widest * 0.6)));
+  return Math.max(0, i);
+}
+
 function nonEmpty(rows: string[][]): string[][] {
   return rows.map((r) => (Array.isArray(r) ? r.map(fixMojibake) : [])).filter((r) => r.some((c) => c.trim() !== ''));
 }

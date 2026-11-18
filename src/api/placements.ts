@@ -7,9 +7,10 @@ import { selectAllPages, selectAllInChunks, chunkIds } from './paging';
 import type { CellarWine } from '../types/wine';
 
 // A single placement of some of a wine's bottles in ONE spot — a rack slot, a
-// bin cell, or an alt cellar (optionally in a case). Introduced by the unified
-// home-storage model (migration 103). During Phase 2 these are kept in sync with
-// the legacy fields by DB triggers (migration 104); Phase 3 writes them directly.
+// bin cell, or an alt cellar (optionally in a case). The one record of where a
+// bottle is (migration 103). Rack placements are mirrored from rack_slots by a
+// trigger; bin and alt-cellar placements are written by the app (migrations
+// 106 and 116). The legacy cellar_wines pointers are retired (migration 139).
 export interface CellarPlacement {
   id: string;
   cellar_wine_id: string;
@@ -95,12 +96,24 @@ export async function addLocationPlacement(
   }
 }
 
+// File many wines into alt cellars in one write — for wines that have no
+// placement there yet (a cellar import's new lines), so nothing needs merging.
+export async function insertLocationPlacements(
+  rows: { wineId: string; locationId: string; caseId: string | null; quantity: number }[],
+): Promise<void> {
+  if (!rows.length) return;
+  const { error } = await supabase.from('cellar_placements').insert(rows.map((r) => ({
+    cellar_wine_id: r.wineId, kind: 'location', quantity: r.quantity, storage_location_id: r.locationId, case_id: r.caseId,
+  })));
+  if (error) throw error;
+}
+
 // ---- App-managed 'bin' placements (Phase 4, mig 116) -----------------------
 
 // Add `quantity` bottles of a wine to ONE bin cell, merging into an existing
-// (wine, cell) bin placement rather than spawning a duplicate. This is how a
-// wine comes to sit in a bin now — NOT via cellar_wines.bin_cell_id.
+// (wine, cell) bin placement rather than spawning a duplicate.
 export async function addBinPlacement(wineId: string, cellId: string, quantity: number): Promise<void> {
+  assertCanEditCellar();
   const { data: existing, error: selErr } = await supabase
     .from('cellar_placements')
     .select('id, quantity')
@@ -111,11 +124,13 @@ export async function addBinPlacement(wineId: string, cellId: string, quantity: 
     .maybeSingle();
   if (selErr) throw selErr;
   if (existing) {
-    const { error } = await supabase
+    const { data: changed, error } = await supabase
       .from('cellar_placements')
       .update({ quantity: (existing.quantity ?? 0) + quantity })
-      .eq('id', existing.id);
+      .eq('id', existing.id)
+      .select('id');
     if (error) throw error;
+    if (!changed?.length) throw refusedWriteError();
   } else {
     const { error } = await supabase.from('cellar_placements').insert({
       cellar_wine_id: wineId, kind: 'bin', quantity, bin_cell_id: cellId,
@@ -124,62 +139,57 @@ export async function addBinPlacement(wineId: string, cellId: string, quantity: 
   }
 }
 
-// The label thumbnail of the MOST-RECENTLY-PLACED live wine in each home storage
-// unit — rack/fridge (by rack_id), bin (by bin_cell_id → bin), alt cellar (by
-// storage_location_id) — so the Cellar carousel tiles can show the last wine
-// added there (and refresh as new wines land). Newest placement first; first
-// non-empty thumbnail per location wins. RLS scopes rows to the user.
 // A storage tile's collage item: the wine's own label photo, or (no photo) its
 // identity so the tile can show a web-found label.
 export type LocationCollageItem = string | { producer: string | null; wineName: string | null };
 type CollageMap = Record<string, LocationCollageItem[]>;
 
-// Up to four different wines per home-storage location (newest first), for the
-// Cellar tab's collage tiles.
-export async function fetchLatestLocationThumbs(userId: string): Promise<{
+// Newest placements read per unit: enough to find four different wines unless
+// one wine fills a rack's newest slots.
+const COLLAGE_ROWS = 24;
+
+// Up to four different live wines per home-storage unit, newest placement
+// first, for the Cellar tab's collage tiles. One small query per unit, so a
+// large external import (never shown there) isn't read at all.
+export async function fetchLatestLocationThumbs(units: { rackIds: string[]; binIds: string[]; locationIds: string[] }): Promise<{
   rack: CollageMap; bin: CollageMap; location: CollageMap;
 }> {
-  const result = { rack: {} as CollageMap, bin: {} as CollageMap, location: {} as CollageMap };
-  const seen = new Set<string>();
-  const add = (map: CollageMap, unitId: string, w: any) => {
-    const k = `${unitId}:${w.id}`;
-    if (seen.has(k)) return;
-    const list = (map[unitId] ??= []);
-    if (list.length >= 4) return;
-    seen.add(k);
-    list.push(w.label_image_path ? w.label_image_path : { producer: w.producer ?? null, wineName: w.wine_name ?? null });
-  };
-  // bin cell → bin id (so a bin placement can resolve to its unit).
-  const { data: binRows } = await supabase.from('wine_racks').select('id').eq('user_id', cellarOwner(userId)).eq('storage_type', 'bin');
-  const binIds = (binRows ?? []).map((b) => b.id);
-  const cellToBin: Record<string, string> = {};
-  if (binIds.length) {
-    // Best-effort (as before): a failed cell read just means no bin thumbs.
-    try {
-      const cells = await selectAllInChunks<{ id: string; bin_id: string }>(binIds, (chunk, from, to) =>
-        supabase.from('bin_cells').select('id, bin_id').in('bin_id', chunk)
-          .order('id', { ascending: true }).range(from, to) as any);
-      for (const c of cells) cellToBin[c.id] = c.bin_id;
-    } catch { /* tolerated */ }
-  }
-  // Paged — a big imported cellar has far more than 1000 placements. Ordered
-  // newest-first with id as a tiebreak so pages are stable.
-  const data = await selectAllPages<any>((from, to) =>
-    supabase
-      .from('cellar_placements')
-      .select('kind, rack_id, bin_cell_id, storage_location_id, created_at, wine:cellar_wines!inner(id, producer, wine_name, label_image_path, archived_at)')
+  const newest = async (filter: (q: any) => any): Promise<any[]> => {
+    const { data, error } = await filter(supabase.from('cellar_placements')
+      .select('id, created_at, wine:cellar_wines!inner(id, producer, wine_name, label_image_path, archived_at)'))
+      .is('wine.archived_at', null)
       .order('created_at', { ascending: false })
       .order('id', { ascending: true })
-      .range(from, to) as any);
-  for (const p of data) {
-    const w = p.wine;
-    if (!w || w.archived_at) continue;
-    if (!w.label_image_path && !w.producer && !w.wine_name) continue;
-    if (p.kind === 'rack' && p.rack_id) add(result.rack, p.rack_id, w);
-    else if (p.kind === 'bin' && p.bin_cell_id) { const b = cellToBin[p.bin_cell_id]; if (b) add(result.bin, b, w); }
-    else if (p.kind === 'location' && p.storage_location_id) add(result.location, p.storage_location_id, w);
-  }
-  return result;
+      .limit(COLLAGE_ROWS);
+    if (error) throw error;
+    return data ?? [];
+  };
+  const collage = (rows: any[]): LocationCollageItem[] => {
+    const seen = new Set<string>();
+    const out: LocationCollageItem[] = [];
+    for (const { wine: w } of rows) {
+      if (out.length >= 4 || seen.has(w.id) || (!w.label_image_path && !w.producer && !w.wine_name)) continue;
+      seen.add(w.id);
+      out.push(w.label_image_path || { producer: w.producer ?? null, wineName: w.wine_name ?? null });
+    }
+    return out;
+  };
+  const cellsByBin = new Map<string, string[]>();
+  const cells = await selectAllInChunks<{ id: string; bin_id: string }>(units.binIds, (chunk, from, to) =>
+    supabase.from('bin_cells').select('id, bin_id').in('bin_id', chunk)
+      .order('id', { ascending: true }).range(from, to) as any);
+  for (const c of cells) cellsByBin.set(c.bin_id, [...(cellsByBin.get(c.bin_id) ?? []), c.id]);
+
+  const tiles = async (ids: string[], filter: (id: string) => (q: any) => any): Promise<CollageMap> => {
+    const lists = await Promise.all(ids.map((id) => newest(filter(id))));
+    return Object.fromEntries(ids.map((id, i) => [id, collage(lists[i])]));
+  };
+  const [rack, bin, location] = await Promise.all([
+    tiles(units.rackIds, (id) => (q) => q.eq('kind', 'rack').eq('rack_id', id)),
+    tiles(units.binIds.filter((id) => cellsByBin.has(id)), (id) => (q) => q.eq('kind', 'bin').in('bin_cell_id', cellsByBin.get(id)!)),
+    tiles(units.locationIds, (id) => (q) => q.eq('kind', 'location').eq('storage_location_id', id)),
+  ]);
+  return { rack, bin, location };
 }
 
 // Every bin placement sitting in any of these cells — for the lattice/cell reads.
@@ -213,8 +223,10 @@ export async function releaseFromBinCell(wineId: string, cellId: string, n: numb
 
 // Delete every bin placement in a set of cells (empty cell / empty bin). The
 // wines survive loose (their quantity is untouched — only the cell membership
-// goes). Returns nothing; callers invalidate.
+// goes). An empty cell legitimately deletes nothing, so only the access check
+// can tell a refused write apart here.
 export async function clearBinCellPlacements(cellIds: string[]): Promise<void> {
+  assertCanEditCellar();
   for (const chunk of chunkIds(cellIds)) {
     const { error } = await supabase
       .from('cellar_placements')
@@ -228,13 +240,16 @@ export async function clearBinCellPlacements(cellIds: string[]): Promise<void> {
 // Remove ONE wine's placement from ONE cell entirely (the row's bottles stay in
 // the cellar, loose). Mirrors "remove from location".
 export async function removeWineFromBinCell(wineId: string, cellId: string): Promise<void> {
-  const { error } = await supabase
+  assertCanEditCellar();
+  const { data, error } = await supabase
     .from('cellar_placements')
     .delete()
     .eq('kind', 'bin')
     .eq('cellar_wine_id', wineId)
-    .eq('bin_cell_id', cellId);
+    .eq('bin_cell_id', cellId)
+    .select('id');
   if (error) throw error;
+  if (!data?.length) throw refusedWriteError();
 }
 
 // Free `n` bottles of a wine FROM wherever they're stored: rack/fridge slots,
@@ -352,34 +367,22 @@ export async function fetchLocationPlacementRows(locationId: string): Promise<Lo
 }
 
 // File an existing alt-cellar placement into a case (or out of one with null).
-// Alt-cellar case membership lives on the placement, not the legacy
-// cellar_wines.case_id, so "Add from This Cellar List" sets it here.
+// Case membership lives on the placement.
 export async function setPlacementCase(placementId: string, caseId: string | null): Promise<void> {
-  const { error } = await supabase
+  assertCanEditCellar();
+  const { data, error } = await supabase
     .from('cellar_placements')
     .update({ case_id: caseId })
-    .eq('id', placementId);
+    .eq('id', placementId)
+    .select('id');
   if (error) throw error;
-}
-
-// Delete ALL of a wine's alt-cellar (location) placements — used when a wine
-// leaves every alt cellar at once (e.g. a whole-wine move into a rack/fridge).
-// The DB no longer mirrors the legacy storage_location_id into these rows
-// (migration 106), so they must be cleared explicitly or the wine lingers as a
-// ghost line in the alt cellar it left.
-export async function clearLocationPlacements(wineId: string): Promise<void> {
-  const { error } = await supabase
-    .from('cellar_placements')
-    .delete()
-    .eq('cellar_wine_id', wineId)
-    .eq('kind', 'location');
-  if (error) throw error;
+  if (!data?.length) throw refusedWriteError();
 }
 
 // Which of these storage_location ids are EXTERNAL (offsite/imported) cellars.
 // External cellars are never robbed by a move of home bottles unless they're the
 // only place the wine is.
-async function fetchExternalLocationIds(locationIds: (string | null | undefined)[]): Promise<Set<string>> {
+export async function fetchExternalLocationIds(locationIds: (string | null | undefined)[]): Promise<Set<string>> {
   const out = new Set<string>();
   for (const chunk of chunkIds(locationIds)) {
     const { data, error } = await supabase
@@ -502,6 +505,8 @@ async function addToWineQuantity(wineId: string, by: number): Promise<void> {
 // the history-free twin is folded INTO the source instead, and if both carry
 // history the bottles stay on the source row (two lines, nothing lost).
 // `fromUnit`: the unit the move was started from — its bottles go first.
+// Returns the id of the cellar line the bottles landed on (the source, or the
+// twin they merged into — the source row may no longer exist).
 export async function moveBottlesToLocation(
   source: {
     id: string; producer: string | null; wine_name: string | null;
@@ -510,7 +515,7 @@ export async function moveBottlesToLocation(
   destLocationId: string,
   count: number,
   opts?: { fromUnit?: StorageUnitRef },
-): Promise<void> {
+): Promise<string> {
   assertCanEditCellar();
   // Authoritative quantity from the DB (the caller's copy may be stale).
   const { data: srcRow, error: srcErr } = await supabase
@@ -553,18 +558,13 @@ export async function moveBottlesToLocation(
   // 2. Merge into an existing line for this wine identity in the destination if
   //    one exists; otherwise place the bottles on the source row itself.
   const here = await fetchLocationPlacementRows(destLocationId);
-  const sameIdentity = (r: any) =>
-    (r.producer ?? '') === (source.producer ?? '') &&
-    (r.wine_name ?? '') === (source.wine_name ?? '') &&
-    (r.vintage ?? null) === (source.vintage ?? null) &&
-    (r.bottle_size_ml ?? 750) === (source.bottle_size_ml ?? 750);
-  const twin = here.find((r) => r.id !== source.id && sameIdentity(r));
+  const twin = here.find((r) => r.id !== source.id && sameIdentity(r, source));
 
   if (!twin) {
     // First bottles of this wine here — keep them on the source row; we only
     // relocated existing bottles, so the row's total is unchanged.
     await addLocationPlacement(source.id, destLocationId, null, n);
-    return;
+    return source.id;
   }
 
   const srcQty = srcQtyNow - n;
@@ -573,7 +573,7 @@ export async function moveBottlesToLocation(
     await addLocationPlacement(twin.id, destLocationId, null, n);
     await addToWineQuantity(twin.id, n);
     await setWineQuantity(source.id, srcQty);
-    return;
+    return twin.id;
   }
 
   // Whole-row move: the source would empty. Deleting it cascades away its removal
@@ -582,54 +582,25 @@ export async function moveBottlesToLocation(
     await addLocationPlacement(twin.id, destLocationId, null, n);
     await addToWineQuantity(twin.id, n);
     await deleteCellarWine(source.id);
-    return;
+    return twin.id;
   }
   // Source has history: land the bottles on the source row, then fold the twin
   // INTO it when the twin is history-free (one consolidated line, history kept).
   // If both carry history, leave two lines rather than lose anything.
   await addLocationPlacement(source.id, destLocationId, null, n);
   if (!(await wineRowHasHistory(twin.id))) await absorbWineRow(source.id, twin.id);
+  return source.id;
 }
 
-// Heal wines left in the legacy-only state by an OLD move: a row that names a
-// home alt cellar in `storage_location_id` but has NO matching 'location'
-// placement. Since migration 106 the DB stopped mirroring that legacy field, so
-// such a bottle is invisible in the alt cellar AND shows as a split line in the
-// Full Cellar List (the "moved to fridge and back, now 1 + 3" bug). Each orphan
-// is folded back via moveBottlesToLocation, which merges it onto the wine's
-// existing line in that cellar (consolidating the split to one line, correct
-// count) and drops the leftover row.
-//
-// Deliberately narrow + idempotent: only ACTIVE rows that (a) point
-// at one of the given HOME location ids, (b) aren't awaiting a unit slot, and
-// (c) have no location placement yet. External/imported cellars are excluded by
-// the caller so a big import is never bulk-rewritten. Returns how many it healed.
-export async function reconcileLegacyLocationWines(
-  userId: string, homeLocationIds: string[],
-): Promise<number> {
-  const homeSet = new Set(homeLocationIds.filter(Boolean));
-  if (homeSet.size === 0 || !canEditCellar()) return 0;
-  const rows = await selectAllPages<any>((from, to) =>
-    supabase
-      .from('cellar_wines')
-      .select('id, producer, wine_name, vintage, bottle_size_ml, quantity, storage_location_id')
-      .eq('user_id', cellarOwner(userId))
-      .is('archived_at', null)
-      .is('awaiting_placement_unit_id', null)
-      .not('storage_location_id', 'is', null)
-      .order('id', { ascending: true })
-      .range(from, to) as any);
-  const candidates = rows.filter((r: any) => homeSet.has(r.storage_location_id));
-  if (candidates.length === 0) return 0;
-  const placed = await fetchPlacementsForWines(candidates.map((r: any) => r.id));
-  const hasLoc = new Set(placed.filter((p) => p.kind === 'location').map((p) => p.cellar_wine_id));
-  let healed = 0;
-  for (const r of candidates) {
-    if (hasLoc.has(r.id)) continue; // already has a real placement — leave it
-    await moveBottlesToLocation(r as any, r.storage_location_id, r.quantity ?? 1);
-    healed++;
-  }
-  return healed;
+type LineIdentity = { producer?: string | null; wine_name?: string | null; vintage?: string | null; bottle_size_ml?: number | null };
+
+// Two cellar lines are the same wine in the same format — so bottles moved into
+// a cellar that already holds that wine join its line there.
+export function sameIdentity(a: LineIdentity, b: LineIdentity): boolean {
+  return (a.producer ?? '') === (b.producer ?? '')
+    && (a.wine_name ?? '') === (b.wine_name ?? '')
+    && (a.vintage ?? null) === (b.vintage ?? null)
+    && (a.bottle_size_ml ?? 750) === (b.bottle_size_ml ?? 750);
 }
 
 // Heal an impossible state: a wine whose `quantity` is BELOW the number of bottles
@@ -694,95 +665,87 @@ export async function trimOrDeleteWineOnUnitDelete(wineId: string, countHere: nu
   if (elsewhere <= 0 && countHere >= qty) {
     await deleteCellarWine(wineId);
   } else {
-    const remaining = Math.max(elsewhere, qty - countHere, 1);
-    await supabase.from('cellar_wines').update({ quantity: remaining }).eq('id', wineId);
+    await setWineQuantity(wineId, Math.max(elsewhere, qty - countHere, 1));
   }
 }
 
-// ---- Deleting a storage location (long-press in the Location filter) ---------
+// ---- Deleting an alt cellar --------------------------------------------------
 
 // "Delete location & move wines to Unplaced Bottles": remove the location but
-// keep every bottle in the cellar. The DB cascades this location's placement
-// rows on delete (so those bottles become unplaced) and SET-NULLs the legacy
-// storage_location_id pointer — so this is simply the location delete.
+// keep every bottle in the cellar. The DB cascades this location's placements
+// on delete, so those bottles simply become unplaced.
 export async function deleteLocationKeepWines(locationId: string): Promise<void> {
   await deleteStorageLocation(locationId);
 }
 
+// One live wine with bottles in an alt cellar: how many are there, how many are
+// placed elsewhere, its whole quantity and its reviews (which go if it does).
+export type LocationWine = { id: string; here: number; elsewhere: number; quantity: number; row: Pick<CellarWine, 'review_entries'> };
+
+// Deleting the cellar's contents deletes a wine outright when every bottle of
+// it is here; otherwise it keeps its bottles elsewhere.
+export function goesWithLocation(w: LocationWine): boolean {
+  return w.elsewhere <= 0 && w.quantity - w.here <= 0;
+}
+
+// The live wines filed in an alt cellar, from its placements. An archived
+// wine's stray placement isn't a bottle there, so it's left out (it just goes
+// with the location).
+export async function fetchLocationWines(locationId: string): Promise<LocationWine[]> {
+  const hereByWine = new Map<string, number>();
+  for (const p of await fetchPlacementsForLocation(locationId)) {
+    hereByWine.set(p.cellar_wine_id, (hereByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+  }
+  const ids = [...hereByWine.keys()];
+  const [rows, placements] = await Promise.all([
+    selectAllInChunks<{ id: string; quantity: number; archived_at: string | null; review_entries: CellarWine['review_entries'] }>(ids, (chunk, from, to) =>
+      supabase.from('cellar_wines').select('id, quantity, archived_at, review_entries').in('id', chunk)
+        .order('id', { ascending: true }).range(from, to) as any),
+    fetchPlacementsForWines(ids),
+  ]);
+  const elsewhere = new Map<string, number>();
+  for (const p of placements) {
+    if (p.storage_location_id !== locationId) elsewhere.set(p.cellar_wine_id, (elsewhere.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+  }
+  return rows.filter((r) => !r.archived_at).map((r) => ({
+    id: r.id, here: hereByWine.get(r.id) ?? 0, elsewhere: elsewhere.get(r.id) ?? 0, quantity: r.quantity ?? 0, row: r,
+  }));
+}
+
 // "Delete location & wines": remove the location AND the bottles filed in it.
-// A wine that lives ONLY here is deleted outright; a wine that also lives
-// elsewhere (e.g. an import that MERGED into an existing cellar wine, so it has
-// bottles at home too) keeps its other bottles — we only subtract the count that
-// was in this location. Returns how many whole wines were deleted.
+// A wine that lives ONLY here is deleted outright; one that also lives
+// elsewhere (e.g. an import that merged into a wine already at home) keeps its
+// other bottles. Pass `wines` when they've just been read for the
+// confirmation. Returns how many whole wines were deleted.
 export async function deleteLocationAndWines(
   locationId: string,
   // Fires as each wine is processed so a big import's delete shows real progress
   // (deleting ~1000 rows one-by-one is slow; without this the screen looks frozen).
   onProgress?: (done: number, total: number) => void,
+  wines?: LocationWine[],
 ): Promise<{ deletedWines: number }> {
   assertCanEditCellar();
-  // Bottles filed in this location, summed per wine.
-  const here = await fetchPlacementsForLocation(locationId);
-  const hereByWine = new Map<string, number>();
-  for (const p of here) {
-    hereByWine.set(p.cellar_wine_id, (hereByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
-  }
-  // Also catch wines pointed here only via the legacy column (no placement row):
-  // treat the whole wine as living here.
-  const legacyRows = await selectAllPages<{ id: string; quantity: number }>((from, to) =>
-    supabase.from('cellar_wines').select('id, quantity')
-      .eq('storage_location_id', locationId)
-      // Archive records are history, not bottles in this location.
-      .is('archived_at', null)
-      .order('id', { ascending: true })
-      .range(from, to) as any);
-  for (const w of legacyRows) {
-    if (!hereByWine.has(w.id)) hereByWine.set(w.id, w.quantity ?? 0);
-  }
-
-  const wineIds = [...hereByWine.keys()];
+  const list = wines ?? await fetchLocationWines(locationId);
   let deletedWines = 0;
-  if (wineIds.length > 0) {
-    // Placements elsewhere (any spot that isn't this location) + current totals.
-    const allPlacements = await fetchPlacementsForWines(wineIds);
-    const otherByWine = new Map<string, number>();
-    for (const p of allPlacements) {
-      if (p.storage_location_id === locationId) continue;
-      otherByWine.set(p.cellar_wine_id, (otherByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+  onProgress?.(0, list.length);
+  for (const [i, w] of list.entries()) {
+    if (goesWithLocation(w)) {
+      // Its placements cascade with it.
+      await deleteCellarWine(w.id);
+      deletedWines += 1;
+    } else {
+      // Free its bottles here before lowering the count: the quantity trigger
+      // (migration 107) trims alt-cellar placements newest first, which could
+      // otherwise take them from another cellar. Never below what's placed
+      // elsewhere.
+      const { error } = await supabase.from('cellar_placements').delete()
+        .eq('cellar_wine_id', w.id).eq('storage_location_id', locationId);
+      if (error) throw error;
+      await setWineQuantity(w.id, Math.max(w.elsewhere, w.quantity - w.here, 1));
     }
-    const wineRows = await selectAllInChunks<{ id: string; quantity: number; archived_at: string | null }>(wineIds, (chunk, from, to) =>
-      supabase.from('cellar_wines').select('id, quantity, archived_at').in('id', chunk)
-        .order('id', { ascending: true }).range(from, to) as any);
-    const qtyById = new Map(wineRows.map((w) => [w.id, w.quantity ?? 0]));
-    // An archive record is history, not a bottle here: a stray placement of one
-    // just goes with the location, and the record stays.
-    const archivedIds = new Set(wineRows.filter((w) => w.archived_at).map((w) => w.id));
-
-    let processed = 0;
-    onProgress?.(0, wineIds.length);
-    for (const id of wineIds) {
-      if (archivedIds.has(id)) { onProgress?.(++processed, wineIds.length); continue; }
-      const inHere = hereByWine.get(id) ?? 0;
-      const total = qtyById.get(id) ?? 0;
-      const otherPlaced = otherByWine.get(id) ?? 0;
-      const remaining = total - inHere;
-      if (otherPlaced <= 0 && remaining <= 0) {
-        // Whole wine lives here → delete it (its placements cascade).
-        await deleteCellarWine(id);
-        deletedWines += 1;
-      } else {
-        // Wine also has bottles elsewhere → keep it, drop just the here-count.
-        // Its placement rows in this location cascade when the location is
-        // deleted below.
-        // Never below what's still placed elsewhere (mirrors trimOrDeleteWineOnUnitDelete).
-        await setWineQuantity(id, Math.max(otherPlaced, remaining, 1));
-      }
-      onProgress?.(++processed, wineIds.length);
-    }
+    onProgress?.(i + 1, list.length);
   }
-
-  // Remove the location itself — cascades any remaining placements + storage
-  // cases + location filters, and nulls the legacy pointer on kept wines.
+  // Cascades any remaining placements, cases and location filters.
   await deleteStorageLocation(locationId);
   return { deletedWines };
 }

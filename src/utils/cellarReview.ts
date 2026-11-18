@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import { getCellarContext } from '../api/cellarContext';
 import type { ReviewEntry, CellarWine } from '../types/wine';
 
 // A cellar bottle's review is a list of dated entries (migration 080), stored
@@ -28,8 +29,26 @@ export function buildEntry(input: ReviewEntryInput): ReviewEntry {
   };
 }
 
-export function entriesOf(wine: CellarWine | null | undefined): ReviewEntry[] {
+export function entriesOf(wine: Pick<CellarWine, 'review_entries'> | null | undefined): ReviewEntry[] {
   return wine && Array.isArray(wine.review_entries) ? wine.review_entries : [];
+}
+
+// A bottle's reviews and personal notes belong to the cellar's owner. A member
+// browsing someone else's shared cellar sees the bottles but not those, and
+// reviews a wine into their own Wine Reviews instead.
+export function isSomeoneElsesBottle(wine: Pick<CellarWine, 'user_id'>): boolean {
+  const me = getCellarContext().userId;
+  return !!me && wine.user_id !== me;
+}
+
+// The review entries this user may see on a bottle (none on someone else's).
+export function visibleEntries(wine: Pick<CellarWine, 'user_id' | 'review_entries'>): ReviewEntry[] {
+  return isSomeoneElsesBottle(wine) ? [] : entriesOf(wine);
+}
+
+// The bottle's review score as this user may see it (null on someone else's).
+export function visibleReviewScore(wine: Pick<CellarWine, 'user_id' | 'review_score'>): number | null {
+  return isSomeoneElsesBottle(wine) ? null : wine.review_score;
 }
 
 // Comparable timestamp for a drinking date. Bare yyyy-mm-dd dates are read at

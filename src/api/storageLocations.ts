@@ -1,16 +1,17 @@
 import { supabase } from './supabase';
-import { cellarOwner, refusedWriteError } from './cellarContext';
+import { cellarOwner, assertCanEditCellar, refusedWriteError } from './cellarContext';
 import { evictCachedLabel } from './labelImageCache';
-import { selectAllPages, selectAllInChunks, chunkIds } from './paging';
+import { selectAllInChunks } from './paging';
 import type { StorageLocation, StorageCase } from '../types/wine';
 
-// Home storage locations (migration 064) — non-grid spaces the user photographs
-// and fills with a loose list of wines via cellar_wines.storage_location_id.
-// Photos live in the wine-labels bucket; display via useLabelImageUrl.
+// Alt cellars (migration 064): non-grid spaces the user photographs — at home,
+// or external (offsite, migration 097). Which wines are in one is recorded by
+// 'location' placements in cellar_placements. Photos live in the wine-labels
+// bucket; display via useLabelImageUrl.
 
 const LIST_COLS = 'id, user_id, name, photo_path, created_at, is_external';
 
-// All of a user's home storage locations, newest last, each with a wine count.
+// All of the cellar's alt cellars, oldest first.
 export async function fetchStorageLocations(userId: string): Promise<StorageLocation[]> {
   const { data, error } = await supabase
     .from('storage_locations')
@@ -18,35 +19,23 @@ export async function fetchStorageLocations(userId: string): Promise<StorageLoca
     .eq('user_id', cellarOwner(userId))
     .order('created_at', { ascending: true });
   if (error) throw error;
-  const locs = (data ?? []) as any[];
-  // Bottle counts come from location PLACEMENTS now (a wine can be split across a
-  // rack and an alt cellar), excluding archived wines.
-  // Paged: an imported external cellar alone can hold thousands of placements,
-  // well past PostgREST's 1000-row cap (which silently undercounted).
-  const placements = await selectAllPages<any>((from, to) =>
-    supabase
-      .from('cellar_placements')
-      .select('id, quantity, storage_location_id, cellar_wines(archived_at)')
+  return ((data ?? []) as StorageLocation[]).map((r) => ({ ...r, is_external: !!r.is_external }));
+}
+
+// Bottles of live wines in each of these alt cellars. Asked for home cellars
+// only (the Cellar tab's tiles), so a large external import isn't paged through.
+export async function fetchLocationBottleCounts(locationIds: string[]): Promise<Record<string, number>> {
+  const rows = await selectAllInChunks<{ quantity: number; storage_location_id: string }>(locationIds, (chunk, from, to) =>
+    supabase.from('cellar_placements')
+      .select('id, quantity, storage_location_id, wine:cellar_wines!inner(archived_at)')
       .eq('kind', 'location')
-      .not('storage_location_id', 'is', null)
+      .in('storage_location_id', chunk)
+      .is('wine.archived_at', null)
       .order('id', { ascending: true })
       .range(from, to) as any);
-  const countByLoc = new Map<string, number>();
-  for (const p of placements) {
-    const w = p.cellar_wines;
-    if (w?.archived_at) continue;
-    if (!p.storage_location_id) continue;
-    countByLoc.set(p.storage_location_id, (countByLoc.get(p.storage_location_id) ?? 0) + (p.quantity ?? 0));
-  }
-  return locs.map((r) => ({
-    id: r.id,
-    user_id: r.user_id,
-    name: r.name,
-    photo_path: r.photo_path,
-    created_at: r.created_at,
-    is_external: !!r.is_external,
-    wineCount: countByLoc.get(r.id) ?? 0,
-  }));
+  const counts: Record<string, number> = {};
+  for (const r of rows) counts[r.storage_location_id] = (counts[r.storage_location_id] ?? 0) + (r.quantity ?? 0);
+  return counts;
 }
 
 export async function fetchStorageLocation(id: string): Promise<StorageLocation | null> {
@@ -69,23 +58,25 @@ export async function createStorageLocation(userId: string, name: string, isExte
   return data as StorageLocation;
 }
 
-// Toggle an Alt Cellar between at-home and external.
-export async function setStorageLocationExternal(id: string, isExternal: boolean): Promise<void> {
-  const { error } = await supabase
-    .from('storage_locations')
-    .update({ is_external: isExternal })
-    .eq('id', id);
+// Update one alt cellar, failing loudly when RLS refuses (no row changes).
+async function updateLocation(id: string, patch: Record<string, unknown>): Promise<void> {
+  assertCanEditCellar();
+  const { data, error } = await supabase.from('storage_locations').update(patch).eq('id', id).select('id');
   if (error) throw error;
+  if (!data?.length) throw refusedWriteError();
+}
+
+// Relabel an Alt Cellar as at home or external. Its bottles stay put.
+export async function setStorageLocationExternal(id: string, isExternal: boolean): Promise<void> {
+  await updateLocation(id, { is_external: isExternal });
 }
 
 export async function setStorageLocationPhoto(id: string, photoPath: string): Promise<void> {
-  const { error } = await supabase.from('storage_locations').update({ photo_path: photoPath }).eq('id', id);
-  if (error) throw error;
+  await updateLocation(id, { photo_path: photoPath });
 }
 
 export async function renameStorageLocation(id: string, name: string): Promise<void> {
-  const { error } = await supabase.from('storage_locations').update({ name: name.trim() || 'My Location' }).eq('id', id);
-  if (error) throw error;
+  await updateLocation(id, { name: name.trim() || 'My Location' });
 }
 
 export async function deleteStorageLocation(id: string): Promise<void> {
@@ -137,6 +128,19 @@ export async function createStorageCase(
   return data as StorageCase;
 }
 
+// Many cases in one write (a cellar import). The caller picks each case's id,
+// so it can file bottles into them without relying on the returned order.
+export async function createStorageCases(
+  userId: string,
+  cases: { id: string; storageLocationId: string; name: string }[],
+): Promise<void> {
+  if (!cases.length) return;
+  const { error } = await supabase.from('storage_cases').insert(cases.map((c) => ({
+    id: c.id, user_id: cellarOwner(userId), storage_location_id: c.storageLocationId, name: c.name.trim() || 'Case',
+  })));
+  if (error) throw error;
+}
+
 // All cases in a location (oldest first, so the list order is stable).
 export async function fetchStorageLocationCases(locationId: string): Promise<StorageCase[]> {
   const { data, error } = await supabase
@@ -153,15 +157,19 @@ export async function updateStorageCase(id: string, updates: { name?: string; no
   if (updates.name !== undefined) patch.name = updates.name.trim() || 'Case';
   if (updates.note !== undefined) patch.note = updates.note?.trim() || null;
   if (Object.keys(patch).length === 0) return;
-  const { error } = await supabase.from('storage_cases').update(patch).eq('id', id);
+  assertCanEditCellar();
+  const { data, error } = await supabase.from('storage_cases').update(patch).eq('id', id).select('id');
   if (error) throw error;
+  if (!data?.length) throw refusedWriteError();
 }
 
-// Dissolve a case: its wines fall back to loose bottles (case_id → null via the
-// FK's ON DELETE SET NULL) but stay in the location.
+// Dissolve a case: its bottles stay in the location, loose (the placements'
+// case_id is set null by the FK).
 export async function deleteStorageCase(id: string): Promise<void> {
-  const { error } = await supabase.from('storage_cases').delete().eq('id', id);
+  assertCanEditCellar();
+  const { data, error } = await supabase.from('storage_cases').delete().eq('id', id).select('id');
   if (error) throw error;
+  if (!data?.length) throw refusedWriteError();
 }
 
 // Fetch specific cases by id (to resolve names for location placements).
@@ -171,37 +179,4 @@ export async function fetchStorageCasesByIds(ids: string[]): Promise<StorageCase
   return selectAllInChunks<StorageCase>(clean, (chunk, from, to) =>
     supabase.from('storage_cases').select(CASE_COLS).in('id', chunk)
       .order('id', { ascending: true }).range(from, to) as any);
-}
-
-// File (or unfile, with null) a wine into a case.
-export async function assignWineToCase(wineId: string, caseId: string | null): Promise<void> {
-  const { error } = await supabase.from('cellar_wines').update({ case_id: caseId }).eq('id', wineId);
-  if (error) throw error;
-}
-
-// Delete any case in this location that no longer holds a wine — so an emptied
-// case doesn't linger as a nameless orphan (still surfacing its old name in the
-// add-a-wine flow) after its bottles are removed, deleted, or archived.
-export async function deleteEmptyCasesForLocation(locationId: string): Promise<void> {
-  // Case membership now lives on cellar_placements (case_id), NOT cellar_wines —
-  // so a case is "empty" only when no PLACEMENT points at it. (Checking the old
-  // cellar_wines.case_id here would wrongly delete every case.)
-  const { data: cases, error } = await supabase
-    .from('storage_cases')
-    .select('id')
-    .eq('storage_location_id', locationId);
-  if (error) throw error;
-  const caseIds = (cases ?? []).map((c: any) => c.id as string);
-  if (caseIds.length === 0) return;
-  // Paged + chunked: a case-heavy imported cellar can exceed 1000 placements, and
-  // a truncated read would make a USED case look empty and delete it.
-  const used = await selectAllInChunks<{ case_id: string | null }>(caseIds, (chunk, from, to) =>
-    supabase.from('cellar_placements').select('id, case_id').in('case_id', chunk)
-      .order('id', { ascending: true }).range(from, to) as any);
-  const usedIds = new Set(used.map((p) => p.case_id).filter(Boolean));
-  const emptyIds = caseIds.filter((id) => !usedIds.has(id));
-  for (const chunk of chunkIds(emptyIds)) {
-    const { error: delErr } = await supabase.from('storage_cases').delete().in('id', chunk);
-    if (delErr) throw delErr;
-  }
 }

@@ -137,7 +137,7 @@ export default function ChosenWinesScreen() {
   // hold the owner's bottles, which aren't the user's to review here.
   const ownLive = useMemo(() => liveWines.filter((w) => w.user_id === userId), [liveWines, userId]);
   const ownArchived = useMemo(() => archivedWines.filter((w) => w.user_id === userId), [archivedWines, userId]);
-  const findBottle = (id: string) => liveWines.find((w) => w.id === id) ?? archivedWines.find((w) => w.id === id);
+  const findBottle = (id: string) => ownLive.find((w) => w.id === id) ?? ownArchived.find((w) => w.id === id);
 
   // ---- Arriving for one wine -------------------------------------------------
   // A deep link to a specific wine (a wine card, Wine Intel, a lineup, the

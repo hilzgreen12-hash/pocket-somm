@@ -22,6 +22,7 @@ import { recommendFromCellar } from '../api/cellarRecommend';
 import { supabase } from '../api/supabase';
 import { archiveBottles, ARCHIVE_NOTE_MAX } from '../services/archiveNight';
 import { releaseHomeBottles, releaseLeavingBottles } from '../services/moveBottles';
+import { rackRoomFor } from '../services/rackMoves';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import { rankWinesBySound, likelyProducerWines } from '../utils/soundAlike';
 import { findSameCellarWine } from '../utils/wineMatch';
@@ -63,6 +64,14 @@ function countWord(n: number): string {
 }
 function bottlesOf(n: number, label: string): string {
   return `${countWord(n)} ${n === 1 ? 'bottle' : 'bottles'} of ${label}`;
+}
+
+// Bottles sent to wait in a rack or fridge: how many of `n` it has free slots
+// for, and the sentence that says so when that's fewer (`rest` ends "the rest …").
+async function fitInRack(unitId: string, sizeMl: number, n: number, rest: string): Promise<{ fits: number; name: string; note: string }> {
+  const { free, name } = await rackRoomFor(unitId, sizeMl);
+  const fits = Math.min(n, free);
+  return { fits, name, note: fits < n && fits > 0 ? ` Only ${fits} of ${n} will fit in the ${name} — the rest ${rest}.` : '' };
 }
 
 // Keep the first candidate per distinct wine — the shared name key plus vintage
@@ -283,10 +292,6 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
         out.set(p.cellar_wine_id, (out.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
       }
     }
-    // Legacy filing straight onto the wine row (no placement): all of it is offsite.
-    for (const w of ws) {
-      if (!out.has(w.id) && w.storage_location_id && external.has(w.storage_location_id)) out.set(w.id, w.quantity ?? 0);
-    }
     return out;
   }
   const homeBottles = (w: CellarWine, external: Map<string, number>) => Math.max(0, (w.quantity ?? 0) - (external.get(w.id) ?? 0));
@@ -406,17 +411,20 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
         finish({ action: 'add', wine: p.wine, line: `Added. ${what}, waiting to be placed in Your Cellar List.`, viewLabel: 'View in Your Cellar List', viewRoute: '/cellar/list' });
         return;
       }
+      const isRack = dest.kind === 'unit' && !dest.isBin;
+      const fit = isRack ? await fitInRack(dest.id, wines.find((w) => w.id === p.id)?.bottle_size_ml ?? 750, p.count, 'stay in Your Cellar List') : null;
+      if (fit?.fits === 0) throw new Error(`There's no free slot in the ${fit.name} — choose another place, or leave them in Your Cellar List.`);
       if (dest.kind === 'location') await addLocationPlacement(p.id, dest.id, null, p.count);
       await updateCellarWine(p.id, { awaiting_placement: true, awaiting_placement_unit_id: dest.id });
       finish(
         {
           action: 'add', wine: p.wine,
-          line: dest.kind === 'location' ? `Added. ${what} ${p.count === 1 ? 'is' : 'are'} in your ${dest.name}.` : `Added. ${what}, ready to place in the ${dest.name}.`,
+          line: dest.kind === 'location' ? `Added. ${what} ${p.count === 1 ? 'is' : 'are'} in your ${dest.name}.` : `Added. ${what}, ready to place in the ${dest.name}.${fit?.note ?? ''}`,
           viewLabel: 'View the wine card', viewRoute: `/cellar/${p.id}`,
         },
         dest.kind === 'location'
           ? { route: `/cellar/storage-location/${dest.id}?placeWine=${p.id}` }
-          : dest.isBin ? { route: `/cellar/bin/${dest.id}` } : { route: `/cellar/rack/${dest.id}?placeWine=${p.id}&placeLimit=${p.count}`, push: true },
+          : dest.isBin ? { route: `/cellar/bin/${dest.id}` } : { route: `/cellar/rack/${dest.id}?placeWine=${p.id}&placeLimit=${fit?.fits ?? p.count}`, push: true },
       );
     } catch (err) {
       fail(err);
@@ -614,7 +622,7 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
     // they don't leave the cellar, just their spot.
     if (moveToCellarList) {
       await releaseHomeBottles(wine.id, count, externalIds, scope);
-      if (count >= wine.quantity) await updateCellarWine(wine.id, { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: false, awaiting_placement_unit_id: null });
+      if (count >= wine.quantity) await updateCellarWine(wine.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
       const from = movedFrom(before, await placesFor(wine));
       finish({ action: 'move', wine: title, line: `${bottlesOf(count, wineName(wine))} moved from ${from} to Your Cellar List.`, viewLabel: 'View in Your Cellar List', viewRoute: '/cellar/list' });
       return;
@@ -637,18 +645,22 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
 
     // To a rack / fridge / bin: free home bottles (never offsite), keep them on
     // the SAME row (one wine = one Cellar List line), and mark them awaiting
-    // placement there; the unit's screen opens so the user picks the spots.
-    const freed = await releaseHomeBottles(wine.id, count, externalIds, scope);
+    // placement there; the unit's screen opens so the user picks the spots. A
+    // rack or fridge takes only as many as it has free slots for.
+    const isBin = targetUnit?.storage_type === 'bin';
+    const fit = isBin ? null : await fitInRack(result.unitId, wine.bottle_size_ml ?? 750, count, 'stay where they are');
+    if (fit?.fits === 0) throw new Error(`There's no free slot in the ${fit.name}, so nothing has been moved.`);
+    const sending = fit?.fits ?? count;
+    const freed = await releaseHomeBottles(wine.id, sending, externalIds, scope);
     const looseBefore = before.filter((p) => p.key === 'loose' || p.key.startsWith('u:')).reduce((n, p) => n + p.count, 0);
-    const toPlace = Math.min(count, freed + looseBefore);
+    const toPlace = Math.min(sending, freed + looseBefore);
     await updateCellarWine(wine.id, { awaiting_placement: true, awaiting_placement_unit_id: result.unitId });
     const from = movedFrom(before, await placesFor(wine));
-    const isBin = targetUnit?.storage_type === 'bin';
     const unitRoute = isBin ? `/cellar/bin/${result.unitId}` : `/cellar/rack/${result.unitId}`;
     finish(
       {
         action: 'move', wine: title,
-        line: `${bottlesOf(toPlace, wineName(wine))} moved from ${from}, ready to place in the ${toName}.`,
+        line: `${bottlesOf(toPlace, wineName(wine))} moved from ${from}, ready to place in the ${toName}.${fit?.note ?? ''}`,
         viewLabel: `View the ${toName}`, viewRoute: unitRoute,
       },
       { route: isBin ? unitRoute : `${unitRoute}?placeWine=${wine.id}&placeLimit=${toPlace}`, push: true },
@@ -703,13 +715,17 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
     const unitId = result?.unitId ?? null;
     const locationId = result?.locationId ?? null;
     let addedId: string | null = null;
+    // A rack or fridge only takes as many new bottles as it has free slots for;
+    // with none free they wait in Your Cellar List instead.
+    const fit = unitId && targetUnit?.storage_type !== 'bin' ? await fitInRack(unitId, 750, count, 'stay in Your Cellar List') : null;
+    const waitUnitId = fit?.fits === 0 ? null : unitId;
 
     const twin = findSameCellarWine(wines, { producer: a.producer, wineName: name, region: a.region, vintage: a.vintage }, 750);
     const live = twin ? await getCellarWineById(twin.id) : null;
     if (live && !live.archived_at) {
       await updateCellarWine(live.id, {
         quantity: (live.quantity ?? 0) + count,
-        ...(unitId ? { awaiting_placement: true, awaiting_placement_unit_id: unitId } : {}),
+        ...(unitId ? { awaiting_placement: true, awaiting_placement_unit_id: waitUnitId } : {}),
       });
       addedId = live.id;
     } else {
@@ -750,12 +766,11 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
         is_favourite: false,
         label_favourite: false,
         bottle_size_ml: 750,
-        storage_location_id: null,
         // Into an alt cellar: filed there below as a placement. Into a rack /
         // fridge / bin: waiting for that unit (its screen opens to place them).
         // Otherwise loose, awaiting placement in the Cellar List.
         awaiting_placement: !locationId,
-        awaiting_placement_unit_id: unitId,
+        awaiting_placement_unit_id: waitUnitId,
       });
       addedId = row.id;
     }
@@ -780,18 +795,26 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
     const destLabel = targetUnit?.name ?? targetLocation?.name ?? locationName ?? 'this location';
     const caseName = addCaseId ? scopeCases.find((c) => c.id === addCaseId)?.name : null;
     const what = bottlesOf(count, label);
+    if (fit?.fits === 0) {
+      finish({
+        action: 'add', wine: title,
+        line: `Added. There's no free slot in the ${fit.name}, so ${what} ${count === 1 ? 'is' : 'are'} waiting to be placed in Your Cellar List.`,
+        viewLabel: 'View the wine card', viewRoute: `/cellar/${addedId}`,
+      });
+      return;
+    }
     finish(
       {
         action: 'add', wine: title,
         line: unitId
-          ? `Added. ${what}, ready to place in the ${destLabel}.`
+          ? `Added. ${what}, ready to place in the ${destLabel}.${fit?.note ?? ''}`
           : `Added. ${what} ${count === 1 ? 'is' : 'are'} in your ${destLabel}${caseName ? `, in ${caseName}` : ''}.`,
         viewLabel: 'View the wine card', viewRoute: `/cellar/${addedId}`,
       },
       // Rack / fridge / bin: open that unit to place the new bottles. Alt cellar
       // with no case named: open it at its "Where should this go?" prompt.
       unitId
-        ? { route: targetUnit?.storage_type === 'bin' ? `/cellar/bin/${unitId}` : `/cellar/rack/${unitId}?placeWine=${addedId}&placeLimit=${count}`, push: true }
+        ? { route: targetUnit?.storage_type === 'bin' ? `/cellar/bin/${unitId}` : `/cellar/rack/${unitId}?placeWine=${addedId}&placeLimit=${fit?.fits ?? count}`, push: true }
         : !addCaseId ? { route: `/cellar/storage-location/${locationId}?placeWine=${addedId}` } : undefined,
     );
   }
@@ -865,15 +888,13 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
         add(`l:${p.storage_location_id}`, loc?.name ?? 'Cellar', `/cellar/storage-location/${p.storage_location_id}?highlight=${w.id}`, n, { external: !!loc?.is_external });
       }
     }
-    // Bottles with no placement row: waiting to be placed in a rack/bin, filed
-    // the older way on the wine itself, or simply loose in the Cellar List.
+    // Bottles with no placement row: waiting to be placed in a rack/bin, or
+    // simply loose in the Cellar List.
     const placed = Array.from(out.values()).reduce((n, p) => n + p.count, 0);
     const rest = Math.max(0, (w.quantity ?? 0) - placed);
     if (rest > 0) {
       const unit = w.awaiting_placement_unit_id ? units.find((u) => u.id === w.awaiting_placement_unit_id) : null;
-      const loc = !unit && w.storage_location_id ? locations.find((l) => l.id === w.storage_location_id) : null;
       if (unit) add(`u:${unit.id}`, unit.name, unit.storage_type === 'bin' ? `/cellar/bin/${unit.id}?highlight=${w.id}` : `/cellar/rack/${unit.id}?placeWine=${w.id}&placeLimit=${rest}`, rest, { note: 'waiting to be placed' });
-      else if (loc) add(`l:${loc.id}`, loc.name, `/cellar/storage-location/${loc.id}?highlight=${w.id}`, rest, { external: loc.is_external });
       else add('loose', 'Your Cellar List', `/cellar/${w.id}`, rest, { note: 'not yet placed' });
     }
     return Array.from(out.values());

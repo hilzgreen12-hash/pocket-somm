@@ -1,7 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { setActiveCellar } from '../api/cellarContext';
+import { setActiveCellar, sharedCellarLabel } from '../api/cellarContext';
 import { useCellarContext } from '../hooks/useCellarContext';
-import { sharedCellarLabel } from './CellarSwitcher';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 

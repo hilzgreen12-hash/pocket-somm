@@ -9,6 +9,7 @@ import { inferCountry } from '../utils/wineCountry';
 import { baseRegionGroup } from '../utils/wineRegionGroup';
 import { groupWinesByIdentity } from '../utils/wineMatch';
 import { bottleValue } from '../utils/bottleValue';
+import { visibleReviewScore } from '../utils/cellarReview';
 import { isMissingIntel } from '../services/bulkIntel';
 
 // Filtering, grouping and sorting for Your Cellar List and Your Cellar Archive
@@ -207,8 +208,8 @@ export function useCellarListFilters(input: {
         case 'purch_asc':   return Number(a.purchase_price ?? Infinity) - Number(b.purchase_price ?? Infinity);
         case 'critic_desc': return (b.critic_score ?? -1) - (a.critic_score ?? -1);
         case 'critic_asc':  return (a.critic_score ?? Infinity) - (b.critic_score ?? Infinity);
-        case 'your_desc':   return (b.review_score ?? -1) - (a.review_score ?? -1);
-        case 'your_asc':    return (a.review_score ?? Infinity) - (b.review_score ?? Infinity);
+        case 'your_desc':   return (visibleReviewScore(b) ?? -1) - (visibleReviewScore(a) ?? -1);
+        case 'your_asc':    return (visibleReviewScore(a) ?? Infinity) - (visibleReviewScore(b) ?? Infinity);
         default:
           return (recent(b) - recent(a)) || (new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       }

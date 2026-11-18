@@ -11,8 +11,7 @@ import {
   fetchInvitesForMe, acceptCellarInvite, leaveOrDeclineCellar,
   type CellarMember, type CellarMemberRole,
 } from '../../src/api/cellarMembers';
-import { sharedCellarLabel } from '../../src/components/CellarSwitcher';
-import { setActiveCellar } from '../../src/api/cellarContext';
+import { setActiveCellar, sharedCellarLabel } from '../../src/api/cellarContext';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -105,7 +104,7 @@ export default function ShareCellarScreen() {
         {
           text: declining ? 'Decline' : 'Leave',
           style: 'destructive',
-          onPress: () => { void leaveOrDeclineCellar(inv.id).then(refresh).catch((e) => showAlert({ title: 'Something went wrong', body: e instanceof Error ? e.message : 'Please try again.' })); },
+          onPress: () => { void leaveOrDeclineCellar(inv).then(refresh).catch((e) => showAlert({ title: 'Something went wrong', body: e instanceof Error ? e.message : 'Please try again.' })); },
         },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -174,6 +173,9 @@ export default function ShareCellarScreen() {
                   returnKeyType="send"
                   onSubmitEditing={() => void sendInvite()}
                 />
+                {/* An invite only matches the exact email an account signs in
+                    with — Apple's "Hide My Email" gives a relay address. */}
+                <Text style={styles.roleHint}>Use the email they sign in with. Signed in with Apple? They'll find it in You → Your Settings.</Text>
                 <Text style={styles.fieldLabel}>Access</Text>
                 <View style={styles.roleRow}>
                   {(['edit', 'view'] as CellarMemberRole[]).map((r) => (

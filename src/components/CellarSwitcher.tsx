@@ -1,16 +1,8 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { setActiveCellar } from '../api/cellarContext';
+import { setActiveCellar, sharedCellarLabel } from '../api/cellarContext';
 import { useCellarContext } from '../hooks/useCellarContext';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
-
-const possessive = (name: string | null) => {
-  const n = (name ?? '').trim();
-  if (!n) return 'Shared Cellar';
-  const first = n.includes('@') ? n.split('@')[0] : n;
-  return `${first}${/s$/i.test(first) ? "'" : "'s"} Cellar`;
-};
-export const sharedCellarLabel = possessive;
 
 // "My Cellar | Hilary's Cellar" — only shown to someone who belongs to at least
 // one shared cellar. Selecting one switches every cellar screen to it.
@@ -19,7 +11,7 @@ export function CellarSwitcher() {
   if (ctx.shared.length === 0) return null;
   const options: { id: string | null; label: string }[] = [
     { id: null, label: 'My Cellar' },
-    ...ctx.shared.map((s) => ({ id: s.ownerId, label: possessive(s.ownerName) })),
+    ...ctx.shared.map((s) => ({ id: s.ownerId, label: sharedCellarLabel(s.ownerName) })),
   ];
   const active = ctx.shared.find((s) => s.ownerId === ctx.ownerId);
   return (

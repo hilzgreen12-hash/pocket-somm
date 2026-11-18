@@ -1,6 +1,6 @@
 import { parsePriceText } from '../utils/priceInput';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { updateCellarWine, stampPurchasePriceDate } from '../api/cellar';
 import { bottleSizeCl } from './BottleSizePicker';
@@ -15,19 +15,26 @@ function symbolFor(code: string): string {
   return CURRENCIES.find((c) => c.code === code.toUpperCase())?.symbol ?? code;
 }
 
+type ValueField = 'estimated_value' | 'purchase_price';
+
 interface Props {
   visible: boolean;
   title: string;
   subtitle: string;
   // Which value the user is entering. Estimated value is stamped as a
   // user-supplied source; purchase price just records the price.
-  field: 'estimated_value' | 'purchase_price';
+  field: ValueField;
   // Which value to PRE-FILL each input from when the sheet opens. Defaults to
   // `field`. Set it to seed from the OTHER value — e.g. "Input Current Values"
   // pre-fills the purchase inputs with each wine's current (estimated) value,
   // while still SAVING to purchase_price.
-  seedField?: 'estimated_value' | 'purchase_price';
+  seedField?: ValueField;
+  // Save pre-filled rows the user left as they were. Only for a sheet whose
+  // pre-fill IS the proposal ("Input Current Values"); otherwise an untouched
+  // row is not written, so reviewing an estimate doesn't confirm it.
+  saveUntouched?: boolean;
   wines: CellarWine[];
+  // The user's default currency, for rows with no other value to match.
   currency: string;
   // Optional gold prompt below the blurb to switch to entering the OTHER value
   // (e.g. "Input Current Values" from the purchase-price editor).
@@ -36,13 +43,24 @@ interface Props {
   onSaved: () => void;
 }
 
+// The currency a row's figure is entered and saved in: that of the wine's other
+// value when it has one, so purchase price and current value stay like-for-like
+// (Change Since Purchase only compares wines whose two values share a currency),
+// else the user's default. Each row shows its own symbol.
+function rowCurrency(w: CellarWine, field: ValueField, fallback: string): string {
+  if (field === 'estimated_value') return (w.purchase_price != null && w.purchase_price_currency) || fallback;
+  return (w.estimated_value != null && w.estimated_value_currency) || fallback;
+}
+
 // A list of wines (lineup-input style rows) each with a per-bottle value input,
 // so the user can fill in the values Vinster couldn't find — estimated current
-// value, or purchase price. Only rows with a positive number are written.
-export function WineValueEditorModal({ visible, title, subtitle, field, seedField, wines, currency, altAction, onClose, onSaved }: Props) {
+// value, or purchase price. Only rows with a positive number the user entered
+// or changed are written.
+export function WineValueEditorModal({ visible, title, subtitle, field, seedField, saveUntouched, wines, currency, altAction, onClose, onSaved }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const sym = symbolFor(currency);
+  // What each input was pre-filled with, to tell the rows the user changed.
+  const seededRef = useRef<Record<string, string>>({});
 
   // Seed each input with the wine's CURRENT value for this field when the sheet
   // opens (empty for "missing value" wines, the existing estimate for a review),
@@ -52,16 +70,15 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
   const seedFieldRef = useRef(seedField); seedFieldRef.current = seedField;
   useEffect(() => {
     if (!visible) return;
-    // Pre-fill from seedField when given (e.g. seed purchase inputs from each
-    // wine's current value), otherwise from the field being saved.
     const from = seedFieldRef.current ?? fieldRef.current;
+    // A value seeding a purchase price is sized to the bottle (values are per 75cl).
+    const scaled = from === 'estimated_value' && fieldRef.current === 'purchase_price';
     const init: Record<string, string> = {};
     for (const w of winesRef.current) {
-      // A value seeding a purchase price is sized to the bottle (values are per 75cl).
-      const scaled = from === 'estimated_value' && fieldRef.current === 'purchase_price';
       const cur = scaled ? bottleValue(w) : from === 'purchase_price' ? w.purchase_price : w.estimated_value;
       if (cur != null) init[w.id] = String(scaled ? Math.round(cur) : cur);
     }
+    seededRef.current = init;
     setValues(init);
     // Re-seed when the value type switches (e.g. "Input Current Values" from the
     // purchase editor) so the inputs reflect the new field, not the old entries.
@@ -74,31 +91,33 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
     setValues((v) => ({ ...v, [id]: cleaned }));
   }
 
-  const parsed = Object.entries(values)
+  const toSave = Object.entries(values)
+    .filter(([id, s]) => saveUntouched || s !== seededRef.current[id])
     .map(([id, s]) => ({ id, n: parsePriceText(s) }))
     .filter((e) => Number.isFinite(e.n) && e.n > 0);
 
   async function handleSave() {
     if (saving) return;
-    if (parsed.length === 0) { onClose(); return; }
+    if (toSave.length === 0) { onClose(); return; }
     setSaving(true);
     let anySaved = false;
     try {
-      for (const e of parsed) {
+      for (const e of toSave) {
         const w = winesRef.current.find((x) => x.id === e.id);
+        if (!w) continue;
+        const cur = rowCurrency(w, field, currency);
         if (field === 'estimated_value') {
-          // Match the wine's existing purchase-price currency when it has one,
-          // so the pair stays like-for-like for the "change since purchase" %
-          // (a mismatched currency would silently drop it from that figure).
-          const cur = w?.purchase_price != null && w.purchase_price_currency ? w.purchase_price_currency : currency;
           await updateCellarWine(e.id, {
             estimated_value: e.n,
             estimated_value_currency: cur,
             estimated_value_source: 'user',
             estimated_value_at: new Date().toISOString(),
+            // The user's own figure has no market spread.
+            estimated_value_low: null,
+            estimated_value_high: null,
+            estimated_value_scope: null,
           });
         } else {
-          const cur = w?.estimated_value != null && w.estimated_value_currency ? w.estimated_value_currency : currency;
           await updateCellarWine(e.id, {
             purchase_price: e.n,
             purchase_price_currency: cur,
@@ -123,6 +142,29 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
 
   function close() { setValues({}); onClose(); }
 
+  const renderRow = ({ item: w }: { item: CellarWine }) => (
+    <View style={styles.row}>
+      <View style={styles.rowMain}>
+        <Text style={styles.rowName} numberOfLines={1}>{[w.producer, w.wine_name].filter(Boolean).join(' ') || w.wine_name}</Text>
+        <Text style={styles.rowMeta} numberOfLines={1}>
+          {[w.vintage, w.region].filter(Boolean).join(' · ')}  ·  {bottleSizeCl(w.bottle_size_ml ?? 750)}cl
+        </Text>
+      </View>
+      <View style={styles.inputWrap}>
+        <Text style={styles.sym}>{symbolFor(rowCurrency(w, field, currency))}</Text>
+        <TextInput
+          style={styles.input}
+          value={values[w.id] ?? ''}
+          onChangeText={(t) => setVal(w.id, t)}
+          placeholder="0"
+          placeholderTextColor={colors.textMuted}
+          keyboardType="decimal-pad"
+        />
+        {field === 'estimated_value' ? <Text style={styles.sym}>{PER_75CL}</Text> : null}
+      </View>
+    </View>
+  );
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <KeyboardAvoidingView style={styles.overlay} behavior="padding">
@@ -134,31 +176,17 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
               <Text style={styles.altLink}>{altAction.label}</Text>
             </TouchableOpacity>
           ) : null}
-          <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.md }}>
-            {wines.map((w) => (
-              <View key={w.id} style={styles.row}>
-                <View style={styles.rowMain}>
-                  <Text style={styles.rowName} numberOfLines={1}>{[w.producer, w.wine_name].filter(Boolean).join(' ') || w.wine_name}</Text>
-                  <Text style={styles.rowMeta} numberOfLines={1}>
-                    {[w.vintage, w.region].filter(Boolean).join(' · ')}  ·  {bottleSizeCl(w.bottle_size_ml ?? 750)}cl
-                  </Text>
-                </View>
-                <View style={styles.inputWrap}>
-                  <Text style={styles.sym}>{sym}</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={values[w.id] ?? ''}
-                    onChangeText={(t) => setVal(w.id, t)}
-                    placeholder="0"
-                    placeholderTextColor={colors.textMuted}
-                    keyboardType="decimal-pad"
-                  />
-                  {field === 'estimated_value' ? <Text style={styles.sym}>{PER_75CL}</Text> : null}
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-          <TouchableOpacity style={[styles.saveBtn, (saving || parsed.length === 0) && { opacity: 0.5 }]} onPress={handleSave} disabled={saving || parsed.length === 0} activeOpacity={0.85}>
+          {/* Virtualised: these lists can run to thousands of wines. */}
+          <FlatList
+            style={styles.list}
+            data={wines}
+            keyExtractor={(w) => w.id}
+            renderItem={renderRow}
+            extraData={values}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: spacing.md }}
+          />
+          <TouchableOpacity style={[styles.saveBtn, (saving || toSave.length === 0) && { opacity: 0.5 }]} onPress={handleSave} disabled={saving || toSave.length === 0} activeOpacity={0.85}>
             {saving ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.saveBtnText}>Save Updates</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={[styles.cancelBtn, saving && { opacity: 0.5 }]} onPress={close} disabled={saving}><Text style={styles.cancelText}>Close</Text></TouchableOpacity>

@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
+import { invalidateCellarViews } from '../../../src/hooks/useCellar';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { createStorageLocation, setStorageLocationPhoto, deleteStorageLocation } from '../../../src/api/storageLocations';
 import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
@@ -66,7 +67,7 @@ export default function NewStorageLocationScreen() {
       createdId = loc.id;
       const path = await uploadLocationPhoto(session.user.id, photoUri, loc.id);
       await setStorageLocationPhoto(loc.id, path);
-      qc.invalidateQueries({ queryKey: ['storage-locations', session.user.id] });
+      invalidateCellarViews(qc);
       router.replace(`/cellar/storage-location/${loc.id}` as any);
     } catch (err) {
       if (createdId) {

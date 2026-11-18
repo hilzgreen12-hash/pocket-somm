@@ -31,7 +31,7 @@ export function useChosenWines() {
         const owned = [
           ...(qc.getQueryData<CellarWine[]>(['cellar', userId]) ?? []),
           ...(qc.getQueryData<CellarWine[]>(['cellar-archive', userId]) ?? []),
-        ].find((w) => w.label_image_path && sameWineIdentity(
+        ].find((w) => w.user_id === userId && w.label_image_path && sameWineIdentity(
           { producer: w.producer, wine_name: w.wine_name, vintage: null },
           { producer: row.producer, wine_name: row.wine_name, vintage: null },
         ));

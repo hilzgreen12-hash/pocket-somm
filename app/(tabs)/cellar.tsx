@@ -4,7 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useCellarContext } from '../../src/hooks/useCellarContext';
-import { loadCellarContext } from '../../src/api/cellarContext';
+import { loadCellarContext, sharedCellarLabel } from '../../src/api/cellarContext';
 import { useStorageLocationNav, type StorageNavEntry } from '../../src/hooks/useStorageLocationNav';
 import { fetchPlacementsForWines } from '../../src/api/placements';
 import { getBinCells } from '../../src/api/bins';
@@ -32,8 +32,9 @@ export default function CellarTab() {
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
   const { wines } = useCellar();
+  const cellarCtx = useCellarContext();
   // A view-only member of a shared cellar can browse it but not add to it.
-  const canEdit = useCellarContext().role !== 'view';
+  const canEdit = cellarCtx.role !== 'view';
   const { locations: storageLocs } = useStorageLocationNav();
   // The sign-in prompt: 'soft' offers "Continue without an account" (the
   // pending action then runs as a guest); 'account' is for account-only
@@ -58,8 +59,8 @@ export default function CellarTab() {
     action();
   }
 
-  // Quick Command, Add Wines and Export work on the user's own cellar, so a
-  // guest must sign in first.
+  // Quick Command, Add Wines, Import, Export and Share Cellar work on the
+  // user's own cellar, so a guest must sign in first.
   function requireAccount(action: () => void) {
     if (!session) {
       pendingActionRef.current = null;
@@ -98,7 +99,7 @@ export default function CellarTab() {
       title: 'Export Cellar',
       body: 'Choose what to export.',
       buttons: [
-        { text: 'Export Full Cellar List', onPress: () => runExport(wines, 'My Cellar') },
+        { text: 'Export Full Cellar List', onPress: () => runExport(wines, cellarCtx.ownerId ? sharedCellarLabel(cellarCtx.ownerName) : 'My Cellar') },
         { text: 'Export by Location', onPress: () => setExportPickerOpen(true) },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -118,9 +119,10 @@ export default function CellarTab() {
     }
   }
 
-  // Export just the wines placed in one storage location. Membership comes from
-  // cellar_placements: alt cellars match storage_location_id, racks match rack_id,
-  // and bins match any of the bin's cell ids.
+  // Export just the bottles placed in one storage location, each wine with the
+  // count stored there (not its whole quantity). Membership comes from
+  // cellar_placements: alt cellars match storage_location_id, racks match
+  // rack_id, and bins match any of the bin's cell ids.
   async function exportByLocation(loc: StorageNavEntry) {
     setExportPickerOpen(false);
     if (exporting) return;
@@ -132,13 +134,14 @@ export default function CellarTab() {
         const cells = await getBinCells(loc.id);
         cellIds = new Set(cells.map((c) => c.id));
       }
-      const inLoc = new Set<string>();
+      const here = new Map<string, number>();
       for (const p of placements) {
-        if (loc.kind === 'location' && p.kind === 'location' && p.storage_location_id === loc.id) inLoc.add(p.cellar_wine_id);
-        else if (loc.kind === 'rack' && p.kind === 'rack' && p.rack_id === loc.id) inLoc.add(p.cellar_wine_id);
-        else if (loc.kind === 'bin' && p.kind === 'bin' && p.bin_cell_id && cellIds?.has(p.bin_cell_id)) inLoc.add(p.cellar_wine_id);
+        const inLoc = (loc.kind === 'location' && p.kind === 'location' && p.storage_location_id === loc.id)
+          || (loc.kind === 'rack' && p.kind === 'rack' && p.rack_id === loc.id)
+          || (loc.kind === 'bin' && p.kind === 'bin' && !!p.bin_cell_id && !!cellIds?.has(p.bin_cell_id));
+        if (inLoc) here.set(p.cellar_wine_id, (here.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
       }
-      const filtered = wines.filter((w) => inLoc.has(w.id));
+      const filtered = wines.filter((w) => (here.get(w.id) ?? 0) > 0).map((w) => ({ ...w, quantity: here.get(w.id)! }));
       if (!filtered.length) { showAlert({ title: 'Nothing to export', body: `No wines are stored in ${loc.name} yet.` }); return; }
       await shareCellarListPdf(filtered, { title: loc.name, session, filterSummary: loc.name });
     } catch (err) {
@@ -208,14 +211,14 @@ export default function CellarTab() {
       <View style={styles.divider} />
       <View style={styles.section}>
         {canEdit ? (
-          <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAuth(openImportChooser)} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAccount(openImportChooser)} activeOpacity={0.85}>
             <Text style={styles.buttonVivinoText}>Import Cellar</Text>
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity style={[styles.buttonVivino, canEdit && { marginTop: spacing.xs }]} onPress={() => requireAccount(openExportMenu)} activeOpacity={0.85}>
           <Text style={styles.buttonVivinoText}>Export Cellar</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.buttonVivino, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/profile/share-cellar' as any))} activeOpacity={0.85}>
+        <TouchableOpacity style={[styles.buttonVivino, { marginTop: spacing.xs }]} onPress={() => requireAccount(() => router.push('/profile/share-cellar' as any))} activeOpacity={0.85}>
           <Text style={styles.buttonVivinoText}>Share Cellar</Text>
         </TouchableOpacity>
       </View>

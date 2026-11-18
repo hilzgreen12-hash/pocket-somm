@@ -1,103 +1,47 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, Pressable, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator, Modal } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
-import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, binCellLabels, binDiamondCount } from '../../../src/api/bins';
+import { useCellarContext } from '../../../src/hooks/useCellarContext';
+import { useCellar, invalidateCellarViews } from '../../../src/hooks/useCellar';
+import { useBinFilters, type BinEntry } from '../../../src/hooks/useBinFilters';
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
+import { VIEW_ONLY_MESSAGE } from '../../../src/api/cellarContext';
+import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin } from '../../../src/api/bins';
+import { fetchPlacementsForWines, placedCount } from '../../../src/api/placements';
+import { binCellLabels, binDiamondCount } from '../../../src/utils/binGeometry';
+import { binCellNoun, confirmCellCapacity, fileLooseBottlesInCell, moveBetweenBinCells } from '../../../src/services/binMoves';
+import { BinLattice } from '../../../src/components/bin/BinLattice';
+import { BinFilterModal } from '../../../src/components/bin/BinFilterModal';
+import { useBinWineMenu } from '../../../src/components/bin/useBinWineMenu';
+import { binStyles } from '../../../src/components/bin/styles';
 import { RenameModal } from '../../../src/components/RenameModal';
 import { CellarCommandModal } from '../../../src/components/CellarCommandModal';
-import { updateCellarWine, deleteCellarWine, getCellarWineById } from '../../../src/api/cellar';
-import { addBinPlacement, releaseFromBinCell, fetchPlacementsForWine, fetchPlacementsForWines, placedCount } from '../../../src/api/placements';
-import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
-import { useCellar, invalidateCellarViews } from '../../../src/hooks/useCellar';
-import { archiveBottles } from '../../../src/services/archiveNight';
-import { releaseLeavingBottles } from '../../../src/services/moveBottles';
-import { ArchiveBottlesSheet } from '../../../src/components/winecard/cellar/ArchiveBottlesSheet';
-import { todayYmd } from '../../../src/utils/reviewDate';
-import { confirmWineDelete, reviewsOn } from '../../../src/utils/confirmWineDelete';
 import { showAlert } from '../../../src/components/AppAlert';
 import { bottleSizeLabel } from '../../../src/components/BottleSizePicker';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { tidyWineRegion } from '../../../src/utils/regionFormat';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
-import type { BinCell, CellarWine } from '../../../src/types/wine';
-import { foldAccents, matchesWineSearch } from '../../../src/utils/wineIdentity';
+import type { BinCell } from '../../../src/types/wine';
 
-const SQRT2 = Math.SQRT2;
-const CANVAS_H = 380;
-const MAX_CELL = 66;
-
-// Enumerate the diamond tessellation in unit coords (cell = 1), spatial order,
-// splitting full diamonds from clipped edge cells — the same tessellation the
-// sizer draws and buildBinCells counts.
-function tessellate(across: number, down: number): { full: { x: number; y: number }[]; clipped: { x: number; y: number }[] } {
-  const full: { x: number; y: number }[] = [];
-  const clipped: { x: number; y: number }[] = [];
-  const E = 1e-9;
-  for (let jj = -1; jj <= down * 2 + 1; jj++) {
-    const y = jj / 2;
-    const offset = Math.abs(jj) % 2 === 0 ? 0 : 0.5;
-    for (let x = offset - 1; x <= across + 1 + E; x += 1) {
-      if (x + 0.5 <= E || x - 0.5 >= across - E || y + 0.5 <= E || y - 0.5 >= down - E) continue;
-      const isFull = x - 0.5 >= -E && x + 0.5 <= across + E && y - 0.5 >= -E && y + 0.5 <= down + E;
-      (isFull ? full : clipped).push({ x, y });
-    }
-  }
-  return { full, clipped };
-}
-
-function fillColor(cell: BinCell): string {
-  const n = cell.bottleCount ?? 0;
-  if (n <= 0) return colors.surfaceElevated;
-  if (n >= cell.capacity) return colors.gold;
-  return colors.gold + '66';
-}
+// Bottles being moved: from another cell, or loose bottles waiting to be filed
+// in this bin (no `fromCellId`).
+type Moving = { id: string; name: string; qty: number; fromCellId?: string };
 
 export default function BinDetailScreen() {
   const { binId, highlight } = useLocalSearchParams<{ binId: string; highlight?: string }>();
   const { session } = useAuth();
   const qc = useQueryClient();
   const userId = session?.user.id;
-  const [vpw, setVpw] = useState(0);
-  const [listOpen, setListOpen] = useState(false);
+  const canEdit = useCellarContext().role !== 'view';
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
-  // Arriving to find a bottle (Quick Command "Find a bottle") → highlight it.
-  useEffect(() => { setHighlightedWineId(highlight ?? null); }, [binId, highlight]);
-  const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
-  // Permanent delete of several bottles in one diamond → ask how many first.
-  const [deleteWine, setDeleteWine] = useState<{ wine: CellarWine; cellId: string; qty: number } | null>(null);
-  const [deleteCountStr, setDeleteCountStr] = useState('1');
-  // "Archive Wine" → the wine card's archive sheet (how many, when, a note).
-  const [archiveTarget, setArchiveTarget] = useState<{ wine: CellarWine; cellId: string } | null>(null);
-  const [archiving, setArchiving] = useState(false);
-  const [movingWine, setMovingWine] = useState<{ id: string; name: string; fromCellId?: string; qty?: number } | null>(null);
-  // Bottles moved into THIS bin (e.g. by Voice Command) that have no cell yet.
-  const { wines: allWines } = useCellar();
-  const awaitingWines = useMemo(() => allWines.filter((w) => w.awaiting_placement_unit_id === binId), [allWines, binId]);
-  // Only the bottles still waiting to be filed (total − already placed), not
-  // the wine's whole quantity.
-  const { data: awaitingPlacements = [] } = useQuery({
-    queryKey: ['placements-list', 'bin-awaiting', binId, awaitingWines.map((w) => w.id).join(',')],
-    queryFn: () => fetchPlacementsForWines(awaitingWines.map((w) => w.id)),
-    enabled: awaitingWines.length > 0,
-  });
-  const awaitingBottles = awaitingWines.reduce((s, w) => {
-    const placed = awaitingPlacements.filter((p) => p.cellar_wine_id === w.id).reduce((n, p) => n + (p.quantity ?? 0), 0);
-    return s + Math.max(0, (w.quantity ?? 0) - placed);
-  }, 0);
-
-  // Bespoke filters live in the same custom_filters table as racks, scoped to
-  // this bin's id (a bin is a wine_racks row), so the +Add flow just works.
-  const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useCustomFilters(binId);
-  const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [editingFilterId, setEditingFilterId] = useState<string | null>(null);
-  const [filterName, setFilterName] = useState('');
-  const [selectedWineIds, setSelectedWineIds] = useState<Set<string>>(new Set());
-  const [savingFilter, setSavingFilter] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [savingRename, setSavingRename] = useState(false);
+  const [moving, setMoving] = useState<Moving | null>(null);
+  // A tap while a move is still saving must not file the bottles twice.
+  const placingRef = useRef(false);
 
   const { data: bins = [] } = useQuery({
     queryKey: ['bins', userId],
@@ -105,169 +49,90 @@ export default function BinDetailScreen() {
     enabled: !!userId,
   });
   const bin = bins.find((b) => b.id === binId);
-
-  // Header ‹ › hop across ALL home storage (racks → bins → Alt Cellars) in the
-  // same order as the "Your Wines at Home" carousel — not just other bins.
-  const storageNav = useStorageLocationNav();
-  const prevLoc = storageNav.prev(binId);
-  const nextLoc = storageNav.next(binId);
-
   const { data: cells = [], isLoading } = useQuery({
     queryKey: ['bin-cells', binId],
     queryFn: () => getBinCells(binId!),
     enabled: !!binId,
   });
 
+  // Header ‹ › hop across ALL home storage in the carousel's order.
+  const storageNav = useStorageLocationNav();
+  const prevLoc = storageNav.prev(binId);
+  const nextLoc = storageNav.next(binId);
+
   const across = bin?.diamonds_across ?? 1;
   const down = bin?.diamonds_down ?? 1;
-  const geo = useMemo(() => tessellate(across, down), [across, down]);
   const labels = useMemo(() => binCellLabels(across, down), [across, down]);
+  const entries = useMemo<BinEntry[]>(() => {
+    const labelFor = (c: BinCell) => (c.kind === 'diamond'
+      ? labels.diamondLabels[c.idx]
+      : labels.triangleLabels[c.idx - binDiamondCount(across, down)]) ?? null;
+    return cells.flatMap((c) => (c.wines ?? []).map((wine) => ({ wine, cellId: c.id, label: labelFor(c) })));
+  }, [cells, labels, across, down]);
+  const filters = useBinFilters(binId, entries, highlight);
 
-  const labelFor = (cell: BinCell): string | null =>
-    cell.kind === 'diamond'
-      ? labels.diamondLabels[cell.idx] ?? null
-      : labels.triangleLabels[cell.idx - binDiamondCount(across, down)] ?? null;
+  // Bottles moved into this bin (e.g. by Quick Command) that have no cell yet:
+  // each wine's bottles that aren't placed anywhere.
+  const { wines: allWines } = useCellar();
+  const awaitingWines = useMemo(() => allWines.filter((w) => w.awaiting_placement_unit_id === binId), [allWines, binId]);
+  const { data: awaitingPlacements = [] } = useQuery({
+    queryKey: ['placements-list', 'bin-awaiting', binId, awaitingWines.map((w) => w.id).join(',')],
+    queryFn: () => fetchPlacementsForWines(awaitingWines.map((w) => w.id)),
+    enabled: awaitingWines.length > 0,
+  });
+  const looseOf = (wineId: string, quantity: number) =>
+    Math.max(0, quantity - placedCount(awaitingPlacements.filter((p) => p.cellar_wine_id === wineId)));
+  const awaitingBottles = awaitingWines.reduce((s, w) => s + looseOf(w.id, w.quantity ?? 0), 0);
 
-  const laid = useMemo(() => {
-    const storedDiamonds = cells.filter((c) => c.kind === 'diamond');
-    const storedTriangles = cells.filter((c) => c.kind === 'triangle');
-    const out: { x: number; y: number; cell: BinCell; label: string | null }[] = [];
-    geo.full.forEach((g, i) => { const s = storedDiamonds[i]; if (s) out.push({ ...g, cell: s, label: labels.diamondLabels[i] ?? null }); });
-    geo.clipped.forEach((g, i) => { const s = storedTriangles[i]; if (s) out.push({ ...g, cell: s, label: labels.triangleLabels[i] ?? null }); });
-    return out;
-  }, [geo, cells, labels]);
-
-  // Every wine in the bin, tagged with the cell it sits in (a wine has exactly
-  // one bin_cell_id) so search/list taps can highlight that diamond.
-  const entries = useMemo(
-    () => cells.flatMap((c) => (c.wines ?? []).map((w) => ({ wine: w, cellId: c.id, label: labelFor(c) }))),
-    [cells, labels],
-  );
-
-  const q = foldAccents(searchQuery.trim());
-  const filteredEntries = useMemo(() => {
-    if (!q) return entries;
-    return entries.filter(({ wine }) =>
-      matchesWineSearch([wine.producer, wine.wine_name, wine.region, wine.grape_variety, wine.vintage], q));
-  }, [entries, q]);
-
-  // Which diamonds glow: every search match while searching; otherwise the
-  // cells holding an active filter's wines, or the single wine tapped in the list.
-  const highlightedCellIds = useMemo(() => {
-    if (q) return new Set(filteredEntries.map((e) => e.cellId));
-    if (activeCustomFilterId) {
-      const f = customFilters.find((cf) => cf.id === activeCustomFilterId);
-      const ids = new Set(f?.wineIds ?? []);
-      return new Set(entries.filter((e) => ids.has(e.wine.id)).map((e) => e.cellId));
-    }
-    if (highlightedWineId) {
-      // Every cell the wine sits in, not just the first.
-      return new Set(entries.filter((en) => en.wine.id === highlightedWineId).map((en) => en.cellId));
-    }
-    return new Set<string>();
-  }, [q, filteredEntries, activeCustomFilterId, customFilters, highlightedWineId, entries]);
+  const wineMenu = useBinWineMenu({
+    binId,
+    binName: bin?.name ?? 'this bin',
+    entries,
+    canEdit,
+    onHighlight: (wineId) => { filters.highlightWine(wineId); filters.setListOpen(false); },
+    onStartMove: (w, cellId, qty) => {
+      setMoving({ id: w.id, name: w.wine_name, fromCellId: cellId, qty });
+      filters.highlightWine(null);
+      filters.setListOpen(false);
+    },
+  });
 
   const diamonds = cells.filter((c) => c.kind === 'diamond').length;
-  const halfDiamonds = cells.filter((c) => c.kind === 'triangle').length;
+  const halfDiamonds = cells.length - diamonds;
+  const wineCount = new Set(entries.map((e) => e.wine.id)).size;
   const totalBottles = cells.reduce((sum, c) => sum + (c.bottleCount ?? 0), 0);
   const totalCapacity = cells.reduce((sum, c) => sum + c.capacity, 0);
+  const fail = (title: string, err: unknown) => showAlert({ title, body: err instanceof Error ? err.message : 'Please try again.' });
 
-  const d = Math.min(MAX_CELL, vpw > 0 ? vpw / across : MAX_CELL, CANVAS_H / down);
-  const W = across * d;
-  const H = down * d;
-  const originLeft = (vpw - W) / 2;
-  const originTop = (CANVAS_H - H) / 2;
-  const sd = d / SQRT2;
-
-  function invalidate() {
-    qc.invalidateQueries({ queryKey: ['bin-cells', binId] });
-    qc.invalidateQueries({ queryKey: ['bins'] });
-    qc.invalidateQueries({ queryKey: ['cellar'] });
+  // A tap files the bottles being moved, else opens the cell — straight into
+  // its add chooser when it's empty and the user can add.
+  function onPressCell(c: BinCell) {
+    if (moving) { void placeMoving(c); return; }
+    const offerAdd = canEdit && (c.wines?.length ?? 0) === 0;
+    router.push(`/cellar/bin/cell/${c.id}${offerAdd ? '?add=1' : ''}` as any);
   }
 
-  // Permanently delete `n` bottles of a wine, this diamond's first. The wine's
-  // last bottles take the wine with them — and the reviews stored on it — so
-  // that always goes through the shared confirmation, which offers Archive
-  // instead. Fewer go straight away when the user has already been warned
-  // (the how-many modal says it can't be undone), else after the same prompt.
-  function deleteFromCell(w: CellarWine, cellId: string, n: number, warned = false) {
-    const whole = n >= (w.quantity ?? 1);
-    if (warned && !whole) { void runDelete(w.id, cellId, n); return; }
-    confirmWineDelete({
-      lead: whole ? undefined : `Permanently remove ${n === 1 ? 'this bottle' : `${n} bottles`} from your cellar.`,
-      reviewsLost: whole ? reviewsOn([w]) : 0,
-      deleteText: 'Delete',
-      onDelete: () => void runDelete(w.id, cellId, n),
-      onArchive: () => void archiveAllFromBin(w.id),
-    });
-  }
-
-  async function runDelete(wineId: string, cellId: string, n: number) {
-    try {
-      const fresh = await getCellarWineById(wineId);
-      if (!fresh || fresh.archived_at) throw new Error('This wine is no longer in your cellar. Pull to refresh and try again.');
-      // Deleting the row removes its placements too (cascade).
-      if (n >= fresh.quantity) await deleteCellarWine(wineId);
-      else {
-        // This diamond's bottles leave first; releaseLeavingBottles then takes
-        // any shortfall from loose bottles or other storage, before the count drops.
-        await releaseFromBinCell(wineId, cellId, n);
-        await releaseLeavingBottles(wineId, fresh.quantity, n);
-        await updateCellarWine(wineId, { quantity: fresh.quantity - n });
-      }
-    } catch (err) {
-      showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      invalidateCellarViews(qc);
-    }
-  }
-
-  function nearestCell(lx: number, ly: number): BinCell | null {
-    let best: BinCell | null = null;
-    let bestDist = Infinity;
-    for (const p of laid) {
-      const dx = p.x * d - lx;
-      const dy = p.y * d - ly;
-      const dist = dx * dx + dy * dy;
-      if (dist < bestDist) { bestDist = dist; best = p.cell; }
-    }
-    return best;
-  }
-
-  // Short tap → place the wine being moved, else add / view the cell.
-  function onTapFrame(lx: number, ly: number) {
-    const c = nearestCell(lx, ly);
-    if (!c) return;
-    if (movingWine) { void placeMoving(c); return; }
-    // Only auto-open the "add" chooser for an EMPTY cell. A cell that already
-    // holds wine just opens its contents — the user taps "Add wine" there.
-    const occupied = (c.wines?.length ?? 0) > 0;
-    router.push(`/cellar/bin/cell/${c.id}${occupied ? '' : '?add=1'}` as any);
-  }
-  function onLongPressFrame(lx: number, ly: number) {
-    if (movingWine) return;
-    const c = nearestCell(lx, ly);
-    if (!c) return;
-    const kind = c.kind === 'triangle' ? 'triangle' : 'diamond';
-    const label = labelFor(c);
-    const heading = label ? (c.kind === 'triangle' ? `Half Diamond ${label}` : `Diamond ${label}`) : `This ${kind}`;
-    // Gesture-parity with the alt-cellar case long-press: offer Add Wines, plus
-    // Empty Contents when the cubby actually holds something. "Add Wines" routes
-    // through the same add flow a tap on an empty diamond uses.
-    const occupied = (c.wines?.length ?? 0) > 0;
+  function onLongPressCell(c: BinCell) {
+    if (moving) return;
+    const noun = binCellNoun(c.kind);
+    const label = c.kind === 'diamond' ? labels.diamondLabels[c.idx] : labels.triangleLabels[c.idx - binDiamondCount(across, down)];
     showAlert({
-      title: heading,
+      title: label ? `${c.kind === 'triangle' ? 'Half Diamond' : 'Diamond'} ${label}` : `This ${noun}`,
       buttons: [
         { text: 'Add Wines', onPress: () => router.push(`/cellar/bin/cell/${c.id}?add=1` as any) },
-        ...(occupied ? [{
+        ...((c.wines?.length ?? 0) > 0 ? [{
           text: 'Empty Contents',
           style: 'destructive' as const,
           onPress: () => showAlert({
-            title: `Empty this ${kind}?`,
+            title: `Empty this ${noun}?`,
             body: 'The wines stay in your cellar as loose bottles — this only clears them out of this cubby.',
             buttons: [
               { text: 'Cancel', style: 'cancel' as const },
-              { text: 'Empty', style: 'destructive' as const, onPress: async () => { try { await emptyBinCell(c.id); invalidate(); } catch (err) { showAlert({ title: 'Could not empty', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
+              { text: 'Empty', style: 'destructive' as const, onPress: async () => {
+                  try { await emptyBinCell(c.id); }
+                  catch (err) { fail('Could not empty', err); }
+                  finally { invalidateCellarViews(qc); }
+                } },
             ],
           }),
         }] : []),
@@ -277,205 +142,55 @@ export default function BinDetailScreen() {
   }
 
   async function placeMoving(cell: BinCell) {
-    if (!movingWine) return;
+    const m = moving;
+    if (!m || placingRef.current) return;
+    if (m.fromCellId === cell.id) { setMoving(null); return; } // put back where it was
+    placingRef.current = true;
     try {
-      if (movingWine.fromCellId) {
-        // Move bottles from one diamond to another (bin placement → bin placement).
-        if (movingWine.fromCellId !== cell.id) {
-          const qty = Math.max(1, movingWine.qty ?? 1);
-          await addBinPlacement(movingWine.id, cell.id, qty);
-          await releaseFromBinCell(movingWine.id, movingWine.fromCellId, qty);
-        }
-      } else {
-        // Awaiting bottle (moved here but not yet filed) → file its loose bottles
-        // into this cell as a bin placement. Loose = total minus whatever is
-        // already placed (rack / other cells / alt cellars).
-        const pls = await fetchPlacementsForWine(movingWine.id);
-        const row = allWines.find((w) => w.id === movingWine.id);
-        const loose = (row?.quantity ?? 0) - placedCount(pls);
-        if (loose < 1) {
-          // Nothing is actually unplaced — never file an extra bottle.
-          await updateCellarWine(movingWine.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
-          invalidate();
-          qc.invalidateQueries({ queryKey: ['cellar'] });
-          setMovingWine(null);
-          showAlert({ title: 'Already placed', body: 'All bottles of this wine are already filed in your storage.' });
-          return;
-        }
-        await addBinPlacement(movingWine.id, cell.id, loose);
+      if (!(await confirmCellCapacity(cell, (cell.bottleCount ?? 0) + m.qty, 'Place'))) return;
+      if (m.fromCellId) {
+        await moveBetweenBinCells(m.id, m.fromCellId, cell.id, m.qty);
+      } else if ((await fileLooseBottlesInCell(m.id, cell.id)) === 0) {
+        showAlert({ title: 'Already placed', body: 'All bottles of this wine are already filed in your storage.' });
       }
-      // Clear any awaiting-placement flag — the bottles are now filed.
-      await updateCellarWine(movingWine.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
-      invalidate();
-      qc.invalidateQueries({ queryKey: ['cellar'] });
-      setMovingWine(null);
+      setMoving(null);
     } catch (err) {
-      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
-  // Archive from the sheet: this bin's bottles leave first.
-  async function archiveFromBin(input: { count: number; date: string; note: string }) {
-    const w = archiveTarget?.wine;
-    if (!w || archiving) return;
-    setArchiving(true);
-    try {
-      const { archived } = await archiveBottles(w.id, input.count, input.date, { fromUnit: { kind: 'bin', id: binId! }, note: input.note || undefined });
-      if (archived === 0) throw new Error('This wine is no longer in your cellar. Pull to refresh and try again.');
-      setArchiveTarget(null);
-    } catch (err) {
-      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+      fail('Could not move', err);
     } finally {
-      invalidateCellarViews(qc);
-      setArchiving(false);
-    }
-  }
-
-  // "Archive instead" from the delete confirmation: every bottle, dated today.
-  async function archiveAllFromBin(wineId: string) {
-    try {
-      await archiveBottles(wineId, Infinity, todayYmd(), { fromUnit: { kind: 'bin', id: binId! } });
-    } catch (err) {
-      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
+      placingRef.current = false;
       invalidateCellarViews(qc);
     }
   }
 
-  // Long-press a wine in the list → the same verbs as a rack slot. `cellId` is the
-  // diamond this bottle sits in (so moves/archives/deletes are cell-scoped).
-  // "Highlight All Bottles" — light up every diamond holding this wine and list
-  // where they are, e.g. "2x75cl in D2b".
-  function showWineCells(w: CellarWine) {
-    const mine = entries.filter((e) => e.wine.id === w.id);
-    const total = mine.reduce((s, e) => s + (e.wine.bin_cell_quantity ?? e.wine.quantity ?? 1), 0);
-    setActiveCustomFilterId(null); setSearchQuery(''); setListOpen(false);
-    setHighlightedWineId(w.id);
-    showAlert({
-      title: [w.producer, w.wine_name, w.vintage].filter(Boolean).join(' '),
-      body: [
-        `${total} bottle${total === 1 ? '' : 's'} in ${bin?.name ?? 'this bin'}`,
-        ...mine.map((e) => `${e.wine.bin_cell_quantity ?? e.wine.quantity ?? 1}x${bottleSizeLabel(e.wine.bottle_size_ml ?? 750)} in ${e.label ?? 'a diamond'}`),
-      ].join('\n'),
-      buttons: [{ text: 'OK', style: 'cancel' }],
-    });
-  }
-
-  function openWineMenu(w: CellarWine, cellId: string) {
-    const cellQty = Math.max(1, w.bin_cell_quantity ?? w.quantity ?? 1);
-    showAlert({
-      title: [w.producer, w.wine_name, w.vintage].filter(Boolean).join(' '),
-      body: 'What would you like to do?',
-      buttons: [
-        { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${w.id}` as any) },
-        { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
-        { text: 'Highlight All Bottles', onPress: () => showWineCells(w) },
-        { text: 'Move to Another Diamond', onPress: () => { setMovingWine({ id: w.id, name: w.wine_name, fromCellId: cellId, qty: cellQty }); setListOpen(false); setSearchQuery(''); setHighlightedWineId(null); } },
-        { text: 'Archive Wine', onPress: () => setArchiveTarget({ wine: w, cellId }) },
-        {
-          text: 'Delete Wine (Permanent)',
-          style: 'destructive',
-          onPress: () => {
-            if (cellQty > 1) { setDeleteCountStr('1'); setDeleteWine({ wine: w, cellId, qty: cellQty }); return; }
-            deleteFromCell(w, cellId, 1);
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-
-  function applyCustomFilter(id: string) {
-    setActiveCustomFilterId((prev) => (prev === id ? null : id));
-    setHighlightedWineId(null);
-    setSearchQuery('');
-  }
-
-  function openCreateFilter() {
-    setEditingFilterId(null);
-    setFilterName('');
-    setSelectedWineIds(new Set());
-    setFilterModalOpen(true);
-  }
-  function openEditFilter(f: { id: string; name: string; wineIds: string[] }) {
-    setEditingFilterId(f.id);
-    setFilterName(f.name);
-    setSelectedWineIds(new Set(f.wineIds));
-    setFilterModalOpen(true);
-  }
-  function openFilterOptions(f: { id: string; name: string; wineIds: string[] }) {
-    showAlert({
-      title: f.name,
-      body: 'Rename this filter or change the wines it holds, or delete it. Your wines stay in the cellar either way.',
-      buttons: [
-        { text: 'Rename / Add / Remove Wines', onPress: () => openEditFilter(f) },
-        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomFilterId === f.id) setActiveCustomFilterId(null); removeFilter.mutate(f.id); } },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-  function toggleWineInSelection(id: string) {
-    setSelectedWineIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  }
-  async function saveFilter() {
-    const name = filterName.trim();
-    if (!name) { showAlert({ title: 'Name needed', body: 'Give your filter a name first.' }); return; }
-    const binWineIds = new Set(entries.map((e) => e.wine.id));
-    const wineIds = Array.from(selectedWineIds).filter((id) => binWineIds.has(id));
-    setSavingFilter(true);
-    try {
-      if (editingFilterId) {
-        await renameFilter.mutateAsync({ filterId: editingFilterId, name });
-        await setFilterWines.mutateAsync({ filterId: editingFilterId, wineIds });
-      } else {
-        await createFilter.mutateAsync({ name, wineIds });
-      }
-      setFilterModalOpen(false);
-      setEditingFilterId(null);
-    } catch (err) {
-      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingFilter(false);
-    }
-  }
-
-  function handleDelete() {
-    if (!binId) return;
-    showAlert({
-      title: bin?.name ?? 'Delete bin',
-      body: 'Permanently remove this bin? Wines stay in your cellar — they\'re just no longer filed in it.',
-      buttons: [
-        { text: 'Delete bin', style: 'destructive', onPress: async () => { try { await deleteBin(binId); qc.invalidateQueries({ queryKey: ['bins'] }); qc.invalidateQueries({ queryKey: ['cellar'] }); router.back(); } catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-
-  // Top-right "Edit" — bin management, mirroring the rack/fridge Edit modal's
-  // contents. Resize is omitted: a bin's diamond geometry is fixed at creation
-  // (there's no in-place resize like a rack grid).
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [savingRename, setSavingRename] = useState(false);
-
+  // Top-right "Edit": bin management, as the rack/fridge Edit offers. A bin's
+  // diamond geometry is fixed at creation, so there's no resize.
   function openBinEdit() {
+    const run = (title: string, work: () => Promise<void>, after?: () => void) => async () => {
+      try { await work(); after?.(); }
+      catch (err) { fail(title, err); }
+      finally { invalidateCellarViews(qc); }
+    };
     showAlert({
       title: bin?.name ?? 'Bin',
       body: 'Manage this bin.',
       buttons: [
         { text: 'Rename Bin', onPress: () => setRenameOpen(true) },
-        { text: 'Empty Bin Contents', style: 'destructive', onPress: confirmEmptyBin },
-        { text: 'Delete Bin', style: 'destructive', onPress: handleDelete },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-
-  function confirmEmptyBin() {
-    showAlert({
-      title: 'Empty this bin?',
-      body: "This empties every cell in this bin. The wines stay in your cellar — they're just unassigned from this bin.",
-      buttons: [
-        { text: 'Empty bin', style: 'destructive', onPress: async () => { try { await emptyBin(binId); invalidate(); } catch (err) { showAlert({ title: 'Could not empty', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
+        { text: 'Empty Bin Contents', style: 'destructive', onPress: () => showAlert({
+            title: 'Empty this bin?',
+            body: "This empties every cell in this bin. The wines stay in your cellar — they're just unassigned from this bin.",
+            buttons: [
+              { text: 'Empty bin', style: 'destructive', onPress: run('Could not empty', () => emptyBin(binId)) },
+              { text: 'Cancel', style: 'cancel' },
+            ],
+          }) },
+        { text: 'Delete Bin', style: 'destructive', onPress: () => showAlert({
+            title: bin?.name ?? 'Delete bin',
+            body: "Permanently remove this bin? Wines stay in your cellar — they're just no longer filed in it.",
+            buttons: [
+              { text: 'Delete bin', style: 'destructive', onPress: run('Could not delete', () => deleteBin(binId), () => router.back()) },
+              { text: 'Cancel', style: 'cancel' },
+            ],
+          }) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -487,16 +202,14 @@ export default function BinDetailScreen() {
     setSavingRename(true);
     try {
       await renameBin(binId, n);
-      qc.invalidateQueries({ queryKey: ['bins'] });
+      invalidateCellarViews(qc);
       setRenameOpen(false);
     } catch (err) {
-      showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' });
+      fail('Could not rename', err);
     } finally {
       setSavingRename(false);
     }
   }
-
-  const showList = listOpen || q.length > 0;
 
   return (
     <View style={styles.container}>
@@ -505,291 +218,151 @@ export default function BinDetailScreen() {
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
         <View style={styles.titleNav}>
-          <TouchableOpacity
-            onPress={() => prevLoc && router.replace(prevLoc.route as any)}
-            disabled={!prevLoc}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 6 }}
-            accessibilityLabel="Previous storage location"
-          >
+          <TouchableOpacity onPress={() => prevLoc && router.replace(prevLoc.route as any)} disabled={!prevLoc} hitSlop={{ top: 12, bottom: 12, left: 12, right: 6 }} accessibilityLabel="Previous storage location">
             <Text style={[styles.navArrow, !prevLoc && styles.navArrowDisabled]}>‹</Text>
           </TouchableOpacity>
           <Text style={styles.title} numberOfLines={1}>{bin?.name ?? 'Bin'}</Text>
-          <TouchableOpacity
-            onPress={() => nextLoc && router.replace(nextLoc.route as any)}
-            disabled={!nextLoc}
-            hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }}
-            accessibilityLabel="Next storage location"
-          >
+          <TouchableOpacity onPress={() => nextLoc && router.replace(nextLoc.route as any)} disabled={!nextLoc} hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }} accessibilityLabel="Next storage location">
             <Text style={[styles.navArrow, !nextLoc && styles.navArrowDisabled]}>›</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={openBinEdit} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
-          <Text style={styles.headerEdit}>Edit</Text>
-        </TouchableOpacity>
+        {canEdit ? (
+          <TouchableOpacity onPress={openBinEdit} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+            <Text style={styles.headerEdit}>Edit</Text>
+          </TouchableOpacity>
+        ) : <View style={styles.headerSpacer} />}
       </View>
 
-      {/* Voice Command — beneath the title, above the separator (mirrors Cellar tab). */}
-      <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
-        <Text style={styles.voiceBubbleText}>Quick Command</Text>
-      </TouchableOpacity>
+      {canEdit && (
+        <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
+          <Text style={styles.voiceBubbleText}>Quick Command</Text>
+        </TouchableOpacity>
+      )}
       <View style={styles.headerDivider} />
 
       {isLoading || !bin ? (
         <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>
       ) : (
         <>
-          {/* Static header — stats + instructions + moving banner. Only the
-              filters and the diamond grid below scroll. */}
+          {/* Static header — stats, instructions and the moving banner. Only
+              the filters, list and lattice below scroll. */}
           <Text style={styles.statsLine1}>{diamonds} {diamonds === 1 ? 'Diamond' : 'Diamonds'} · {halfDiamonds} Half {halfDiamonds === 1 ? 'Diamond' : 'Diamonds'}</Text>
-          <Text style={styles.statsLine2}>{entries.length} {entries.length === 1 ? 'Wine' : 'Wines'} · {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalCapacity} Slots</Text>
-          <Text style={styles.hint}>Short tap an area to add wine or view / edit contents. Long hold to empty.</Text>
-          {/* Bottles moved into this bin (e.g. by Voice Command) with no cell
-              yet — yellow at the top; long-press then tap a diamond to file. */}
-          {awaitingBottles > 0 && !movingWine ? (
+          <Text style={styles.statsLine2}>{wineCount} {wineCount === 1 ? 'Wine' : 'Wines'} · {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalCapacity} Slots</Text>
+          {canEdit
+            ? <Text style={styles.hint}>Short tap an area to add wine or view / edit contents. Long hold to empty.</Text>
+            : <Text style={styles.hint}>{VIEW_ONLY_MESSAGE}</Text>}
+          {canEdit && awaitingBottles > 0 && !moving ? (
             <View style={styles.awaitingBlock}>
               <Text style={styles.awaitingBanner}>{awaitingBottles} {awaitingBottles === 1 ? 'Bottle' : 'Bottles'} moved here — awaiting placement</Text>
-              {awaitingWines.map((w) => (
-                <TouchableOpacity key={w.id} style={styles.awaitingRow} onLongPress={() => setMovingWine({ id: w.id, name: w.wine_name })} onPress={() => setMovingWine({ id: w.id, name: w.wine_name })} delayLongPress={400} activeOpacity={0.7}>
-                  <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
-                  <Text style={styles.awaitingHint}>Long-press, then tap a diamond to place →</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : null}
-          {movingWine ? (
-            <View style={styles.movingBanner}>
-              <Text style={styles.movingBannerText} numberOfLines={2}>Moving {movingWine.name} — tap a diamond to file it there.</Text>
-              <TouchableOpacity onPress={() => setMovingWine(null)}><Text style={styles.movingCancel}>Cancel</Text></TouchableOpacity>
-            </View>
-          ) : null}
-
-        <ScrollView contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
-          {/* Filter row — List reveals the contents; each saved filter is a chip
-              that highlights its diamonds; + Add builds a bespoke one. */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
-            <TouchableOpacity style={[styles.filterChip, listOpen && styles.filterChipActive]} onPress={() => setListOpen((v) => !v)} activeOpacity={0.7}>
-              <Text style={[styles.filterChipText, listOpen && styles.filterChipTextActive]} allowFontScaling={false}>List {listOpen ? '▴' : '▾'}</Text>
-            </TouchableOpacity>
-            {customFilters.map((f) => {
-              const active = activeCustomFilterId === f.id;
-              return (
-                <TouchableOpacity key={f.id} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => applyCustomFilter(f.id)} onLongPress={() => openFilterOptions(f)} delayLongPress={400} activeOpacity={0.7}>
-                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1} allowFontScaling={false}>{f.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-            <TouchableOpacity style={styles.filterChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
-              <Text style={styles.filterChipAddText} allowFontScaling={false}>+ Add</Text>
-            </TouchableOpacity>
-          </ScrollView>
-
-          {/* Search bar — matches racks/fridges. */}
-          <View style={styles.searchRow}>
-            <TextInput
-              style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={(t) => { setSearchQuery(t); setActiveCustomFilterId(null); setHighlightedWineId(null); }}
-              placeholder="Search producer, wine, region, vintage…"
-              placeholderTextColor={colors.textMuted}
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-            />
-            {searchQuery.length > 0 ? (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}><Text style={styles.searchClearText}>✕</Text></TouchableOpacity>
-            ) : null}
-          </View>
-
-          {showList ? (
-            <View style={styles.listSection}>
-              {filteredEntries.length === 0 ? (
-                <Text style={styles.emptyList}>{entries.length === 0 ? 'No wines in this bin yet.' : `No wines match "${searchQuery}"`}</Text>
-              ) : (
-                <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                  {filteredEntries.map(({ wine, label, cellId }) => {
-                    const active = highlightedWineId === wine.id;
-                    return (
-                      <TouchableOpacity
-                        key={`${wine.id}-${cellId}`}
-                        style={[styles.wineRow, active && styles.wineRowActive]}
-                        onPress={() => {
-                          // Toggle: tapping the highlighted wine again clears it.
-                          const alreadyOn = highlightedWineId === wine.id;
-                          setHighlightedWineId(alreadyOn ? null : wine.id);
-                          setActiveCustomFilterId(null); setSearchQuery('');
-                          if (!alreadyOn) setListOpen(false);
-                        }}
-                        onLongPress={() => openWineMenu(wine, cellId)}
-                        delayLongPress={400}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.wineRowTop}>
-                          {label ? <Text style={styles.cubbyTag}>{label}</Text> : null}
-                          <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}</Text>
-                        </View>
-                        {/* Region + grape in gold beneath the white name. */}
-                        {tidyWineRegion(wine.region) || wine.grape_variety ? (
-                          <Text style={[styles.wineMeta, { color: colors.gold }]} numberOfLines={1}>
-                            {[tidyWineRegion(wine.region), wine.grape_variety].filter(Boolean).join(' · ')}
-                          </Text>
-                        ) : null}
-                        <Text style={styles.wineMeta} numberOfLines={1}>
-                          {`${wine.bin_cell_quantity ?? wine.quantity ?? 1} × ${bottleSizeLabel(wine.bottle_size_ml ?? 750)}`}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              )}
-            </View>
-          ) : null}
-
-          <View style={styles.canvasWrap}>
-            <View style={styles.canvas} onLayout={(e) => setVpw(e.nativeEvent.layout.width)}>
-              {W > 0 && H > 0 ? (
-                <>
-                  <Pressable
-                    style={[styles.frame, { left: originLeft, top: originTop, width: W, height: H }]}
-                    onPress={(e) => onTapFrame(e.nativeEvent.locationX, e.nativeEvent.locationY)}
-                    onLongPress={(e) => onLongPressFrame(e.nativeEvent.locationX, e.nativeEvent.locationY)}
-                    delayLongPress={400}
-                  >
-                    {laid.map((p) => {
-                      const hot = highlightedCellIds.has(p.cell.id);
-                      const dim = highlightedCellIds.size > 0 && !hot;
-                      return (
-                        <View
-                          key={p.cell.id}
-                          pointerEvents="none"
-                          style={{ position: 'absolute', left: p.x * d - sd / 2, top: p.y * d - sd / 2, width: sd, height: sd, opacity: dim ? 0.3 : 1, transform: [{ rotate: '45deg' }], borderWidth: hot ? 2.5 : 1.25, borderColor: hot ? '#fff2cc' : colors.gold, backgroundColor: hot ? colors.gold : fillColor(p.cell) }}
-                        />
-                      );
-                    })}
-                  </Pressable>
-                  {/* Grid-reference labels rendered as a separate, NON-clipped
-                      overlay above the frame — so the D/HD refs on the edge
-                      half-diamonds (which the frame's overflow:hidden would clip)
-                      stay fully legible. Edge labels are nudged toward the frame
-                      interior so they sit on the visible part of each cell. */}
-                  <View pointerEvents="none" style={{ position: 'absolute', left: originLeft, top: originTop, width: W, height: H }}>
-                    {laid.map((p) => {
-                      if (!p.label) return null;
-                      const EDGE = 1e-6;
-                      const nx = p.x <= EDGE ? 1 : p.x >= across - EDGE ? -1 : 0;
-                      const ny = p.y <= EDGE ? 1 : p.y >= down - EDGE ? -1 : 0;
-                      const nudge = d * 0.28;
-                      const dim = highlightedCellIds.size > 0 && !highlightedCellIds.has(p.cell.id);
-                      return (
-                        <Text
-                          key={`lbl-${p.cell.id}`}
-                          style={{ position: 'absolute', left: p.x * d - 20 + nx * nudge, top: p.y * d - 7 + ny * nudge, width: 40, textAlign: 'center', fontSize: 10, fontFamily: fonts.bodySemibold, color: '#FFFFFF', opacity: dim ? 0.3 : 1, textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2.5 }}
-                          allowFontScaling={false}
-                        >
-                          {p.label}
-                        </Text>
-                      );
-                    })}
-                  </View>
-                </>
-              ) : null}
-            </View>
-          </View>
-
-          <View style={styles.legend}>
-            <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.surfaceElevated }]} /><Text style={styles.legendText} allowFontScaling={false}>Empty</Text></View>
-            <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.gold + '66' }]} /><Text style={styles.legendText} allowFontScaling={false}>Part full</Text></View>
-            <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.gold }]} /><Text style={styles.legendText} allowFontScaling={false}>Full</Text></View>
-          </View>
-        </ScrollView>
-        </>
-      )}
-
-      {/* Bespoke-filter builder — name it, tick the wines it holds. */}
-      <Modal visible={filterModalOpen} transparent animationType="fade" onRequestClose={() => setFilterModalOpen(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <Text style={styles.sheetTitle}>{editingFilterId ? 'Edit Filter' : 'New Filter'}</Text>
-            <TextInput style={styles.input} value={filterName} onChangeText={setFilterName} placeholder="Filter name (e.g. Drink First)" placeholderTextColor={colors.textMuted} />
-            <Text style={styles.sheetLabel}>Wines in this filter</Text>
-            <ScrollView style={{ maxHeight: 280 }} nestedScrollEnabled>
-              {entries.length === 0 ? (
-                <Text style={styles.emptyList}>No wines in this bin yet.</Text>
-              ) : entries.map(({ wine, label }) => {
-                const on = selectedWineIds.has(wine.id);
+              {awaitingWines.map((w) => {
+                const start = () => setMoving({ id: w.id, name: w.wine_name, qty: looseOf(w.id, w.quantity ?? 0) });
                 return (
-                  <TouchableOpacity key={wine.id} style={styles.pickRow} onPress={() => toggleWineInSelection(wine.id)} activeOpacity={0.7}>
-                    <View style={[styles.checkbox, on && styles.checkboxOn]}>{on ? <Text style={styles.checkboxTick}>✓</Text> : null}</View>
-                    <View style={styles.wineRowTop}>
-                      {label ? <Text style={styles.cubbyTag}>{label}</Text> : null}
-                      <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}</Text>
-                    </View>
+                  <TouchableOpacity key={w.id} style={styles.awaitingRow} onPress={start} onLongPress={start} delayLongPress={400} activeOpacity={0.7}>
+                    <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
+                    <Text style={styles.awaitingHint}>Long-press, then tap a diamond to place →</Text>
                   </TouchableOpacity>
                 );
               })}
+            </View>
+          ) : null}
+          {moving ? (
+            <View style={styles.movingBanner}>
+              <Text style={styles.movingBannerText} numberOfLines={2}>Moving {moving.name} — tap a diamond to file it there.</Text>
+              <TouchableOpacity onPress={() => setMoving(null)}><Text style={styles.movingCancel}>Cancel</Text></TouchableOpacity>
+            </View>
+          ) : null}
+
+          <ScrollView contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
+            {/* List reveals the contents; each saved filter is a chip that
+                highlights its diamonds; + Add builds a new one. */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
+              <TouchableOpacity style={[styles.filterChip, filters.listOpen && styles.filterChipActive]} onPress={() => filters.setListOpen(!filters.listOpen)} activeOpacity={0.7}>
+                <Text style={[styles.filterChipText, filters.listOpen && styles.filterChipTextActive]} allowFontScaling={false}>List {filters.listOpen ? '▴' : '▾'}</Text>
+              </TouchableOpacity>
+              {filters.customFilters.map((f) => {
+                const active = filters.activeFilterId === f.id;
+                return (
+                  <TouchableOpacity key={f.id} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => filters.toggleFilter(f.id)} onLongPress={canEdit ? () => filters.openFilterOptions(f) : undefined} delayLongPress={400} activeOpacity={0.7}>
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1} allowFontScaling={false}>{f.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {canEdit && (
+                <TouchableOpacity style={styles.filterChipAdd} onPress={filters.openNewFilter} activeOpacity={0.7}>
+                  <Text style={styles.filterChipAddText} allowFontScaling={false}>+ Add</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
-            <TouchableOpacity style={[styles.saveBtn, savingFilter && { opacity: 0.5 }]} onPress={saveFilter} disabled={savingFilter} activeOpacity={0.85}>
-              {savingFilter ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.saveBtnText}>{editingFilterId ? 'Save Filter' : 'Create Filter'}</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setFilterModalOpen(false)}><Text style={styles.cancelBtnText}>Cancel</Text></TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
-      <RenameModal
-        visible={renameOpen}
-        initialName={bin?.name ?? ''}
-        title="Rename bin"
-        saving={savingRename}
-        onSave={handleRename}
-        onClose={() => setRenameOpen(false)}
-      />
+            <View style={styles.searchRow}>
+              <TextInput
+                style={styles.searchInput}
+                value={filters.searchQuery}
+                onChangeText={filters.search}
+                placeholder="Search producer, wine, region, vintage…"
+                placeholderTextColor={colors.textMuted}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+              {filters.searchQuery.length > 0 ? (
+                <TouchableOpacity onPress={() => filters.search('')} style={styles.searchClear}><Text style={styles.searchClearText}>✕</Text></TouchableOpacity>
+              ) : null}
+            </View>
 
-      {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} locationName={bin?.name ?? null} scope={binId ? { kind: 'bin', id: binId } : undefined} hereWineIds={Array.from(new Set(entries.map((e) => e.wine.id)))} />
+            {filters.showList ? (
+              <View style={styles.listSection}>
+                {filters.filteredEntries.length === 0 ? (
+                  <Text style={binStyles.emptyList}>{entries.length === 0 ? 'No wines in this bin yet.' : `No wines match "${filters.searchQuery}"`}</Text>
+                ) : (
+                  <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                    {filters.filteredEntries.map(({ wine, label, cellId }) => {
+                      const active = filters.highlightedWineId === wine.id;
+                      const regionLine = [tidyWineRegion(wine.region), wine.grape_variety].filter(Boolean).join(' · ');
+                      return (
+                        <TouchableOpacity
+                          key={`${wine.id}-${cellId}`}
+                          style={[styles.wineRow, active && styles.wineRowActive]}
+                          onPress={() => {
+                            // Tapping the highlighted wine again clears it.
+                            filters.highlightWine(active ? null : wine.id);
+                            if (!active) filters.setListOpen(false);
+                          }}
+                          onLongPress={() => wineMenu.open(wine, cellId)}
+                          delayLongPress={400}
+                          activeOpacity={0.7}
+                        >
+                          <View style={binStyles.wineRowTop}>
+                            {label ? <Text style={binStyles.cubbyTag}>{label}</Text> : null}
+                            <Text style={binStyles.wineName} numberOfLines={1}>{wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}</Text>
+                          </View>
+                          {regionLine ? <Text style={[styles.wineMeta, { color: colors.gold }]} numberOfLines={1}>{regionLine}</Text> : null}
+                          <Text style={styles.wineMeta} numberOfLines={1}>{`${wine.bin_cell_quantity ?? 0} × ${bottleSizeLabel(wine.bottle_size_ml ?? 750)}`}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+              </View>
+            ) : null}
 
-      {/* Permanent delete — how many bottles? Shown for multi-bottle wines. */}
-      <Modal visible={deleteWine !== null} transparent animationType="fade" onRequestClose={() => setDeleteWine(null)}>
-        <View style={styles.delOverlay}>
-          <View style={styles.delSheet}>
-            <Text style={styles.delTitle}>Delete how many?</Text>
-            <Text style={styles.delBody}>You have {deleteWine?.qty} bottle{deleteWine?.qty === 1 ? '' : 's'} of {deleteWine?.wine.wine_name}. How many would you like to permanently delete? This can't be undone.</Text>
-            <TextInput
-              style={styles.delInput}
-              value={deleteCountStr}
-              onChangeText={(t) => setDeleteCountStr(t.replace(/[^0-9]/g, '').slice(0, 3))}
-              keyboardType="number-pad"
-              placeholder="1"
-              placeholderTextColor={colors.textMuted}
-              autoFocus
-              selectTextOnFocus
+            <BinLattice
+              across={across}
+              down={down}
+              cells={cells}
+              labels={labels}
+              highlighted={filters.highlightedCellIds}
+              onPressCell={onPressCell}
+              onLongPressCell={canEdit ? onLongPressCell : undefined}
             />
-            <TouchableOpacity style={styles.delBtn} onPress={() => { const q = deleteWine; if (!q) return; setDeleteWine(null); deleteFromCell(q.wine, q.cellId, Math.max(1, Math.min(q.qty, parseInt(deleteCountStr, 10) || 1)), true); }}>
-              <Text style={styles.delBtnText}>Delete Bottles</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.delAll} onPress={() => { const q = deleteWine; if (!q) return; setDeleteWine(null); deleteFromCell(q.wine, q.cellId, q.qty, true); }}>
-              <Text style={styles.delAllText}>Delete all {deleteWine?.qty}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.delCancel} onPress={() => setDeleteWine(null)}>
-              <Text style={styles.delCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+          </ScrollView>
+        </>
+      )}
 
-      {archiveTarget ? (
-        <ArchiveBottlesSheet
-          visible
-          wine={archiveTarget.wine}
-          initialCount={1}
-          working={archiving}
-          onArchive={(input) => void archiveFromBin(input)}
-          onDelete={(count) => {
-            const { wine, cellId } = archiveTarget;
-            setArchiveTarget(null);
-            deleteFromCell(wine, cellId, count);
-          }}
-          onClose={() => setArchiveTarget(null)}
-        />
-      ) : null}
+      <BinFilterModal filters={filters} entries={entries} />
+      <RenameModal visible={renameOpen} initialName={bin?.name ?? ''} title="Rename bin" saving={savingRename} onSave={handleRename} onClose={() => setRenameOpen(false)} />
+      {/* Quick Command — the Cellar tab's engine, scoped to this bin. */}
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} locationName={bin?.name ?? null} scope={binId ? { kind: 'bin', id: binId } : undefined} hereWineIds={Array.from(new Set(entries.map((e) => e.wine.id)))} />
+      {wineMenu.sheets}
     </View>
   );
 }
@@ -799,22 +372,12 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
-  delOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  delSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
-  delTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
-  delBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
-  delInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', marginBottom: spacing.md },
-  delBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  delBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#1A1A1A' },
-  delAll: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
-  delAllText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text },
-  delCancel: { alignItems: 'center', paddingVertical: spacing.sm },
-  delCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   headerDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   // Equal-width back / Edit so the flex-1 title is truly screen-centred.
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 50 },
   headerEdit: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.gold, textAlign: 'right', width: 50 },
+  headerSpacer: { width: 50 },
   // Centred nav cluster: ‹ bin name › — gold arrows hop across all home storage.
   titleNav: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   navArrow: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, paddingHorizontal: 2 },
@@ -824,14 +387,14 @@ const styles = StyleSheet.create({
   statsLine2: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', marginTop: 2 },
   hint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', marginTop: 6, marginBottom: spacing.md, lineHeight: 19, paddingHorizontal: spacing.xl },
   movingBanner: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, padding: spacing.md, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.14)', borderWidth: 1, borderColor: colors.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  movingBannerText: { flex: 1, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text },
+  movingCancel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
   // "Awaiting placement" banner + yellow rows (moved here, no cell yet).
   awaitingBlock: { paddingTop: spacing.xs },
   awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl },
   awaitingRow: { marginHorizontal: spacing.xl, marginTop: spacing.sm, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
   awaitingWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   awaitingHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  movingBannerText: { flex: 1, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text },
-  movingCancel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
   filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.sm },
   filterChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md, backgroundColor: colors.surface, maxWidth: 170 },
   filterChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
@@ -844,31 +407,7 @@ const styles = StyleSheet.create({
   searchClear: { paddingLeft: spacing.sm, paddingVertical: spacing.sm },
   searchClearText: { fontSize: 14, color: colors.textMuted },
   listSection: { paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
-  emptyList: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
   wineRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   wineRowActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
-  wineRowTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  cubbyTag: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.gold, borderWidth: 1, borderColor: colors.gold, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1, overflow: 'hidden' },
-  wineName: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text, flexShrink: 1 },
   wineMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
-  canvasWrap: { paddingHorizontal: spacing.xl },
-  canvas: { height: CANVAS_H, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
-  frame: { position: 'absolute', overflow: 'hidden', borderWidth: 2, borderColor: colors.gold, borderRadius: 3, backgroundColor: colors.surface },
-  legend: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, marginTop: spacing.lg },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendSwatch: { width: 14, height: 14, borderRadius: 3, borderWidth: 1, borderColor: colors.gold, transform: [{ rotate: '45deg' }] },
-  legendText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
-  sheetTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
-  sheetLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  pickRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  checkbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  checkboxOn: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.16)' },
-  checkboxTick: { fontSize: 13, color: colors.gold, fontFamily: fonts.bodySemibold },
-  saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
-  saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  cancelBtn: { alignItems: 'center', paddingTop: spacing.md },
-  cancelBtnText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

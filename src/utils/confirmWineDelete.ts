@@ -4,7 +4,7 @@ import type { CellarWine } from '../types/wine';
 
 // How many reviews are stored on these cellar rows. A wine's reviews live on its
 // cellar_wines row, so deleting the row deletes them too.
-export function reviewsOn(rows: (CellarWine | null | undefined)[]): number {
+export function reviewsOn(rows: (Pick<CellarWine, 'review_entries'> | null | undefined)[]): number {
   return rows.reduce((n, w) => n + entriesOf(w).length, 0);
 }
 

@@ -1,4 +1,3 @@
-import { useCellarImportStore } from './cellarImportStore';
 import { useFoodPairingStore } from './foodPairingStore';
 import { useLabelStore } from './labelStore';
 import { useLastIntelStore } from './lastIntelStore';
@@ -28,7 +27,6 @@ export function clearAllStores() {
   useScanStore.getState().reset();
   useLabelStore.getState().reset();
   useFoodPairingStore.getState().reset();
-  useCellarImportStore.getState().reset();
   useLineupStore.getState().clear();
 
   // Persisted to AsyncStorage under a global (non-user-scoped) key, so without

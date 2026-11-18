@@ -15,8 +15,7 @@ import { useCellar, invalidateCellarViews } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { useRacks } from '../../src/hooks/useRacks';
-import { getSlotAssignments } from '../../src/api/racks';
+import { fetchPlacementsForWines } from '../../src/api/placements';
 import { archiveBottles, ARCHIVE_NOTE_MAX } from '../../src/services/archiveNight';
 import { todayYmd } from '../../src/utils/reviewDate';
 import { findFoodWinePairing } from '../../src/api/label';
@@ -81,21 +80,23 @@ function CellarResults({ recommendations, wines, onSelect }: {
   // genuine matches, which used to render as a dead "no longer in your cellar"
   // card. Drop those rather than surface them.
   const live = recommendations.filter((rec) => wines.some((w) => w.id === rec.cellarWineId));
-  // Resolve where each wine physically lives so "View in Your Home Storage"
-  // jumps straight to that spot — the same targets the wine card links to.
-  const { racks } = useRacks();
-  const rackIds = racks.map((r) => r.id);
-  const { data: slotAssignments = [] } = useQuery({
-    queryKey: ['slot-assignments', rackIds],
-    queryFn: () => getSlotAssignments(rackIds),
-    enabled: rackIds.length > 0,
+  // Where each wine's bottles are, so "View in Your Home Storage" jumps
+  // straight to one of them: a rack or fridge, a bin cell, else an alt cellar.
+  const liveIds = live.map((rec) => rec.cellarWineId);
+  const { data: placements = [] } = useQuery({
+    queryKey: ['placements-list', 'pairing', liveIds.join(',')],
+    queryFn: () => fetchPlacementsForWines(liveIds),
+    enabled: liveIds.length > 0,
   });
   function storageHref(w: CellarWine): string {
-    if (w.storage_location_id) return `/cellar/storage-location/${w.storage_location_id}`;
-    if (w.bin_cell_id) return `/cellar/bin/cell/${w.bin_cell_id}`;
-    const slot = slotAssignments.find((s) => s.cellar_wine_id === w.id);
-    if (slot) return `/cellar/rack/${slot.rack_id}?highlight=${w.id}`;
-    return `/cellar/${w.id}`; // not yet placed → fall back to the wine card
+    const mine = placements.filter((p) => p.cellar_wine_id === w.id);
+    const rack = mine.find((p) => p.kind === 'rack');
+    if (rack) return `/cellar/rack/${rack.rack_id}?highlight=${w.id}`;
+    const cell = mine.find((p) => p.kind === 'bin');
+    if (cell) return `/cellar/bin/cell/${cell.bin_cell_id}`;
+    const loc = mine.find((p) => p.kind === 'location');
+    if (loc) return `/cellar/storage-location/${loc.storage_location_id}?highlight=${w.id}`;
+    return `/cellar/${w.id}`; // not placed anywhere → the wine card
   }
   return (
     <>

@@ -1,8 +1,8 @@
 import type { CellarImportWine } from '../api/label';
 
-// Deterministic profiles for known merchant exports. When a sheet's header
-// matches a profile's fingerprint, we map it exactly in code — instant, free,
-// and 100% accurate, with that merchant's own case rules baked in. Anything
+// Deterministic profiles for known merchant and cellar-app exports. When a
+// sheet's header matches a profile's fingerprint, we map it exactly in code —
+// instant, free, and 100% accurate, with that source's own case rules baked in. Anything
 // unrecognized falls through to the Claude parser. Adding a new merchant is a
 // small, self-contained function below + an entry in PROFILES.
 
@@ -382,6 +382,107 @@ function parseWineBourse(rows: string[][]): CellarImportWine[] | null {
   return out.length ? out : null;
 }
 
+// The first column whose header contains any of `parts` — for exports whose
+// header wording has drifted between versions.
+function ciLike(cols: Cols, ...parts: string[]): number {
+  for (const [name, i] of Object.entries(cols)) if (parts.some((p) => name.includes(p))) return i;
+  return -1;
+}
+// A vintage cell, with non-vintage as "NV" (CellarTracker writes NV as 1001,
+// Vivino as "N.V." or "U.V.").
+function vintageOf(s: string): string | null {
+  if (/^\s*1001\s*$/.test(s) || /\b[nu]\.?\s?v\.?(?:\s|$)/i.test(s)) return 'NV';
+  return yr(s);
+}
+// Wines repeated in a list (one row per bottle) become one holding.
+function sumRepeats(wines: { key: string; wine: CellarImportWine }[]): CellarImportWine[] {
+  const byKey = new Map<string, CellarImportWine>();
+  for (const { key, wine } of wines) {
+    const prev = byKey.get(key);
+    if (!prev) byKey.set(key, wine);
+    else { prev.totalBottles += wine.totalBottles; prev.looseBottles = prev.totalBottles; }
+  }
+  return Array.from(byKey.values());
+}
+
+// CellarTracker — the CSV from "My Cellar" → Export. The Wines view gives one
+// row per wine with its bottle count; the Bottles view one row per bottle, so
+// repeated rows of a wine (iWine) and size are added up. Price is what the
+// owner paid, Value CellarTracker's valuation. Column names are matched
+// loosely: they differ a little between views and over the years.
+function parseCellarTracker(rows: string[][]): CellarImportWine[] | null {
+  const h = headerMatch(rows, ['iwine', 'vintage', 'wine', 'producer']);
+  if (!h) return null;
+  const { idx, cols } = h;
+  const c = {
+    id: ci(cols, 'iwine'), wine: ci(cols, 'wine'), producer: ci(cols, 'producer'), vint: ci(cols, 'vintage'),
+    qty: ci(cols, 'quantity', 'totalquantity', 'qty'), size: ci(cols, 'size', 'bottlesize'), colour: ci(cols, 'color', 'colour'), type: ci(cols, 'type'),
+    country: ci(cols, 'country'), region: ci(cols, 'region'), sub: ci(cols, 'subregion'), app: ci(cols, 'appellation'),
+    from: ciLike(cols, 'beginconsume', 'drink from'), to: ciLike(cols, 'endconsume', 'drink to'),
+    price: ci(cols, 'price', 'nativeprice'), value: ci(cols, 'value'), cur: ci(cols, 'currency'),
+  };
+  const out: { key: string; wine: CellarImportWine }[] = [];
+  for (let i = idx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    const producer = get(r, c.producer); const full = get(r, c.wine);
+    if (!producer && !full) continue;
+    // No count column (the Bottles view): each row is one bottle.
+    const total = c.qty >= 0 ? intOf(get(r, c.qty)) ?? 0 : 1;
+    if (total < 1) continue;
+    // "Wine" is the full name, usually starting with the producer.
+    const cuvee = producer && full.toLowerCase().startsWith(producer.toLowerCase()) ? full.slice(producer.length).trim() : full;
+    const region = Array.from(new Set([get(r, c.app), get(r, c.sub), get(r, c.region)].filter(Boolean))).join(', ');
+    const cur = get(r, c.cur);
+    const size = volToMl(get(r, c.size));
+    out.push({
+      key: `${get(r, c.id) || full}|${size}`,
+      wine: mkWine({
+        producer: producer || full, wineName: cuvee && cuvee !== producer ? cuvee : null, vintage: vintageOf(get(r, c.vint)),
+        region: region || null, country: get(r, c.country) || null, colour: colourOf(`${get(r, c.colour)} ${get(r, c.type)}`),
+        bottleSizeMl: size, totalBottles: total, looseBottles: total,
+        drinkingWindowFrom: yr(get(r, c.from)), drinkingWindowTo: yr(get(r, c.to)),
+        purchasePricePerBottle: numOf(get(r, c.price)) || null, marketPricePerBottle: numOf(get(r, c.value)) || null,
+        currency: /^[a-z]{3}$/i.test(cur) ? cur.toUpperCase() : null,
+      }),
+    });
+  }
+  return out.length ? sumRepeats(out) : null;
+}
+
+// Vivino — cellar.csv from "Export your data". One row per wine with its count
+// in a "cellar count" column. Vivino has renamed headers over the years, so the
+// count is matched loosely; a file with no count (the full wine list rather
+// than the cellar) falls through to the general reader.
+function parseVivinoCellar(rows: string[][]): CellarImportWine[] | null {
+  const h = headerMatch(rows, ['winery', 'wine name', 'vintage']);
+  if (!h) return null;
+  const { idx, cols } = h;
+  const c = {
+    winery: ci(cols, 'winery'), name: ci(cols, 'wine name'), vint: ci(cols, 'vintage'), region: ci(cols, 'region'),
+    country: ci(cols, 'country'), type: ci(cols, 'wine type'), count: ciLike(cols, 'cellar count', 'quantity', 'bottles'),
+    window: ciLike(cols, 'drinking window'),
+  };
+  if (c.count < 0) return null;
+  const out: { key: string; wine: CellarImportWine }[] = [];
+  for (let i = idx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    const winery = get(r, c.winery); const name = get(r, c.name);
+    const total = intOf(get(r, c.count)) ?? 0;
+    if ((!winery && !name) || total < 1) continue;
+    const vintage = vintageOf(get(r, c.vint));
+    const dw = get(r, c.window);
+    out.push({
+      key: `${winery}|${name}|${vintage ?? ''}`,
+      wine: mkWine({
+        producer: winery || name, wineName: winery && name ? name : null, vintage,
+        region: get(r, c.region) || null, country: get(r, c.country) || null, colour: colourOf(get(r, c.type)),
+        totalBottles: total, looseBottles: total, drinkingWindowFrom: yr(dw), drinkingWindowTo: yrTo(dw), currency: null,
+      }),
+    });
+  }
+  return out.length ? sumRepeats(out) : null;
+}
+
 const PROFILES: { source: string; parse: (rows: string[][]) => CellarImportWine[] | null }[] = [
   { source: 'Justerini & Brooks', parse: parseJB },
   { source: 'Berry Bros & Rudd', parse: parseBerryBros },
@@ -393,6 +494,8 @@ const PROFILES: { source: string; parse: (rows: string[][]) => CellarImportWine[
   { source: 'Fine & Rare Wines', parse: parseFRW },
   { source: 'Nexus', parse: parseNexus },
   { source: 'Wine Bourse', parse: parseWineBourse },
+  { source: 'CellarTracker', parse: parseCellarTracker },
+  { source: 'Vivino', parse: parseVivinoCellar },
 ];
 
 // Try every known-merchant profile against a sheet. Returns the matched source

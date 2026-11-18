@@ -1,30 +1,22 @@
 import { supabase } from './supabase';
 import { cellarOwner, assertCanEditCellar, canEditCellar, VIEW_ONLY_MESSAGE } from './cellarContext';
-import { selectAllPages } from './paging';
+import { selectAllPages, chunkIds } from './paging';
 import type { CellarWine } from '../types/wine';
 import { findSameCellarWine, type WineLike } from '../utils/wineMatch';
 
+// Every live wine in the selected cellar, newest first. Paged past PostgREST's
+// 1000-row cap (large imported cellars run to ~9,000 wines); `id` breaks ties
+// between rows created together (an import) so no page overlaps or skips one.
 export async function getCellarWines(userId: string): Promise<CellarWine[]> {
-  // Page through in 1000-row chunks — PostgREST caps a single response at ~1000
-  // rows, which silently truncated large (~9k) imported cellars, undercounting
-  // Cellar Statistics totals and hiding wines from "From My Cellar" pairing +
-  // import de-dup. Fetch every page so callers always see the whole cellar.
-  const PAGE = 1000;
-  const out: CellarWine[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
+  return selectAllPages<CellarWine>((from, to) =>
+    supabase
       .from('cellar_wines')
       .select('*')
       .eq('user_id', cellarOwner(userId))
       .is('archived_at', null)
       .order('created_at', { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    const batch = data ?? [];
-    out.push(...batch);
-    if (batch.length < PAGE) break;
-  }
-  return out;
+      .order('id', { ascending: true })
+      .range(from, to));
 }
 
 // ----- Removal events (cellar_wine_removals) -----
@@ -97,36 +89,41 @@ export async function takeBackCellarWineRemovals(wine: CellarWine, alsoIds: stri
   }
 }
 
-// Heal data inconsistency: if a wine is currently assigned to a rack_slot, it
-// is by definition part of the user's live cellar. Older versions of the app
-// occasionally left wines with archived_at set while still referenced from a
-// slot — those wines showed in the rack view but were excluded from
-// getCellarWines, View Cellar Wine Notes, etc. This function clears that flag
-// for any wine currently in any of the user's racks. It's idempotent (no-op
-// when nothing's wrong) and safe to call on every cellar list mount.
+// Heal data left by older versions of the app: a wine still sitting in a rack
+// slot is by definition in the live cellar, but some were left with archived_at
+// set — they showed in the rack yet were missing from the cellar list and stats.
+// Clears that flag for any such wine. Idempotent; a no-op for view-only members
+// (they can't write the owner's rows). Returns how many wines it fixed.
 export async function repairRackedWines(userId: string): Promise<number> {
-  const { data: assignments, error: assignErr } = await supabase
-    .from('rack_slots')
-    .select('cellar_wine_id, wine_racks!inner(user_id)')
-    .eq('wine_racks.user_id', cellarOwner(userId))
-    .not('cellar_wine_id', 'is', null);
-  if (assignErr) {
-    console.error('[repairRackedWines] could not read rack assignments:', assignErr);
+  if (!canEditCellar()) return 0;
+  type SlotRow = { cellar_wine_id: string | null };
+  let slots: SlotRow[];
+  try {
+    slots = await selectAllPages<SlotRow>((from, to) =>
+      supabase
+        .from('rack_slots')
+        .select('cellar_wine_id, wine_racks!inner(user_id)')
+        .eq('wine_racks.user_id', cellarOwner(userId))
+        .not('cellar_wine_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, to));
+  } catch (err) {
+    console.error('[repairRackedWines] could not read rack assignments:', err);
     return 0;
   }
 
-  const wineIds = Array.from(new Set(((assignments ?? []) as any[]).map((r) => r.cellar_wine_id))).filter(Boolean) as string[];
-  if (wineIds.length === 0) return 0;
-
-  // Un-archive racked wines that are wrongly archived.
-  const { data: fixed, error: fixErr } = await supabase
-    .from('cellar_wines')
-    .update({ archived_at: null })
-    .in('id', wineIds)
-    .not('archived_at', 'is', null)
-    .select('id');
-  if (fixErr) console.error('[repairRackedWines] archive reset failed:', fixErr);
-  return (fixed ?? []).length;
+  let fixed = 0;
+  for (const chunk of chunkIds(slots.map((s) => s.cellar_wine_id))) {
+    const { data, error } = await supabase
+      .from('cellar_wines')
+      .update({ archived_at: null })
+      .in('id', chunk)
+      .not('archived_at', 'is', null)
+      .select('id');
+    if (error) console.error('[repairRackedWines] archive reset failed:', error);
+    fixed += (data ?? []).length;
+  }
+  return fixed;
 }
 
 // Newest archive first. Paged past PostgREST's 1000-row cap, like getCellarWines.
@@ -140,16 +137,6 @@ export async function getArchivedWines(userId: string): Promise<CellarWine[]> {
       .order('archived_at', { ascending: false })
       .order('id', { ascending: true })
       .range(from, to));
-}
-
-export async function getSharedCellarWines(ownerId: string): Promise<CellarWine[]> {
-  const { data, error } = await supabase
-    .from('cellar_wines')
-    .select('*')
-    .eq('user_id', ownerId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data ?? [];
 }
 
 // Fetch a single cellar wine by id — used when a screen holds a per-location
@@ -177,6 +164,20 @@ export async function addCellarWine(wine: NewCellarWine): Promise<CellarWine> {
     .single();
   if (error) throw error;
   return data;
+}
+
+// Add many wines in one write (a cellar import). The caller picks each row's
+// id, so re-sending a batch whose reply was lost adds nothing twice: rows that
+// already landed are skipped. Returns the ids actually added this time.
+export async function addCellarWines(rows: (NewCellarWine & { id: string })[]): Promise<string[]> {
+  assertCanEditCellar();
+  if (!rows.length) return [];
+  const { data, error } = await supabase
+    .from('cellar_wines')
+    .upsert(rows.map((r) => ({ ...r, user_id: cellarOwner(r.user_id) })), { onConflict: 'id', ignoreDuplicates: true })
+    .select('id');
+  if (error) throw error;
+  return (data ?? []).map((r) => r.id as string);
 }
 
 export async function updateCellarWine(id: string, updates: Partial<CellarWine>): Promise<void> {
@@ -244,39 +245,6 @@ export async function setAutoLabelIfMissing(id: string, path: string): Promise<b
     .select('id');
   if (error) throw error;
   return (data?.length ?? 0) > 0;
-}
-
-export async function shareCellar(ownerId: string, email: string): Promise<void> {
-  const { error } = await supabase
-    .from('cellar_shares')
-    .insert({ owner_id: ownerId, shared_with_email: email });
-  if (error) throw error;
-}
-
-export async function getCellarShares(ownerId: string): Promise<{ shared_with_email: string; shared_with_id: string | null }[]> {
-  const { data, error } = await supabase
-    .from('cellar_shares')
-    .select('shared_with_email, shared_with_id')
-    .eq('owner_id', ownerId);
-  if (error) throw error;
-  return data ?? [];
-}
-
-export async function getSharedWithMe(): Promise<{ owner_id: string; owner_email?: string }[]> {
-  const { data, error } = await supabase
-    .from('cellar_shares')
-    .select('owner_id');
-  if (error) throw error;
-  return data ?? [];
-}
-
-export async function removeCellarShare(ownerId: string, email: string): Promise<void> {
-  const { error } = await supabase
-    .from('cellar_shares')
-    .delete()
-    .eq('owner_id', ownerId)
-    .eq('shared_with_email', email);
-  if (error) throw error;
 }
 
 // Record when a purchase price was set (migration 124). Separate, best-effort

@@ -7,20 +7,18 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useCellar, invalidateCellarViews } from '../../src/hooks/useCellar';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useLineupStore } from '../../src/stores/lineupStore';
-import { useLabelStore } from '../../src/stores/labelStore';
 import { detectLineup, prepareImageBase64, scanLabel, type DetectedBottle } from '../../src/api/label';
-import { assignSlots, getRackSlots } from '../../src/api/racks';
-import { findCellarWineByIdentity } from '../../src/api/cellar';
-import { freeSlotsFrom } from '../../src/utils/rackSlots';
+import { findCellarWineByIdentity, getCellarWineById } from '../../src/api/cellar';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
+import { rackRoomFor } from '../../src/services/rackMoves';
 import { wineNameKey, looseWineMatch } from '../../src/utils/wineIdentity';
 import { findSameCellarWine } from '../../src/utils/wineMatch';
-import { BottleSizePicker, bottleSizeCl } from '../../src/components/BottleSizePicker';
+import { BottleSizePicker, bottleSizeCl, bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import type { CellarWine } from '../../src/types/wine';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
@@ -90,54 +88,19 @@ function newCellarRow(b: DetectedBottle, userId: string, quantity: number, extra
   } as any;
 }
 
-// Place ONE wine's bottles as a line running PERPENDICULAR to the lineup axis,
-// from the wine's own position. A horizontal lineup (wines across columns)
-// stacks each wine's bottles DOWN its column; a vertical lineup (wines down
-// rows) runs each wine's bottles ACROSS its row. Skips occupied slots, stops at
-// the grid edge.
-function computeWineLine(
-  wineIndex: number, startRow: number, startCol: number,
-  rows: number, cols: number, quantity: number,
-  lineupOrient: 'Vertical' | 'Horizontal', occupied: Set<string>,
-): Array<{ row: number; col: number }> {
-  const result: Array<{ row: number; col: number }> = [];
-  if (lineupOrient === 'Horizontal') {
-    const col = startCol + wineIndex;
-    if (col < 0 || col >= cols) return result;
-    let row = startRow;
-    while (result.length < quantity && row >= 0 && row < rows) {
-      if (!occupied.has(`${row},${col}`)) result.push({ row, col });
-      row++;
-    }
-  } else {
-    const row = startRow + wineIndex;
-    if (row < 0 || row >= rows) return result;
-    let col = startCol;
-    while (result.length < quantity && col >= 0 && col < cols) {
-      if (!occupied.has(`${row},${col}`)) result.push({ row, col });
-      col++;
-    }
-  }
-  return result;
-}
-
 export default function ScanLineupScreen() {
   const { wines: cellarWines, addWine, updateWine } = useCellar();
   const { racks } = useRacks();
   const { session } = useAuth();
   const qc = useQueryClient();
-  const { wines: lineupWines, imageUri, originRackId, startSlot, orientation, setLineup, updateBottle } = useLineupStore();
-  const { setWineDetails } = useLabelStore();
+  const { wines: lineupWines, imageUri, originRackId, setLineup, updateBottle } = useLineupStore();
 
-  // Rack-placement lineup: launched from a rack with a chosen start slot — the
-  // whole lineup is auto-placed into the rack at once (legacy path).
-  const isRackPlacement = startSlot != null && !!originRackId;
-  // New default: launched from a rack with NO start slot — after confirming the
-  // list the bottles return to the rack "awaiting placement", and the user taps
-  // an empty slot for each one in order. Both use the same tickable review list.
-  const isManualPlace = startSlot == null && !!originRackId;
-  const isRackLineup = !!originRackId;
+  // After the list is confirmed, the bottles go back to the rack "awaiting
+  // placement" and the user taps an empty slot for each one, in scan order.
   const [placing, setPlacing] = useState(false);
+  // Rows already saved by an earlier attempt that then hit a snag — trying
+  // again only adds the rest.
+  const [savedRows, setSavedRows] = useState<ReadonlySet<number>>(new Set());
   // Synchronous double-tap guard — `placing` state lands a render too late.
   const placingRef = useRef(false);
   // Quick batch confirm: each row is ticked once reviewed/edited; "Add Bottles"
@@ -151,8 +114,8 @@ export default function ScanLineupScreen() {
   const [bottlesIndex, setBottlesIndex] = useState<number | null>(null);
   const [bottlesQty, setBottlesQty] = useState(1);
 
-  // If the store already holds a lineup (we've returned mid-flow after
-  // onboarding a wine), open straight onto the review list.
+  // If the store already holds a lineup (we've come back mid-flow), open
+  // straight onto the review list.
   const [stage, setStage] = useState<Stage>(lineupWines.length > 0 ? 'review' : 'capture');
   // Live in-app camera (matches Archive a Lineup) — go straight to the scanner
   // with an instruction overlay, no take/upload chooser.
@@ -237,13 +200,13 @@ export default function ScanLineupScreen() {
         setStage('capture');
         return;
       }
-      // Batch identical bottles (same producer + name + vintage) into one ×N row,
-      // so a scanned pair becomes one cellar listing of 2, not two listings.
-      // Different vintages of the same wine stay separate.
+      // Batch identical bottles (same producer + name + vintage + size) into one
+      // ×N row, so a scanned pair becomes one cellar listing of 2, not two
+      // listings. Different vintages or formats of the same wine stay separate.
       const batched: DetectedBottle[] = [];
       const indexByKey = new Map<string, number>();
       for (const b of raw) {
-        const key = `${norm(b.producer)}|${norm(b.wineName)}|${(b.vintage ?? '').trim()}`;
+        const key = `${norm(b.producer)}|${norm(b.wineName)}|${(b.vintage ?? '').trim()}|${b.bottleSizeMl ?? 750}`;
         const at = indexByKey.get(key);
         if (at != null) {
           batched[at].quantity = (batched[at].quantity ?? 1) + 1;
@@ -254,6 +217,7 @@ export default function ScanLineupScreen() {
         }
       }
       setConfirmed(new Set());
+      setSavedRows(new Set());
       // Store the normalised image: the boxes were detected on it, so the label
       // crops line up.
       setLineup(batched, workUri);
@@ -264,16 +228,6 @@ export default function ScanLineupScreen() {
     }
   }
 
-  // Is this detected bottle now in the live cellar? (Matched on producer + name
-  // so an edited vintage during onboarding still reads as added.)
-  function isAdded(b: DetectedBottle): boolean {
-    const p = norm(b.producer);
-    const n = norm(b.wineName) || p;
-    return cellarWines.some((w) => norm(w.producer) === p && (norm(w.wine_name) === n || norm(w.wine_name) === norm(b.wineName)));
-  }
-
-  const addedCount = lineupWines.filter(isAdded).length;
-  const allDone = lineupWines.length > 0 && addedCount === lineupWines.length;
   const lineupRack = racks.find((r) => r.id === originRackId);
   const lineupRackName = lineupRack?.name ?? 'the rack';
   // Only true racks stack extra bottles vertically down a column — fridges and
@@ -355,40 +309,27 @@ export default function ScanLineupScreen() {
     setConfirmed((prev) => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; });
   }
 
-  // Send one bottle through the same flow as Scan a Label (Confirm Wine
-  // Details → Wine Intel → Add to Cellar). context=lineup routes the flow back
-  // here afterwards. router.replace keeps the back-stack to a single screen.
-  function onboard(b: DetectedBottle) {
-    setWineDetails({
-      producer: b.producer,
-      region: b.region ?? '',
-      wineName: b.wineName || null,
-      vintage: b.vintage || '',
-      style: null,
-      bottleSizeMl: null,
-      // Pre-seed the cellar quantity from the batched count so a "×2" lineup
-      // entry adds 2 bottles (the user can still adjust on the results screen).
-      quantity: b.quantity ?? 1,
-    } as any);
-    router.replace('/label/confirm?context=lineup');
-  }
-
-  // The existing cellar row that is the same wine AND vintage as a detected
-  // bottle. Producer alone is never enough — that once merged "Mullineux Iron"
-  // into "Mullineux Schist". Producer + name compare as an order-independent
-  // set, so an OCR producer/name swap still matches.
-  function findCellarMatch(b: DetectedBottle): CellarWine | null {
+  // The existing cellar row that is the same wine, vintage AND bottle size as a
+  // detected bottle (a magnum is its own line). Producer alone is never enough —
+  // that once merged "Mullineux Iron" into "Mullineux Schist". Producer + name
+  // compare as an order-independent set, so an OCR producer/name swap still
+  // matches. The live cache first, then the database, so a momentarily stale
+  // cache can't slip a duplicate through.
+  async function findCellarMatch(b: DetectedBottle, userId: string): Promise<CellarWine | null> {
     if (!wineNameKey(b.producer, b.wineName)) return null;
-    return findSameCellarWine(cellarWines, { producer: b.producer, wineName: b.wineName, region: (b as any).region ?? null, vintage: b.vintage }) ?? null;
+    const identity = { producer: b.producer, wineName: b.wineName, region: b.region ?? null, vintage: b.vintage };
+    const size = b.bottleSizeMl ?? 750;
+    return findSameCellarWine(cellarWines, identity, size) ?? await findCellarWineByIdentity(userId, identity, size);
   }
 
   // Fallback for OCR / word-order / grape-placement variance that the exact
   // wineNameKey misses — e.g. "Iron Kasteelsig" (grape Syrah) vs "Iron Syrah
-  // Kasteelsig". Same producer+name+grape token SUBSET, same vintage.
+  // Kasteelsig". Same producer+name+grape token SUBSET, same vintage and size.
   function findFuzzyCellarMatch(b: DetectedBottle): CellarWine | null {
-    return cellarWines.find((w) => looseWineMatch(
+    const size = b.bottleSizeMl ?? 750;
+    return cellarWines.find((w) => (w.bottle_size_ml ?? 750) === size && looseWineMatch(
       { producer: w.producer, wineName: w.wine_name, grape: w.grape_variety, vintage: w.vintage },
-      { producer: b.producer, wineName: b.wineName, grape: (b as any).grape ?? null, vintage: b.vintage },
+      { producer: b.producer, wineName: b.wineName, grape: b.grape ?? null, vintage: b.vintage },
     )) ?? null;
   }
 
@@ -396,7 +337,8 @@ export default function ScanLineupScreen() {
   // whether to add to that listing or keep it as a separate entry, rather than
   // merging silently (which would wrongly collapse a fuzzy false match).
   function askMergeChoice(b: DetectedBottle, match: CellarWine): Promise<'merge' | 'separate'> {
-    const existingLabel = [match.producer, match.wine_name, match.vintage].filter(Boolean).join(' ');
+    const size = bottleSizeLabel(match.bottle_size_ml ?? 750);
+    const existingLabel = `${[match.producer, match.wine_name, match.vintage].filter(Boolean).join(' ')} (${size})`;
     const incomingLabel = [b.producer, b.wineName, b.vintage].filter(Boolean).join(' ') || 'this bottle';
     return new Promise((resolve) => {
       showAlert({
@@ -433,136 +375,87 @@ export default function ScanLineupScreen() {
     } catch { /* placed without a thumbnail */ }
   }
 
-  // Rack-placement: place each kept bottle into consecutive free slots from the
-  // chosen start, in the chosen orientation. A wine already in the cellar has
-  // these bottles added to its count (reusing its line); a new wine is created
-  // minimally (intel auto-generates when its card is first opened).
-  async function placeAll() {
-    if (!isRackPlacement || !originRackId || !startSlot || placingRef.current) return;
-    const rack = racks.find((r) => r.id === originRackId);
-    const userId = session?.user.id;
-    if (!rack || !userId) {
-      showAlert({ title: 'Could not place lineup', body: 'Please try again.' });
-      return;
+  // Before anything is saved: how many bottles of each size the rack still
+  // has room for. When they don't all fit, say so — the rows beyond the room
+  // are still added, but wait in Your Cellar List instead of the rack.
+  // Resolves the room per size, or null if the user cancelled.
+  async function checkRoom(rackId: string, rows: DetectedBottle[]): Promise<Map<number, number> | null> {
+    const wanted = new Map<number, number>();
+    for (const b of rows) wanted.set(b.bottleSizeMl ?? 750, (wanted.get(b.bottleSizeMl ?? 750) ?? 0) + (b.quantity ?? 1));
+    const room = new Map<number, number>();
+    let fit = 0;
+    let total = 0;
+    for (const [size, n] of wanted) {
+      const { free } = await rackRoomFor(rackId, size);
+      room.set(size, free);
+      fit += Math.min(free, n);
+      total += n;
     }
-    const kept = lineupWines;
-    if (kept.length === 0) return;
-    placingRef.current = true;
-    setPlacing(true);
-    try {
-      const existing = await getRackSlots(originRackId);
-      const occupied = new Set(existing.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`));
-      const total = kept.reduce((sum, b) => sum + (b.quantity ?? 1), 0);
-      // Large-format band (row -1) is a single row → keep the simple linear
-      // fill. Standard rows use per-wine perpendicular placement so a wine's
-      // multiple bottles stack perpendicular to the lineup axis.
-      const useLinear = startSlot.row === -1;
-      const linearFree = useLinear
-        ? freeSlotsFrom(startSlot.row, startSlot.col, rack.rows, rack.cols, total, orientation, occupied, rack.large_format_cols)
-        : [];
-      const imgDims = await lineupImageDims();
-      let cursor = 0;
-      let placedCount = 0;
-      // Several lineup rows can merge into one cellar wine, each holding the same
-      // stale match.quantity — keep a running total per cellar id so the count
-      // rises by every bottle placed.
-      const bumps = new Map<string, number>();
-      for (let wi = 0; wi < kept.length; wi++) {
-        const b = kept[wi];
-        const count = b.quantity ?? 1;
-        let slots: Array<{ row: number; col: number }>;
-        if (useLinear) {
-          slots = linearFree.slice(cursor, cursor + count);
-          cursor += slots.length;
-          if (slots.length === 0) break; // band full
-        } else {
-          slots = computeWineLine(wi, startSlot.row, startSlot.col, rack.rows, rack.cols, count, orientation, occupied);
-          slots.forEach((s) => occupied.add(`${s.row},${s.col}`));
-          if (slots.length === 0) continue; // this wine's line is off-grid/full
-        }
-        // Already in the cellar? Add these bottles to that line's count and
-        // reuse it (no duplicate line). Check the live cache first, then the DB
-        // directly — so a momentarily-stale cache can't slip a duplicate through.
-        let match = findCellarMatch(b) ?? await findCellarWineByIdentity(userId, { producer: b.producer, wineName: b.wineName, vintage: b.vintage });
-        // Exact key missed it? Try the looser subset match before creating a
-        // duplicate row (the reported Mullineux Iron Syrah case).
-        if (!match) match = findFuzzyCellarMatch(b);
-        // When a match is found, ASK per bottle — never merge silently.
-        const reusedExisting = match ? (await askMergeChoice(b, match)) === 'merge' : false;
-        let targetId: string;
-        if (match && reusedExisting) {
-          targetId = match.id;
-          const addedSoFar = bumps.get(match.id) ?? 0;
-          bumps.set(match.id, addedSoFar + slots.length);
-          await updateWine.mutateAsync({ id: match.id, updates: { quantity: (match.quantity ?? 0) + addedSoFar + slots.length } });
-        } else {
-          const saved = await addWine.mutateAsync(newCellarRow(b, userId, slots.length));
-          targetId = saved.id;
-        }
-        await assignSlots(originRackId, slots, targetId);
-        // A merged wine keeps the label it already has, unless the user
-        // re-scanned this bottle's label.
-        if (b.overrideImageUri || !reusedExisting || !match?.label_image_path) await attachThumbnail(userId, targetId, b, imgDims);
-        placedCount += slots.length;
-      }
-      qc.invalidateQueries({ queryKey: ['rack-slots', originRackId] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-      useLineupStore.getState().clear();
-      const leftover = total - placedCount;
-      router.replace(`/cellar/rack/${originRackId}` as any);
-      if (leftover > 0) {
-        showAlert({ title: 'Rack filled up', body: `Placed ${placedCount} of ${total} bottles — the rack ran out of free slots, so ${leftover} ${leftover === 1 ? "wasn't" : "weren't"} placed.` });
-      }
-    } catch (err) {
-      showAlert({ title: 'Could not place lineup', body: err instanceof Error ? err.message : 'Please try again.' });
-      setPlacing(false);
-    } finally {
-      placingRef.current = false;
-    }
+    if (fit >= total) return room;
+    return new Promise((resolve) => {
+      showAlert({
+        title: 'Not enough room',
+        body: fit > 0
+          ? `Only ${fit} of ${total} will fit in ${lineupRackName} — the rest stay in Your Cellar List.`
+          : `There's no free slot in ${lineupRackName} for these bottles — they'll stay in Your Cellar List.`,
+        dismissable: false,
+        buttons: [
+          { text: 'Add Wines', onPress: () => resolve(room) },
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+        ],
+      });
+    });
   }
 
-  // Manual-placement lineup (no start slot): each confirmed bottle becomes a
-  // cellar row "awaiting placement" in this rack, then the rack takes over and
-  // the user taps an empty slot for each, in scan order. A wine already in the
-  // cellar can join that listing instead (asked per bottle, never silently).
-  async function placeAsAwaiting() {
-    if (!isManualPlace || !originRackId || placingRef.current) return;
+  // Each confirmed bottle becomes a cellar row "awaiting placement" in this
+  // rack, then the rack takes over and the user taps an empty slot for each, in
+  // scan order. A wine already in the cellar can join that listing instead
+  // (asked per bottle, never silently). Rows are saved one by one; if one
+  // fails, the saved ones are marked and a retry only adds the rest.
+  async function addLineup() {
+    if (!originRackId || placingRef.current) return;
     const userId = session?.user.id;
     if (!userId) { showAlert({ title: 'Could not add lineup', body: 'Please try again.' }); return; }
-    const kept = lineupWines;
-    if (kept.length === 0) return;
+    const pending = lineupWines.map((b, i) => ({ b, i })).filter(({ i }) => !savedRows.has(i));
+    if (pending.length === 0) return;
     placingRef.current = true;
     setPlacing(true);
+    const saved = new Set(savedRows);
     try {
+      const room = await checkRoom(originRackId, pending.map(({ b }) => b));
+      if (!room) return;
       const imgDims = await lineupImageDims();
-      // Running total per merged cellar id (see placeAll) — two rows merging
-      // into one wine must both count, not overwrite each other.
-      const bumps = new Map<string, number>();
-      for (const b of kept) {
+      for (const { b, i } of pending) {
+        const size = b.bottleSizeMl ?? 750;
         const count = b.quantity ?? 1;
-        const match = findCellarMatch(b) ?? findFuzzyCellarMatch(b);
+        // Rows wait for a slot in scan order while the rack has room for them.
+        const left = room.get(size) ?? 0;
+        room.set(size, Math.max(0, left - count));
+        const awaiting = left > 0 ? { awaiting_placement: true, awaiting_placement_unit_id: originRackId } : {};
+        const match = (await findCellarMatch(b, userId)) ?? findFuzzyCellarMatch(b);
         if (match && (await askMergeChoice(b, match)) === 'merge') {
-          const addedSoFar = bumps.get(match.id) ?? 0;
-          bumps.set(match.id, addedSoFar + count);
-          await updateWine.mutateAsync({
-            id: match.id,
-            updates: { quantity: (match.quantity ?? 0) + addedSoFar + count, awaiting_placement: true, awaiting_placement_unit_id: originRackId },
-          });
-          continue; // the existing listing keeps its label + intel
+          // A fresh read, so two rows merging into one wine both count.
+          const live = await getCellarWineById(match.id);
+          if (!live || live.archived_at) throw new Error(`${match.wine_name} is no longer in your cellar.`);
+          await updateWine.mutateAsync({ id: live.id, updates: { quantity: (live.quantity ?? 0) + count, ...awaiting } });
+        } else {
+          const added = await addWine.mutateAsync(newCellarRow(b, userId, count, awaiting));
+          await attachThumbnail(userId, added.id, b, imgDims);
         }
-        const saved = await addWine.mutateAsync(newCellarRow(b, userId, count, { awaiting_placement: true, awaiting_placement_unit_id: originRackId }));
-        await attachThumbnail(userId, saved.id, b, imgDims);
+        saved.add(i);
+        setSavedRows(new Set(saved));
       }
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-      qc.invalidateQueries({ queryKey: ['rack-slots', originRackId] });
+      invalidateCellarViews(qc);
       useLineupStore.getState().clear();
-      router.replace(`/cellar/rack/${originRackId}` as any);
+      router.replace(`/cellar/rack/${originRackId}`);
     } catch (err) {
-      showAlert({ title: 'Could not add lineup', body: err instanceof Error ? err.message : 'Please try again.' });
-      setPlacing(false);
+      showAlert(saved.size > savedRows.size
+        ? { title: 'Some wines added, then hit a snag', body: `${saved.size} of ${lineupWines.length} are in your cellar. Tap Add Wines to add the rest. ${err instanceof Error ? err.message : ''}`.trim() }
+        : { title: 'Could not add lineup', body: err instanceof Error ? err.message : 'Please try again.' });
+      invalidateCellarViews(qc);
     } finally {
       placingRef.current = false;
+      setPlacing(false);
     }
   }
 
@@ -614,9 +507,9 @@ export default function ScanLineupScreen() {
           <ActivityIndicator color={colors.gold} />
           <Text style={styles.hint}>Vinster is reading your bottles…</Text>
         </View>
-      ) : isRackLineup ? (
-        // Rack-lineup review: tick each bottle to confirm (or Edit it), then place
-        // it into the rack — auto (legacy start-slot) or by tapping slots in order.
+      ) : (
+        // Review: tick each bottle to confirm (or Edit it), then add them; the
+        // rack then asks for a slot for each one.
         <ScrollView contentContainerStyle={styles.content}>
           {lineupWines.length === 0 ? (
             <>
@@ -640,39 +533,42 @@ export default function ScanLineupScreen() {
               ) : null}
               {lineupWines.map((b, i) => {
                 const isOn = confirmed.has(i);
+                const isSaved = savedRows.has(i);
                 const name = [b.producer, b.wineName].filter(Boolean).join(' ') || 'Unreadable bottle';
                 const qty = b.quantity ?? 1;
                 return (
                   <View key={i} style={styles.lineupRow}>
-                    <TouchableOpacity style={styles.checkbox} onPress={() => toggleConfirm(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <TouchableOpacity style={styles.checkbox} onPress={() => toggleConfirm(i)} disabled={isSaved} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Text style={[styles.checkboxText, isOn && styles.checkboxTextOn]}>{isOn ? '☑' : '☐'}</Text>
                     </TouchableOpacity>
                     <View style={styles.rowText}>
                       <Text style={styles.rowName} numberOfLines={2}>
                         {b.vintage ? `${b.vintage} ` : ''}{name}, {qty}x{bottleSizeCl(b.bottleSizeMl ?? 750)}cl
                       </Text>
-                      {isRackType ? (
+                      {isRackType && !isSaved ? (
                         <TouchableOpacity onPress={() => openBottles(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                           <Text style={styles.addBottlesLink}>+ Add more bottles vertically</Text>
                         </TouchableOpacity>
                       ) : null}
                       {!b.confident && !isOn ? <Text style={styles.unconfident}>Low-confidence read — check it</Text> : null}
                     </View>
-                    <TouchableOpacity onPress={() => openEdit(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={styles.editLink}>Edit</Text>
-                    </TouchableOpacity>
+                    {isSaved ? (
+                      <Text style={styles.addedTag}>Added ✓</Text>
+                    ) : (
+                      <TouchableOpacity onPress={() => openEdit(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={styles.editLink}>Edit</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 );
               })}
               <TouchableOpacity
                 style={[styles.primaryBtn, (placing || !allConfirmed) && { opacity: 0.4 }]}
-                onPress={isManualPlace ? placeAsAwaiting : placeAll}
+                onPress={addLineup}
                 disabled={placing || !allConfirmed}
                 activeOpacity={0.85}
               >
-                <Text style={styles.primaryBtnText}>
-                  {placing ? (isManualPlace ? 'Adding…' : 'Placing…') : 'Add Wines'}
-                </Text>
+                <Text style={styles.primaryBtnText}>{placing ? 'Adding…' : 'Add Wines'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryBtn} onPress={retake} activeOpacity={0.85}>
                 <Text style={styles.secondaryBtnText}>Retake</Text>
@@ -680,60 +576,6 @@ export default function ScanLineupScreen() {
               <Text style={styles.placementHintItalic}>Select the bottle placement on the next screen</Text>
             </>
           )}
-        </ScrollView>
-      ) : (
-        // review
-        <ScrollView contentContainerStyle={styles.content}>
-          {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewSmall} resizeMode="contain" /> : null}
-
-          {allDone ? (
-            <View style={styles.successBlock}>
-              <Text style={styles.successTitle}>All Lineup Wines Have Been Saved Successfully</Text>
-              <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list')} activeOpacity={0.85}>
-                <Text style={styles.doneBtnText}>View Cellar List</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace(originRackId ? `/cellar/rack/${originRackId}` as any : '/(tabs)/cellar')} activeOpacity={0.85}>
-                <Text style={styles.doneBtnText}>{originRackId ? 'Back to Rack' : 'Done'}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : lineupWines.length === 0 ? (
-            <Text style={styles.hint}>Vinster couldn't read any bottles. Try a clearer photo with the front labels showing.</Text>
-          ) : (
-            <>
-              <Text style={styles.sectionLabel}>Add to Your Cellar</Text>
-              {lineupWines.map((b, i) => {
-                const added = isAdded(b);
-                const qty = b.quantity ?? 1;
-                const label = [b.vintage, b.producer, b.wineName].filter(Boolean).join(' ');
-                return (
-                  <View key={i} style={styles.row}>
-                    <View style={styles.rowText}>
-                      <Text style={styles.rowName} numberOfLines={2}>{label || 'Unreadable bottle'}</Text>
-                      <View style={styles.rowMetaRow}>
-                        {b.region ? <Text style={styles.rowMeta} numberOfLines={1}>{b.region}</Text> : null}
-                        {qty >= 2 ? <Text style={styles.qtyTag}>×{qty} bottles</Text> : null}
-                      </View>
-                      {!b.confident && !added ? <Text style={styles.unconfident}>Low-confidence read — check the details</Text> : null}
-                    </View>
-                    {added ? (
-                      <Text style={styles.addedTag}>Added ✓</Text>
-                    ) : (
-                      <TouchableOpacity onPress={() => onboard(b)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                        <Text style={styles.editAddLink}>add / edit</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                );
-              })}
-              <Text style={styles.progressHint}>{addedCount} of {lineupWines.length} added</Text>
-            </>
-          )}
-
-          {!allDone && lineupWines.length > 0 ? (
-            <TouchableOpacity style={styles.secondaryBtn} onPress={retake} activeOpacity={0.85}>
-              <Text style={styles.secondaryBtnText}>Retake</Text>
-            </TouchableOpacity>
-          ) : null}
         </ScrollView>
       )}
 
@@ -772,7 +614,7 @@ export default function ScanLineupScreen() {
         <View style={styles.editOverlay}>
           <View style={styles.bottlesSheet}>
             <Text style={styles.editTitle}>Add more bottles</Text>
-            <Text style={styles.editFieldLabel}>Bottles ({orientation === 'Horizontal' ? 'stacked down' : 'across'} from this wine)</Text>
+            <Text style={styles.editFieldLabel}>Bottles of this wine</Text>
             <View style={styles.qtyRow}>
               <TouchableOpacity style={styles.qtyBtn} onPress={() => setBottlesQty((q) => Math.max(1, q - 1))} activeOpacity={0.7}>
                 <Text style={styles.qtyBtnText}>−</Text>
@@ -830,21 +672,13 @@ const styles = StyleSheet.create({
   chooseBtnText: { paddingHorizontal: spacing.xl },
   secondaryBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   secondaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
-  doneBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  doneBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
-  sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: spacing.sm },
 
   // Consistent gold stats bar shared with Archive a Night.
   statsBar: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: spacing.md, marginBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   statsBarText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   addBottlesLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, marginTop: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowText: { flex: 1 },
   rowName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
-  rowMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 2 },
-  rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted },
-  // Batched-bottle count shown after the region, e.g. "×2 bottles".
-  qtyTag: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
   unconfident: { fontFamily: fonts.bodyRegular, fontSize: 11, color: colors.gold, marginTop: 2 },
 
   // Quantity stepper in the lineup edit sheet.
@@ -853,7 +687,6 @@ const styles = StyleSheet.create({
   qtyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.gold, lineHeight: 26 },
   qtyValue: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, minWidth: 32, textAlign: 'center' },
   editHintCaptured: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.gold, textAlign: 'center', marginTop: spacing.sm },
-  editAddLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
 
   confirmAllLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   // "Place in <location>" — centred gold header above the stats.
@@ -875,7 +708,4 @@ const styles = StyleSheet.create({
   editDiscard: { alignItems: 'center', paddingTop: spacing.md },
   editDiscardText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   addedTag: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
-  progressHint: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
-  successBlock: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
-  successTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', lineHeight: 28, marginBottom: spacing.sm },
 });

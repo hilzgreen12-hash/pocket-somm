@@ -134,6 +134,6 @@ export async function moveWholeWineHome(wineId: string, dest: HomeDestination): 
     if (p.kind !== 'rack') await decrementPlacement(p.id, p.quantity ?? 0);
   }
   await updateCellarWine(wineId, dest.kind === 'list'
-    ? { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: false, awaiting_placement_unit_id: null }
+    ? { awaiting_placement: false, awaiting_placement_unit_id: null }
     : { awaiting_placement: true, awaiting_placement_unit_id: dest.id });
 }

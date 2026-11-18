@@ -6,11 +6,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../hooks/useRacks';
 import { useAuth } from '../hooks/useAuth';
+import { useCellarContext } from '../hooks/useCellarContext';
+import { invalidateCellarViews } from '../hooks/useCellar';
 import { useRackStore } from '../stores/rackStore';
-import { getRackBottleCounts, getSlotAssignments } from '../api/racks';
-import { getBins, getBinBottleCounts, deleteBin, getBinCells } from '../api/bins';
-import { fetchStorageLocations, deleteStorageLocation, renameStorageLocation } from '../api/storageLocations';
-import { deleteLocationAndWines, trimOrDeleteWineOnUnitDelete, fetchLatestLocationThumbs, type LocationCollageItem } from '../api/placements';
+import { VIEW_ONLY_MESSAGE } from '../api/cellarContext';
+import { getRackBottleCounts } from '../api/racks';
+import { summariseRackContents, deleteRackWithContents } from '../services/rackContents';
+import { getBins, getBinBottleCounts, deleteBin } from '../api/bins';
+import { fetchStorageLocations, fetchLocationBottleCounts, renameStorageLocation } from '../api/storageLocations';
+import { deleteLocationKeepWines, fetchLatestLocationThumbs, type LocationCollageItem } from '../api/placements';
+import { summariseBinContents, deleteBinWithContents, type UnitContents } from '../services/storageContents';
+import { confirmDeleteAltCellar } from './altCellar/confirmDeleteAltCellar';
 import { WineCardThumb } from './WineCardThumb';
 import { LabelThumb } from './LabelThumb';
 import { placeholderLabelImages } from './ExamplePlaceholder';
@@ -26,6 +32,13 @@ const TILE_H = HOME_TILE.h;
 
 function bottleLabel(n: number) {
   return n === 0 ? 'Empty' : `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
+}
+
+// The "Delete … & Contents" confirmation text for a rack, fridge or bin: what
+// goes, and the reviews on wines kept nowhere else.
+function contentsBody({ bottles, wines, reviewsLost }: UnitContents): string {
+  const reviewLine = reviewsLost === 0 ? '' : reviewsLost === 1 ? ' Your review of one of them will be deleted too.' : ` Your ${reviewsLost} reviews of them will be deleted too.`;
+  return `${bottles} ${bottles === 1 ? 'bottle' : 'bottles'} (${wines} ${wines === 1 ? 'wine' : 'wines'}) will be permanently removed from your cellar.${reviewLine} Bottles of these wines stored elsewhere stay. This can't be undone.`;
 }
 
 // A storage tile's backdrop: a collage of up to four wines held there (label
@@ -116,6 +129,12 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
   const qc = useQueryClient();
   const { setPendingStorageType, reset: resetRackStore, setPendingWineId, setPendingAddMode } = useRackStore();
   const userId = session?.user.id;
+  // View-only members of a shared cellar can browse its storage but not add,
+  // rename or delete any of it.
+  const canEdit = useCellarContext().role !== 'view';
+  const requireEditor = (action: () => void) => requireAuth(() => (
+    canEdit ? action() : showAlert({ title: 'View only', body: VIEW_ONLY_MESSAGE })
+  ));
 
   // Rename an Alt Cellar from its carousel long-press (showAlert has no input,
   // so the rename lives in its own small modal).
@@ -127,8 +146,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     setRenaming(true);
     try {
       await renameStorageLocation(renameLoc.id, renameVal.trim());
-      qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
-      qc.invalidateQueries({ queryKey: ['storage-location', renameLoc.id] });
+      invalidateCellarViews(qc);
       setRenameLoc(null);
     } catch (err) {
       showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -162,22 +180,26 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
   // here or count toward the home totals; they live in the Full Cellar List's
   // "Stored Externally" grouping, not "Your Wines At Home".
   const homeLocations = storageLocations.filter((l) => !l.is_external);
-  const rackBottles = Object.values(rackCounts).reduce((sum: number, n: number) => sum + n, 0);
-  const binBottles = Object.values(binCounts).reduce((sum: number, n: number) => sum + n, 0);
-  const locationBottles = homeLocations.reduce((sum, l) => sum + (l.wineCount ?? 0), 0);
-  const totalBottles = rackBottles + binBottles + locationBottles;
+  const homeLocationIds = homeLocations.map((l) => l.id);
+  const { data: locationCounts = {} } = useQuery({
+    queryKey: ['storage-locations', 'counts', homeLocationIds],
+    queryFn: () => fetchLocationBottleCounts(homeLocationIds),
+    enabled: homeLocationIds.length > 0,
+  });
+  const sum = (counts: Record<string, number>) => Object.values(counts).reduce((n, c) => n + c, 0);
+  const totalBottles = sum(rackCounts) + sum(binCounts) + sum(locationCounts);
 
-  // Up to four wines per location for the tile collages. Keyed on the bottle
-  // total so it refreshes whenever wines are added/moved/removed.
+  // Up to four wines per unit for the tile collages. Keyed on the bottle total
+  // too, so screens that only refresh the cellar still update the tiles.
   const { data: tileThumbs } = useQuery({
-    queryKey: ['home-storage-thumbs', userId, totalBottles],
-    queryFn: () => fetchLatestLocationThumbs(userId!),
+    queryKey: ['home-storage-thumbs', rackIds, binIds, homeLocationIds, totalBottles],
+    queryFn: () => fetchLatestLocationThumbs({ rackIds, binIds, locationIds: homeLocationIds }),
     enabled: !!userId,
   });
   const totalLocations = racks.length + bins.length + homeLocations.length;
   const hasStorage = totalLocations > 0;
 
-  // ---- Add flows (verbatim from the old racks page) ------------------------
+  // ---- Add flows -------------------------------------------------------------
   function clearStalePendingWine() {
     setPendingWineId(null);
     setPendingAddMode(false);
@@ -186,12 +208,12 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     clearStalePendingWine();
     resetRackStore();
     setPendingStorageType(type);
-    router.push('/cellar/rack/resize' as any);
+    router.push('/cellar/rack/new');
   }
   function addByKind(kind: 'rack' | 'fridge' | 'bin' | 'location') {
     if (kind === 'rack' || kind === 'fridge') return addRackOrFridge(kind);
-    if (kind === 'bin') return router.push('/cellar/bin/resize' as any);
-    return router.push('/cellar/storage-location/new' as any);
+    if (kind === 'bin') return router.push('/cellar/bin/new');
+    return router.push('/cellar/storage-location/new');
   }
   // Top-level + carousel "+ Add" — offers every storage kind in one prompt.
   function handleAddAnyStorage() {
@@ -201,14 +223,14 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
       buttons: [
         { text: 'Add a Wine Rack', onPress: () => addRackOrFridge('rack') },
         { text: 'Add a Wine Fridge', onPress: () => addRackOrFridge('fridge') },
-        { text: 'Add a Wine Bin (diamond shaped)', onPress: () => router.push('/cellar/bin/resize' as any) },
-        { text: 'Add an Alt Cellar', onPress: () => router.push('/cellar/storage-location/new' as any) },
+        { text: 'Add a Wine Bin (diamond shaped)', onPress: () => router.push('/cellar/bin/new') },
+        { text: 'Add an Alt Cellar', onPress: () => router.push('/cellar/storage-location/new') },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
 
-  // ---- Long-press delete flows (verbatim) ----------------------------------
+  // ---- Long-press actions (editors only) -----------------------------------
   function handleLongPressRack(rack: WineRack) {
     const noun = rack.storage_type === 'fridge' ? 'Fridge' : 'Rack';
     const onError = (err: unknown) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -216,84 +238,95 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
       title: rack.name,
       buttons: [
         { text: `Delete ${noun}`, style: 'destructive', onPress: () => { removeRack.mutate(rack.id, { onError, onSuccess: contentsKeptNotice }); } },
-        {
-          text: `Delete ${noun} & Contents`,
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Count this unit's bottles per wine, delete the unit (cascades its
-              // slots), THEN trim/delete each wine merge-safely — so a wine that
-              // also sits in another unit keeps its other bottles.
-              const slots = await getSlotAssignments([rack.id]);
-              const countByWine = new Map<string, number>();
-              for (const s of slots) countByWine.set(s.cellar_wine_id, (countByWine.get(s.cellar_wine_id) ?? 0) + 1);
-              await new Promise<void>((resolve, reject) => removeRack.mutate(rack.id, { onSuccess: () => resolve(), onError: reject }));
-              for (const [id, count] of countByWine) await trimOrDeleteWineOnUnitDelete(id, count);
-              qc.invalidateQueries({ queryKey: ['cellar'] });
-            } catch (err) { onError(err); }
-          },
-        },
+        { text: `Delete ${noun} & Contents`, style: 'destructive', onPress: () => void confirmDeleteRackContents(rack, noun) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
-  function handleLongPressBin(bin: WineRack) {
-    const invalidate = () => {
-      qc.invalidateQueries({ queryKey: ['bins', userId] });
-      qc.invalidateQueries({ queryKey: ['bins', 'counts'] });
-      qc.invalidateQueries({ queryKey: ['cellar'] });
+  // "Delete Rack & Contents": count what goes first — bottles, wines and the
+  // reviews on wines kept nowhere else — and say so before anything is deleted.
+  async function confirmDeleteRackContents(rack: WineRack, noun: string) {
+    const onError = (err: unknown) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+    const refresh = () => {
+      qc.invalidateQueries({ queryKey: ['racks', userId] });
+      invalidateCellarViews(qc);
     };
+    try {
+      const contents = await summariseRackContents(rack.id);
+      if (contents.bottles === 0) {
+        removeRack.mutate(rack.id, { onError });
+        return;
+      }
+      showAlert({
+        title: `Delete ${rack.name} & its contents?`,
+        body: contentsBody(contents),
+        buttons: [
+          { text: `Delete ${noun} & Contents`, style: 'destructive', onPress: async () => {
+              try { await deleteRackWithContents(rack.id, contents); }
+              catch (err) { onError(err); }
+              finally { refresh(); }
+            } },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+    } catch (err) {
+      onError(err);
+    }
+  }
+  function handleLongPressBin(bin: WineRack) {
     const onError = (err: unknown) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
     showAlert({
       title: bin.name,
       buttons: [
-        { text: 'Delete Bin', style: 'destructive', onPress: async () => { try { await deleteBin(bin.id); invalidate(); contentsKeptNotice(); } catch (err) { onError(err); } } },
-        {
-          text: 'Delete Bin & Contents',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // A bin holds a wine's full quantity in a cell; count that, delete the
-              // bin, then trim/delete each wine merge-safely (a wine also in a rack
-              // keeps its racked bottles).
-              const cells = await getBinCells(bin.id);
-              const countByWine = new Map<string, number>();
-              for (const c of cells) for (const w of (c.wines ?? [])) countByWine.set(w.id, (countByWine.get(w.id) ?? 0) + (w.quantity ?? 1));
-              await deleteBin(bin.id);
-              for (const [id, count] of countByWine) await trimOrDeleteWineOnUnitDelete(id, count);
-              invalidate();
-            } catch (err) { onError(err); }
-          },
-        },
+        { text: 'Delete Bin', style: 'destructive', onPress: async () => {
+            try { await deleteBin(bin.id); contentsKeptNotice(); }
+            catch (err) { onError(err); }
+            finally { invalidateCellarViews(qc); }
+          } },
+        { text: 'Delete Bin & Contents', style: 'destructive', onPress: () => void confirmDeleteBinContents(bin) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
-  function handleLongPressLocation(loc: { id: string; name: string }) {
-    const invalidate = () => {
-      qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
-      qc.invalidateQueries({ queryKey: ['cellar'] });
+  // "Delete Bin & Contents": the bottles in the bin (not the wines' whole
+  // quantities), counted and confirmed like a rack's.
+  async function confirmDeleteBinContents(bin: WineRack) {
+    const onError = (err: unknown) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+    const run = async (work: () => Promise<void>) => {
+      try { await work(); }
+      catch (err) { onError(err); }
+      finally { invalidateCellarViews(qc); }
     };
+    try {
+      const contents = await summariseBinContents(bin.id);
+      if (contents.bottles === 0) {
+        await run(() => deleteBin(bin.id));
+        return;
+      }
+      showAlert({
+        title: `Delete ${bin.name} & its contents?`,
+        body: contentsBody(contents),
+        buttons: [
+          { text: 'Delete Bin & Contents', style: 'destructive', onPress: () => void run(() => deleteBinWithContents(bin.id, contents)) },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+    } catch (err) {
+      onError(err);
+    }
+  }
+  function handleLongPressLocation(loc: { id: string; name: string }) {
     const onError = (err: unknown) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
     showAlert({
       title: loc.name,
       buttons: [
         { text: 'Rename Location', onPress: () => { setRenameLoc(loc); setRenameVal(loc.name); } },
-        { text: 'Delete Alt Cellar', style: 'destructive', onPress: async () => { try { await deleteStorageLocation(loc.id); invalidate(); contentsKeptNotice(); } catch (err) { onError(err); } } },
-        {
-          text: 'Delete Alt Cellar & Contents',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Placement-aware + merge-safe: deletes wines that live ONLY here and
-              // trims the here-count from wines that also live elsewhere (rather than
-              // the old legacy-field lookup, which missed placement-based wines and
-              // could destroy bottles held in other units).
-              await deleteLocationAndWines(loc.id);
-              invalidate();
-            } catch (err) { onError(err); }
-          },
-        },
+        { text: 'Delete Alt Cellar', style: 'destructive', onPress: async () => {
+            try { await deleteLocationKeepWines(loc.id); contentsKeptNotice(); }
+            catch (err) { onError(err); }
+            finally { invalidateCellarViews(qc); }
+          } },
+        { text: 'Delete Alt Cellar & Contents', style: 'destructive', onPress: () => void confirmDeleteAltCellar(loc, { qc }) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -308,8 +341,8 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   bg={<WinesCollage items={tileThumbs?.rack[rack.id]} offset={0} />}
                   name={rack.name}
                   meta={`${rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'} · ${bottleLabel(rackCounts[rack.id] ?? 0)}`}
-                  onPress={() => router.push(`/cellar/rack/${rack.id}` as any)}
-                  onLongPress={() => handleLongPressRack(rack)}
+                  onPress={() => router.push(`/cellar/rack/${rack.id}`)}
+                  onLongPress={canEdit ? () => handleLongPressRack(rack) : undefined}
                 />
     ) })),
     ...bins.map((bin) => ({ key: storageKey('bin', bin.id), label: bin.name, node: (
@@ -317,17 +350,17 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   bg={<WinesCollage items={tileThumbs?.bin[bin.id]} offset={4} />}
                   name={bin.name}
                   meta={`Bin · ${bottleLabel(binCounts[bin.id] ?? 0)}`}
-                  onPress={() => router.push(`/cellar/bin/${bin.id}` as any)}
-                  onLongPress={() => handleLongPressBin(bin)}
+                  onPress={() => router.push(`/cellar/bin/${bin.id}`)}
+                  onLongPress={canEdit ? () => handleLongPressBin(bin) : undefined}
                 />
     ) })),
     ...homeLocations.map((loc) => ({ key: storageKey('location', loc.id), label: loc.name, node: (
                 <StorageTile
                   bg={<WinesCollage items={tileThumbs?.location[loc.id]} offset={8} />}
                   name={loc.name}
-                  meta={`Alt Cellar · ${bottleLabel(loc.wineCount ?? 0)}`}
-                  onPress={() => router.push(`/cellar/storage-location/${loc.id}` as any)}
-                  onLongPress={() => handleLongPressLocation(loc)}
+                  meta={`Alt Cellar · ${bottleLabel(locationCounts[loc.id] ?? 0)}`}
+                  onPress={() => router.push(`/cellar/storage-location/${loc.id}`)}
+                  onLongPress={canEdit ? () => handleLongPressLocation(loc) : undefined}
                 />
     ) })),
   ], (t) => t.key);
@@ -370,7 +403,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
             onReorder={saveOrder}
             items={orderedTiles}
             trailing={
-          <TouchableOpacity style={styles.addTile} onPress={() => requireAuth(handleAddAnyStorage)} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.addTile} onPress={() => requireEditor(handleAddAnyStorage)} activeOpacity={0.85}>
             <Text style={styles.addTilePlus} allowFontScaling={false}>+ Add</Text>
           </TouchableOpacity>
             }
@@ -385,12 +418,12 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   bg={<CollageBg offset={i * 2} />}
                   name={t.name}
                   meta={`${t.type} · Tap to set up`}
-                  onPress={() => requireAuth(() => addByKind(t.kind))}
+                  onPress={() => requireEditor(() => addByKind(t.kind))}
                 />
               </View>
             ))
           }
-          <TouchableOpacity style={styles.addTile} onPress={() => requireAuth(handleAddAnyStorage)} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.addTile} onPress={() => requireEditor(handleAddAnyStorage)} activeOpacity={0.85}>
             <Text style={styles.addTilePlus} allowFontScaling={false}>+ Add</Text>
           </TouchableOpacity>
         </ScrollView>

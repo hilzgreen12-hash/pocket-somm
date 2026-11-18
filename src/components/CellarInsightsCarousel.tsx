@@ -10,6 +10,7 @@ import { useCellar } from '../hooks/useCellar';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useLabels } from '../hooks/useLabels';
 import { wineNameKey } from '../utils/wineIdentity';
+import { isSomeoneElsesBottle } from '../utils/cellarReview';
 import { LabelThumb } from './LabelThumb';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, placeholderLabelImages, NAMED_LABELS } from './ExamplePlaceholder';
@@ -37,7 +38,7 @@ const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
 // ever shows when THAT tile has no data (never beside its own real tile).
 const INSIGHT_EXAMPLES: { key: string; card: PlaceholderCard }[] = [
   { key: 'personality', card: { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY } },
-  { key: 'archived', card: { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Drank Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY } },
+  { key: 'archived', card: { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY } },
   { key: 'restaurants', card: { kind: 'image', uri: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY } },
   { key: 'cookbook', card: { kind: 'labelCollage', images: [KITCHEN_IMG], title: 'Recipes in Your Cookbook', stamp: '12 Recipes', overlay: INSIGHT_OVERLAY } },
   { key: 'labels-month', card: { kind: 'labelCollage', images: placeholderLabelImages(6, 4), title: 'Labels Scanned Last Month', stamp: '12 wine labels', overlay: INSIGHT_OVERLAY } },
@@ -91,8 +92,9 @@ export function CellarInsightsCarousel() {
     },
   });
 
-  // Bottles archived in the last month — every one counts; the newest labels
-  // make the collage.
+  // Bottles archived in the last month — drunk, gifted or otherwise removed (an
+  // archive records no reason, so the tile doesn't claim they were drunk); the
+  // newest labels make the collage.
   const { data: archivedLM = [] } = useQuery({
     queryKey: ['insights-archived-month', userId],
     enabled: !!userId,
@@ -163,7 +165,7 @@ export function CellarInsightsCarousel() {
   if (archivedBottles > 0 && archivedThumbs.length > 0) {
     tiles.push({
       key: 'archived',
-      title: 'Drank Last Month', meta: `${archivedBottles} bottle${archivedBottles === 1 ? '' : 's'}`,
+      title: 'Archived Last Month', meta: `${archivedBottles} bottle${archivedBottles === 1 ? '' : 's'}`,
       collage: archivedThumbs,
       onTap: () => router.push('/cellar/list?archived=1'),
     });
@@ -207,6 +209,7 @@ export function CellarInsightsCarousel() {
       if (hasReview && recent(c.reviewed_at ?? c.chosen_at)) { reviewCount++; addPic(c.label_image_path, c.producer, c.wine_name); }
     }
     for (const w of wines as any[]) {
+      if (isSomeoneElsesBottle(w)) continue; // a shared cellar owner's reviews aren't this user's
       const entries: { date?: string | null; savedAt?: string | null }[] = Array.isArray(w.review_entries) ? w.review_entries : [];
       const n = entries.length
         ? entries.filter((e) => recent(e.date ?? e.savedAt)).length

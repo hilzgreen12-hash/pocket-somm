@@ -10,7 +10,9 @@ import { formatCurrency, currencySymbol } from '../../../constants/currency';
 import { colors, spacing } from '../../../constants/theme';
 import { PER_75CL } from '../../../utils/bottleValue';
 import { effectiveMaturity } from '../../../utils/maturity';
-import { entriesOf, byRecency } from '../../../utils/cellarReview';
+import { byRecency, isSomeoneElsesBottle, visibleEntries } from '../../../utils/cellarReview';
+import { findExistingReview } from '../../../utils/reviewDedup';
+import { useChosenWines } from '../../../hooks/useChosenWines';
 import { reviewPlaceLabel } from '../../../utils/reviewPlace';
 import type { CellarWine } from '../../../types/wine';
 import type { WineCardData } from './useWineCardData';
@@ -61,6 +63,18 @@ export function reviewHrefs(wine: CellarWine) {
     write: `/wines/chosen?openCellarReviewInput=${wine.id}${back}`,
     edit: `/wines/chosen?openCellarReviewEdit=${wine.id}${back}`,
   };
+}
+
+// A new review of this wine in the user's own Wine Reviews (for a bottle in
+// someone else's shared cellar), returning to the card.
+function ownReviewHref(wine: CellarWine): string {
+  const qs = new URLSearchParams({ seedAdd: '1', backTo: `/cellar/${wine.id}` });
+  if (wine.producer) qs.set('sp', wine.producer);
+  if (wine.wine_name) qs.set('sw', wine.wine_name);
+  if (wine.vintage) qs.set('sv', wine.vintage);
+  if (wine.region) qs.set('sr', wine.region);
+  if (wine.grape_variety) qs.set('sg', wine.grape_variety);
+  return `/wines/chosen?${qs.toString()}`;
 }
 
 // Overview's facts bar: bottles, critic score, value, drinking window. Each
@@ -132,7 +146,14 @@ export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRan
   onRangeWine: (name: string, tier: string | null) => void;
 }) {
   const isArchived = !!wine.archived_at;
-  const reviews = useMemo(() => byRecency(entriesOf(wine)), [wine]);
+  const reviews = useMemo(() => byRecency(visibleEntries(wine)), [wine]);
+  // In someone else's shared cellar the owner's reviews stay hidden; the
+  // member's own review of the wine lives in their Wine Reviews.
+  const othersBottle = isSomeoneElsesBottle(wine);
+  const { chosenWines } = useChosenWines();
+  const myReview = useMemo(() => (othersBottle
+    ? findExistingReview(chosenWines, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage })
+    : null), [othersBottle, chosenWines, wine]);
   const latest = reviews[0] ?? null;
   const hrefs = reviewHrefs(wine);
   const placeOf = (r: { location: string | null }) => reviewPlaceLabel(r.location);
@@ -202,7 +223,18 @@ export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRan
         </View>
       ) : null}
 
-      {latest || canEdit ? (
+      {othersBottle ? (
+        <View style={wc.Card}>
+          <Text style={wc.H2}>Your Reviews</Text>
+          <Text style={wc.Small}>Your reviews of this wine are kept in your own Wine Reviews.</Text>
+          <TouchableOpacity
+            onPress={() => router.push((myReview ? `/wines/chosen?openReview=${myReview.id}&backTo=${encodeURIComponent(`/cellar/${wine.id}`)}` : ownReviewHref(wine)))}
+            activeOpacity={0.7}
+          >
+            <Text style={[wc.Link, { marginTop: 6 }]}>{myReview ? 'View your review ›' : 'Add your review ›'}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : latest || canEdit ? (
         <View style={wc.Card}>
           <View style={wc.CardHead}>
             <Text style={wc.H2}>Your Reviews</Text>

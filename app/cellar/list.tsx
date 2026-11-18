@@ -5,22 +5,22 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive, invalidateCellarViews } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
-import { usePreferences } from '../../src/hooks/usePreferences';
 import { useCellarContext } from '../../src/hooks/useCellarContext';
 import {
   useCellarListFilters, locationOptions, PRICE_SORT_OPTIONS, SCORE_SORT_OPTIONS, COLOUR_OPTIONS, MATURITY_OPTIONS,
   type SortMode, type CellarListRowData,
 } from '../../src/hooks/useCellarListFilters';
-import { updateCellarIntelBatch } from '../../src/services/bulkIntel';
+import { useBulkIntel } from '../../src/hooks/useBulkIntel';
 import { archiveBottles } from '../../src/services/archiveNight';
 import { moveExternalBottlesHome, moveWholeWineHome, type HomeDestination } from '../../src/services/moveBottles';
+import { rackRoomFor, confirmRackRoom } from '../../src/services/rackMoves';
 import { backfillMissingMaturities } from '../../src/services/maturityBackfill';
 import { deleteCellarWine } from '../../src/api/cellar';
 import { getBins, getBinOfCell } from '../../src/api/bins';
 import { fetchCellarLocations, createCellarLocation, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
 import {
-  fetchPlacementsForWines, reconcileLegacyLocationWines, reconcileQuantityBelowPlacements,
+  fetchPlacementsForWines, reconcileQuantityBelowPlacements,
   deleteLocationKeepWines, deleteLocationAndWines, type CellarPlacement,
 } from '../../src/api/placements';
 import { todayYmd } from '../../src/utils/reviewDate';
@@ -30,7 +30,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { useReturnToCellar } from '../../src/components/winecard/cellar/useReturnToCellar';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
-import { SearchProgress } from '../../src/components/SearchProgress';
+import { BulkIntelProgress } from '../../src/components/BulkIntelProgress';
 import { RenameModal } from '../../src/components/RenameModal';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import { CellarListRow } from '../../src/components/cellarList/CellarListRow';
@@ -48,7 +48,6 @@ import type { CellarWine, StorageLocation, WineRack } from '../../src/types/wine
 type Sheet = 'location' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | null;
 
 const NEW_LOCATION = 'new_location';
-const INTEL_BATCH_SIZE = 25;
 
 // Stable empty defaults, so the memoised filters don't recompute while a query loads.
 const NO_PLACEMENTS: CellarPlacement[] = [];
@@ -83,7 +82,6 @@ export default function CellarListScreen() {
   const { role, ownerId } = useCellarContext();
   const canEdit = role !== 'view';
   const cellarId = ownerId ?? userId;
-  const { preferences } = usePreferences();
   const { archived, added, add, region } = useLocalSearchParams<{ archived?: string; added?: string; add?: string; region?: string }>();
   const isArchiveView = archived === '1';
 
@@ -171,18 +169,6 @@ export default function CellarListScreen() {
       .then((healed) => { if (healed > 0) invalidateCellarViews(qc); })
       .catch(() => { /* best-effort heal */ });
   }, [userId, cellarId, canEdit, wines.length, qc]);
-
-  // Fold wines an OLD move left pointing at a home alt cellar without a real
-  // placement back onto their line there. Home cellars only, so a large
-  // external import is never touched.
-  useEffect(() => {
-    if (!userId || !canEdit || wines.length === 0 || !storageQuery.isSuccess) return;
-    if (!firstTimeThisSession(`legacy-locations:${cellarId}`)) return;
-    const homeIds = storageLocations.filter((s) => !s.is_external).map((s) => s.id);
-    reconcileLegacyLocationWines(userId, homeIds)
-      .then((healed) => { if (healed > 0) invalidateCellarViews(qc); })
-      .catch(() => { /* best-effort heal */ });
-  }, [userId, cellarId, canEdit, wines.length, storageQuery.isSuccess, storageLocations, qc]);
 
   // Drinking windows for wines that have none, quietly in the background, so the
   // Maturity filter doesn't drop them. Wines held only in External Storage stay
@@ -312,8 +298,7 @@ export default function CellarListScreen() {
       reviewsLost: reviewsOn(rows),
       onDelete: async () => {
         setBusy(true);
-        // Deleting the row also empties its rack slots (their wine link is
-        // ON DELETE SET NULL) and removes its placements (cascade).
+        // Deleting the row also deletes its rack slots and placements (cascade).
         try { for (const id of ids) await deleteCellarWine(id); }
         catch (err) { showAlert({ title: 'Could not delete', body: errorText(err) }); }
         finally { refreshAll(); setBusy(false); }
@@ -335,7 +320,12 @@ export default function CellarListScreen() {
   async function moveOneHome(target: Extract<MoveHomeTarget, { kind: 'one' }>, dest: HomeDestination, count: number) {
     const w = target.wine;
     try {
-      const moved = await moveExternalBottlesHome(w.id, count, target.externalPls, dest);
+      // A rack or fridge only takes as many as it has free slots for.
+      const sending = dest.kind === 'rack'
+        ? await confirmRackRoom(await rackRoomFor(dest.id, w.bottle_size_ml ?? 750), count, 'stay in external storage')
+        : count;
+      if (sending === 0) return;
+      const moved = await moveExternalBottlesHome(w.id, sending, target.externalPls, dest);
       if (moved === 0) throw new Error('Those bottles are no longer in external storage. Pull to refresh and try again.');
       refreshAll();
       if (dest.kind === 'rack') router.push(`/cellar/rack/${dest.id}?placeWine=${w.id}&placeLimit=${moved}`);
@@ -416,10 +406,46 @@ export default function CellarListScreen() {
 
   async function moveSelectedHome(dest: HomeDestination) {
     const ids = [...selectedIds];
+    if (dest.kind === 'rack' && !(await confirmRackRoomForWines(ids, dest))) return;
     if (!(await runOnSelected(ids, (id) => moveWholeWineHome(id, dest), 'move', 'moved'))) return;
     if (dest.kind === 'rack') router.push(`/cellar/rack/${dest.id}`);
     else if (dest.kind === 'bin') router.push(`/cellar/bin/${dest.id}`);
     else showAlert({ title: 'Moved', body: `${winesLabel(ids.length)} moved to ${dest.kind === 'location' ? dest.name : 'Your Cellar List, unplaced'}.` });
+  }
+
+  // Every bottle of the chosen wines goes to wait for a slot in the rack. When
+  // they won't all fit, say how many will (the rest stay in Your Cellar List,
+  // unplaced) and let the user back out. Resolves true to go ahead.
+  async function confirmRackRoomForWines(ids: string[], dest: { id: string; name: string }): Promise<boolean> {
+    const bySize = new Map<number, number>();
+    for (const id of ids) {
+      const w = wines.find((x) => x.id === id);
+      if (w) bySize.set(w.bottle_size_ml ?? 750, (bySize.get(w.bottle_size_ml ?? 750) ?? 0) + (w.quantity ?? 1));
+    }
+    let fit = 0;
+    let total = 0;
+    try {
+      for (const [size, n] of bySize) {
+        fit += Math.min(n, (await rackRoomFor(dest.id, size)).free);
+        total += n;
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: errorText(err) });
+      return false;
+    }
+    if (fit >= total) return true;
+    return new Promise((resolve) => {
+      showAlert({
+        title: 'Not enough room',
+        body: fit > 0
+          ? `Only ${fit} of ${total} will fit in ${dest.name} — the rest stay in Your Cellar List.`
+          : `There's no free slot in ${dest.name} for these bottles. Nothing has been moved.`,
+        dismissable: false,
+        buttons: fit > 0
+          ? [{ text: 'Move', onPress: () => resolve(true) }, { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) }]
+          : [{ text: 'OK', style: 'cancel', onPress: () => resolve(false) }],
+      });
+    });
   }
 
   function onMoveHomePick(dest: HomeDestination, count: number) {
@@ -627,52 +653,14 @@ export default function CellarListScreen() {
 
   // ---- "Update all": critic scores and values for wines missing them ----
 
-  const [intelUpdating, setIntelUpdating] = useState(false);
-  const [intelProgress, setIntelProgress] = useState({ done: 0, total: 0 });
-  const intelAbortRef = useRef<AbortController | null>(null);
-
-  // Runs in bunches of 25: each press confirms, then does the next bunch.
-  function handleUpdateAllIntel() {
-    const missing = filters.missingIntel;
-    if (missing.length === 0 || intelUpdating) return;
-    const batch = missing.slice(0, INTEL_BATCH_SIZE);
-    showAlert({
-      title: 'Update wine intel',
-      body: `Vinster updates your wines in bunches of ${INTEL_BATCH_SIZE} at a time, which it completes with ease.${
-        missing.length > batch.length
-          ? ` This will do the next ${batch.length} of ${missing.length} — press "Update all" again for each further bunch.`
-          : ''
-      }`,
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Go', onPress: () => void runIntelBatch(batch) },
-      ],
-    });
-  }
-
-  async function runIntelBatch(batch: CellarWine[]) {
-    const controller = new AbortController();
-    intelAbortRef.current = controller;
-    setIntelUpdating(true);
-    setIntelProgress({ done: 0, total: batch.length });
-    try {
-      await updateCellarIntelBatch(batch, preferences?.defaultCurrency ?? 'GBP', (done, total) => setIntelProgress({ done, total }), controller.signal);
-    } catch {
-      showAlert({ title: 'Could not finish', body: 'Some wines could not be updated. Please try again.' });
-    } finally {
-      refreshAll();
-      setIntelUpdating(false);
-      intelAbortRef.current = null;
-    }
-  }
-
-  // "Save Progress and Exit Update": stop starting further wines; each wine
-  // already updated is saved.
-  function exitIntelUpdate() {
-    intelAbortRef.current?.abort();
-    setIntelUpdating(false);
-    refreshAll();
-  }
+  // Imported wines and wines a recent run couldn't value are left out (see
+  // services/bulkIntel); the photo-less get a label photo found while we're here.
+  const bulkIntel = useBulkIntel(refreshAll, { findLabels: true });
+  const { eligible: bulkEligible } = bulkIntel;
+  const intelTargets = useMemo(
+    () => (isArchiveView ? [] : bulkEligible(filters.missingIntel)),
+    [isArchiveView, bulkEligible, filters.missingIntel],
+  );
 
   // ---- Filter chips and their pop-ups ----
 
@@ -755,10 +743,10 @@ export default function CellarListScreen() {
             <Text style={styles.summaryText}>
               {winesLabel(filters.rows.length)} · {bottlesLabel(filters.totalBottles)}
             </Text>
-            {canEdit && filters.missingIntel.length > 0 ? (
-              <TouchableOpacity onPress={handleUpdateAllIntel} activeOpacity={0.7} style={styles.missingIntelBtn}>
+            {intelTargets.length > 0 ? (
+              <TouchableOpacity onPress={() => bulkIntel.start(intelTargets, 'intel', 'Update all')} activeOpacity={0.7} style={styles.missingIntelBtn}>
                 <Text style={styles.missingIntelText}>
-                  {winesLabel(filters.missingIntel.length)} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
+                  {winesLabel(intelTargets.length)} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -870,20 +858,7 @@ export default function CellarListScreen() {
         </View>
       )}
 
-      {/* "Update all" progress. Back is blocked so a mid-batch dismiss can't strand it. */}
-      <Modal visible={intelUpdating} animationType="fade" onRequestClose={() => {}}>
-        <View style={{ flex: 1 }}>
-          <SearchProgress
-            title="Updating wine intel…"
-            subtitle="Vinster needs a moment"
-            body="Vinster is fetching critic scores and market values for your wines."
-            durationMs={Math.max(15000, intelProgress.total * 2500)}
-          />
-          <TouchableOpacity style={styles.exitUpdateBtn} onPress={exitIntelUpdate} activeOpacity={0.85}>
-            <Text style={styles.exitUpdateText}>Save Progress and Exit Update</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
+      <BulkIntelProgress progress={bulkIntel.progress} title="Updating wine intel…" onStop={bulkIntel.stop} />
 
       {/* Deleting a location's wines. Back is blocked mid-delete. */}
       <Modal visible={deleting} animationType="fade" onRequestClose={() => {}}>
@@ -1029,8 +1004,6 @@ const styles = StyleSheet.create({
   selectActionDisabled: { opacity: 0.4 },
   selectActionText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.cream, textAlign: 'center', letterSpacing: 0.3 },
 
-  exitUpdateBtn: { position: 'absolute', bottom: 64, alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: colors.background },
-  exitUpdateText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   deleteProgressWrap: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.md },
   deleteProgressTitle: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.4 },
   deleteProgressCount: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },

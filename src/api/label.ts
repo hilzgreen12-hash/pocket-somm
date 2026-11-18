@@ -652,25 +652,36 @@ export interface CellarImportWine {
   notes: string | null;
 }
 
-export async function parseCellarImport(text: string, source?: string): Promise<CellarImportWine[]> {
-  const data = await invokeFunction('parse-cellar-import', { text, source: source ?? '' }) as { wines?: CellarImportWine[] };
-  return data.wines ?? [];
+// What one read of a list returned. `truncated`: part of it wasn't read (the
+// text was over the server's cap, or the reply ran out of room part-way).
+export interface CellarListRead {
+  wines: CellarImportWine[];
+  truncated: boolean;
 }
 
-// PDF invoices / statements: the base64 PDF is read directly by Claude (as a
-// document) rather than decoded to rows on-device.
-export async function parseCellarPdf(pdfBase64: string, source?: string): Promise<CellarImportWine[]> {
-  // Prefer the streamed path (heartbeat-kept SSE survives a cellular blip on
-  // this long PDF read); fall back to the buffered invoke on a transport drop.
-  // A real application error (not a transport drop) propagates without falling back.
+// Read one list: spreadsheet rows as text, or a PDF invoice / statement (read
+// directly by Claude as a document rather than decoded on the phone). Prefers
+// the streamed path (heartbeat-kept SSE survives a cellular blip on a long
+// read); falls back to the buffered invoke on a transport drop. A real
+// application error propagates without falling back.
+async function readCellarList(body: { text: string } | { pdfBase64: string }, source?: string): Promise<CellarListRead> {
+  const payload = { ...body, source: source ?? '' };
+  let data: { wines?: CellarImportWine[]; truncated?: boolean };
   try {
-    const data = await streamEdgeFunction('parse-cellar-import', { pdfBase64, source: source ?? '' }) as { wines?: CellarImportWine[] };
-    return data.wines ?? [];
+    data = await streamEdgeFunction('parse-cellar-import', payload) as typeof data;
   } catch (err) {
     if (!isNetworkError(err)) throw err;
-    const data = await invokeFunction('parse-cellar-import', { pdfBase64, source: source ?? '' }) as { wines?: CellarImportWine[] };
-    return data.wines ?? [];
+    data = await invokeFunction('parse-cellar-import', payload) as typeof data;
   }
+  return { wines: data.wines ?? [], truncated: data.truncated === true };
+}
+
+export function parseCellarImport(text: string, source?: string): Promise<CellarListRead> {
+  return readCellarList({ text }, source);
+}
+
+export function parseCellarPdf(pdfBase64: string, source?: string): Promise<CellarListRead> {
+  return readCellarList({ pdfBase64 }, source);
 }
 
 // "Archive a Night" — identify each bottle in a lineup photo.

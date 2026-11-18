@@ -1,7 +1,13 @@
 import { showAlert } from '../components/AppAlert';
 import { isNetworkError } from '../api/invokeResilient';
+import { prepareImageBase64, scanLabel } from '../api/label';
 import { handleGuestLimit } from './guestLimit';
 import { isWineNotFound } from './pricing';
+import { launchImageLibrary } from '../utils/imagePicker';
+import { ensureMediaPermission } from '../utils/mediaPermissions';
+import { ensureConnectionForUpload } from '../utils/connectionGuard';
+import { useLabelStore } from '../stores/labelStore';
+import { useScanStore } from '../stores/scanStore';
 import type { WineDetails } from '../types/wine';
 
 // What a label read turned out to be, and the one place the label-scan screens
@@ -61,4 +67,45 @@ export function askReadAsList(): Promise<boolean> {
       ],
     });
   });
+}
+
+// "Upload Label": pick a photo from the library and read it the same way the
+// label camera does. Starts from a clean label store, so a failed read can never
+// carry the previous wine onto the Confirm screen. Resolves:
+//   'label' — a usable label; its details are in the label store, go to Confirm
+//   'list'  — the user chose to read a wine list; the scan store holds it
+//   null    — cancelled, or the photo couldn't be used (the user has been told)
+// `enterManually` is offered alongside "Try Again" when the read fails.
+export async function readLabelFromLibrary(opts: { setReading: (reading: boolean) => void; enterManually: Extra }): Promise<'label' | 'list' | null> {
+  if (!(await ensureMediaPermission('library'))) return null;
+  const result = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
+  if (result.canceled || !result.assets[0]) return null;
+  const uri = result.assets[0].uri;
+  if (!(await ensureConnectionForUpload())) return null;
+  const label = useLabelStore.getState();
+  label.reset();
+  opts.setReading(true);
+  try {
+    const base64 = await prepareImageBase64(uri);
+    label.setImage(uri, base64);
+    const details = await scanLabel(base64);
+    const kind = classifyLabelRead(details);
+    if (kind === 'list') {
+      opts.setReading(false);
+      if (await askReadAsList()) {
+        useScanStore.getState().setImage(uri, 'upload');
+        return 'list';
+      }
+    } else if (kind === 'not-wine' || kind === 'unreadable') {
+      alertBadLabelPhoto(kind, opts.enterManually);
+      return null;
+    }
+    label.setWineDetails(details);
+    return 'label';
+  } catch (err) {
+    alertLabelFailure(err, opts.enterManually);
+    return null;
+  } finally {
+    opts.setReading(false);
+  }
 }

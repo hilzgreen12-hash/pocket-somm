@@ -1,4 +1,5 @@
 import { invokeResilient } from './invokeResilient';
+import { fetchPlacementsForWines } from './placements';
 import type { CellarWine, StorageLocation, WineRack } from '../types/wine';
 
 export type CellarCommandAction = 'move' | 'archive' | 'add' | 'delete';
@@ -51,11 +52,21 @@ export async function parseCellarCommand(
   locations: StorageLocation[],
   units: WineRack[],
 ): Promise<CellarCommandResult> {
+  // Each wine's alt cellars by name, so "the Margaux in the shed" resolves.
+  // Best-effort: without them the parser still matches on the wine itself.
   const nameById = new Map(locations.map((l) => [l.id, l.name]));
+  const whereByWine = new Map<string, string[]>();
+  try {
+    for (const p of await fetchPlacementsForWines(wines.map((w) => w.id))) {
+      const name = p.kind === 'location' && p.storage_location_id ? nameById.get(p.storage_location_id) : undefined;
+      const names = whereByWine.get(p.cellar_wine_id) ?? [];
+      if (name && !names.includes(name)) whereByWine.set(p.cellar_wine_id, [...names, name]);
+    }
+  } catch { /* names are a hint only */ }
   const data = await invokeResilient('cellar-command', {
     action,
     transcript,
-    wines: wines.map((w) => toWinePayload(w, w.storage_location_id ? nameById.get(w.storage_location_id) : null)),
+    wines: wines.map((w) => toWinePayload(w, whereByWine.get(w.id)?.join(', ') ?? null)),
     locations: locations.map((l) => ({ id: l.id, name: l.name, isExternal: l.is_external })),
     units: units.map((u) => ({ id: u.id, name: u.name, type: u.storage_type ?? 'rack' })),
   }) as Record<string, any>;

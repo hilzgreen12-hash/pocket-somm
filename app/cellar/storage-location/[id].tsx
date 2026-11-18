@@ -1,423 +1,290 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Modal } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator, FlatList, type ListRenderItem } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { launchCamera, launchImageLibrary } from '../../../src/utils/imagePicker';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, deleteStorageLocation, renameStorageLocation, fetchStorageLocationCases, createStorageCase, updateStorageCase, deleteStorageCase, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
-import { ensureConnectionForUpload } from '../../../src/utils/connectionGuard';
-import { fetchLocationPlacementRows, type LocationWineRow, decrementPlacement, addLocationPlacement, setPlacementCase, releaseFromLocation, moveBottlesToLocation, fetchPlacementsForWine } from '../../../src/api/placements';
-import type { StorageCase, CellarWine } from '../../../src/types/wine';
-import { foldAccents, matchesWineSearch } from '../../../src/utils/wineIdentity';
-import { WineSearchModal } from '../../../src/components/WineSearchModal';
-import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
-import { deleteCellarWine, updateCellarWine, getCellarWineById } from '../../../src/api/cellar';
-import { clearWineFromRacks } from '../../../src/api/racks';
-import { fetchStorageLocations } from '../../../src/api/storageLocations';
-import { useRacks } from '../../../src/hooks/useRacks';
+import { useQueryClient } from '@tanstack/react-query';
+import { renameStorageLocation, createStorageCase, updateStorageCase, deleteStorageCase, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
+import { fetchPlacementsForWine, moveBottlesToLocation, placedCount, type CellarPlacement, type LocationWineRow } from '../../../src/api/placements';
+import { getCellarWineById, updateCellarWine } from '../../../src/api/cellar';
+import { VIEW_ONLY_MESSAGE } from '../../../src/api/cellarContext';
+import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
+import { useAuth } from '../../../src/hooks/useAuth';
+import { useCellarContext } from '../../../src/hooks/useCellarContext';
 import { invalidateCellarViews } from '../../../src/hooks/useCellar';
+import { useAltCellarData, type AltCellarItem } from '../../../src/hooks/useAltCellarData';
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
+import { useLabelImageUrl } from '../../../src/hooks/useLabelImageUrl';
+import { useRackStore } from '../../../src/stores/rackStore';
+import { useLabelStore } from '../../../src/stores/labelStore';
+import { readLabelFromLibrary } from '../../../src/services/labelRead';
+import {
+  archiveFromAltCellar, deleteRowBottles, fileRowIntoCase, moveRowBottlesIntoCase, moveRowToAltCellar,
+  moveRowToCellarList, releaseRowForRack,
+} from '../../../src/services/altCellarMoves';
+import { confirmDeleteAltCellar } from '../../../src/components/altCellar/confirmDeleteAltCellar';
+import { AltCellarWineRow, altCellarCaseStyles } from '../../../src/components/altCellar/AltCellarWineRow';
+import { AltCellarFilters } from '../../../src/components/altCellar/AltCellarFilters';
+import { CaseFormModal } from '../../../src/components/altCellar/CaseFormModal';
+import { CountPromptModal } from '../../../src/components/altCellar/CountPromptModal';
+import { RenameModal } from '../../../src/components/RenameModal';
+import { WineSearchModal } from '../../../src/components/WineSearchModal';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { PackagingPrompt, fileLocationBottlesIntoCase } from '../../../src/components/PackagingPrompt';
 import { CellarCommandModal } from '../../../src/components/CellarCommandModal';
-import { prepareImageBase64, scanLabel } from '../../../src/api/label';
-import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
-import { useLabelStore } from '../../../src/stores/labelStore';
-import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
-import { useLabelImageUrl } from '../../../src/hooks/useLabelImageUrl';
-import { useAuth } from '../../../src/hooks/useAuth';
-import { useRackStore } from '../../../src/stores/rackStore';
-import { wineHeaderLine } from '../../../src/utils/wineHeader';
-import { effectiveMaturity } from '../../../src/utils/maturity';
-import { showAlert } from '../../../src/components/AppAlert';
-import { archiveBottles } from '../../../src/services/archiveNight';
 import { ArchiveBottlesSheet } from '../../../src/components/winecard/cellar/ArchiveBottlesSheet';
-import { todayYmd } from '../../../src/utils/reviewDate';
-import { confirmWineDelete, reviewsOn } from '../../../src/utils/confirmWineDelete';
-import { LabelThumb } from '../../../src/components/LabelThumb';
+import { showAlert } from '../../../src/components/AppAlert';
 import { bottleSizeCl } from '../../../src/components/BottleSizePicker';
+import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
+import { launchCamera, launchImageLibrary } from '../../../src/utils/imagePicker';
+import { confirmWineDelete, reviewsOn } from '../../../src/utils/confirmWineDelete';
+import { wineHeaderLine } from '../../../src/utils/wineHeader';
+import { todayYmd } from '../../../src/utils/reviewDate';
+import type { CellarWine, StorageCase } from '../../../src/types/wine';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 
-// Search terms that map free text onto a drinking-window status (mirrors the
-// rack screen), so a search for "peak" or "young" filters by maturity too.
-const STATUS_SEARCH: { status: string; terms: string[] }[] = [
-  { status: 'too_young', terms: ['too young', 'young', 'hold'] },
-  { status: 'approaching', terms: ['approaching', 'approach'] },
-  { status: 'peak', terms: ['peak', 'drinking now', 'drink now', 'ready', 'drinking'] },
-  { status: 'declining', terms: ['declining', 'decline', 'fading', 'past peak'] },
-];
-const MATURITY_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'All' },
-  { value: 'too_young', label: 'Too Young' },
-  { value: 'approaching', label: 'Early but Approachable' },
-  { value: 'peak', label: 'Sweet Spot' },
-  { value: 'declining', label: 'In Decline' },
-];
+const bottles = (n: number) => `${n} bottle${n === 1 ? '' : 's'}`;
+const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Please try again.');
 
-// The "List" chip is a view-mode picker. The default is the flat full list (in
-// the order wines were added); the grouped-by-case and cases-summary views are
-// the alternates.
-const LIST_VIEW_OPTIONS: { value: 'bottles' | 'default'; label: string }[] = [
-  { value: 'bottles', label: 'All Wines' },
-  { value: 'default', label: 'Wines Grouped by Case' },
-];
+// "a, b and c"
+function listNames(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
 
 export default function StorageLocationScreen() {
   const { id, highlight, placeWine } = useLocalSearchParams<{ id: string; highlight?: string; placeWine?: string }>();
-  // Quick Command "Find a bottle": show just this wine, as an applied filter would.
-  const [highlightOnly, setHighlightOnly] = useState<string | null>(highlight ?? null);
-  useEffect(() => { setHighlightOnly(highlight ?? null); }, [id, highlight]);
   const qc = useQueryClient();
   const { session } = useAuth();
   const userId = session?.user.id;
   const navigation = useNavigation();
+  // View-only members of a shared cellar can look, but not change anything.
+  const canEdit = useCellarContext().role !== 'view';
   const { setPendingStorageLocationId, setPendingCaseId, setPendingWineId, setPendingAddMode } = useRackStore();
-  const { setImage, setWineDetails } = useLabelStore();
-  const [search, setSearch] = useState('');
-  const [maturity, setMaturity] = useState('');
-  const [maturityOpen, setMaturityOpen] = useState(false);
-  const [packaging, setPackaging] = useState('');
-  const [listView, setListView] = useState<'default' | 'bottles' | 'cases'>('bottles');
-  // When set, the flat list is narrowed to a single case (picked from the List
-  // dropdown, below the view-mode options). Cleared by any view-mode choice.
-  const [caseFilter, setCaseFilter] = useState('');
-  const [listOpen, setListOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [editingImage, setEditingImage] = useState(false);
-  // Voice Command entry — mirrors the Cellar tab, scoped copy for home storage.
-  const [voiceOpen, setVoiceOpen] = useState(false);
-  // Multi-select — long-press a wine to select, then bulk archive / delete /
-  // remove-from-location. Mirrors the Full Cellar List select-mode.
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
-
-  const { data: location, isLoading } = useQuery({
-    queryKey: ['storage-location', id],
-    queryFn: () => fetchStorageLocation(id!),
-    enabled: !!id,
-  });
-  // Wines in this alt cellar now come from location PLACEMENTS (unified model),
-  // so a wine can be here AND in a rack; each row carries the quantity + case of
-  // its placement here.
-  const { data: wines = [] } = useQuery({
-    queryKey: ['storage-location-wines', id],
-    queryFn: () => fetchLocationPlacementRows(id!),
-    enabled: !!id,
-  });
-  const { data: cases = [] } = useQuery({
-    queryKey: ['storage-location-cases', id],
-    queryFn: () => fetchStorageLocationCases(id!),
-    enabled: !!id,
-  });
-  // Cases are now first-class, user-created filter chips ("+ Add Case"): an empty
-  // case is a deliberate, valid bucket, so we no longer auto-delete empty cases.
-  // A case is removed only explicitly (long-press → Delete Case).
+  const data = useAltCellarData(id, userId, highlight);
+  const { location, isLoading, rows, cases, racks, allLocations, filters, items, awaiting } = data;
   const photoUrl = useLabelImageUrl(location?.photo_path ?? null);
 
-  // "Select from Cellar List" → place/move an existing cellar wine here.
-  const { racks } = useRacks();
-  const { data: allLocations = [] } = useQuery({
-    queryKey: ['storage-locations', userId],
-    queryFn: () => fetchStorageLocations(userId!),
-    enabled: !!userId,
-  });
-  // Header carousel arrows hop across ALL home storage (racks → bins → Alt
-  // Cellars) in the same order as the "Your Wines at Home" carousel — not just
-  // between Alt Cellars.
+  // Header ‹ › hop across ALL home storage in the "Your Wines at Home" order.
   const storageNav = useStorageLocationNav();
   const prevLoc = storageNav.prev(id);
   const nextLoc = storageNav.next(id);
+
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [editingImage, setEditingImage] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [caseForm, setCaseForm] = useState<{ edit?: StorageCase } | null>(null);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
-  const [moveModal, setMoveModal] = useState<{ wine: CellarWine; currentName: string; max: number } | null>(null);
-  const [moveQty, setMoveQty] = useState('');
-
-  // Where the picked wine's bottles live OUTSIDE this location (null = only loose
-  // in the Full Cellar List), read from its placements — not the legacy
-  // storage_location_id / bin_cell_id fields, which no longer track storage.
-  function describeOtherPlacements(ps: { kind: string; rack_id: string | null; storage_location_id: string | null }[]): string | null {
-    const names: string[] = [];
-    for (const p of ps) {
-      let name: string;
-      if (p.kind === 'rack') name = racks.find((r) => r.id === p.rack_id)?.name ?? 'a rack';
-      else if (p.kind === 'bin') name = 'a wine bin';
-      else name = allLocations.find((l) => l.id === p.storage_location_id)?.name ?? 'another location';
-      if (!names.includes(name)) names.push(name);
-    }
-    if (names.length === 0) return null;
-    if (names.length === 1) return names[0];
-    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-  }
-
-  function invalidateAfterMove(w: CellarWine) {
-    qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
-    qc.invalidateQueries({ queryKey: ['storage-location', id] });
-    qc.invalidateQueries({ queryKey: ['storage-locations'] });
-    if (w.storage_location_id) qc.invalidateQueries({ queryKey: ['storage-location-wines', w.storage_location_id] });
-    qc.invalidateQueries({ queryKey: ['cellar'] });
-    qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-    qc.invalidateQueries({ queryKey: ['rack-slots'] });
-    qc.invalidateQueries({ queryKey: ['bins'] });
-    qc.invalidateQueries({ queryKey: ['bin-cells'] });
-    qc.invalidateQueries({ queryKey: ['placements'] });
-    qc.invalidateQueries({ queryKey: ['placements-list'] });
-  }
-
-  // Set after a wine lands in this location so the "How is this wine packaged?"
-  // prompt opens for it. Also driven by the long-press "Update Packaging".
-  const [packagingWineId, setPackagingWineId] = useState<string | null>(null);
-  // How many bottles just landed (only those get filed by the packaging prompt).
-  const [packagingCount, setPackagingCount] = useState<number | null>(null);
   const [wineSearchOpen, setWineSearchOpen] = useState(false);
   const wineSearchCaseRef = useRef<string | null>(null);
-  // Permanent delete of a multi-bottle wine → ask how many first.
-  // `row` is the per-location list row (its quantity = bottles HERE, not the total).
-  const [deleteWine, setDeleteWine] = useState<{ row: LocationWineRow; name: string; qty: number } | null>(null);
-  const [deleteCountStr, setDeleteCountStr] = useState('1');
-  // "Archive Wine" → the wine card's archive sheet (how many of the bottles
-  // here, when, a note).
+  // "Select from Cellar List" with several bottles to bring: how many?
+  const [moveModal, setMoveModal] = useState<{ wine: CellarWine; body: string; max: number } | null>(null);
+  // Bottles that just landed here, for "How is this wine packaged?".
+  const [packaging, setPackaging] = useState<{ wineId: string; count: number | null } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<LocationWineRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<LocationWineRow | null>(null);
 
-  // Move `count` of a cellar wine's bottles that are NOT already here into this
-  // location. moveBottlesToLocation frees them from rack slots / other storage and
-  // lands them on the SAME cellar line (or merges into this wine's existing line
-  // here) — never cloning a second Full Cellar List row (owner mandate: one wine =
-  // one line). `count` is capped by the caller to the bottles not already here.
-  async function executeMove(w: CellarWine, count: number, _fromName: string | null) {
-    if (!id) return;
-    const M = Math.max(1, Math.min(count, w.quantity ?? 1));
+  const here = location?.name ?? 'this cellar';
+
+  // Every write refreshes every view of the cellar; a failure says what went
+  // wrong. Resolves to the write's result, or null when it failed.
+  async function runWrite<T>(verb: string, write: () => Promise<T>): Promise<{ value: T } | null> {
+    setBusy(true);
     try {
-      // moveBottlesToLocation merges into a same-identity twin already here when
-      // there is one (else the bottles stay on w's own row) — work out which row
-      // they'll land on so the packaging prompt files the right placement.
-      const rowsHere = await fetchLocationPlacementRows(id);
-      const sameIdentity = (r: any) =>
-        (r.producer ?? '') === (w.producer ?? '') &&
-        (r.wine_name ?? '') === (w.wine_name ?? '') &&
-        (r.vintage ?? null) === (w.vintage ?? null) &&
-        (r.bottle_size_ml ?? 750) === (w.bottle_size_ml ?? 750);
-      const landedWineId = rowsHere.find((r) => r.id !== w.id && sameIdentity(r))?.id ?? w.id;
-      await moveBottlesToLocation(w, id, M);
-      invalidateAfterMove(w);
-      setMoveModal(null);
-      // Now ask how the moved bottles are packaged in this location.
-      setPackagingCount(M);
-      setPackagingWineId(landedWineId);
+      return { value: await write() };
     } catch (err) {
-      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: `Could not ${verb}`, body: errorText(err) });
+      return null;
+    } finally {
+      setBusy(false);
+      invalidateCellarViews(qc);
     }
+  }
+
+  // ---- Bringing an existing cellar wine here ("Select from Cellar List") ----
+
+  // Where a wine's bottles are outside this cellar, from its placements, plus
+  // Your Cellar List for its unplaced ones.
+  function describeElsewhere(placements: CellarPlacement[], loose: number): string[] {
+    const names: string[] = [];
+    for (const p of placements) {
+      const name = p.kind === 'rack' ? racks.find((r) => r.id === p.rack_id)?.name ?? 'a rack'
+        : p.kind === 'bin' ? 'a wine bin'
+        : allLocations.find((l) => l.id === p.storage_location_id)?.name ?? 'another location';
+      if (!names.includes(name)) names.push(name);
+    }
+    if (loose > 0) names.push('Your Cellar List');
+    return names;
+  }
+
+  // moveBottlesToLocation frees the bottles from wherever they are and lands
+  // them on this wine's line here (merging into a matching line if there is
+  // one), then asks how they're packaged.
+  async function executeMove(w: CellarWine, count: number) {
+    if (!id) return;
+    const landed = await runWrite('move', () => moveBottlesToLocation(w, id, count));
+    setMoveModal(null);
+    if (landed) setPackaging({ wineId: landed.value, count });
   }
 
   async function onPickCellarWine(w: CellarWine) {
     setCellarPickerOpen(false);
     if (!id) return;
     const header = wineHeaderLine(w.producer, w.wine_name, w.vintage);
-    // "Already here" is about PLACEMENTS in this location (the legacy
-    // storage_location_id no longer tracks it). A wine split across this cellar
-    // and elsewhere can still bring its other bottles here.
-    let placements: Awaited<ReturnType<typeof fetchPlacementsForWine>>;
+    let placements: CellarPlacement[];
     try {
       placements = await fetchPlacementsForWine(w.id);
     } catch (err) {
-      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not move', body: errorText(err) });
       return;
     }
-    const isHere = (p: { kind: string; storage_location_id: string | null }) => p.kind === 'location' && p.storage_location_id === id;
+    const isHere = (p: CellarPlacement) => p.kind === 'location' && p.storage_location_id === id;
     const total = w.quantity ?? 1;
-    const hereCount = placements.filter(isHere).reduce((s, p) => s + (p.quantity ?? 0), 0);
-    const movable = Math.max(0, total - hereCount);
+    const movable = Math.max(0, total - placedCount(placements.filter(isHere)));
     if (movable <= 0) {
       showAlert({ title: 'Already here', body: `${header} is already in this location.` });
       return;
     }
-    const where = describeOtherPlacements(placements.filter((p) => !isHere(p) && (p.quantity ?? 0) > 0));
-    if (!where) { void executeMove(w, movable, null); return; } // only loose bottles → file them here
-    if (movable <= 1) {
+    const others = placements.filter((p) => !isHere(p) && (p.quantity ?? 0) > 0);
+    // Only unplaced bottles: nothing to move them from, so just file them here.
+    if (others.length === 0) { void executeMove(w, movable); return; }
+    const where = listNames(describeElsewhere(others, Math.max(0, total - placedCount(placements))));
+    if (movable === 1) {
       showAlert({
         title: 'Move this wine?',
         body: `${header} is in ${where}. Move it here?`,
         buttons: [
           { text: 'Cancel', style: 'cancel' },
-          { text: `Move from ${where}`, onPress: () => void executeMove(w, 1, where) },
+          { text: `Move from ${where}`, onPress: () => void executeMove(w, 1) },
         ],
       });
-    } else {
-      setMoveQty(String(movable));
-      setMoveModal({ wine: w, currentName: where, max: movable });
+      return;
     }
+    setMoveModal({ wine: w, max: movable, body: `${movable} bottles of ${header} aren't here yet — in ${where}. How many are we moving?` });
   }
 
-  const filtered = useMemo(() => {
-    const q = foldAccents(search.trim());
-    return wines.filter((w) => {
-      if (maturity && effectiveMaturity(w) !== maturity) return false;
-      // Packaging filter: "loose" keeps only un-cased bottles. (Case grouping is
-      // now filtered via the case chips on the carousel, not a packaging kind.)
-      if (packaging === 'loose' && w.case_id) return false;
-      if (highlightOnly && w.id !== highlightOnly) return false;
-      if (caseFilter && w.case_id !== caseFilter) return false;
-      if (q) {
-        const statusTerms = STATUS_SEARCH.find((s) => s.status === effectiveMaturity(w))?.terms ?? [];
-        if (!matchesWineSearch([w.producer, w.wine_name, w.region, w.vintage], q) && !statusTerms.some((t) => t.includes(q))) return false;
-      }
-      return true;
+  // ---- Bottles waiting to be placed ----
+
+  // File a waiting wine into a case here, or leave it loose (an alt cellar
+  // needs no exact spot).
+  async function placeAwaiting(row: LocationWineRow, caseId: string | null) {
+    await runWrite('place', async () => {
+      if (caseId && id) await fileLocationBottlesIntoCase({ wineId: row.id, locationId: id, caseId, placementId: row.placement_id, count: row.quantity });
+      await updateCellarWine(row.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
     });
-  }, [wines, search, maturity, packaging, caseFilter, highlightOnly]);
-
-  // Stats bar figures — cases, loose (un-cased) bottles, and the grand total.
-  const caseCount = cases.length;
-  const looseBottles = wines.filter((w) => !w.case_id).reduce((s, w) => s + (w.quantity ?? 0), 0);
-
-  // Bottles moved here (e.g. by Voice Command) that haven't been filed yet.
-  // Only wines awaiting THIS alt cellar (or loose) — not ones flagged as awaiting
-  // a rack/fridge/bin slot (awaiting_placement_unit_id names that unit).
-  const awaitingWines = wines.filter((w) => w.awaiting_placement && (!w.awaiting_placement_unit_id || w.awaiting_placement_unit_id === id));
-  const awaitingBottles = awaitingWines.reduce((s, w) => s + (w.quantity ?? 0), 0);
-
-  // Place an awaiting bottle into a case here, or "ignore" it (an alt cellar
-  // doesn't require placement, so a bottle can simply live loose here).
-  async function placeAwaiting(w: LocationWineRow, caseId: string | null) {
-    try {
-      // Case membership lives on this wine's placement HERE, not cellar_wines.case_id.
-      if (caseId && id) {
-        await fileLocationBottlesIntoCase({
-          wineId: w.id, locationId: id, caseId,
-          placementId: w.placement_id ?? null,
-          count: w.quantity ?? null,
-        });
-      }
-      await updateCellarWine(w.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
-      qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
-      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-    } catch (err) {
-      showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
   }
-  function openPlaceAwaiting(w: LocationWineRow) {
-    const label = wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'This wine');
+  function openPlaceAwaiting(row: LocationWineRow) {
+    const label = wineHeaderLine(row.producer, row.wine_name, row.vintage) || (row.wine_name ?? 'This wine');
     showAlert({
       title: 'Where should this go?',
-      body: `${label} is here awaiting placement. File it into a case, or leave it loose in ${location?.name ?? 'this cellar'}.`,
+      body: `${label} is here awaiting placement. File it into a case, or leave it loose in ${here}.`,
       buttons: [
-        ...cases.map((c) => ({ text: `Into ${c.name}`, onPress: () => void placeAwaiting(w, c.id) })),
-        { text: 'Leave loose', onPress: () => void placeAwaiting(w, null) },
+        ...cases.map((c) => ({ text: `Into ${c.name}`, onPress: () => void placeAwaiting(row, c.id) })),
+        { text: 'Leave loose', onPress: () => void placeAwaiting(row, null) },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
 
-  // Arriving from Quick Command "Confirm & Place Wine" (?placeWine=<id>): open the
-  // same case / loose prompt a manual add uses, once the wine's row is here.
+  // Arriving from Quick Command "Confirm & Place Wine" (?placeWine=<id>): the
+  // same case-or-loose prompt a manual add uses, once the wine's row is here.
   const placeWineHandled = useRef<string | null>(null);
   useEffect(() => {
-    if (!placeWine || placeWineHandled.current === placeWine) return;
-    const w = awaitingWines.find((x) => x.id === placeWine);
-    if (!w) return;
+    if (!canEdit || !placeWine || placeWineHandled.current === placeWine) return;
+    const row = awaiting.find((r) => r.id === placeWine);
+    if (!row) return;
     placeWineHandled.current = placeWine;
-    if (cases.length === 0) { void placeAwaiting(w, null); return; } // nowhere to file it → loose
-    openPlaceAwaiting(w);
+    if (cases.length === 0) void placeAwaiting(row, null); // nowhere to file it → loose
+    else openPlaceAwaiting(row);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placeWine, awaitingWines.map((w) => w.id).join(','), cases.length]);
+  }, [canEdit, placeWine, awaiting.map((r) => r.placement_id).join(','), cases.length]);
 
-  // All add paths file the saved wine into THIS location (context=add-location,
-  // pendingStorageLocationId set). A "case" is just a wine with a higher quantity.
-  // caseId non-null routes the add into an existing case (the mixed-case loop);
-  // a normal add clears it so no stale case is inherited.
+  // ---- Adding a new wine ----
+
+  // Every add files the saved wine into THIS cellar (context=add-location),
+  // into a case when `caseId` is given.
+  function setPending(caseId: string | null) {
+    setPendingStorageLocationId(id ?? null);
+    setPendingCaseId(caseId);
+  }
+  function clearPending() {
+    setPendingStorageLocationId(null);
+    setPendingCaseId(null);
+  }
   function handleScan(caseId: string | null = null) {
     if (!id) return;
-    setPendingStorageLocationId(id);
-    setPendingCaseId(caseId);
+    setPending(caseId);
     router.push('/label/camera?context=add-location' as any);
   }
-  // Catalog Search replaces free-text Manual Input across the add-a-wine flows.
-  // WineSearchInput's 'Use <typed>' escape hatch still covers absent wines.
   function handleSearch(caseId: string | null = null) {
     wineSearchCaseRef.current = caseId;
     setWineSearchOpen(true);
   }
+  // A fresh label store, so a previous scan's photo can't ride along.
   function handleSearchSelect(r: { producer: string; wineName: string | null; region: string | null; style: string | null; vintage: string | null }) {
     setWineSearchOpen(false);
     if (!id) return;
-    setPendingStorageLocationId(id);
-    setPendingCaseId(wineSearchCaseRef.current);
-    setWineDetails({ producer: r.producer, region: r.region ?? '', wineName: r.wineName, vintage: r.vintage ?? '', style: r.style ?? null } as any);
+    setPending(wineSearchCaseRef.current);
+    const label = useLabelStore.getState();
+    label.reset();
+    label.setWineDetails({ producer: r.producer, region: r.region ?? '', wineName: r.wineName, vintage: r.vintage ?? '', style: r.style ?? null } as any);
     router.push('/label/confirm?context=add-location' as any);
   }
+  // Read the photo the way the label camera does: a wine list can be read as
+  // one, and a photo that isn't a readable label says so.
   async function handleUpload(caseId: string | null = null) {
     if (!id) return;
-    if (!(await ensureMediaPermission('library'))) return;
-    const res = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
-    if (res.canceled || !res.assets[0]) return;
-    if (!(await ensureConnectionForUpload())) return;
-    setPendingStorageLocationId(id);
-    setPendingCaseId(caseId);
-    setUploading(true);
-    try {
-      const uri = res.assets[0].uri;
-      const base64 = await prepareImageBase64(uri);
-      setImage(uri, base64);
-      const details = await scanLabel(base64);
-      setWineDetails(details);
-      router.push('/label/confirm?context=add-location' as any);
-    } catch (err) {
-      showAlert({ title: 'Could not read label', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setUploading(false);
-    }
+    setPending(caseId);
+    const read = await readLabelFromLibrary({
+      setReading: setUploading,
+      enterManually: { text: 'Enter Manually', onPress: () => {
+        setPending(caseId);
+        useLabelStore.getState().reset();
+        router.push('/label/confirm?context=add-location&manual=1' as any);
+      } },
+    });
+    if (read === 'label') { router.push('/label/confirm?context=add-location' as any); return; }
+    clearPending();
+    if (read === 'list') router.push('/scan/wine-list?shared=1' as any);
   }
 
-  // Back navigation. The add-a-wine flow (camera → confirm → results) ends in a
-  // router.replace back to this same location route, landing a second copy of
-  // this screen on top of the original. dismissTo('/cellar/racks') collapses
-  // both onto the Home Storage overview in one tap — but only when a racks
-  // route actually exists below us; otherwise (reached directly from a wine
-  // card) plain back(), mirroring the rack screen's handleBack.
-  function handleBack() {
-    const state = navigation.getState?.();
-    const routes = state?.routes ?? [];
-    const hasRacks = routes.some((r) => r.name === 'cellar/racks');
-    if (hasRacks) {
-      // A Racks page sits below us — collapse everything (location copies + any
-      // scanner screens) back onto it in one hop.
-      router.dismissTo('/cellar/racks');
-      return;
-    }
-    // Reached this location directly (no Racks page below). The add-a-wine flow
-    // (camera → confirm → results) does a router.replace back to THIS same route
-    // after each bottle, stacking one extra identical copy per wine. A single
-    // back() would just reveal the copy underneath, so Back looks dead and the
-    // user is trapped (they end up pressing it several times). Pop ALL the stacked
-    // copies of this screen at once so Back always leaves. Mirrors the rack screen.
-    const topName = routes.length ? routes[routes.length - 1].name : undefined;
-    let sameTop = 0;
-    for (let i = routes.length - 1; i >= 0 && routes[i].name === topName; i--) sameTop++;
-    if (sameTop >= routes.length || !router.canGoBack()) {
-      // Nothing but location copies below (or nothing to pop) — leave to the Cellar tab.
-      router.replace('/(tabs)/cellar');
-    } else {
-      router.dismiss(sameTop);
-    }
-  }
-
-  // "+ Add Wine" header link → the same chooser the rack/bin flows use.
   function openAddWine() {
     showAlert({
       title: 'Add a wine to this location',
       buttons: [
         { text: 'Scan a Label', onPress: () => handleScan() },
-        { text: 'Upload a Label', onPress: () => handleUpload() },
-        // Pulling existing cellar bottles in would move them out of home storage.
+        { text: 'Upload a Label', onPress: () => void handleUpload() },
+        // Bottles never move from home into External Storage.
         ...(location?.is_external ? [] : [{ text: 'Select from Cellar List', onPress: () => setCellarPickerOpen(true) }]),
         { text: 'Search a Wine', onPress: () => handleSearch() },
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
 
-  // "Edit Image" header link → retake or re-pick the location's portrait photo.
+  // Back. Each wine added through the label flow lands a fresh copy of this
+  // screen on the stack (results → router.replace here), so a single back()
+  // would only reveal the copy beneath. Collapse onto the Racks page when one
+  // is below; otherwise pop every stacked copy at once, or leave for the
+  // Cellar tab when there's nothing else. Mirrors the rack screen.
+  function handleBack() {
+    const routes = navigation.getState?.()?.routes ?? [];
+    if (routes.some((r) => r.name === 'cellar/racks')) {
+      router.dismissTo('/cellar/racks');
+      return;
+    }
+    const topName = routes.length ? routes[routes.length - 1].name : undefined;
+    let sameTop = 0;
+    for (let i = routes.length - 1; i >= 0 && routes[i].name === topName; i--) sameTop++;
+    if (sameTop >= routes.length || !router.canGoBack()) router.replace('/(tabs)/cellar');
+    else router.dismiss(sameTop);
+  }
+
+  // ---- The cellar itself: photo, name, home/external, delete ----
+
   async function pickAndSetImage(fromCamera: boolean) {
     if (!id || !userId) return;
     if (!(await ensureMediaPermission(fromCamera ? 'camera' : 'library'))) return;
@@ -429,20 +296,38 @@ export default function StorageLocationScreen() {
     try {
       const path = await uploadLocationPhoto(userId, res.assets[0].uri, id);
       await setStorageLocationPhoto(id, path);
-      qc.invalidateQueries({ queryKey: ['storage-location', id] });
-      qc.invalidateQueries({ queryKey: ['storage-locations'] });
     } catch (err) {
-      showAlert({ title: 'Could not update photo', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not update photo', body: errorText(err) });
     } finally {
       setEditingImage(false);
+      invalidateCellarViews(qc);
     }
   }
   function handleEditImage() {
     showAlert({
       title: 'Location photo',
       buttons: [
-        { text: 'Take Photo', onPress: () => pickAndSetImage(true) },
-        { text: 'Choose from Library', onPress: () => pickAndSetImage(false) },
+        { text: 'Take Photo', onPress: () => void pickAndSetImage(true) },
+        { text: 'Choose from Library', onPress: () => void pickAndSetImage(false) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // A deliberate relabel, so it says what it means for the bottles first —
+  // External Storage is one-way: bottles only ever move from it to home.
+  function confirmToggleExternal() {
+    if (!location) return;
+    const n = data.bottlesHere;
+    const toExternal = !location.is_external;
+    const what = n === 0 ? 'this cellar' : bottles(n);
+    showAlert({
+      title: toExternal ? 'Make this External Storage?' : 'Make this home storage?',
+      body: toExternal
+        ? `This makes ${what} External Storage. Bottles can only move from External to home afterwards.`
+        : `This makes ${what} part of your home storage. ${n === 1 ? 'It' : 'They'}'ll count in Your Wines At Home.`,
+      buttons: [
+        { text: toExternal ? 'Mark as external' : 'Mark as at home', onPress: () => void runWrite('update', () => setStorageLocationExternal(location.id, toExternal)) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -454,256 +339,99 @@ export default function StorageLocationScreen() {
       title: location.name,
       body: 'Manage this storage location.',
       buttons: [
-        {
-          text: 'Rename location',
-          onPress: () => { setRenameVal(location.name); setRenaming(true); },
-        },
-        {
-          text: location.is_external ? 'Mark as at home' : 'Mark as external',
-          onPress: async () => {
-            try {
-              await setStorageLocationExternal(location.id, !location.is_external);
-              qc.invalidateQueries({ queryKey: ['storage-location', id] });
-              qc.invalidateQueries({ queryKey: ['storage-locations'] });
-            } catch (err) { showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' }); }
-          },
-        },
-        {
-          text: 'Delete location',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteStorageLocation(location.id);
-              // Every other mutation here invalidates; this one didn't, leaving
-              // the deleted card + its bottle count on Home Storage and the
-              // wines under a stale sloc: filter (S1).
-              qc.invalidateQueries({ queryKey: ['storage-locations'] });
-              qc.invalidateQueries({ queryKey: ['storage-location', id] });
-              qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
-              qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
-              qc.invalidateQueries({ queryKey: ['cellar'] });
-              router.back();
-            }
-            catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); }
-          },
-        },
+        { text: 'Rename location', onPress: () => setRenaming(true) },
+        { text: location.is_external ? 'Mark as at home' : 'Mark as external', onPress: confirmToggleExternal },
+        { text: 'Delete location', style: 'destructive', onPress: () => void confirmDeleteAltCellar(location, { qc, onDeleted: () => router.back(), onProgress: setDeleteProgress }) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
 
-  function toggleSelected(wineId: string) {
-    setSelectedIds((prev) => { const next = new Set(prev); next.has(wineId) ? next.delete(wineId) : next.add(wineId); return next; });
-  }
-  function exitSelect() { setSelectMode(false); setSelectedIds(new Set()); }
-
-  function invalidateAfterBulk() {
-    invalidateCellarViews(qc);
-    qc.invalidateQueries({ queryKey: ['storage-location', id] });
+  async function saveRename(name: string) {
+    if (!location) return;
+    if (await runWrite('rename', () => renameStorageLocation(location.id, name))) setRenaming(false);
   }
 
-  // Run a per-wine action across the selection, tolerating a mid-way failure:
-  // successfully-processed wines drop out of the selection so a retry only
-  // touches the remainder.
-  async function runBulk(verb: string, action: (wineId: string) => Promise<void>) {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    setBusy(true);
-    const done: string[] = [];
-    try {
-      for (const wid of ids) { await action(wid); done.push(wid); }
-      invalidateAfterBulk();
-      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
-      exitSelect();
-    } catch (err) {
-      invalidateAfterBulk();
-      if (done.length) setSelectedIds((prev) => { const next = new Set(prev); done.forEach((wid) => next.delete(wid)); return next; });
-      showAlert({
-        title: done.length ? `${verb} some, then hit a snag` : `Could not ${verb.toLowerCase()}`,
-        body: `${done.length ? `${done.length} of ${ids.length} done. The rest are still selected — try again. ` : ''}${err instanceof Error ? err.message : 'Please try again.'}`,
-      });
-    } finally { setBusy(false); }
-  }
+  // ---- A wine's actions (long-press a row) ----
 
-  function confirmArchiveSelected() {
-    const n = selectedIds.size;
-    if (n === 0) return;
-    showAlert({
-      title: `Archive ${n} wine${n === 1 ? '' : 's'}?`,
-      body: 'They move to Your Archive and leave this location. Your reviews and history stay.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        // Every bottle of each wine HERE (all its rows in this cellar), dated today.
-        { text: 'Archive Wines', onPress: () => runBulk('Archived', async (wid) => {
-          const hereQty = wines.filter((x) => x.id === wid).reduce((sum, x) => sum + (x.quantity ?? 0), 0);
-          if (hereQty > 0) await archiveHere(wid, hereQty, todayYmd());
-        }) },
-      ],
-    });
-  }
-  function confirmDeleteSelected() {
-    const n = selectedIds.size;
-    if (n === 0) return;
-    showAlert({
-      title: `Delete ${n} wine${n === 1 ? '' : 's'}?`,
-      body: "Permanently remove them from your records. This can't be undone.",
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        // Scoped to the bottles HERE (every row of the wine in this cellar), like
-        // the single-wine delete — never the wine's bottles stored elsewhere.
-        { text: 'Delete (permanent)', style: 'destructive', onPress: () => runBulk('Deleted', async (wid) => {
-          const hereQty = wines.filter((x) => x.id === wid).reduce((sum, x) => sum + (x.quantity ?? 0), 0);
-          if (hereQty > 0) await deleteBottlesFromLocation(wid, hereQty);
-        }) },
-      ],
-    });
-  }
-  function confirmRemoveSelected() {
-    const n = selectedIds.size;
-    if (n === 0) return;
-    showAlert({
-      title: `Remove ${n} wine${n === 1 ? '' : 's'} from ${location?.name ?? 'this location'}?`,
-      body: 'They stay in your cellar as loose bottles — this only takes them out of this location.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        // Release this wine's placements HERE (case membership lives on them, so
-        // it goes too); the bottles become loose in the Full Cellar List.
-        { text: 'Remove from location', onPress: () => runBulk('Removed', async (wid) => {
-          const hereQty = wines.filter((x) => x.id === wid).reduce((sum, x) => sum + (x.quantity ?? 0), 0);
-          if (hereQty > 0 && id) await releaseFromLocation(wid, id, hereQty);
-        }) },
-      ],
-    });
-  }
-
-  // Per-wine action runner (single wine) — same invalidation + empty-case
-  // cleanup as runBulk.
-  async function runSingle(verb: string, wid: string, action: (id: string) => Promise<void>) {
-    setBusy(true);
-    try {
-      await action(wid);
-      invalidateAfterBulk();
-      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
-    } catch (err) {
-      showAlert({ title: `Could not ${verb.toLowerCase()}`, body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally { setBusy(false); }
-  }
-
-  // Permanent delete of `n` bottles FROM THIS LOCATION. A list row's quantity is
-  // the count HERE, not the wine's total (it may also sit in a rack / bin / other
-  // cellar), so read the real row first. Free the n bottles from this location's
-  // placement FIRST (the quantity-trim trigger only trims 'location' placements
-  // and could otherwise strip the wrong one), then lower the total. The whole
-  // wine is deleted only when n covers every bottle it has.
-  async function deleteBottlesFromLocation(wid: string, n: number, placementId?: string | null): Promise<void> {
-    if (n <= 0) return;
-    const real = await getCellarWineById(wid);
-    if (!real) return; // already gone
-    const total = real.quantity ?? 0;
-    if (n >= total) {
-      await clearWineFromRacks(wid);
-      await deleteCellarWine(wid);
-      return;
-    }
-    if (placementId) await decrementPlacement(placementId, n);
-    else if (id) await releaseFromLocation(wid, id, n);
-    await updateCellarWine(wid, { quantity: total - n });
-  }
-
-  // Permanently delete `n` of a wine's bottles HERE. When they're the wine's last
-  // bottles the wine itself goes, with the reviews stored on it, so that always
-  // asks first through the shared confirmation (which offers Archive instead).
-  // Fewer go straight away once the user has been warned (the how-many modal
-  // says it can't be undone), else after the same prompt.
-  async function deleteHere(w: LocationWineRow, n: number, warned = false) {
-    // This list shows only the bottles here; the wine's real total says
-    // whether these are its last.
-    const real = await getCellarWineById(w.id).catch(() => null);
-    const whole = n >= (real?.quantity ?? w.quantity ?? 1);
-    const run = () => runSingle('Deleted', w.id, (wid) => deleteBottlesFromLocation(wid, n, w.placement_id));
-    if (warned && !whole) { await run(); return; }
-    confirmWineDelete({
-      lead: whole ? undefined : `Permanently remove ${n === 1 ? 'this bottle' : `${n} bottles`} from your cellar.`,
-      reviewsLost: whole ? reviewsOn([real ?? w]) : 0,
-      onDelete: () => void run(),
-      onArchive: () => void runSingle('Archived', w.id, (wid) => archiveHere(wid, Infinity, todayYmd())),
-    });
-  }
-
-  // Archive bottles of a wine, this location's first.
-  async function archiveHere(wid: string, count: number, date: string, note?: string): Promise<void> {
-    const { archived } = await archiveBottles(wid, count, date, { fromUnit: { kind: 'location', id: id! }, note });
-    if (archived === 0) throw new Error('This wine is no longer in your cellar. Pull to refresh and try again.');
-  }
-
-  // Long-press a wine → a per-wine action pop-up (replaces the select-mode dark
-  // bar), for consistency with the rack/fridge grids.
-  // "Highlight All Bottles" — filter the list to this wine and list where its
-  // bottles sit here, e.g. "2x75cl in XX Mixed Case", "6x75cl Loose".
-  function showWineHere(w: LocationWineRow) {
-    const rowsHere = wines.filter((r) => r.id === w.id);
+  // "Highlight All Bottles": narrow the list to this wine and say where its
+  // bottles sit here, e.g. "2x75cl in Mixed Case", "6x75cl Loose".
+  function showWineHere(row: LocationWineRow) {
     const byCase = new Map<string | null, number>();
-    for (const r of rowsHere) {
-      const k = r.case_id ?? null;
-      byCase.set(k, (byCase.get(k) ?? 0) + (r.quantity ?? 0));
-    }
-    const total = Array.from(byCase.values()).reduce((s, n) => s + n, 0);
-    const size = `${bottleSizeCl(w.bottle_size_ml ?? 750)}cl`;
-    const lines = Array.from(byCase.entries())
+    for (const r of rows.filter((x) => x.id === row.id)) byCase.set(r.case_id ?? null, (byCase.get(r.case_id ?? null) ?? 0) + (r.quantity ?? 0));
+    const total = [...byCase.values()].reduce((s, n) => s + n, 0);
+    const size = `${bottleSizeCl(row.bottle_size_ml ?? 750)}cl`;
+    const lines = [...byCase.entries()]
       .filter(([, n]) => n > 0)
       .sort(([a], [b]) => (a === null ? 1 : 0) - (b === null ? 1 : 0)) // cases first, loose last
-      .map(([caseId, n]) => caseId
-        ? `${n}x${size} in ${cases.find((c) => c.id === caseId)?.name ?? 'a case'}`
-        : `${n}x${size} Loose`);
-    setHighlightOnly(w.id);
+      .map(([caseId, n]) => (caseId ? `${n}x${size} in ${cases.find((c) => c.id === caseId)?.name ?? 'a case'}` : `${n}x${size} Loose`));
+    filters.setHighlightOnly(row.id);
     showAlert({
-      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
-      body: [`${total} bottle${total === 1 ? '' : 's'} in ${location?.name ?? 'this cellar'}`, ...lines].join('\n'),
+      title: wineHeaderLine(row.producer, row.wine_name, row.vintage),
+      body: [`${bottles(total)} in ${here}`, ...lines].join('\n'),
       buttons: [{ text: 'OK', style: 'cancel' }],
     });
   }
 
-  function openWineActions(w: LocationWineRow) {
-    const qty = w.quantity ?? 1;
-    const cl = bottleSizeCl(w.bottle_size_ml ?? 750);
-    const region = (w.region ?? '').trim();
-    // Header = wine + vintage; body = region and the bottle count/format HERE.
-    const bottleLine = `${qty} x ${cl}cl in ${location?.name ?? 'this cellar'}`;
+  function openWineActions(row: LocationWineRow) {
+    const title = wineHeaderLine(row.producer, row.wine_name, row.vintage);
+    if (!canEdit) {
+      showAlert({
+        title,
+        buttons: [
+          { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${row.id}` as any) },
+          { text: 'Highlight All Bottles', onPress: () => showWineHere(row) },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    const qty = row.quantity ?? 1;
     showAlert({
-      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
-      body: [region, bottleLine].filter(Boolean).join('\n'),
+      title,
+      body: [(row.region ?? '').trim(), `${qty} x ${bottleSizeCl(row.bottle_size_ml ?? 750)}cl in ${here}`].filter(Boolean).join('\n'),
       buttons: [
-        { text: 'Move Bottles', onPress: () => openMoveBottlesMenu(w) },
-        { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
-        { text: 'Highlight All Bottles', onPress: () => showWineHere(w) },
-        { text: 'Archive Wine', onPress: () => setArchiveTarget(w) },
-        { text: 'Delete Wine', style: 'destructive', onPress: () => {
-          const qty = w.quantity ?? 1;
-          if (qty > 1) { setDeleteCountStr('1'); setDeleteWine({ row: w, name: w.wine_name, qty }); return; }
-          void deleteHere(w, 1);
-        } },
+        { text: 'Move Bottles', onPress: () => openMoveBottlesMenu(row) },
+        { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/edit-wine/${row.id}` as any) },
+        { text: 'Highlight All Bottles', onPress: () => showWineHere(row) },
+        { text: 'Archive Wine', onPress: () => setArchiveTarget(row) },
+        { text: 'Delete Wine', style: 'destructive', onPress: () => (qty > 1 ? setDeleteTarget(row) : void deleteHere(row, 1)) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
 
-  // "Move Bottles" → a submenu: file this wine into / out of a case here, or move
-  // it (some or all bottles) to a different storage location.
-  function openMoveBottlesMenu(w: LocationWineRow) {
+  // Permanently delete `n` of a row's bottles. When they're the wine's last
+  // bottles the wine goes, with its reviews, so that always asks first (and
+  // offers Archive instead). Fewer go straight away once the how-many modal
+  // has warned it can't be undone.
+  async function deleteHere(row: LocationWineRow, n: number, warned = false) {
+    if (!id) return;
+    const real = await getCellarWineById(row.id).catch(() => null);
+    const whole = n >= (real?.quantity ?? row.quantity ?? 1);
+    const run = () => runWrite('delete', () => deleteRowBottles(row, id, n));
+    if (warned && !whole) { void run(); return; }
+    confirmWineDelete({
+      lead: whole ? undefined : `Permanently remove ${n === 1 ? 'this bottle' : `${n} bottles`} from your cellar.`,
+      reviewsLost: whole ? reviewsOn([real ?? row]) : 0,
+      onDelete: () => void run(),
+      onArchive: () => void runWrite('archive', () => archiveFromAltCellar(row.id, id, Infinity, todayYmd())),
+    });
+  }
+
+  function openMoveBottlesMenu(row: LocationWineRow) {
     showAlert({
-      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+      title: wineHeaderLine(row.producer, row.wine_name, row.vintage),
       buttons: [
-        { text: 'Add/Move to Case', onPress: () => openMoveToCase(w) },
-        { text: 'Remove from Case', onPress: () => removeFromCase(w) },
-        { text: 'Move Storage Locations', onPress: () => openMoveWine(w) },
+        { text: 'Add/Move to Case', onPress: () => openMoveToCase(row) },
+        { text: 'Remove from Case', onPress: () => removeFromCase(row) },
+        { text: 'Move Storage Locations', onPress: () => openMoveWine(row) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
-  // Pick a case in this cellar to file the wine into (setting its placement case).
-  function openMoveToCase(w: LocationWineRow) {
-    const current = w.case_id;
-    const targets = cases.filter((c) => c.id !== current);
+  function openMoveToCase(row: LocationWineRow) {
+    const targets = cases.filter((c) => c.id !== row.case_id);
     if (targets.length === 0) {
       showAlert({ title: cases.length === 0 ? 'No cases yet' : 'Already filed', body: cases.length === 0 ? 'Create a case first from the case carousel (+ Add Case).' : 'This wine is already in your only case.' });
       return;
@@ -711,93 +439,64 @@ export default function StorageLocationScreen() {
     showAlert({
       title: 'Add / move to case',
       buttons: [
-        ...targets.map((c) => ({ text: c.name, onPress: () => addExistingToCase(w, c) })),
+        ...targets.map((c) => ({ text: c.name, onPress: () => void runWrite('update', () => fileRowIntoCase(row, id!, c.id)) })),
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
-  function removeFromCase(w: LocationWineRow) {
-    if (!w.case_id) {
-      showAlert({ title: 'Not in a case', body: `${wineHeaderLine(w.producer, w.wine_name, w.vintage) || 'This wine'} is loose in ${location?.name ?? 'this cellar'} — it isn't in a case.` });
+  function removeFromCase(row: LocationWineRow) {
+    if (!row.case_id) {
+      showAlert({ title: 'Not in a case', body: `${wineHeaderLine(row.producer, row.wine_name, row.vintage) || 'This wine'} is loose in ${here} — it isn't in a case.` });
       return;
     }
-    void fileWineIntoCase(w, null);
+    void runWrite('update', () => fileRowIntoCase(row, id!, null));
   }
 
-  // "Move Wine/Bottles" → first ask HOW MANY of this location's bottles to move
-  // (skipped when there's only one), then WHERE: back to the Full Cellar List as
-  // loose bottles, or into a different location. Archiving is its own top-level
-  // action now, not a move destination.
-  function openMoveWine(w: LocationWineRow) {
-    const total = w.quantity ?? 1;
-    if (total <= 1) { promptMoveDestination(w, 1); return; }
-    // One button per count (capped for a tidy sheet), plus an explicit "All".
+  // "Move Storage Locations": how many of this row's bottles (skipped for one),
+  // then where.
+  function openMoveWine(row: LocationWineRow) {
+    const total = row.quantity ?? 1;
+    if (total <= 1) { promptMoveDestination(row, 1); return; }
     const cap = Math.min(total, 12);
-    const counts: number[] = [];
-    for (let n = 1; n <= cap; n++) counts.push(n);
     showAlert({
-      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+      title: wineHeaderLine(row.producer, row.wine_name, row.vintage),
       body: `How many of your ${total} bottles would you like to move?`,
       buttons: [
-        ...counts.map((n) => ({
-          text: n === total ? `All ${n}` : `${n} bottle${n === 1 ? '' : 's'}`,
-          onPress: () => promptMoveDestination(w, n),
+        ...Array.from({ length: cap }, (_, i) => i + 1).map((n) => ({
+          text: n === total ? `All ${n}` : bottles(n),
+          onPress: () => promptMoveDestination(row, n),
         })),
-        ...(total > cap ? [{ text: `All ${total}`, onPress: () => promptMoveDestination(w, total) }] : []),
+        ...(total > cap ? [{ text: `All ${total}`, onPress: () => promptMoveDestination(row, total) }] : []),
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
-
-  // Second step of the move: pick a destination for the chosen `count` bottles.
-  function promptMoveDestination(w: LocationWineRow, count: number) {
-    const placementId = w.placement_id;
-    const noun = count === (w.quantity ?? 1) ? 'this wine' : `${count} bottle${count === 1 ? '' : 's'}`;
+  function promptMoveDestination(row: LocationWineRow, count: number) {
+    const noun = count === (row.quantity ?? 1) ? 'this wine' : bottles(count);
     showAlert({
-      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+      title: wineHeaderLine(row.producer, row.wine_name, row.vintage),
       body: `Where would you like to move ${noun}?`,
       buttons: [
         { text: 'Move to Cellar List', onPress: () => showAlert({
-          title: `Move out of ${location?.name ?? 'this location'}?`,
+          title: `Move out of ${here}?`,
           body: `${count === 1 ? 'It goes' : 'They go'} back to your Full Cellar List as loose bottles. Nothing else changes.`,
           buttons: [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Move to Cellar List', onPress: () => runSingle('Moved', w.id, async () => {
-              if (placementId) await decrementPlacement(placementId, count);
-            }) },
+            { text: 'Move to Cellar List', onPress: () => void runWrite('move', () => moveRowToCellarList(row, id!, count)) },
           ],
         }) },
-        { text: 'Move to Different Location', onPress: () => openMoveToDifferentLocation(w, count) },
+        { text: 'Move to Different Location', onPress: () => openMoveToDifferentLocation(row, count) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
 
-  // Send `count` bottles of this wine to a rack/fridge — a rack needs a physical
-  // slot, so route to the rack screen's "place unplaced bottles" mode
-  // (placeWine + placeLimit, as the wine card does): it assigns EXISTING bottles
-  // to slots, never changes the wine's quantity, and caps the selection at
-  // `count`. The bottles were already released from this location, so they sit
-  // loose on the same cellar line until placed — placing fewer just leaves the
-  // rest loose in the Full Cellar List. (The old pendingWineId flow let the user
-  // type any count and backfilled quantity when it exceeded it.)
-  function moveToRack(w: CellarWine, rackId: string, count: number) {
-    setPendingWineId(null);
-    setPendingAddMode(false);
-    router.push(`/cellar/rack/${rackId}?placeWine=${w.id}&placeLimit=${Math.max(1, count)}` as any);
-  }
-
-  function openMoveToDifferentLocation(w: LocationWineRow, count: number) {
-    // Destinations are every OTHER home-storage place: racks & fridges (which
-    // need slot placement) plus other Alt Cellars (a placement here). Previously
-    // only Alt Cellars were offered, so a user whose only other storage was a
-    // rack saw a wrong "No other locations".
-    const placementId = w.placement_id;
-    // Home bottles never move OUT to external storage: from a home cellar only
-    // other home cellars are offered (an external cellar can still send bottles
-    // anywhere, including home).
-    const otherLocations = allLocations.filter((l) => l.id !== id && (location?.is_external || !l.is_external));
-    if (racks.length === 0 && otherLocations.length === 0) {
+  // Another place at home: a rack or fridge (whose own screen slots the
+  // bottles) or another home alt cellar. Never External Storage — bottles
+  // only ever move from it to home.
+  function openMoveToDifferentLocation(row: LocationWineRow, count: number) {
+    const otherCellars = allLocations.filter((l) => l.id !== id && !l.is_external);
+    if (racks.length === 0 && otherCellars.length === 0) {
       showAlert({ title: 'No other locations', body: 'You have no other racks, fridges or home storage locations to move this into yet.' });
       return;
     }
@@ -806,201 +505,41 @@ export default function StorageLocationScreen() {
       buttons: [
         ...racks.map((r) => ({
           text: `${r.name} (${r.storage_type === 'fridge' ? 'fridge' : 'rack'})`,
-          // Free the bottles from this location first (they become loose if the
-          // user backs out of the rack placement — not lost), then place in the rack.
-          onPress: async () => {
-            // Release FIRST so the moved bottles are truly unplaced on the same
-            // line; abort rather than navigate if that fails (placing on top of
-            // bottles still counted here would double-place them).
-            try {
-              if (placementId) await decrementPlacement(placementId, count);
-              else if (id) await releaseFromLocation(w.id, id, count);
-              invalidateAfterBulk();
-            } catch (err) {
-              showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
-              return;
-            }
-            moveToRack(w, r.id, count);
-          },
+          onPress: () => void moveToRack(row, r.id, count),
         })),
-        ...otherLocations.map((l) => ({
-          text: l.is_external ? `${l.name} (external)` : `${l.name} (home storage)`,
-          onPress: () => runSingle('Moved', w.id, async (wid) => {
-            if (placementId) await decrementPlacement(placementId, count);
-            await addLocationPlacement(wid, l.id, null, count);
-            qc.invalidateQueries({ queryKey: ['storage-location-wines', l.id] });
-          }),
+        ...otherCellars.map((l) => ({
+          text: `${l.name} (home storage)`,
+          onPress: () => void runWrite('move', () => moveRowToAltCellar(row, id!, l.id, count)),
         })),
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
-
-  // Rename this location (U1 — renameStorageLocation had no caller/UI).
-  const [renaming, setRenaming] = useState(false);
-  const [renameVal, setRenameVal] = useState('');
-  async function saveRename() {
-    if (!location || !renameVal.trim()) { setRenaming(false); return; }
-    try {
-      await renameStorageLocation(location.id, renameVal);
-      qc.invalidateQueries({ queryKey: ['storage-location', id] });
-      qc.invalidateQueries({ queryKey: ['storage-locations'] });
-      setRenaming(false);
-    } catch (err) { showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' }); }
+  // The bottles leave here first, loose on the same line, then the rack's
+  // "place unplaced bottles" mode slots them (capped at what was freed). Any
+  // the user doesn't place stay loose in the Full Cellar List.
+  async function moveToRack(row: LocationWineRow, rackId: string, count: number) {
+    const freed = await runWrite('move', () => releaseRowForRack(row, id!, count));
+    if (!freed) return;
+    setPendingWineId(null);
+    setPendingAddMode(false);
+    router.push(`/cellar/rack/${rackId}?placeWine=${row.id}&placeLimit=${freed.value}` as any);
   }
 
   // ---- Cases ----
-  const [caseEdit, setCaseEdit] = useState<StorageCase | null>(null);
-  const [caseEditName, setCaseEditName] = useState('');
-  const [caseEditNote, setCaseEditNote] = useState('');
-  // "+ Add Case" on the filter carousel → create a new empty case (name + note).
-  const [createCaseOpen, setCreateCaseOpen] = useState(false);
-  const [newCaseName, setNewCaseName] = useState('');
-  const [newCaseNote, setNewCaseNote] = useState('');
 
-  function invalidateCases() {
-    qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
-    qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
-  }
-
-  function openCreateCase() {
-    setNewCaseName('');
-    setNewCaseNote('');
-    setCreateCaseOpen(true);
-  }
-  async function saveNewCase() {
-    if (!userId || !id) return;
-    if (!newCaseName.trim()) { showAlert({ title: 'Name the case', body: 'Give this case a name so you can find it.' }); return; }
-    try {
-      await createStorageCase(userId, { storageLocationId: id, name: newCaseName, note: newCaseNote });
-      invalidateCases();
-      setCreateCaseOpen(false);
-      // Do NOT change the active filter — the new case shows up as its own chip
-      // on the carousel; the "All Wines" List chip must stay exactly as it was.
-    } catch (err) {
-      showAlert({ title: 'Could not create case', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-  // Quick "how many bottles are you adding" flow for a single-wine case.
-  const [addBottlesCase, setAddBottlesCase] = useState<StorageCase | null>(null);
-  const [addBottlesQty, setAddBottlesQty] = useState(1);
-
-  function openAddToCase(c: StorageCase) {
-    // A case is just a named box — any wine can join it, whether it's already in
-    // this cellar (file it in) or a new bottle (scan / upload / manual).
+  // Long-press a case (its chip, or its header in the grouped view).
+  function openCaseMenu(c: StorageCase) {
     showAlert({
-      title: `Add a wine to ${c.name}`,
+      title: c.name,
+      body: c.note || undefined,
       buttons: [
-        { text: 'Select Wine From This Cellar', onPress: () => openAddExistingToCase(c) },
-        { text: 'Scan a Label', onPress: () => handleScan(c.id) },
-        { text: 'Upload a Label', onPress: () => handleUpload(c.id) },
-        { text: 'Search a Wine', onPress: () => handleSearch(c.id) },
+        { text: 'Add Wines', onPress: () => openAddToCase(c) },
+        { text: 'Rename Case', onPress: () => setCaseForm({ edit: c }) },
+        { text: 'Delete Case (contents land as loose bottles)', style: 'destructive', onPress: () => confirmDissolveCase(c) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
-  }
-
-  // "Add from This Cellar List" — file a wine already in this alt cellar into the
-  // case by setting its placement's case (no new bottle created).
-  function openAddExistingToCase(c: StorageCase) {
-    const candidates = wines.filter((w) => w.case_id !== c.id);
-    if (candidates.length === 0) {
-      showAlert({ title: 'Nothing to add', body: `Every wine in ${location?.name ?? 'this cellar'} is already in ${c.name}.` });
-      return;
-    }
-    const cap = 12;
-    showAlert({
-      title: `Add to ${c.name}`,
-      body: candidates.length > cap ? `Choose a wine already in this cellar (showing the first ${cap}).` : 'Choose a wine already in this cellar to file into the case.',
-      buttons: [
-        ...candidates.slice(0, cap).map((w) => ({
-          text: wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'Wine'),
-          onPress: () => promptCaseMoveQty(w, c),
-        })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ],
-    });
-  }
-
-  // When the chosen wine has more than one bottle in this cellar, ask how many to
-  // file into the case; a single bottle moves straight away.
-  function promptCaseMoveQty(w: LocationWineRow, c: StorageCase) {
-    const max = w.quantity ?? 1;
-    if (max <= 1) { void moveBottlesIntoCase(w, c, 1); return; }
-    showAlert({
-      title: `How many bottles of ${w.wine_name} to add to ${c.name}?`,
-      buttons: [
-        ...Array.from({ length: Math.min(max, 12) }, (_, i) => ({
-          text: `${i + 1} bottle${i === 0 ? '' : 's'}`,
-          onPress: () => void moveBottlesIntoCase(w, c, i + 1),
-        })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ],
-    });
-  }
-
-  // File `n` of a wine's bottles into a case. Moving all of a placement just
-  // re-cases it; a partial move splits (decrement the source placement, add the
-  // moved bottles to the case). Confirms where the bottles came from and went.
-  async function moveBottlesIntoCase(w: LocationWineRow, c: StorageCase, n: number) {
-    const sourceCaseId = w.case_id ?? null;
-    const sourceName = sourceCaseId ? (cases.find((cc) => cc.id === sourceCaseId)?.name ?? 'another case') : 'loose bottles';
-    const placementId = w.placement_id;
-    const total = w.quantity ?? 1;
-    try {
-      if (n >= total && placementId) {
-        await setPlacementCase(placementId, c.id);
-      } else if (placementId && id) {
-        await decrementPlacement(placementId, n);
-        await addLocationPlacement(w.id, id, c.id, n);
-      } else if (id) {
-        // No placement on the row (shouldn't happen — rows come from placements):
-        // still file via a placement, never the legacy cellar_wines.case_id.
-        await fileLocationBottlesIntoCase({ wineId: w.id, locationId: id, caseId: c.id, count: n });
-      }
-      qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
-      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-      showAlert({ title: 'Moved', body: `${n} bottle${n === 1 ? '' : 's'} of ${w.wine_name} moved from ${sourceName} to ${c.name}.` });
-    } catch (err) {
-      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-  // File a wine into a case (or out of one with null) by setting its placement's
-  // case — the alt-cellar case membership lives on the placement, not the legacy
-  // cellar_wines.case_id. Shared by "Add from This Cellar List" and the per-wine
-  // Move Bottles → Add/Move to Case / Remove from Case menu.
-  async function fileWineIntoCase(w: LocationWineRow, caseId: string | null) {
-    try {
-      const placementId = w.placement_id;
-      if (placementId) await setPlacementCase(placementId, caseId);
-      else if (id) await fileLocationBottlesIntoCase({ wineId: w.id, locationId: id, caseId });
-      qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
-      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-    } catch (err) {
-      showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-  function addExistingToCase(w: LocationWineRow, c: StorageCase) { void fileWineIntoCase(w, c.id); }
-
-  async function confirmAddBottles() {
-    const c = addBottlesCase;
-    if (!c) return;
-    const target = wines.find((w) => w.case_id === c.id);
-    if (!target) {
-      setAddBottlesCase(null);
-      showAlert({ title: 'No wine yet', body: 'This case has no wine to add to — scan or add one first.' });
-      return;
-    }
-    try {
-      await updateCellarWine(target.id, { quantity: (target.quantity ?? 0) + addBottlesQty });
-      qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
-      qc.invalidateQueries({ queryKey: ['cellar'] });
-      setAddBottlesCase(null);
-    } catch (err) {
-      showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
   }
   function confirmDissolveCase(c: StorageCase) {
     showAlert({
@@ -1008,89 +547,99 @@ export default function StorageLocationScreen() {
       body: 'The bottles stay in this location as loose wines — this only removes the case grouping.',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Dissolve', style: 'destructive', onPress: async () => {
-          try { await deleteStorageCase(c.id); invalidateCases(); }
-          catch (err) { showAlert({ title: 'Could not dissolve', body: err instanceof Error ? err.message : 'Please try again.' }); }
-        } },
+        { text: 'Dissolve', style: 'destructive', onPress: () => void runWrite('dissolve', () => deleteStorageCase(c.id)) },
       ],
     });
   }
-  // Long-press a case name in the List filter → rename it or delete it (its
-  // bottles stay in the location as loose wines).
-  function openCaseFilterMenu(c: StorageCase) {
+  async function saveCaseForm(name: string, note: string) {
+    if (!userId || !id || !caseForm) return;
+    if (!name.trim()) { showAlert({ title: 'Name the case', body: 'Give this case a name so you can find it.' }); return; }
+    const edit = caseForm.edit;
+    const saved = await runWrite(edit ? 'save' : 'create case', async () => {
+      if (edit) await updateStorageCase(edit.id, { name, note });
+      else await createStorageCase(userId, { storageLocationId: id, name, note });
+    });
+    if (saved) setCaseForm(null);
+  }
+
+  // A case is just a named box: a wine already here can be filed in, or a new
+  // bottle added straight into it.
+  function openAddToCase(c: StorageCase) {
     showAlert({
-      title: c.name,
+      title: `Add a wine to ${c.name}`,
       buttons: [
-        { text: 'Add Wines', onPress: () => openAddToCase(c) },
-        { text: 'Rename Case', onPress: () => { setCaseEditName(c.name); setCaseEditNote(c.note ?? ''); setCaseEdit(c); } },
-        { text: 'Delete Case (contents land as loose bottles)', style: 'destructive', onPress: () => confirmDissolveCase(c) },
+        { text: 'Select Wine From This Cellar', onPress: () => openAddExistingToCase(c) },
+        { text: 'Scan a Label', onPress: () => handleScan(c.id) },
+        { text: 'Upload a Label', onPress: () => void handleUpload(c.id) },
+        { text: 'Search a Wine', onPress: () => handleSearch(c.id) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
-  function openCaseMenu(c: StorageCase) {
+  function openAddExistingToCase(c: StorageCase) {
+    const candidates = rows.filter((r) => r.case_id !== c.id);
+    if (candidates.length === 0) {
+      showAlert({ title: 'Nothing to add', body: `Every wine in ${here} is already in ${c.name}.` });
+      return;
+    }
+    const cap = 12;
     showAlert({
-      title: c.name,
-      body: c.note || 'Manage this case.',
+      title: `Add to ${c.name}`,
+      body: candidates.length > cap ? `Choose a wine already in this cellar (showing the first ${cap}).` : 'Choose a wine already in this cellar to file into the case.',
       buttons: [
-        { text: 'Add a wine to this case', onPress: () => openAddToCase(c) },
-        { text: 'Edit name & note', onPress: () => { setCaseEditName(c.name); setCaseEditNote(c.note ?? ''); setCaseEdit(c); } },
-        { text: 'Dissolve case', style: 'destructive', onPress: () => confirmDissolveCase(c) },
-        { text: 'Cancel', style: 'cancel' },
+        ...candidates.slice(0, cap).map((r) => ({
+          text: wineHeaderLine(r.producer, r.wine_name, r.vintage) || (r.wine_name ?? 'Wine'),
+          onPress: () => promptCaseMoveQty(r, c),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
-  async function saveCaseEdit() {
-    if (!caseEdit) return;
-    try {
-      await updateStorageCase(caseEdit.id, { name: caseEditName, note: caseEditNote });
-      invalidateCases();
-      setCaseEdit(null);
-    } catch (err) { showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' }); }
+  function promptCaseMoveQty(row: LocationWineRow, c: StorageCase) {
+    const max = row.quantity ?? 1;
+    if (max <= 1) { void moveIntoCase(row, c, 1); return; }
+    showAlert({
+      title: `How many bottles of ${row.wine_name} to add to ${c.name}?`,
+      buttons: [
+        ...Array.from({ length: Math.min(max, 12) }, (_, i) => ({ text: bottles(i + 1), onPress: () => void moveIntoCase(row, c, i + 1) })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+  async function moveIntoCase(row: LocationWineRow, c: StorageCase, n: number) {
+    const from = row.case_id ? cases.find((x) => x.id === row.case_id)?.name ?? 'another case' : 'loose bottles';
+    if (await runWrite('move', () => moveRowBottlesIntoCase(row, id!, c.id, n))) {
+      showAlert({ title: 'Moved', body: `${bottles(n)} of ${row.wine_name} moved from ${from} to ${c.name}.` });
+    }
   }
 
-  // Wines split into their cases + the loose remainder (search/maturity applied).
-  // Render EVERY case, even one with zero (matching) wines — otherwise an
-  // emptied case vanishes with no route left to its Dissolve menu (D1), and a
-  // search that excludes a case's wines hides its "+ Add" (U2).
-  // "Loose" packaging hides case groups entirely. Case groups are built from
-  // `filtered` so maturity/search/bespoke filters compose into the grouped +
-  // cases views too.
-  const caseGroups = (packaging === 'loose' ? [] : cases
-    .map((c) => ({ box: c, wines: filtered.filter((w) => w.case_id === c.id) })));
-  const looseFiltered = filtered.filter((w) => !w.case_id);
+  // ---- The list ----
 
-  const renderWine = (w: LocationWineRow) => {
-    const isSelected = selectedIds.has(w.id);
-    return (
-      <TouchableOpacity
-        key={w.id}
-        style={[styles.wineRow, isSelected && styles.wineRowSelected]}
-        onPress={() => { if (selectMode) toggleSelected(w.id); else router.push(`/cellar/${w.id}` as any); }}
-        onLongPress={() => openWineActions(w)}
-        delayLongPress={400}
-        activeOpacity={0.7}
-      >
-        {selectMode ? (
-          <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>{isSelected ? <Text style={styles.checkboxTick}>✓</Text> : null}</View>
-        ) : null}
-        <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.thumb} />
-        <View style={styles.wineMain}>
-          {/* White producer+name, gold region + grape beneath (shared header). */}
-          <WineIdentityHeader
-            producer={w.producer}
-            wineName={w.wine_name}
-            vintage={w.vintage}
-            region={w.region}
-            grape={w.grape_variety}
-            size="sm"
-            align="left"
-          />
-          <Text style={[styles.wineMeta, { marginTop: 2 }]}>{w.quantity ?? 0} x {bottleSizeCl(w.bottle_size_ml ?? 750)}cl</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  // Stable handlers (reading the latest state through refs), so the memoised
+  // rows don't all re-render whenever the screen does.
+  const actionsRef = useRef({ openWineActions, openCaseMenu });
+  actionsRef.current = { openWineActions, openCaseMenu };
+  const onRowPress = useCallback((row: LocationWineRow) => router.push(`/cellar/${row.id}` as any), []);
+  const onRowLongPress = useCallback((row: LocationWineRow) => actionsRef.current.openWineActions(row), []);
+  const renderItem = useCallback<ListRenderItem<AltCellarItem>>(({ item }) => {
+    if (item.type === 'wine') return <AltCellarWineRow row={item.row} inCase={item.inCase} onPress={onRowPress} onLongPress={onRowLongPress} />;
+    if (item.type === 'case') {
+      return (
+        <TouchableOpacity
+          style={altCellarCaseStyles.header}
+          onLongPress={canEdit ? () => actionsRef.current.openCaseMenu(item.box) : undefined}
+          delayLongPress={350}
+          activeOpacity={0.75}
+        >
+          <Text style={altCellarCaseStyles.name} numberOfLines={1}>{item.box.name}</Text>
+          {item.box.note ? <Text style={altCellarCaseStyles.note} numberOfLines={2}>{item.box.note}</Text> : null}
+        </TouchableOpacity>
+      );
+    }
+    return <Text style={item.type === 'heading' ? styles.looseHeader : styles.emptyList}>{item.text}</Text>;
+  }, [onRowPress, onRowLongPress, canEdit]);
+  // Keeps the search box above the keyboard, as the old scroll view did.
+  const renderScroll = useCallback((props: object) => <KeyboardAwareScrollView {...props} bottomOffset={24} />, []);
 
   if (isLoading) {
     return <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>;
@@ -1104,6 +653,72 @@ export default function StorageLocationScreen() {
     );
   }
 
+  const listHeader = (
+    <>
+      {photoUrl ? (
+        <View style={styles.photoWrap}>
+          <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
+          {canEdit ? (
+            <TouchableOpacity style={styles.photoEditBadge} onPress={handleEditImage} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Change photo">
+              <Ionicons name="camera" size={18} color={colors.gold} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : canEdit ? (
+        <TouchableOpacity style={styles.photoAdd} onPress={handleEditImage} activeOpacity={0.8}>
+          <Ionicons name="camera-outline" size={26} color={colors.gold} />
+          <Text style={styles.photoAddText}>Add a photo</Text>
+        </TouchableOpacity>
+      ) : null}
+
+      <View style={styles.statsBar}>
+        <Text style={styles.statsBarText}>
+          {cases.length} {cases.length === 1 ? 'Case' : 'Cases'} · {data.looseBottles} Loose {data.looseBottles === 1 ? 'Bottle' : 'Bottles'}
+        </Text>
+        {canEdit ? (
+          <TouchableOpacity onPress={openAddWine} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
+            <Text style={styles.addWineText}>+ Add Wine</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {!canEdit ? <Text style={styles.viewOnly}>{VIEW_ONLY_MESSAGE}</Text> : null}
+
+      {/* Bottles moved here (e.g. by Quick Command) and not yet filed. */}
+      {canEdit && data.awaitingBottles > 0 ? (
+        <View style={styles.awaitingBlock}>
+          <Text style={styles.awaitingBanner}>{data.awaitingBottles} {data.awaitingBottles === 1 ? 'Bottle' : 'Bottles'} moved here — awaiting placement</Text>
+          {awaiting.map((r) => (
+            <TouchableOpacity key={r.placement_id} style={styles.awaitingRow} onPress={() => openPlaceAwaiting(r)} activeOpacity={0.7}>
+              <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(r.producer, r.wine_name, r.vintage) || r.wine_name}</Text>
+              <Text style={styles.awaitingHint}>View storage options to place →</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      <AltCellarFilters
+        filters={filters}
+        rows={rows}
+        cases={cases}
+        onCaseLongPress={canEdit ? openCaseMenu : undefined}
+        onAddCase={canEdit ? () => setCaseForm({}) : undefined}
+      />
+    </>
+  );
+
+  const listEmpty = rows.length === 0 ? (
+    <View style={styles.emptyWinesBlock}>
+      <Text style={styles.emptyWinesTitle}>No Wines Here Yet</Text>
+      {canEdit ? (
+        <TouchableOpacity onPress={openAddWine} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}>
+          <Text style={styles.emptyWinesAdd}>+ Add Wine</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  ) : (
+    <Text style={styles.emptyList}>No wines match your filters.</Text>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -1114,402 +729,74 @@ export default function StorageLocationScreen() {
           <TouchableOpacity onPress={() => prevLoc && router.replace(prevLoc.route as any)} disabled={!prevLoc} hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} accessibilityLabel="Previous storage location">
             <Text style={[styles.navArrow, !prevLoc && styles.navArrowDisabled]}>‹</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={{ flexShrink: 1 }} onLongPress={handleLongPressHeader} delayLongPress={400} activeOpacity={1}>
+          <TouchableOpacity style={{ flexShrink: 1 }} onLongPress={canEdit ? handleLongPressHeader : undefined} delayLongPress={400} activeOpacity={1}>
             <Text style={styles.title} numberOfLines={1}>{location.name}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => nextLoc && router.replace(nextLoc.route as any)} disabled={!nextLoc} hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} accessibilityLabel="Next storage location">
             <Text style={[styles.navArrow, !nextLoc && styles.navArrowDisabled]}>›</Text>
           </TouchableOpacity>
         </View>
-        {/* Right spacer matches the back button width so the title is truly
-            screen-centred. Editing the photo now happens via the camera badge
-            on the image itself. */}
+        {/* Matches the back button's width so the title is truly centred. */}
         <View style={styles.headerSide} />
       </View>
 
-      {/* Voice Command — beneath the title, above the separator (mirrors Cellar tab). */}
-      <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
-        <Text style={styles.voiceBubbleText}>Quick Command</Text>
-      </TouchableOpacity>
+      {canEdit ? (
+        <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
+          <Text style={styles.voiceBubbleText}>Quick Command</Text>
+        </TouchableOpacity>
+      ) : null}
       <View style={styles.headerDivider} />
 
-      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        {/* Layout: header (+ its separator), the (landscape) photo, then the
-            counts stats bar with a "+ Add Wine" link inside it, then filters. */}
-        {photoUrl ? (
-          <View style={styles.photoWrap}>
-            <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
-            {/* Camera badge — tap to change the photo (replaces the header link). */}
-            <TouchableOpacity style={styles.photoEditBadge} onPress={handleEditImage} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Change photo">
-              <Ionicons name="camera" size={18} color={colors.gold} />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity style={styles.photoAdd} onPress={handleEditImage} activeOpacity={0.8}>
-            <Ionicons name="camera-outline" size={26} color={colors.gold} />
-            <Text style={styles.photoAddText}>Add a photo</Text>
-          </TouchableOpacity>
-        )}
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.key}
+        renderItem={renderItem}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        renderScrollComponent={renderScroll}
+        contentContainerStyle={{ paddingBottom: 90 }}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={12}
+        windowSize={7}
+      />
 
-        <View style={styles.statsBar}>
-          <Text style={styles.statsBarText}>
-            {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'}
-          </Text>
-          <TouchableOpacity onPress={openAddWine} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
-            <Text style={styles.addWineText}>+ Add Wine</Text>
-          </TouchableOpacity>
-        </View>
+      <RenameModal visible={renaming} initialName={location.name} title="Rename location" saving={busy} onSave={(name) => void saveRename(name)} onClose={() => setRenaming(false)} />
 
-        {/* Bottles moved here (e.g. by Voice Command) that haven't been filed —
-            shown in yellow at the top; long-press to place them or leave loose. */}
-        {awaitingBottles > 0 ? (
-          <View style={styles.awaitingBlock}>
-            <Text style={styles.awaitingBanner}>{awaitingBottles} {awaitingBottles === 1 ? 'Bottle' : 'Bottles'} moved here — awaiting placement</Text>
-            {awaitingWines.map((w) => (
-              <TouchableOpacity key={w.id} style={styles.awaitingRow} onPress={() => openPlaceAwaiting(w)} activeOpacity={0.7}>
-                <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
-                <Text style={styles.awaitingHint}>View storage options to place →</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : null}
+      <CaseFormModal
+        visible={caseForm !== null}
+        title={caseForm?.edit ? 'Edit case' : 'Create New Case'}
+        saveText={caseForm?.edit ? 'Save' : 'Create Case'}
+        initial={caseForm?.edit ? { name: caseForm.edit.name, note: caseForm.edit.note } : undefined}
+        onSave={(name, note) => void saveCaseForm(name, note)}
+        onClose={() => setCaseForm(null)}
+      />
 
-        {/* Filter row — List (default full list), Packaging, Maturity, saved
-            filters, then + Add, mirroring the rack/fridge affordance. */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
-          {highlightOnly ? (
-            // Arrived from Quick Command "Find a bottle": showing just that wine.
-            <TouchableOpacity style={[styles.filterChip, styles.filterChipActive]} onPress={() => setHighlightOnly(null)} activeOpacity={0.7}>
-              <Text style={[styles.filterChipText, styles.filterChipTextActive]} numberOfLines={1}>
-                {[wines.find((w) => w.id === highlightOnly)?.producer, wines.find((w) => w.id === highlightOnly)?.vintage].filter(Boolean).join(' ') || 'This wine'} ✕
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-          {/* The List chip is the view-mode picker only — it never reflects a
-              selected case (that shows via the case chip's own highlight), so it
-              can't be hijacked into showing a case name. */}
-          <TouchableOpacity
-            style={[styles.filterChip, (listView !== 'bottles' || !!packaging) && styles.filterChipActive]}
-            onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); }}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterChipText, (listView !== 'bottles' || !!packaging) && styles.filterChipTextActive]} allowFontScaling={false}>
-              {packaging === 'loose' ? 'Loose Bottles'
-                : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'All Wines')} {listOpen ? '▴' : '▾'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, maturity ? styles.filterChipActive : null]}
-            onPress={() => { setMaturityOpen((v) => !v); setListOpen(false); }}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterChipText, maturity ? styles.filterChipTextActive : null]} allowFontScaling={false}>
-              {maturity ? (MATURITY_OPTIONS.find((o) => o.value === maturity)?.label ?? 'Maturity') : 'Maturity'} {maturityOpen ? '▴' : '▾'}
-            </Text>
-          </TouchableOpacity>
-          {/* Each case is a filter chip. Tap to narrow the list to that case;
-              long-press to rename or delete it. Toggle off by tapping again. */}
-          {cases.map((c) => {
-            const active = caseFilter === c.id;
-            return (
-              <TouchableOpacity
-                key={c.id}
-                style={[styles.filterChip, active && styles.filterChipActive]}
-                onPress={() => { setCaseFilter(active ? '' : c.id); setListView('bottles'); setPackaging(''); }}
-                onLongPress={() => openCaseFilterMenu(c)}
-                delayLongPress={400}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1} allowFontScaling={false}>{c.name}</Text>
-              </TouchableOpacity>
-            );
-          })}
-          {/* "+ Add Case" — the carousel only creates cases; no other bespoke
-              filters are made here. */}
-          <TouchableOpacity style={styles.filterChipAdd} onPress={openCreateCase} activeOpacity={0.7}>
-            <Text style={styles.filterChipAddText} allowFontScaling={false}>+ Add Case</Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        {listOpen ? (
-          <View style={styles.maturityDropdown}>
-            {/* Just the view modes now — individual cases live on the filter
-                carousel as their own chips. */}
-            {([
-              { key: 'all', label: 'All Wines', active: listView === 'bottles' && !caseFilter && !packaging, onPress: () => { setListView('bottles'); setCaseFilter(''); setPackaging(''); } },
-              { key: 'loose', label: 'Loose Bottles', active: packaging === 'loose', onPress: () => { setPackaging('loose'); setListView('bottles'); setCaseFilter(''); } },
-              { key: 'grouped', label: 'Wines Grouped by Case', active: listView === 'default' && !caseFilter && !packaging, onPress: () => { setListView('default'); setCaseFilter(''); setPackaging(''); } },
-            ] as const).map((o) => (
-              <TouchableOpacity key={o.key} style={[styles.maturityOption, o.active && styles.maturityOptionActive]} onPress={() => { o.onPress(); setListOpen(false); }} activeOpacity={0.7}>
-                <Text style={[styles.maturityOptionText, o.active && styles.maturityOptionTextActive]}>{o.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : null}
-
-        {maturityOpen ? (
-          <View style={styles.maturityDropdown}>
-            {MATURITY_OPTIONS.map((o) => {
-              const active = maturity === o.value;
-              return (
-                <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setMaturity(o.value); setMaturityOpen(false); }} activeOpacity={0.7}>
-                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ) : null}
-
-        {/* Carousel affordance — the case chips ("folders") scroll horizontally,
-            and "+ Add Case" lives at the end. */}
-        <View style={styles.swipeHint}>
-          <Text style={styles.swipeHintText}>Swipe to add and view folders</Text>
-          <Text style={styles.swipeHintText}>→</Text>
-        </View>
-
-        <View style={styles.searchRow}>
-          <TextInput
-            style={styles.searchInput}
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search producer, wine, region, maturity…"
-            placeholderTextColor={colors.textMuted}
-            returnKeyType="search"
-          />
-          {search.length > 0 ? (
-            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.searchClear}>✕</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        {listView === 'bottles' ? (
-          filtered.length === 0 ? (
-            wines.length === 0 ? (
-              <View style={styles.emptyWinesBlock}>
-                <Text style={styles.emptyWinesTitle}>No Wines Here Yet</Text>
-                <TouchableOpacity onPress={openAddWine} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}>
-                  <Text style={styles.emptyWinesAdd}>+ Add Wine</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <Text style={styles.emptyList}>No wines match your filters.</Text>
-            )
-          ) : (
-            <View style={styles.listSection}>{filtered.map(renderWine)}</View>
-          )
-        ) : listView === 'cases' ? (
-          caseGroups.length === 0 ? (
-            <Text style={styles.emptyList}>No cases here yet.</Text>
-          ) : (
-            <View style={styles.listSection}>
-              {caseGroups.map((g) => {
-                const count = g.wines.reduce((s, w) => s + (w.quantity ?? 0), 0);
-                return (
-                  <TouchableOpacity key={g.box.id} style={styles.caseListRow} onPress={() => openAddToCase(g.box)} onLongPress={() => openCaseMenu(g.box)} delayLongPress={350} activeOpacity={0.7}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.caseName} numberOfLines={1}>{g.box.name}</Text>
-                      <Text style={styles.caseListMeta} numberOfLines={1}>{location.name} · {count} {count === 1 ? 'bottle' : 'bottles'}</Text>
-                    </View>
-                    <Text style={styles.caseAdd}>›</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )
-        ) : filtered.length === 0 && caseGroups.length === 0 ? (
-          wines.length === 0 ? (
-            <View style={styles.emptyWinesBlock}>
-              <Text style={styles.emptyWinesTitle}>No Wines Here Yet</Text>
-              <TouchableOpacity onPress={openAddWine} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}>
-                <Text style={styles.emptyWinesAdd}>+ Add Wine</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <Text style={styles.emptyList}>No wines match your search.</Text>
-          )
-        ) : (
-          <View style={styles.listSection}>
-            {/* Only cases that actually hold wines are shown here. An empty case
-                is created + managed from the chip carousel, so we no longer
-                surface it (with an add-a-wine popup) in the grouped list. */}
-            {(() => {
-              const filledCases = caseGroups.filter((g) => g.wines.length > 0);
-              return (
-                <>
-                  {filledCases.length === 0 ? (
-                    <Text style={styles.emptyList}>No wines have been placed in cases yet.</Text>
-                  ) : (
-                    filledCases.map((g) => (
-                      <View key={g.box.id} style={styles.caseGroup}>
-                        <TouchableOpacity
-                          style={styles.caseHeader}
-                          onLongPress={() => { if (!selectMode) openCaseMenu(g.box); }}
-                          delayLongPress={350}
-                          activeOpacity={0.75}
-                        >
-                          <View style={{ flex: 1 }}>
-                            <View style={styles.caseTitleRow}>
-                              <Text style={styles.caseName} numberOfLines={1}>{g.box.name}</Text>
-                            </View>
-                            {g.box.note ? <Text style={styles.caseNoteText} numberOfLines={2}>{g.box.note}</Text> : null}
-                          </View>
-                        </TouchableOpacity>
-                        {g.wines.map(renderWine)}
-                      </View>
-                    ))
-                  )}
-                  {looseFiltered.length > 0 ? (
-                    <>
-                      {filledCases.length > 0 ? <Text style={styles.looseHeader}>Loose bottles</Text> : null}
-                      {looseFiltered.map(renderWine)}
-                    </>
-                  ) : null}
-                </>
-              );
-            })()}
-          </View>
-        )}
-      </KeyboardAwareScrollView>
-
-      {/* Multi-select action bar — floats at the bottom while selecting. */}
-      {selectMode && (
-        <View style={styles.selectBar}>
-          <View style={styles.selectBarTop}>
-            <Text style={styles.selectBarCount}>{selectedIds.size} selected</Text>
-            <TouchableOpacity onPress={exitSelect} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.selectBarCancel}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.selectBarActions}>
-            <TouchableOpacity style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]} disabled={selectedIds.size === 0 || busy} onPress={confirmArchiveSelected}>
-              <Text style={styles.selectActionText}>Archive</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]} disabled={selectedIds.size === 0 || busy} onPress={confirmRemoveSelected}>
-              <Text style={styles.selectActionText}>Remove from Location</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]} disabled={selectedIds.size === 0 || busy} onPress={confirmDeleteSelected}>
-              <Text style={styles.selectActionText}>Delete</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Edit a case's name + note */}
-      <Modal visible={addBottlesCase !== null} transparent animationType="fade" onRequestClose={() => setAddBottlesCase(null)}>
-        <View style={styles.caseModalOverlay}>
-          <View style={styles.caseModalSheet}>
-            <Text style={styles.caseModalTitle}>Add bottles</Text>
-            <Text style={[styles.caseModalLabel, { textAlign: 'center' }]}>How many bottles are you adding{addBottlesCase ? ` to ${addBottlesCase.name}` : ''}?</Text>
-            <View style={styles.addQtyRow}>
-              <TouchableOpacity style={styles.addQtyBtn} onPress={() => setAddBottlesQty((q) => Math.max(1, q - 1))} activeOpacity={0.7}><Text style={styles.addQtyBtnText}>−</Text></TouchableOpacity>
-              <Text style={styles.addQtyValue}>{addBottlesQty}</Text>
-              <TouchableOpacity style={styles.addQtyBtn} onPress={() => setAddBottlesQty((q) => q + 1)} activeOpacity={0.7}><Text style={styles.addQtyBtnText}>+</Text></TouchableOpacity>
-            </View>
-            <TouchableOpacity style={styles.caseModalSave} onPress={confirmAddBottles} activeOpacity={0.85}>
-              <Text style={styles.caseModalSaveText}>✓  Add {addBottlesQty} bottle{addBottlesQty === 1 ? '' : 's'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setAddBottlesCase(null)}><Text style={styles.caseModalCancelText}>Cancel</Text></TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={renaming} transparent animationType="fade" onRequestClose={() => setRenaming(false)}>
-        <View style={styles.caseModalOverlay}>
-          <KeyboardAwareScrollView contentContainerStyle={styles.caseModalScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-            <View style={styles.caseModalSheet}>
-              <Text style={styles.caseModalTitle}>Rename location</Text>
-              <Text style={styles.caseModalLabel}>Name</Text>
-              <TextInput style={styles.caseModalInput} value={renameVal} onChangeText={setRenameVal} placeholder="Location name" placeholderTextColor={colors.textSubtle} />
-              <TouchableOpacity style={styles.caseModalSave} onPress={saveRename} activeOpacity={0.85}>
-                <Text style={styles.caseModalSaveText}>Save</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.caseModalCancel} onPress={() => setRenaming(false)}>
-                <Text style={styles.caseModalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAwareScrollView>
-        </View>
-      </Modal>
-
-      <Modal visible={caseEdit !== null} transparent animationType="fade" onRequestClose={() => setCaseEdit(null)}>
-        <View style={styles.caseModalOverlay}>
-          <KeyboardAwareScrollView contentContainerStyle={styles.caseModalScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-            <View style={styles.caseModalSheet}>
-              <Text style={styles.caseModalTitle}>Edit case</Text>
-              <Text style={styles.caseModalLabel}>Name</Text>
-              <TextInput style={styles.caseModalInput} value={caseEditName} onChangeText={setCaseEditName} placeholder="Case name" placeholderTextColor={colors.textSubtle} maxLength={12} />
-              <Text style={styles.caseModalLabel}>Note</Text>
-              <TextInput style={[styles.caseModalInput, styles.caseModalNoteInput]} value={caseEditNote} onChangeText={setCaseEditNote} placeholder="e.g. next to the Pétrus" placeholderTextColor={colors.textSubtle} maxLength={20} multiline />
-              <Text style={styles.caseModalHint}>Up to 20 characters.</Text>
-              <TouchableOpacity style={styles.caseModalSave} onPress={saveCaseEdit} activeOpacity={0.85}>
-                <Text style={styles.caseModalSaveText}>Save</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.caseModalCancel} onPress={() => setCaseEdit(null)}>
-                <Text style={styles.caseModalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAwareScrollView>
-        </View>
-      </Modal>
-
-      {/* Create a new case — name + note. Opened by "+ Add Case" on the carousel. */}
-      <Modal visible={createCaseOpen} transparent animationType="fade" onRequestClose={() => setCreateCaseOpen(false)}>
-        <View style={styles.caseModalOverlay}>
-          <KeyboardAwareScrollView contentContainerStyle={styles.caseModalScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-            <View style={styles.caseModalSheet}>
-              <Text style={styles.caseModalTitle}>Create New Case</Text>
-              <Text style={styles.caseModalLabel}>Name</Text>
-              <TextInput style={styles.caseModalInput} value={newCaseName} onChangeText={setNewCaseName} placeholder="e.g. Rhône reds" placeholderTextColor={colors.textSubtle} maxLength={12} autoFocus />
-              <Text style={styles.caseModalHint}>Up to 12 characters.</Text>
-              <Text style={styles.caseModalLabel}>Note</Text>
-              <TextInput style={[styles.caseModalInput, styles.caseModalNoteInput]} value={newCaseNote} onChangeText={setNewCaseNote} placeholder="e.g. next to the Pétrus" placeholderTextColor={colors.textSubtle} maxLength={20} multiline />
-              <Text style={styles.caseModalHint}>Up to 20 characters.</Text>
-              <TouchableOpacity style={styles.caseModalSave} onPress={saveNewCase} activeOpacity={0.85}>
-                <Text style={styles.caseModalSaveText}>Create Case</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.caseModalCancel} onPress={() => setCreateCaseOpen(false)}>
-                <Text style={styles.caseModalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAwareScrollView>
-        </View>
-      </Modal>
-
-      {/* Select from Cellar List — pick an existing wine to place/move here. */}
       <CellarWinePicker visible={cellarPickerOpen} allowPlaced onClose={() => setCellarPickerOpen(false)} onSelect={onPickCellarWine} />
 
-      {/* Catalog Search → prefilled Confirm (replaces free-text Manual Input). */}
       <WineSearchModal visible={wineSearchOpen} onClose={() => setWineSearchOpen(false)} onSelect={handleSearchSelect} />
 
-      {/* Permanent delete — how many bottles? Shown for multi-bottle wines. */}
-      <Modal visible={deleteWine !== null} transparent animationType="fade" onRequestClose={() => setDeleteWine(null)}>
-        <View style={styles.caseModalOverlay}>
-          <View style={[styles.caseModalSheet, { marginHorizontal: spacing.xl }]}>
-            <Text style={styles.caseModalTitle}>Delete how many?</Text>
-            <Text style={styles.caseModalHint}>You have {deleteWine?.qty} bottle{deleteWine?.qty === 1 ? '' : 's'} of {deleteWine?.name}. How many to permanently delete? This can't be undone.</Text>
-            <TextInput
-              style={styles.caseModalInput}
-              value={deleteCountStr}
-              onChangeText={(t) => setDeleteCountStr(t.replace(/[^0-9]/g, '').slice(0, 3))}
-              keyboardType="number-pad"
-              placeholder="1"
-              placeholderTextColor={colors.textSubtle}
-              autoFocus
-              selectTextOnFocus
-            />
-            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = deleteWine; if (!q) return; setDeleteWine(null); void deleteHere(q.row, Math.max(1, Math.min(q.qty, parseInt(deleteCountStr, 10) || 1)), true); }}>
-              <Text style={styles.caseModalSaveText}>Delete Bottles</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.caseModalSave} onPress={() => { const q = deleteWine; if (!q) return; setDeleteWine(null); void deleteHere(q.row, q.qty, true); }}>
-              <Text style={styles.caseModalSaveText}>Delete all {deleteWine?.qty}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setDeleteWine(null)}>
-              <Text style={styles.caseModalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <CountPromptModal
+        visible={deleteTarget !== null}
+        title="Delete how many?"
+        body={`You have ${bottles(deleteTarget?.quantity ?? 0)} of ${deleteTarget?.wine_name ?? 'this wine'} here. How many to permanently delete? This can't be undone.`}
+        max={deleteTarget?.quantity ?? 1}
+        initial={1}
+        confirmText="Delete Bottles"
+        all={`Delete all ${deleteTarget?.quantity ?? ''}`}
+        onConfirm={(n) => { const row = deleteTarget; setDeleteTarget(null); if (row) void deleteHere(row, n, true); }}
+        onClose={() => setDeleteTarget(null)}
+      />
+
+      <CountPromptModal
+        visible={moveModal !== null}
+        title={`Move to ${here}`}
+        body={moveModal?.body ?? ''}
+        max={moveModal?.max ?? 1}
+        initial={moveModal?.max ?? 1}
+        confirmText="Move"
+        onConfirm={(n) => { if (moveModal) void executeMove(moveModal.wine, n); }}
+        onClose={() => setMoveModal(null)}
+      />
 
       {archiveTarget ? (
         <ArchiveBottlesSheet
@@ -1518,67 +805,40 @@ export default function StorageLocationScreen() {
           initialCount={1}
           working={busy}
           onArchive={({ count, date, note }) => {
-            const w = archiveTarget;
+            const row = archiveTarget;
             setArchiveTarget(null);
-            void runSingle('Archived', w.id, (wid) => archiveHere(wid, count, date, note || undefined));
+            void runWrite('archive', () => archiveFromAltCellar(row.id, id!, count, date, note || undefined));
           }}
           onDelete={(count) => {
-            const w = archiveTarget;
+            const row = archiveTarget;
             setArchiveTarget(null);
-            void deleteHere(w, count);
+            void deleteHere(row, count);
           }}
           onClose={() => setArchiveTarget(null)}
         />
       ) : null}
 
-      {/* Voice Command — same engine as the Cellar tab, scoped copy for home storage. */}
-      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} locationName={location?.name ?? null} scope={id ? { kind: 'location', id } : undefined} hereWineIds={Array.from(new Set(wines.map((w) => w.id)))} />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} locationName={location.name} scope={id ? { kind: 'location', id } : undefined} hereWineIds={Array.from(new Set(rows.map((r) => r.id)))} />
 
-      {/* "How is this wine packaged?" — on move-in and on Update Packaging. */}
+      {/* "How is this wine packaged?" — for the bottles that just moved in. */}
       <PackagingPrompt
-        visible={packagingWineId !== null}
-        wineId={packagingWineId}
+        visible={packaging !== null}
+        wineId={packaging?.wineId ?? null}
         locationId={id}
-        count={packagingCount}
+        count={packaging?.count ?? null}
         userId={userId ?? ''}
-        onClose={() => { setPackagingWineId(null); setPackagingCount(null); }}
-        onDone={() => { invalidateAfterBulk(); qc.invalidateQueries({ queryKey: ['storage-location-cases', id] }); }}
+        onClose={() => setPackaging(null)}
+        onDone={() => invalidateCellarViews(qc)}
       />
 
-      {/* Move quantity — "You have N bottles, how many are we moving?" */}
-      <Modal visible={moveModal !== null} transparent animationType="fade" onRequestClose={() => setMoveModal(null)}>
-        <View style={styles.caseModalOverlay}>
-          <View style={styles.caseModalSheet}>
-            <Text style={styles.caseModalTitle}>Move to {location?.name ?? 'this location'}</Text>
-            <Text style={[styles.caseModalLabel, { textAlign: 'center' }]}>
-              You have {moveModal?.max} bottles of {moveModal ? wineHeaderLine(moveModal.wine.producer, moveModal.wine.wine_name, moveModal.wine.vintage) : ''} in {moveModal?.currentName}. How many are we moving?
-            </Text>
-            <TextInput
-              style={styles.caseModalInput}
-              value={moveQty}
-              onChangeText={(t) => setMoveQty(t.replace(/[^0-9]/g, '').slice(0, 4))}
-              keyboardType="number-pad"
-              placeholder="Number of bottles"
-              placeholderTextColor={colors.textSubtle}
-            />
-            <TouchableOpacity
-              style={styles.caseModalSave}
-              onPress={() => { const n = parseInt(moveQty, 10); if (moveModal && Number.isFinite(n) && n > 0) void executeMove(moveModal.wine, Math.min(n, moveModal.max), moveModal.currentName); }}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.caseModalSaveText}>Move</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setMoveModal(null)}><Text style={styles.caseModalCancelText}>Cancel</Text></TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {(uploading || editingImage) && (
-        <View style={styles.uploadingOverlay} pointerEvents="auto">
+      {uploading || editingImage || deleteProgress ? (
+        <View style={styles.overlay} pointerEvents="auto">
           <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.uploadingText}>{editingImage ? 'Updating photo…' : 'Reading the label…'}</Text>
+          <Text style={styles.overlayText}>
+            {deleteProgress ? `Deleting… ${deleteProgress.done} of ${deleteProgress.total}` : editingImage ? 'Updating photo…' : 'Reading the label…'}
+          </Text>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -1587,13 +847,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.md },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  // Voice Command row + its own divider (the separator moved off the header so
-  // the row can sit between the title and the line, matching the Cellar tab).
+  // Quick Command sits between the title and the divider, as on the Cellar tab.
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   headerDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
-  // Equal-width side cells so the flex-1 titleNav is truly screen-centred.
   headerSide: { width: 44, justifyContent: 'center' },
   backLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold },
   // Matches the rack / fridge headers (size, weight, spacing) + carousel arrows.
@@ -1602,102 +860,31 @@ const styles = StyleSheet.create({
   navArrow: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, paddingHorizontal: 2 },
   navArrowDisabled: { color: 'rgba(224,184,74,0.25)' },
 
-  // Portrait photo, ~2/3 the old footprint, centred.
-  // ~15% smaller than before (85% → 72%). The camera badge sits in its corner.
   photoWrap: { alignSelf: 'center', width: '72%', marginVertical: spacing.md },
   areaPhoto: { width: '100%', aspectRatio: 4 / 3, borderRadius: 14, backgroundColor: colors.surface },
   photoEditBadge: { position: 'absolute', top: 8, right: 8, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   photoAdd: { alignSelf: 'center', width: '72%', aspectRatio: 4 / 3, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginVertical: spacing.md },
   photoAddText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
 
-  // Stats bar — full-width yellow (gold) rules top and bottom, beneath the photo.
-  // Counts + a "+ Add Wine" link stacked inside one bordered bar.
+  // Counts + "+ Add Wine" in one bar, gold rules above and below.
   statsBar: { paddingVertical: spacing.sm, marginBottom: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, alignItems: 'center', gap: spacing.xs },
   statsBarText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center' },
-  // "Awaiting placement" banner + yellow rows (moved-here, not yet filed).
-  // Sits above the filter carousel with a clear gap below it.
+  addWineText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6 },
+  viewOnly: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
+
   awaitingBlock: { marginBottom: spacing.lg },
   awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingTop: spacing.sm, paddingHorizontal: spacing.xl },
   awaitingRow: { marginHorizontal: spacing.xl, marginTop: spacing.sm, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
   awaitingWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   awaitingHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 2 },
 
-  // Matches the counts line above it (uppercase gold, bodySemibold).
-  addWineText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6 },
-  filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
-  filterChipAddText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
-
-  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginBottom: spacing.sm },
-  searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
-  searchClear: { fontSize: 15, color: colors.textMuted, paddingLeft: spacing.sm },
-
-  // Filter chips + Maturity dropdown — matched to the rack/fridge screens so the
-  // Other Home Storage filters read the same (was a lighter, muted pill before).
-  filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.sm },
-  filterChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md, backgroundColor: colors.surface, maxWidth: 170 },
-  filterChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
-  filterChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
-  filterChipTextActive: { color: colors.gold },
-  maturityDropdown: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
-
-  maturityOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  maturityOptionActive: { backgroundColor: 'rgba(212,176,96,0.12)' },
-  maturityOptionText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
-  maturityOptionTextActive: { color: colors.gold, fontFamily: fonts.bodySemibold },
-  listSection: { paddingHorizontal: spacing.xl },
   emptyList: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xl, lineHeight: 20 },
-  // Empty location (no wines yet) — a title with a gold "+ Add Wine" beneath.
   emptyWinesBlock: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
   emptyWinesTitle: { fontSize: 16, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyWinesAdd: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  wineRowSelected: { backgroundColor: 'rgba(224,184,74,0.16)' },
-  caseGroup: { marginBottom: spacing.md, borderWidth: 1, borderColor: 'rgba(224,184,74,0.30)', borderRadius: 12, overflow: 'hidden' },
-  caseHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: 'rgba(224,184,74,0.10)' },
-  caseTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  caseName: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, flexShrink: 1 },
+  looseHeader: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs },
 
-  caseNoteText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 3 },
-  caseAdd: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
-  looseHeader: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.sm, marginBottom: spacing.xs },
-  caseListRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  caseListMeta: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 3 },
-  caseModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center' },
-  caseModalScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xl },
-  caseModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
-  caseModalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
-  caseModalLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs, marginTop: spacing.sm },
-  caseModalInput: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
-  caseModalHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 4, marginBottom: spacing.xs },
-  swipeHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: spacing.xl, marginTop: -2, marginBottom: spacing.sm },
-  swipeHintText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, letterSpacing: 0.2 },
-
-  caseModalNoteInput: { flex: 1, minHeight: 44, textAlignVertical: 'top' },
-  caseModalSave: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.lg },
-  caseModalSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  addQtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xl, marginTop: spacing.md },
-  addQtyBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  addQtyBtnText: { fontSize: 26, fontFamily: fonts.bodyRegular, color: colors.gold },
-  addQtyValue: { fontSize: 28, fontFamily: fonts.bodyBold, color: colors.text, minWidth: 48, textAlign: 'center' },
-  caseModalCancel: { alignItems: 'center', paddingTop: spacing.md },
-  caseModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  checkbox: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  checkboxOn: { backgroundColor: colors.gold },
-  checkboxTick: { fontSize: 13, color: colors.surface, fontFamily: fonts.headingBold },
-  selectBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xl, gap: spacing.sm },
-  selectBarTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
-  selectBarCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
-  selectBarCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold },
-  selectBarActions: { flexDirection: 'row', gap: spacing.sm },
-  selectAction: { flex: 1, borderWidth: 1, borderColor: 'rgba(244,235,224,0.30)', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
-  selectActionDisabled: { opacity: 0.4 },
-  selectActionText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.cream, textAlign: 'center', letterSpacing: 0.3 },
-  thumb: { width: 34, height: 44 },
-  wineMain: { flex: 1 },
-
-  wineMeta: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, flexShrink: 1 },
-
-  uploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
-  uploadingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  overlayText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
 });

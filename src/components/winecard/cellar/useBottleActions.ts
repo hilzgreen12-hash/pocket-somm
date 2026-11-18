@@ -8,10 +8,10 @@ import { getCellarWineById, updateCellarWine, deleteCellarWine } from '../../../
 import { clearSlotOfWine } from '../../../api/racks';
 import { fetchPlacementsForWine, placedCount, addLocationPlacement, moveBottlesToLocation } from '../../../api/placements';
 import { addWinesToFilter, removeWineFromFilter } from '../../../api/customFilters';
-import { deleteEmptyCasesForLocation } from '../../../api/storageLocations';
 import { evictCachedLabel } from '../../../api/labelImageCache';
 import { archiveBottles, archiveDateIso } from '../../../services/archiveNight';
 import { releaseHomeBottles, releaseLeavingBottles, loosenBottlesFor } from '../../../services/moveBottles';
+import { rackRoomFor, confirmRackRoom } from '../../../services/rackMoves';
 import { formatWineTitle } from '../../../utils/wineTitle';
 import { showAlert } from '../../AppAlert';
 import type { CellarWine } from '../../../types/wine';
@@ -83,7 +83,6 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
       if (archived === 0 || !archivedWineId) throw new Error('This wine is no longer in your cellar. Go back and try again.');
       // Every bottle went: the row itself is now the archive record.
       const whole = archivedWineId === wine.id;
-      if (whole && wine.storage_location_id) await deleteEmptyCasesForLocation(wine.storage_location_id).catch(() => {});
       const filterId = archiveFilterRef.current;
       archiveFilterRef.current = null;
       if (filterId) await removeWineFromFilter(filterId, wine.id);
@@ -131,7 +130,6 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
         const ids = new Set(wine.archived_at ? data.archiveLine.map((r) => r.id) : [wine.id]);
         for (const id of ids) await deleteCellarWine(id);
         evictCachedLabel(wine.label_image_path);
-        if (wine.storage_location_id) await deleteEmptyCasesForLocation(wine.storage_location_id).catch(() => {});
         // Gone from the caches at once, so a fresh add can never match it.
         if (userId) {
           for (const key of ['cellar', 'cellar-archive']) {
@@ -189,9 +187,15 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
         await moveBottlesToLocation(fresh, dest.id, n);
       } else if (dest.kind === 'list') {
         await releaseHomeBottles(wine.id, n, data.externalIds);
-        if (n >= fresh.quantity) await updateCellarWine(wine.id, { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: false, awaiting_placement_unit_id: null });
+        if (n >= fresh.quantity) await updateCellarWine(wine.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
       } else if (dest.id) {
-        ready = await loosenBottlesFor(wine.id, fresh.quantity, n, data.externalIds, { kind: dest.kind, id: dest.id });
+        // A rack or fridge only takes as many as it has free slots for; the
+        // rest stay where they are.
+        const sending = dest.kind === 'rack'
+          ? await confirmRackRoom(await rackRoomFor(dest.id, fresh.bottle_size_ml ?? 750), n, 'stay where they are')
+          : n;
+        if (sending === 0) return;
+        ready = await loosenBottlesFor(wine.id, fresh.quantity, sending, data.externalIds, { kind: dest.kind, id: dest.id });
         await updateCellarWine(wine.id, { awaiting_placement: true, awaiting_placement_unit_id: dest.id });
       }
       refresh();
@@ -281,7 +285,7 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
       store.setPendingWineId(wine.id);
       store.setPendingAddMode(true);
       store.setPendingStorageType(type);
-      router.push('/cellar/rack/resize');
+      router.push('/cellar/rack/new');
     };
     showAlert({
       title: 'What Kind of Storage Location?',
@@ -289,7 +293,7 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
       buttons: [
         { text: 'Rack', onPress: () => newRack('rack') },
         { text: 'Fridge', onPress: () => newRack('fridge') },
-        { text: 'Bin (diamonds)', onPress: () => router.push('/cellar/bin/resize') },
+        { text: 'Bin (diamonds)', onPress: () => router.push('/cellar/bin/new') },
         { text: 'Alt Cellar', onPress: () => router.push('/cellar/storage-location/new') },
         { text: 'Cancel', style: 'cancel' as const },
       ],

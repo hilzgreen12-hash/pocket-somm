@@ -29,7 +29,7 @@ import { WineCardHero } from '../../src/components/winecard/WineCardHero';
 import { wc } from '../../src/components/winecard/wcStyles';
 import { PER_75CL, priceForSize } from '../../src/utils/bottleValue';
 import { vintageVerdict, tooFewVintagesNote, pickFromCellar, ordinal, type CellarPick } from '../../src/utils/wineCardInsights';
-import { entriesOf } from '../../src/utils/cellarReview';
+import { visibleEntries } from '../../src/utils/cellarReview';
 import { wineQueryName, wineQueryAltName, wineNameKey, normaliseVintage } from '../../src/utils/wineIdentity';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { patchChosenWine } from '../../src/api/chosenWines';
@@ -1303,9 +1303,9 @@ export default function LabelResultsScreen() {
         title: 'What Kind of Storage Location?',
         body: 'Your wine is saved to the cellar — set up where it lives.',
         buttons: [
-          { text: 'Rack', onPress: () => { setPendingWineId(savedWineId); setPendingStorageType('rack'); router.replace('/cellar/rack/resize' as any); } },
-          { text: 'Fridge', onPress: () => { setPendingWineId(savedWineId); setPendingStorageType('fridge'); router.replace('/cellar/rack/resize' as any); } },
-          { text: 'Bin (diamonds)', onPress: () => router.replace('/cellar/bin/resize' as any) },
+          { text: 'Rack', onPress: () => { setPendingWineId(savedWineId); setPendingStorageType('rack'); router.replace('/cellar/rack/new'); } },
+          { text: 'Fridge', onPress: () => { setPendingWineId(savedWineId); setPendingStorageType('fridge'); router.replace('/cellar/rack/new'); } },
+          { text: 'Bin (diamonds)', onPress: () => router.replace('/cellar/bin/new' as any) },
           { text: 'Alt Cellar', onPress: () => router.replace('/cellar/storage-location/new' as any) },
           { text: 'Cancel', style: 'cancel', onPress: goToCellarList },
         ],
@@ -1668,13 +1668,13 @@ export default function LabelResultsScreen() {
     return Number.isNaN(dt.getTime()) ? '' : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   };
   const intelReturn = encodeURIComponent('/label/results?context=intel');
-  // Every review of this wine — restaurant / other (chosen wines) and cellar
-  // bottles' review entries — newest first.
+  // Every review of this wine — restaurant / other (chosen wines) and the
+  // user's own cellar bottles' review entries — newest first.
   const intelReviews = [
     ...chosenWines
       .filter((c) => (c.user_score != null || !!c.tasting_note?.trim()) && sameWineIdentity(intelId, { producer: c.producer, wineName: c.wine_name, vintage: c.vintage }))
       .map((c) => ({ key: `c-${c.id}`, date: c.reviewed_at ?? c.chosen_at, place: c.restaurant_name ?? null, score: c.user_score, note: c.tasting_note, open: () => router.push(`/wines/chosen?openReview=${c.id}&backTo=${intelReturn}&fromIntel=1` as any) })),
-    ...[...cellarMatches, ...archiveMatches].flatMap((w) => entriesOf(w).map((e) => ({ key: `e-${w.id}-${e.id}`, date: e.date ?? e.savedAt, place: e.location ?? null, score: e.score ?? null, note: e.note ?? null, open: () => router.push(`/wines/chosen?openCellarReview=${w.id}&backTo=${intelReturn}` as any) }))),
+    ...[...cellarMatches, ...archiveMatches].flatMap((w) => visibleEntries(w).map((e) => ({ key: `e-${w.id}-${e.id}`, date: e.date ?? e.savedAt, place: e.location ?? null, score: e.score ?? null, note: e.note ?? null, open: () => router.push(`/wines/chosen?openCellarReview=${w.id}&backTo=${intelReturn}` as any) }))),
   ].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
   const latestIntelReview = intelReviews[0] ?? null;
 

@@ -14,8 +14,8 @@ import { fonts } from '../constants/fonts';
 // "How is this wine packaged?" — shown whenever a wine lands in an Other Home
 // Storage location. Offers Loose Bottle(s), filing into an existing case, or
 // creating a brand-new case (name + note). Case membership lives on the wine's
-// 'location' PLACEMENT in this alt cellar (placement.case_id) — never the legacy
-// cellar_wines.case_id. Loose leaves the bottles uncased. The caller invalidates
+// 'location' PLACEMENT in this alt cellar (placement.case_id). Loose leaves the
+// bottles uncased. The caller invalidates
 // via onDone.
 
 // File `count` of a wine's bottles in an alt cellar into a case (or loose with
@@ -23,8 +23,8 @@ import { fonts } from '../constants/fonts';
 // `placementId` when given, else the wine's LOOSE placement in the location. A
 // partial file splits the placement (decrement the source, add to the case's
 // placement — addLocationPlacement merges into an existing one, so no duplicate
-// lines). If the wine has no placement here yet (legacy-only row) one is created,
-// but only for bottles that aren't already placed elsewhere, so the placed total
+// lines). If the wine has no placement here yet one is created, but only for
+// bottles that aren't already placed elsewhere, so the placed total
 // never exceeds the wine's quantity.
 export async function fileLocationBottlesIntoCase(opts: {
   wineId: string;

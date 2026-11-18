@@ -1,13 +1,8 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
-import { launchImageLibrary } from '../../utils/imagePicker';
-import { ensureMediaPermission } from '../../utils/mediaPermissions';
-import { ensureConnectionForUpload } from '../../utils/connectionGuard';
 import { useLabelStore } from '../../stores/labelStore';
-import { useScanStore } from '../../stores/scanStore';
-import { prepareImageBase64, scanLabel } from '../../api/label';
-import { classifyLabelRead, alertBadLabelPhoto, alertLabelFailure, askReadAsList } from '../../services/labelRead';
+import { readLabelFromLibrary } from '../../services/labelRead';
 import { showAlert } from '../AppAlert';
 import type { WineRack } from '../../types/wine';
 import { colors, spacing } from '../../constants/theme';
@@ -26,7 +21,7 @@ interface Props {
 // screens, which return to Your Cellar List.
 export function AddWineChooser({ visible, racks, onClose }: Props) {
   const [readingLabel, setReadingLabel] = useState(false);
-  const { setImage, setWineDetails, reset: resetLabelStore } = useLabelStore();
+  const resetLabelStore = useLabelStore((s) => s.reset);
 
   // A blank Confirm form that returns here when cancelled.
   function startManualAdd() {
@@ -38,37 +33,12 @@ export function AddWineChooser({ visible, racks, onClose }: Props) {
   // as one, and a photo that isn't a readable label says so (with the option to
   // type the wine in) instead of opening a blank form.
   async function uploadLabel() {
-    if (!(await ensureMediaPermission('library'))) return;
-    const result = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
-    if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
-    if (!(await ensureConnectionForUpload())) return;
-    const enterManually = { text: 'Enter Manually', onPress: startManualAdd };
-    resetLabelStore();
-    setReadingLabel(true);
-    try {
-      const base64 = await prepareImageBase64(uri);
-      setImage(uri, base64);
-      const details = await scanLabel(base64);
-      const kind = classifyLabelRead(details);
-      if (kind === 'list') {
-        setReadingLabel(false);
-        if (await askReadAsList()) {
-          useScanStore.getState().setImage(uri, 'upload');
-          router.push('/scan/wine-list?shared=1');
-          return;
-        }
-      } else if (kind === 'not-wine' || kind === 'unreadable') {
-        alertBadLabelPhoto(kind, enterManually);
-        return;
-      }
-      setWineDetails(details);
-      router.push(`/label/confirm?via=upload&backTo=${BACK_TO_LIST}`);
-    } catch (err) {
-      alertLabelFailure(err, enterManually);
-    } finally {
-      setReadingLabel(false);
-    }
+    const read = await readLabelFromLibrary({
+      setReading: setReadingLabel,
+      enterManually: { text: 'Enter Manually', onPress: startManualAdd },
+    });
+    if (read === 'list') router.push('/scan/wine-list?shared=1');
+    else if (read === 'label') router.push(`/label/confirm?via=upload&backTo=${BACK_TO_LIST}`);
   }
 
   // A lineup is placed straight into a rack or fridge grid, so pick which one

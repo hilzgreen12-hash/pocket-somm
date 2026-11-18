@@ -5,6 +5,7 @@ import { WineIdentityHeader } from '../WineIdentityHeader';
 import { bottleSizeCl } from '../BottleSizePicker';
 import { formatCurrency } from '../../constants/currency';
 import { PER_75CL } from '../../utils/bottleValue';
+import { visibleReviewScore } from '../../utils/cellarReview';
 import { colors, spacing } from '../../constants/theme';
 import { fontsSpectral as fonts } from '../../constants/fonts';
 import type { CellarWine } from '../../types/wine';
@@ -28,7 +29,7 @@ export const CellarListRow = memo(function CellarListRow({
   const valueText = w.estimated_value != null
     ? `${formatCurrency(Number(w.estimated_value), w.estimated_value_currency, { decimals: 0 })}${PER_75CL}`
     : null;
-  const score = showYourScore ? w.review_score : w.critic_score;
+  const score = showYourScore ? visibleReviewScore(w) : w.critic_score;
   return (
     <TouchableOpacity
       style={[styles.row, selected && styles.rowSelected]}

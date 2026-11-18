@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput, Switch } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -8,17 +8,17 @@ import * as Crypto from 'expo-crypto';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
+import { invalidateCellarViews } from '../../src/hooks/useCellar';
 import { importCellarDocument, prepareImageBase64, parseCellarImport, parseCellarPdf, type ImportedCellarWine, type CellarImportWine } from '../../src/api/label';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
-import { fileToSheets, type ImportSheet } from '../../src/utils/cellarImportDecode';
+import { fileToSheets, sheetChunks, type ImportSheet } from '../../src/utils/cellarImportDecode';
 import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
-import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
+import { addCellarWines, getCellarWineById, getCellarWines, updateCellarWine, type NewCellarWine } from '../../src/api/cellar';
 import { bulkCreateChosenReviews } from '../../src/api/chosenWines';
 import { createLibraryFilter } from '../../src/api/libraryFilters';
-import { supabase } from '../../src/api/supabase';
 import { parseVivinoReviews, isMonthFirstCurrency, type VivinoReview } from '../../src/utils/vivinoCsv';
-import { fetchStorageLocations, createStorageLocation, createStorageCase } from '../../src/api/storageLocations';
-import { addLocationPlacement } from '../../src/api/placements';
+import { fetchStorageLocations, createStorageLocation, createStorageCases } from '../../src/api/storageLocations';
+import { addLocationPlacement, fetchPlacementsForWines, insertLocationPlacements } from '../../src/api/placements';
 import type { CellarWine, StorageLocation } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { formatCurrency } from '../../src/constants/currency';
@@ -30,10 +30,24 @@ import { launchCamera, launchImageLibrary } from '../../src/utils/imagePicker';
 
 type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'location' | 'adding' | 'done' | 'reviews-done';
 
-// The review + save now work on the rich CellarImportWine (carrying the case
+// New cellar lines are written this many at a time.
+const INSERT_BATCH = 200;
+// Screenshots read at once: enough to be quick, few enough not to swamp a
+// mobile connection with large uploads.
+const SCREENSHOT_READS_AT_ONCE = 3;
+// A storage statement PDF is a few hundred KB; the server refuses ~10 MB+.
+const MAX_PDF_BYTES = 10_000_000;
+
+// A holding's bottle count, never less than one.
+function bottlesOf(w: CellarImportWine): number {
+  return Number.isFinite(w.totalBottles) && w.totalBottles > 0 ? Math.round(w.totalBottles) : 1;
+}
+
+// The review + save work on the rich CellarImportWine (carrying the case
 // structure). The photo/screenshot path returns the simpler bottle shape, so
 // lift it into a loose CellarImportWine.
 function fromImported(w: ImportedCellarWine): CellarImportWine {
+  const quantity = Number.isFinite(w.quantity) && w.quantity > 0 ? Math.round(w.quantity) : 1;
   return {
     producer: w.producer || null,
     wineName: w.wine_name || null,
@@ -42,11 +56,11 @@ function fromImported(w: ImportedCellarWine): CellarImportWine {
     country: null,
     colour: null,
     bottleSizeMl: w.bottle_size_ml ?? 750,
-    totalBottles: Number.isFinite(w.quantity) && w.quantity > 0 ? w.quantity : 1,
+    totalBottles: quantity,
     packaging: 'loose',
     bottlesPerCase: null,
     cases: null,
-    looseBottles: w.quantity,
+    looseBottles: quantity,
     drinkingWindowFrom: null,
     drinkingWindowTo: null,
     purchasePricePerBottle: w.purchase_price ?? null,
@@ -61,10 +75,65 @@ function fromImported(w: ImportedCellarWine): CellarImportWine {
 function isCased(w: CellarImportWine): boolean {
   return (w.packaging === 'owc' || w.packaging === 'non_owc') && (w.bottlesPerCase ?? 0) > 1;
 }
-function caseSummary(w: CellarImportWine, cl: (ml: number) => string): string {
-  const kind = w.packaging === 'non_owc' ? 'Non-OWC' : 'OWC';
-  const prefix = w.cases && w.cases > 1 ? `${w.cases} × ` : '';
-  return `${prefix}${kind} of ${w.bottlesPerCase} · ${cl(w.bottleSizeMl)}cl`;
+// One case's name, e.g. "OWC of 6 · 75cl".
+function caseName(w: CellarImportWine): string {
+  return `${w.packaging === 'non_owc' ? 'Non-OWC' : 'OWC'} of ${w.bottlesPerCase} · ${bottleSizeCl(w.bottleSizeMl)}cl`;
+}
+// The holding on the review list, e.g. "2 × OWC of 6 · 75cl".
+function caseSummary(w: CellarImportWine): string {
+  return `${w.cases && w.cases > 1 ? `${w.cases} × ` : ''}${caseName(w)}`;
+}
+
+// The cellar line a new holding becomes. Imported values are for the bottle as
+// listed; Vinster keeps values per 75cl. added_via 'import' means no Wine Intel
+// is generated for it in the background.
+function newCellarRow(userId: string, id: string, w: CellarImportWine, defaultCurrency: string): NewCellarWine & { id: string } {
+  const year = (s: string | null) => { const n = s ? parseInt(s, 10) : NaN; return Number.isFinite(n) ? n : null; };
+  const market = w.marketPricePerBottle;
+  const paid = w.purchasePricePerBottle;
+  return {
+    id,
+    user_id: userId,
+    wine_name: (w.wineName || w.producer || '').trim(),
+    producer: w.wineName ? (w.producer ?? null) : null,
+    region: w.region ?? null,
+    vintage: w.vintage ?? null,
+    quantity: bottlesOf(w),
+    date_received: new Date().toISOString().split('T')[0],
+    drinking_window_from: year(w.drinkingWindowFrom),
+    drinking_window_to: year(w.drinkingWindowTo),
+    drinking_window_status: 'unknown',
+    // A market/current value column becomes the wine's estimated value, so
+    // Cellar Stats reflect it without a lookup.
+    estimated_value: market != null ? per75From(market, w.bottleSizeMl) : null,
+    estimated_value_currency: market != null ? (w.currency ?? defaultCurrency) : null,
+    estimated_value_at: market != null ? new Date().toISOString() : null,
+    estimated_value_source: market != null ? 'imported' : null,
+    purchase_price: paid ?? null,
+    purchase_price_currency: paid != null ? (w.currency ?? defaultCurrency) : null,
+    bottle_size_ml: w.bottleSizeMl ?? 750,
+    added_via: 'import',
+  };
+}
+
+// Run `task` over every item, at most `limit` at a time, keeping each outcome:
+// one failure doesn't throw away the others.
+async function settleLimited<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      try { results[i] = { status: 'fulfilled', value: await task(items[i]) }; } catch (reason) { results[i] = { status: 'rejected', reason }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+// "1, 2 and 4".
+function listJoin(n: number[]): string {
+  return n.length < 2 ? String(n[0] ?? '') : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
 }
 
 // Why a row is pre-unticked: it already exists in the cellar, or it repeats an
@@ -144,19 +213,30 @@ export default function ImportCellarScreen() {
 
   const [stage, setStage] = useState<Stage>('capture');
   const [wines, setWines] = useState<CellarImportWine[]>([]);
+  // Each row's cellar id, chosen up front so retrying an interrupted import
+  // can't add the same row twice (see addCellarWines).
+  const [rowIds, setRowIds] = useState<string[]>([]);
   const [keep, setKeep] = useState<boolean[]>([]);
   const [dupFlags, setDupFlags] = useState<DupFlag[]>([]);
+  // Leave out rows already in the cellar, so importing an updated list again
+  // doesn't double what's there. Off: their bottles join the existing line.
+  const [skipExisting, setSkipExisting] = useState(true);
+  // Part of the list couldn't be read (shown above the review list).
+  const [readWarning, setReadWarning] = useState<string | null>(null);
+  // "N of M" while a long list is read or added.
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [addedCount, setAddedCount] = useState(0);
   // How many bottles were merged into wines already in the cellar (for the
   // done-screen summary). Set on a successful import.
   const [mergedBottles, setMergedBottles] = useState(0);
   // Per-wine merge detail for the done screen: which existing wines gained bottles.
   const [mergedList, setMergedList] = useState<Array<{ name: string; added: number; base: number }>>([]);
+  // Bottles that were added but couldn't be filed in the chosen location.
+  const [unfiledBottles, setUnfiledBottles] = useState(0);
   // The location this import was filed into (for the done-screen "view it here" line).
   const [importedLocationName, setImportedLocationName] = useState<string | null>(null);
   // Existing cellar wines keyed by identity, so a 'cellar' duplicate can be
-  // merged into its existing row (bottle count += imported qty) rather than
-  // spawning a parallel cellar line.
+  // skipped or merged into its existing row rather than spawning a parallel line.
   const existingByKey = useRef<Map<string, CellarWine>>(new Map());
   // Multi-sheet workbooks (e.g. a portfolio spanning several accounts) let the
   // user choose which lists to import before parsing.
@@ -170,9 +250,9 @@ export default function ImportCellarScreen() {
   // files under "All Wines Stored Externally" vs "All Wines At Home" in the list.
   const [newLocationExternal, setNewLocationExternal] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
-  // Vivino reviews import summary (matched onto cellar wines vs added as
-  // standalone "other" reviews vs skipped because already reviewed).
-  const [reviewSummary, setReviewSummary] = useState<{ matched: number; added: number; skipped: number; rawRows?: number; parsed?: number; items?: number; dbCount?: number } | null>(null);
+  // Reviews import summary: reviews added, across how many wines, and exact
+  // duplicates skipped.
+  const [reviewSummary, setReviewSummary] = useState<{ reviews: number; wines: number; skipped: number } | null>(null);
 
   // Auto-open the right picker so the chooser → this screen → picker feels like
   // one action. Vivino stays on the instructions screen (the user needs to have
@@ -200,31 +280,40 @@ export default function ImportCellarScreen() {
     }
   }
 
+  // Read each screenshot (cellar lists often span several screens) and merge
+  // the wines. A screenshot that fails doesn't lose the ones that were read.
   async function analyze(uris: string[]) {
     if (!(await ensureConnectionForUpload())) return;
     setStage('analyzing');
-    try {
-      // Read each screenshot in parallel; merge the extracted wines (cellar
-      // lists often span several screens).
-      const results = await Promise.all(uris.map(async (uri) => {
-        const base64 = await prepareImageBase64(uri);
-        const { wines: w } = await importCellarDocument(base64);
-        return w ?? [];
-      }));
-      const all = results.flat();
-      await presentWines(all.map(fromImported));
-    } catch (err) {
-      showAlert({ title: 'Could not read the screenshot', body: err instanceof Error ? err.message : 'Please try again.' });
+    const total = uris.length;
+    let done = 0;
+    if (total > 1) setProgress({ done, total });
+    const results = await settleLimited(uris, SCREENSHOT_READS_AT_ONCE, async (uri) => {
+      const { wines: read } = await importCellarDocument(await prepareImageBase64(uri));
+      if (total > 1) setProgress({ done: ++done, total });
+      return read ?? [];
+    });
+    setProgress(null);
+    const failed = results.flatMap((r, i) => (r.status === 'rejected' ? [i + 1] : []));
+    if (failed.length === total) {
+      const reason = (results[0] as PromiseRejectedResult).reason;
+      showAlert({ title: 'Could not read the screenshot', body: reason instanceof Error ? reason.message : 'Please try again.' });
       setStage('capture');
+      return;
     }
+    const read = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+    await presentWines(read.map(fromImported), failed.length
+      ? `Screenshot${failed.length > 1 ? 's' : ''} ${listJoin(failed)} couldn't be read, so ${failed.length > 1 ? 'their' : 'its'} wines aren't listed below. You can carry on with these and import the rest again.`
+      : null);
   }
 
   // Pre-tick logic shared by every import source. Everything is ticked by
-  // default. Wines already in the cellar stay ticked but are flagged 'cellar' —
-  // on confirm their bottles are MERGED into the existing listing rather than
-  // creating a parallel line. Wines repeated within this same import are
-  // pre-unticked ('import') so we don't double-count the same row twice.
-  async function presentWines(all: CellarImportWine[]) {
+  // default. Wines already in the cellar are flagged 'cellar' — skipped while
+  // "Skip wines already in your cellar" is on, otherwise their bottles are
+  // MERGED into the existing listing. Wines repeated within this same import
+  // are pre-unticked ('import') so we don't double-count the same row twice.
+  // `warning`: part of the file couldn't be read.
+  async function presentWines(all: CellarImportWine[], warning: string | null = null) {
     // Vintage is core identity — a file with NO vintages at all can't be imported
     // reliably. Block and send the user back to fix the file.
     if (all.length && !all.some((w) => (w.vintage ?? '').toString().trim() !== '')) {
@@ -258,17 +347,23 @@ export default function ImportCellarScreen() {
       const flag: DupFlag = map.has(k) ? 'cellar' : seen.has(k) ? 'import' : null;
       seen.add(k);
       flags.push(flag);
-      // Tick new wines and cellar-merges; untick within-import repeats.
+      // Tick new wines and cellar matches; untick within-import repeats.
       initialKeep.push(flag !== 'import');
     }
     setWines(all);
+    setRowIds(all.map(() => Crypto.randomUUID()));
     setDupFlags(flags);
     setKeep(initialKeep);
+    setSkipExisting(true);
+    setReadWarning(warning);
     setStage('review');
-    // Flag the two things the user needs to know about, combined into one alert.
-    const formatNote = noFormatCount > 0
-      ? `\n\n${noFormatCount} wine${noFormatCount === 1 ? '' : 's'} had no bottle format, so ${noFormatCount === 1 ? 'it was' : 'they were'} set to 1×75cl (single 75cl bottles). You can change a wine's format later.`
-      : '';
+    // Flag what the user needs to know about, combined into one alert.
+    const notes = [
+      noFormatCount > 0
+        ? `${noFormatCount} wine${noFormatCount === 1 ? '' : 's'} had no bottle format, so ${noFormatCount === 1 ? 'it was' : 'they were'} set to 1×75cl (single 75cl bottles). You can change a wine's format later.`
+        : null,
+      warning,
+    ].filter(Boolean).map((n) => `\n\n${n}`).join('');
     const hasPurchase = all.some((w) => w.purchasePricePerBottle != null);
     const hasMarket = all.some((w) => w.marketPricePerBottle != null);
     if (!hasPurchase && hasMarket) {
@@ -276,7 +371,7 @@ export default function ImportCellarScreen() {
       // applied as each wine's estimated value, so the user can proceed.
       showAlert({
         title: 'Market values found',
-        body: `No purchase prices in your file, but Vinster found market/current values and will apply them as each wine's estimated value. Add purchase prices too for the most accurate Cellar Stats.${formatNote}`,
+        body: `No purchase prices in your file, but Vinster found market/current values and will apply them as each wine's estimated value. Add purchase prices too for the most accurate Cellar Stats.${notes}`,
         buttons: [
           { text: 'Add purchase prices', onPress: () => setStage('capture') },
           { text: 'Continue' },
@@ -286,14 +381,14 @@ export default function ImportCellarScreen() {
       // No purchase prices anywhere → stats need them. Offer to go back or proceed.
       showAlert({
         title: 'No purchase prices found',
-        body: `Vinster can't see purchase prices in your file, and therefore won't be able to generate accurate Cellar Stats. Please go back and add a column with purchase prices.${formatNote}`,
+        body: `Vinster can't see purchase prices in your file, and therefore won't be able to generate accurate Cellar Stats. Please go back and add a column with purchase prices.${notes}`,
         buttons: [
           { text: 'Go back', onPress: () => setStage('capture') },
           { text: 'Skip purchase prices' },
         ],
       });
-    } else if (noFormatCount > 0) {
-      showAlert({ title: 'No bottle format found', body: formatNote.trim(), buttons: [{ text: 'OK' }] });
+    } else if (notes) {
+      showAlert({ title: warning ? "Some wines weren't read" : 'No bottle format found', body: notes.trim(), buttons: [{ text: 'OK' }] });
     }
   }
 
@@ -323,14 +418,21 @@ export default function ImportCellarScreen() {
       // rather than decoded — no rows to split, so no sheet picker.
       const isPdf = /\.pdf$/.test(name) || (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46); // %PDF
       if (isPdf) {
+        if (bytes.length > MAX_PDF_BYTES) {
+          showAlert({ title: 'That PDF is too large', body: 'Vinster can read statements up to about 10 MB. Try a smaller file, or a spreadsheet export instead.' });
+          setStage('capture');
+          return;
+        }
         if (!(await ensureConnectionForUpload())) { setStage('capture'); return; }
-        const wines = await parseCellarPdf(await new File(asset.uri).base64(), asset.name ?? 'PDF');
-        if (wines.length === 0) {
+        const read = await parseCellarPdf(await new File(asset.uri).base64(), asset.name ?? 'PDF');
+        if (read.wines.length === 0) {
           showAlert({ title: "Couldn't read that PDF", body: "Vinster couldn't find any wine holdings in that document. If it's a scanned image, try a clearer copy or a spreadsheet export instead." });
           setStage('capture');
           return;
         }
-        await presentWines(wines);
+        await presentWines(read.wines, read.truncated
+          ? "This document was too long to read in full, so some wines may be missing below. You can carry on with these, or import a spreadsheet export instead."
+          : null);
         return;
       }
       // Decode the spreadsheet (Excel / CSV, any encoding) into clean per-sheet
@@ -358,9 +460,8 @@ export default function ImportCellarScreen() {
   }
 
   // Import Vivino RATINGS + TASTING NOTES (not stock). Pick the full wine list,
-  // extract every rated/reviewed wine, and either write the review onto the
-  // matching cellar wine or keep it as a standalone "other" review so nothing's
-  // lost. Never clobbers a review already written in Vinster.
+  // extract every rated/reviewed wine, and save each as a review in Your Wine
+  // Reviews, grouped in a dated Import folder.
   async function pickReviewsFile() {
     try {
       const res = await DocumentPicker.getDocumentAsync({
@@ -387,14 +488,14 @@ export default function ImportCellarScreen() {
         setStage('capture');
         return;
       }
-      await importReviews(reviews, (parsedSheets[0]?.rows?.length ?? 0));
+      await importReviews(reviews);
     } catch (err) {
       showAlert({ title: 'Could not read the file', body: err instanceof Error ? err.message : 'Please try again.' });
       setStage('capture');
     }
   }
 
-  async function importReviews(reviews: VivinoReview[], rawRows: number) {
+  async function importReviews(reviews: VivinoReview[]) {
     const userId = session?.user.id;
     if (!userId) return;
     setStage('adding');
@@ -404,7 +505,6 @@ export default function ImportCellarScreen() {
       // tasting occasions) are all kept: they share a review_group_id so they
       // collapse into ONE review card with dated entries. No intel generated now
       // (on demand when a wine is opened).
-      const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
       const groupIds = new Map<string, string>(); // wine+vintage -> shared review_group_id
       const seenIdentical = new Set<string>();
       let trueDupes = 0;
@@ -440,20 +540,7 @@ export default function ImportCellarScreen() {
       if (ids.length > 0) await createLibraryFilter(userId, 'wine-review', folderName, ids);
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
       qc.invalidateQueries({ queryKey: ['library-filters'] });
-      // Exact DB row count (bypasses pagination) — distinguishes an INSERT loss
-      // (dbCount < items) from a FETCH/display loss (dbCount == items but the
-      // screen shows fewer).
-      let dbCount = 0;
-      try {
-        const { count } = await supabase
-          .from('chosen_wines')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', userId);
-        dbCount = count ?? 0;
-      } catch { /* diagnostic only */ }
-      // Full pipeline breakdown so any row loss is visible at a glance:
-      // file rows → parsed reviews → after dedup → rows inserted → rows in DB → wines.
-      setReviewSummary({ matched: groupIds.size, added: ids.length, skipped: trueDupes, rawRows, parsed: reviews.length, items: items.length, dbCount });
+      setReviewSummary({ reviews: ids.length, wines: groupIds.size, skipped: trueDupes });
       setStage('reviews-done');
     } catch (err) {
       showAlert({ title: 'Could not import reviews', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -461,34 +548,74 @@ export default function ImportCellarScreen() {
     }
   }
 
-  // Parse the chosen sheets: a recognised merchant export maps exactly in code;
-  // anything else goes to the intelligent (Claude) parser. Both return the same
-  // wine shape, which we fold into the shared review list.
+  // Parse the chosen sheets: a recognised merchant or cellar-app export maps
+  // exactly on the phone; anything else is read by the intelligent (Claude)
+  // parser in parts of ~100 rows, one after another. A part that fails or comes
+  // back incomplete is reported, and the user can carry on with the rest.
   async function processSheets(selected: ImportSheet[]) {
     setStage('analyzing');
     try {
-      const all: CellarImportWine[] = [];
-      for (const sheet of selected) {
+      const plan = selected.map((sheet) => {
         const known = parseKnownSource(sheet.rows);
-        const wines = known ? known.wines : await parseCellarImport(sheet.tsv, sheet.name);
-        all.push(...wines);
+        return { sheet, known, parts: known ? [] : sheetChunks(sheet) };
+      });
+      const total = plan.reduce((n, p) => n + p.parts.length, 0);
+      const all: CellarImportWine[] = [];
+      let done = 0;
+      let unread = 0;
+      let failedInARow = 0;
+      let lastError: unknown = null;
+      if (total > 1) setProgress({ done, total });
+      for (const { sheet, known, parts } of plan) {
+        if (known) { all.push(...known.wines); continue; }
+        for (const part of parts) {
+          // Several failures in a row (offline, over the usage limit): the rest
+          // would fail the same way, so they're counted as unread.
+          if (failedInARow >= 3) {
+            unread++;
+          } else {
+            try {
+              const read = await parseCellarImport(part, sheet.name);
+              all.push(...read.wines);
+              if (read.truncated) unread++;
+              failedInARow = 0;
+            } catch (err) {
+              unread++;
+              failedInARow++;
+              lastError = err;
+            }
+          }
+          if (total > 1) setProgress({ done: ++done, total });
+        }
       }
+      setProgress(null);
       if (all.length === 0) {
-        showAlert({
-          title: "Couldn't read that list",
-          body: "We couldn't find any wines. If this was an Excel file exported from Numbers, try a CSV instead — File → Export To → CSV — which reads most reliably. Make sure the top row names the columns (producer, wine, vintage, quantity…).",
-        });
+        showAlert(lastError
+          ? { title: 'Could not read the list', body: lastError instanceof Error ? lastError.message : 'Please try again.' }
+          : {
+            title: "Couldn't read that list",
+            body: "We couldn't find any wines. If this was an Excel file exported from Numbers, try a CSV instead — File → Export To → CSV — which reads most reliably. Make sure the top row names the columns (producer, wine, vintage, quantity…).",
+          });
         setStage('capture');
         return;
       }
-      await presentWines(all);
+      await presentWines(all, unread
+        ? `Part of your file couldn't be read${total > 1 ? ` (${unread} of ${total} parts)` : ''}, so some wines may be missing below. You can carry on with these and import the rest again.`
+        : null);
     } catch (err) {
+      setProgress(null);
       showAlert({ title: 'Could not read the list', body: err instanceof Error ? err.message : 'Please try again.' });
       setStage('capture');
     }
   }
 
-  const keptCount = keep.filter(Boolean).length;
+  // Whether a row goes into the cellar: ticked, and not a wine already there
+  // while those are being skipped.
+  const included = (i: number) => keep[i] && !(skipExisting && dupFlags[i] === 'cellar');
+  const keptCount = wines.reduce((n, _, i) => n + (included(i) ? 1 : 0), 0);
+  // What the review rows read besides each wine, so the list redraws on a change.
+  const reviewListState = useMemo(() => ({ keep, skipExisting }), [keep, skipExisting]);
+  const cellarMatches = dupFlags.filter((f) => f === 'cellar').length;
 
   async function loadLocations() {
     const userId = session?.user.id;
@@ -512,7 +639,7 @@ export default function ImportCellarScreen() {
     setSavingLocation(true);
     try {
       const loc = await createStorageLocation(userId, name, newLocationExternal);
-      await confirmImport(loc.id);
+      await confirmImport(loc);
     } catch (err) {
       showAlert({ title: 'Could not create location', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -520,149 +647,213 @@ export default function ImportCellarScreen() {
     }
   }
 
-  // Materialize the import. `locationId` null → wines land unplaced (loose, no
-  // location); otherwise every wine is filed into that location and each cased
-  // holding also becomes an OWC / non-OWC case there.
-  async function confirmImport(locationId: string | null) {
-    if (!session?.user.id || keptCount === 0) return;
+  // File a batch of new lines in the import location: each full case becomes
+  // its own case there, the remaining bottles sit loose. A line that landed on
+  // an earlier, interrupted attempt (not in `added`) may already be filed, so
+  // those are checked first. Returns how many bottles couldn't be filed.
+  async function fileNewLines(userId: string, locationId: string, items: { id: string; wine: CellarImportWine }[], added: Set<string>): Promise<number> {
+    try {
+      const earlier = items.filter((x) => !added.has(x.id)).map((x) => x.id);
+      const filed = new Set(earlier.length ? (await fetchPlacementsForWines(earlier)).map((p) => p.cellar_wine_id) : []);
+      const cases: { id: string; storageLocationId: string; name: string }[] = [];
+      const placements: { wineId: string; locationId: string; caseId: string | null; quantity: number }[] = [];
+      for (const { id, wine } of items) {
+        if (filed.has(id)) continue;
+        const qty = bottlesOf(wine);
+        const perCase = wine.bottlesPerCase ?? 0;
+        const caseCount = isCased(wine) ? Math.min(wine.cases ?? Infinity, Math.floor(qty / perCase)) : 0;
+        for (let c = 0; c < caseCount; c++) {
+          const caseId = Crypto.randomUUID();
+          cases.push({ id: caseId, storageLocationId: locationId, name: caseName(wine) });
+          placements.push({ wineId: id, locationId, caseId, quantity: perCase });
+        }
+        const loose = qty - caseCount * perCase;
+        if (loose > 0) placements.push({ wineId: id, locationId, caseId: null, quantity: loose });
+      }
+      await createStorageCases(userId, cases);
+      await insertLocationPlacements(placements);
+      return 0;
+    } catch {
+      return items.reduce((n, x) => n + bottlesOf(x.wine), 0);
+    }
+  }
+
+  // Materialize the import. `location` null → wines land unplaced; otherwise
+  // every wine is filed into that location, its full cases as cases there.
+  async function confirmImport(location: StorageLocation | null) {
+    const userId = session?.user.id;
+    if (!userId || keptCount === 0) return;
     setStage('adding');
-    const userId = session.user.id;
-    // Work over ORIGINAL indices so that if an insert throws partway we can drop
-    // exactly the rows already committed. Without this, a mid-loop failure left
-    // the full kept list intact, so re-tapping "Add" re-inserted everything that
-    // had already landed → duplicate cellar lines.
-    const keptIndices = wines.map((_, i) => i).filter((i) => keep[i]);
+    const locationId = location?.id ?? null;
+    // Work over ORIGINAL indices so that if a write throws partway we can drop
+    // exactly the rows already committed, and a retry only adds the remainder.
+    const keptIndices = wines.map((_, i) => i).filter(included);
     const succeeded: number[] = [];
     let bottlesAdded = 0;
     let mergedBottlesRun = 0;
-    // Running per-existing-wine target quantity, so several imported rows that
-    // map to the same cellar wine accumulate instead of clobbering each other.
-    const mergeTotals = new Map<string, number>();
+    let unfiled = 0;
     // Per existing-wine merge detail (name, bottles added this import, prior count).
     const mergedInfo = new Map<string, { name: string; added: number; base: number }>();
+    setProgress({ done: 0, total: keptIndices.length });
     try {
-      // Bulk add identity + quantity + price. No per-wine AI enrichment here —
-      // a cellar import can be dozens of wines; the user can generate intel on
-      // any wine later from its card.
+      // Bottles of a wine already in the cellar join its line, one wine at a
+      // time: the line's current count is re-read just before writing, so
+      // bottles added meanwhile (or by an earlier row of this import) are kept.
+      // A line archived or deleted since the review is added afresh.
+      const fresh: number[] = [];
       for (const i of keptIndices) {
-        const w = wines[i];
-        const qty = Number.isFinite(w.totalBottles) && w.totalBottles > 0 ? Math.round(w.totalBottles) : 1;
-        // Duplicate of an existing cellar wine → add these bottles to that
-        // listing rather than creating a new one.
-        const existing = dupFlags[i] === 'cellar' ? existingByKey.current.get(wineKey(w)) : undefined;
-        if (existing) {
-          const base = mergeTotals.get(existing.id) ?? (existing.quantity ?? 0);
-          const next = base + qty;
-          mergeTotals.set(existing.id, next);
-          await updateCellarWine(existing.id, { quantity: next });
-          // File the merged-in bottles into the chosen import location too — the
-          // Full Cellar List reads cellar_placements, so without this the added
-          // bottles bumped the count but never appeared in the folder (and the
-          // wine's placement total no longer matched its quantity).
-          if (locationId) {
-            try { await addLocationPlacement(existing.id, locationId, null, qty); } catch { /* best-effort */ }
-          }
-          const info = mergedInfo.get(existing.id);
-          mergedInfo.set(existing.id, {
-            name: [existing.producer, existing.wine_name, existing.vintage].filter(Boolean).join(' '),
-            added: (info?.added ?? 0) + qty,
-            base: info?.base ?? (existing.quantity ?? 0),
-          });
-          succeeded.push(i);
-          bottlesAdded += qty;
-          mergedBottlesRun += qty;
-          continue;
-        }
-        const dwFrom = w.drinkingWindowFrom ? parseInt(w.drinkingWindowFrom, 10) : null;
-        const dwTo = w.drinkingWindowTo ? parseInt(w.drinkingWindowTo, 10) : null;
-        const saved = await addCellarWine({
-          user_id: userId,
-          wine_name: (w.wineName || w.producer || '').trim(),
-          producer: w.wineName ? (w.producer ?? null) : null,
-          region: w.region ?? null,
-          vintage: w.vintage ?? null,
-          quantity: qty,
-          storage_location: null,
-          storage_location_id: locationId ?? null,
-          date_received: new Date().toISOString().split('T')[0],
-          critic_score: null,
-          critic_score_note: null,
-          drinking_window_from: Number.isFinite(dwFrom as number) ? dwFrom : null,
-          drinking_window_to: Number.isFinite(dwTo as number) ? dwTo : null,
-          drinking_window_status: 'unknown',
-          tasting_notes: null,
-          grape_variety: null,
-          label_image_path: null,
-          user_notes: null,
-          // Market/current value from the import doc (when the sheet had one) →
-          // the wine's estimated value, so Cellar Stats reflect it without a lookup.
-          // Imported values are for the bottle as listed; Vinster keeps values per 75cl.
-          estimated_value: w.marketPricePerBottle != null ? per75From(w.marketPricePerBottle, w.bottleSizeMl) : null,
-          estimated_value_currency: w.marketPricePerBottle != null ? (w.currency ?? defaultCurrency) : null,
-          estimated_value_at: w.marketPricePerBottle != null ? new Date().toISOString() : null,
-          estimated_value_source: w.marketPricePerBottle != null ? 'imported' : null,
-          purchase_price: w.purchasePricePerBottle ?? null,
-          purchase_price_currency: w.purchasePricePerBottle != null ? (w.currency ?? defaultCurrency) : null,
-          bottle_size_ml: w.bottleSizeMl ?? 750,
-          // Marks it as imported, so no Wine Intel is generated in the background.
-          added_via: 'import',
-        } as any);
-        // Cased holding + a chosen location → create the OWC/non-OWC case and
-        // file the wine into it. Non-fatal: a failure still leaves the wine
-        // filed loose in the location.
-        let caseId: string | null = null;
-        if (locationId && isCased(w)) {
-          try {
-            const name = caseSummary(w, bottleSizeCl);
-            const created = await createStorageCase(userId, { storageLocationId: locationId, name });
-            // NB: do NOT call assignWineToCase here. It updates cellar_wines.case_id,
-            // which fires the Phase-2 legacy→placements sync trigger (migration 104)
-            // and creates a location placement of `qty`. addLocationPlacement below
-            // would then ADD another `qty` on top → double the bottle count (a 6-pack
-            // showing as 12). The case is linked purely via the placement's case_id.
-            caseId = created.id;
-          } catch { /* wine stays loose in the location */ }
-        }
-        // Create the LOCATION PLACEMENT so the wine actually appears in its folder.
-        // The Full Cellar List filters on cellar_placements, not the legacy
-        // storage_location_id — without this the wine showed as "Unplaced". This is
-        // the SINGLE source of the wine's placement (see the no-assignWineToCase note).
+        const match = dupFlags[i] === 'cellar' ? existingByKey.current.get(wineKey(wines[i])) : undefined;
+        const live = match ? await getCellarWineById(match.id) : null;
+        if (!live || live.archived_at) { fresh.push(i); continue; }
+        const qty = bottlesOf(wines[i]);
+        await updateCellarWine(live.id, { quantity: (live.quantity ?? 0) + qty });
         if (locationId) {
-          try { await addLocationPlacement(saved.id, locationId, caseId, qty); } catch { /* best-effort */ }
+          try { await addLocationPlacement(live.id, locationId, null, qty); } catch { unfiled += qty; }
         }
+        const info = mergedInfo.get(live.id);
+        mergedInfo.set(live.id, {
+          name: [live.producer, live.wine_name, live.vintage].filter(Boolean).join(' '),
+          added: (info?.added ?? 0) + qty,
+          base: info?.base ?? (live.quantity ?? 0),
+        });
         succeeded.push(i);
         bottlesAdded += qty;
+        mergedBottlesRun += qty;
+        setProgress({ done: succeeded.length, total: keptIndices.length });
       }
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
-      if (locationId) {
-        qc.invalidateQueries({ queryKey: ['storage-location-wines', locationId] });
-        qc.invalidateQueries({ queryKey: ['storage-location-cases', locationId] });
-        qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+      // New lines, a batch at a time. No Wine Intel or price lookups here — an
+      // import can be thousands of wines; intel is generated on demand later.
+      for (let b = 0; b < fresh.length; b += INSERT_BATCH) {
+        const batch = fresh.slice(b, b + INSERT_BATCH);
+        const added = new Set(await addCellarWines(batch.map((i) => newCellarRow(userId, rowIds[i], wines[i], defaultCurrency))));
+        if (locationId) unfiled += await fileNewLines(userId, locationId, batch.map((i) => ({ id: rowIds[i], wine: wines[i] })), added);
+        succeeded.push(...batch);
+        bottlesAdded += batch.reduce((n, i) => n + bottlesOf(wines[i]), 0);
+        setProgress({ done: succeeded.length, total: keptIndices.length });
       }
+      invalidateCellarViews(qc);
       setAddedCount((prev) => prev + bottlesAdded);
       setMergedBottles((prev) => prev + mergedBottlesRun);
       setMergedList(Array.from(mergedInfo.values()));
-      setImportedLocationName(locationId ? (locations.find((l) => l.id === locationId)?.name ?? null) : null);
+      setUnfiledBottles((prev) => prev + unfiled);
+      setImportedLocationName(location?.name ?? null);
       setStage('done');
     } catch (err) {
       console.warn('import-cellar: partial failure after', succeeded.length, 'of', keptIndices.length, err);
       // Drop the rows we already committed so a retry only adds the remainder.
       if (succeeded.length) {
         const done = new Set(succeeded);
-        setWines((prev) => prev.filter((_, i) => !done.has(i)));
-        setKeep((prev) => prev.filter((_, i) => !done.has(i)));
-        setDupFlags((prev) => prev.filter((_, i) => !done.has(i)));
+        const remaining = <T,>(prev: T[]) => prev.filter((_, i) => !done.has(i));
+        setWines(remaining);
+        setRowIds(remaining);
+        setKeep(remaining);
+        setDupFlags(remaining);
         setAddedCount((prev) => prev + bottlesAdded);
         setMergedBottles((prev) => prev + mergedBottlesRun);
-        qc.invalidateQueries({ queryKey: ['cellar', userId] });
+        setUnfiledBottles((prev) => prev + unfiled);
+        invalidateCellarViews(qc);
       }
       showAlert({
         title: succeeded.length ? 'Imported some, then hit a snag' : 'Could not import',
-        body: `${succeeded.length ? `${bottlesAdded} bottle${bottlesAdded === 1 ? '' : 's'} added. The rest are still listed — tap Add to retry them. ` : ''}${err instanceof Error ? err.message : 'Please try again.'}`,
+        body: `${succeeded.length ? `${bottlesAdded} bottle${bottlesAdded === 1 ? '' : 's'} added. The rest are still listed — tap Continue to retry them. ` : ''}${err instanceof Error ? err.message : 'Please try again.'}`,
       });
       setStage('review');
+    } finally {
+      setProgress(null);
     }
   }
+
+  // One row of the review list.
+  function renderReviewRow(w: CellarImportWine, i: number) {
+    const flag = dupFlags[i];
+    // A wine already in the cellar can't be ticked while those are skipped.
+    const skipped = skipExisting && flag === 'cellar';
+    const on = included(i);
+    const qty = bottlesOf(w);
+    const label = [w.vintage, w.producer, w.wineName].filter(Boolean).join(' ');
+    // quantity x format, matching the cellar list (e.g. 1x75, 2x150).
+    const qtyFormat = `${qty}x${bottleSizeCl(w.bottleSizeMl)}`;
+    // Purchase and/or market price per bottle (when the file gave them)
+    // — shown in gold next to the format so the user can confirm prices
+    // were read. Market value is labelled so it's clear it's not cost.
+    const priceStr = [
+      w.purchasePricePerBottle != null ? `${formatCurrency(w.purchasePricePerBottle, w.currency ?? defaultCurrency, { decimals: 0 })}/btl` : null,
+      w.marketPricePerBottle != null ? `${formatCurrency(w.marketPricePerBottle, w.currency ?? defaultCurrency, { decimals: 0 })}/btl mkt` : null,
+    ].filter(Boolean).join('  ·  ') || null;
+    const tag = flag === 'cellar'
+      ? (skipped ? 'Already in your cellar · skipped' : `Already in cellar · +${qty} to existing`)
+      : flag === 'import' ? 'Duplicate · tap to include' : null;
+    return (
+      <TouchableOpacity
+        style={[styles.row, !on && styles.rowOff]}
+        onPress={() => setKeep((prev) => prev.map((v, j) => (j === i ? !v : v)))}
+        disabled={skipped}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.checkbox, on && styles.checkboxOn]}>{on ? '☑' : '☐'}</Text>
+        <View style={styles.rowText}>
+          <Text style={styles.rowName} numberOfLines={2}>{label || 'Unnamed wine'}</Text>
+          {/* Format + purchase price on one gold line below the name
+              (format listed once; price shows only when the file gave one). */}
+          <Text style={styles.qtyFormat} numberOfLines={1}>
+            {isCased(w) ? caseSummary(w) : qtyFormat}{priceStr ? `  ·  ${priceStr}` : ''}
+          </Text>
+          <View style={styles.rowMetaRow}>
+            {w.region ? <Text style={styles.rowMeta} numberOfLines={1}>{w.region}</Text> : null}
+            {tag ? <Text style={styles.rowTag}>{tag}</Text> : null}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  const reviewHeader = wines.length === 0 ? (
+    <Text style={styles.hint}>Vinster couldn't read any wines from that image. Try a clearer screenshot showing the wine names.</Text>
+  ) : (
+    <>
+      <Text style={styles.sectionLabel}>Found {wines.length} wine{wines.length === 1 ? '' : 's'} — tap to include or skip</Text>
+      {readWarning ? <Text style={styles.readWarning}>{readWarning}</Text> : null}
+      {cellarMatches > 0 ? (
+        <>
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Skip wines already in your cellar</Text>
+            <Switch
+              value={skipExisting}
+              onValueChange={setSkipExisting}
+              trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+          <Text style={styles.dedupNote}>
+            {skipExisting
+              ? `${cellarMatches} wine${cellarMatches === 1 ? ' is' : 's are'} already in your cellar and will be left out, so importing a list again doesn't double your bottles.`
+              : 'Wines already in your cellar add their bottles to your existing listing, not a new one.'}
+          </Text>
+        </>
+      ) : null}
+      {dupFlags.includes('import') ? (
+        <Text style={styles.dedupNote}>Wines repeated within this import are unticked to avoid double-counting. Tap any row to change it.</Text>
+      ) : null}
+    </>
+  );
+
+  const reviewFooter = (
+    <>
+      <TouchableOpacity
+        style={[styles.primaryBtn, keptCount === 0 && styles.primaryBtnDisabled]}
+        onPress={goToLocationStep}
+        disabled={keptCount === 0}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.primaryBtnText}>
+          {keptCount === 0 ? 'Nothing selected' : `Continue with ${keptCount} wine${keptCount === 1 ? '' : 's'}`}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
+        <Text style={styles.secondaryBtnText}>{isCsv ? 'Choose another file' : 'Choose another image'}</Text>
+      </TouchableOpacity>
+    </>
+  );
 
   return (
     <View style={styles.container}>
@@ -738,13 +929,15 @@ export default function ImportCellarScreen() {
       ) : stage === 'analyzing' ? (
         <View style={styles.centerBlock}>
           <ActivityIndicator color={colors.gold} />
-          <Text style={styles.hint}>Vinster is reading your cellar list…</Text>
+          <Text style={styles.hint}>
+            Vinster is reading your cellar list…{progress ? `\n${progress.done} of ${progress.total} read` : ''}
+          </Text>
         </View>
       ) : stage === 'location' ? (
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={styles.sectionLabel}>Where are these stored?</Text>
           {locations.map((loc) => (
-            <TouchableOpacity key={loc.id} style={styles.locRow} onPress={() => confirmImport(loc.id)} activeOpacity={0.7}>
+            <TouchableOpacity key={loc.id} style={styles.locRow} onPress={() => confirmImport(loc)} activeOpacity={0.7}>
               <Text style={styles.locName} numberOfLines={1}>{loc.name}</Text>
               <Text style={styles.locChevron}>›</Text>
             </TouchableOpacity>
@@ -792,13 +985,16 @@ export default function ImportCellarScreen() {
       ) : stage === 'adding' ? (
         <View style={styles.centerBlock}>
           <ActivityIndicator color={colors.gold} />
-          <Text style={styles.hint}>Adding your wines…</Text>
+          <Text style={styles.hint}>
+            {progress && progress.total > 1 ? `Adding ${progress.done} of ${progress.total} wines…` : 'Adding your wines…'}
+          </Text>
         </View>
       ) : stage === 'done' ? (
         <View style={styles.centerBlock}>
           <Text style={styles.doneTitle}>Cellar imported</Text>
           <Text style={styles.hint}>
             {addedCount} bottle{addedCount === 1 ? '' : 's'} added{mergedBottles > 0 ? ` — ${mergedBottles} of them merged into wines already in your cellar` : ''}.{'\n\n'}This import can be viewed in Your Cellar List{importedLocationName ? ` in your ${importedLocationName} folder` : ''}.
+            {unfiledBottles > 0 ? `\n\n${unfiledBottles} bottle${unfiledBottles === 1 ? '' : 's'} couldn't be filed in ${importedLocationName ?? 'that location'} — ${unfiledBottles === 1 ? "it's" : "they're"} in Your Cellar List, unplaced.` : ''}
           </Text>
           <Text style={styles.doneIntelNudge}>
             Please update intel on these wines so that prices and scores are included in your cellar statistics — you can do this from the Full Cellar List screen.
@@ -824,7 +1020,7 @@ export default function ImportCellarScreen() {
           <Text style={styles.doneTitle}>Reviews imported</Text>
           <Text style={styles.hint}>
             {reviewSummary
-              ? `${reviewSummary.added} review${reviewSummary.added === 1 ? '' : 's'} across ${reviewSummary.matched} wine${reviewSummary.matched === 1 ? '' : 's'} imported into a new dated Import folder in Your Wine Reviews${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} exact duplicate${reviewSummary.skipped === 1 ? ' was' : 's were'} skipped` : ''}. Open Pair · Wine Reviews, then the Import folder, to see them.\n\nImport detail: ${reviewSummary.rawRows ?? '?'} file rows → ${reviewSummary.parsed ?? '?'} reviews read → ${reviewSummary.items ?? '?'} to add → ${reviewSummary.added} saved → ${reviewSummary.dbCount ?? '?'} now in your account.`
+              ? `${reviewSummary.reviews} review${reviewSummary.reviews === 1 ? '' : 's'} across ${reviewSummary.wines} wine${reviewSummary.wines === 1 ? '' : 's'} imported into a new dated Import folder in Your Wine Reviews${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} exact duplicate${reviewSummary.skipped === 1 ? ' was' : 's were'} skipped` : ''}. Open Pair · Wine Reviews, then the Import folder, to see them.`
               : 'Your reviews have been imported.'}
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/wines/chosen')} activeOpacity={0.85}>
@@ -835,72 +1031,18 @@ export default function ImportCellarScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        // review
-        <ScrollView contentContainerStyle={styles.content}>
-          {wines.length === 0 ? (
-            <Text style={styles.hint}>Vinster couldn't read any wines from that image. Try a clearer screenshot showing the wine names.</Text>
-          ) : (
-            <>
-              <Text style={styles.sectionLabel}>Found {wines.length} wine{wines.length === 1 ? '' : 's'} — tap to include or skip</Text>
-              {dupFlags.some(Boolean) ? (
-                <Text style={styles.dedupNote}>
-                  Wines already in your cellar stay ticked — their bottles are added to your existing listing, not duplicated. Wines repeated within this import are unticked to avoid double-counting. Tap any row to change it.
-                </Text>
-              ) : null}
-              {wines.map((w, i) => {
-                const on = keep[i];
-                const flag = dupFlags[i];
-                const qty = Number.isFinite(w.totalBottles) && w.totalBottles > 0 ? Math.round(w.totalBottles) : 1;
-                const label = [w.vintage, w.producer, w.wineName].filter(Boolean).join(' ');
-                // quantity x format, matching the cellar list (e.g. 1x75, 2x150).
-                const qtyFormat = `${qty}x${bottleSizeCl(w.bottleSizeMl)}`;
-                // Purchase and/or market price per bottle (when the file gave them)
-                // — shown in gold next to the format so the user can confirm prices
-                // were read. Market value is labelled so it's clear it's not cost.
-                const priceStr = [
-                  w.purchasePricePerBottle != null ? `${formatCurrency(w.purchasePricePerBottle, w.currency ?? defaultCurrency, { decimals: 0 })}/btl` : null,
-                  w.marketPricePerBottle != null ? `${formatCurrency(w.marketPricePerBottle, w.currency ?? defaultCurrency, { decimals: 0 })}/btl mkt` : null,
-                ].filter(Boolean).join('  ·  ') || null;
-                return (
-                  <TouchableOpacity
-                    key={i}
-                    style={[styles.row, !on && styles.rowOff]}
-                    onPress={() => setKeep((prev) => prev.map((v, j) => (j === i ? !v : v)))}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.checkbox, on && styles.checkboxOn]}>{on ? '☑' : '☐'}</Text>
-                    <View style={styles.rowText}>
-                      <Text style={styles.rowName} numberOfLines={2}>{label || 'Unnamed wine'}</Text>
-                      {/* Format + purchase price on one gold line below the name
-                          (format listed once; price shows only when the file gave one). */}
-                      <Text style={styles.qtyFormat} numberOfLines={1}>
-                        {isCased(w) ? caseSummary(w, bottleSizeCl) : qtyFormat}{priceStr ? `  ·  ${priceStr}` : ''}
-                      </Text>
-                      <View style={styles.rowMetaRow}>
-                        {w.region ? <Text style={styles.rowMeta} numberOfLines={1}>{w.region}</Text> : null}
-                        {flag ? <Text style={styles.rowTag}>{flag === 'cellar' ? `Already in cellar · +${qty} to existing` : 'Duplicate · tap to include'}</Text> : null}
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </>
-          )}
-
-          <TouchableOpacity
-            style={[styles.primaryBtn, keptCount === 0 && styles.primaryBtnDisabled]}
-            onPress={goToLocationStep}
-            disabled={keptCount === 0}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.primaryBtnText}>
-              {keptCount === 0 ? 'Nothing selected' : `Continue with ${keptCount} wine${keptCount === 1 ? '' : 's'}`}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
-            <Text style={styles.secondaryBtnText}>{isCsv ? 'Choose another file' : 'Choose another image'}</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        // review — a FlatList, so a list of thousands of wines stays smooth.
+        <FlatList
+          data={wines}
+          keyExtractor={(_, i) => rowIds[i] ?? String(i)}
+          renderItem={({ item, index }) => renderReviewRow(item, index)}
+          extraData={reviewListState}
+          ListHeaderComponent={reviewHeader}
+          ListFooterComponent={reviewFooter}
+          contentContainerStyle={styles.content}
+          initialNumToRender={30}
+          windowSize={11}
+        />
       )}
     </View>
   );
@@ -944,6 +1086,9 @@ const styles = StyleSheet.create({
   rowTag: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   dedupNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, lineHeight: 18, marginBottom: spacing.md },
+  readWarning: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, lineHeight: 18, marginBottom: spacing.md },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: 4, marginBottom: spacing.xs },
+  toggleLabel: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   // Storage-location step.
   locRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 12, marginBottom: spacing.sm },
   locName: { flex: 1, fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
