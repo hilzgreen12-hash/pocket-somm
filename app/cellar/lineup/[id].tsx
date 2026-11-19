@@ -16,7 +16,12 @@ import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import type { CellarWine } from '../../../src/types/wine';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { useScanHistory } from '../../../src/hooks/useScanHistory';
-import { detectLineup, prepareImageBase64, type WineSearchResult } from '../../../src/api/label';
+import { detectLineup, prepareImageBase64, fetchAutoLabelUri, type WineSearchResult } from '../../../src/api/label';
+import { labelSignedUrl } from '../../../src/api/labelPhotos';
+import { useLabelStore } from '../../../src/stores/labelStore';
+import { withBordeauxInfo } from '../../../src/constants/bordeauxClassification';
+import { findExistingReview } from '../../../src/utils/reviewDedup';
+import { entriesOf } from '../../../src/utils/cellarReview';
 import { buildLineupWines, archiveBottles } from '../../../src/services/archiveNight';
 import { findSameCellarWine, sameWineIdentity } from '../../../src/utils/wineMatch';
 import { getCellarWineById } from '../../../src/api/cellar';
@@ -46,10 +51,20 @@ function lineupDay(archivedAt: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// "19 November 2026" for the read-only date line, from a YYYY-MM-DD day.
+function fmtLineupDay(day: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
+  return new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 const UNDO_NOTE = 'The bottle Vinster already moved to your archive for this lineup stays there — this doesn’t put it back in your cellar.';
 
 export default function LineupDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // ?new=1: a lineup that has just been added opens ready to fill in.
+  const { id, new: isNew } = useLocalSearchParams<{ id: string; new?: string }>();
+  // A saved lineup opens as a read-only page; Edit (top right) turns it into
+  // the input screen, and Save Lineup turns it back.
+  const [editing, setEditing] = useState(isNew === '1');
   const qc = useQueryClient();
   const { session } = useAuth();
 
@@ -85,11 +100,7 @@ export default function LineupDetailScreen() {
   const [dateDraft, setDateDraft] = useState('');
   const [cityDraft, setCityDraft] = useState('');
   const [venueDraft, setVenueDraft] = useState('');
-  // "Lineup Saved" after a successful Save Lineup, until the next edit.
-  const [lineupSaved, setLineupSaved] = useState(false);
   const [savingLineup, setSavingLineup] = useState(false);
-  // Wraps a field setter so any edit turns the button back to "Save Lineup".
-  const edited = <T,>(set: (v: T) => void) => (v: T) => { setLineupSaved(false); set(v); };
   // Which wine row (index) is being linked to a cellar wine via the picker.
   const [cellarPickerFor, setCellarPickerFor] = useState<number | null>(null);
   const hydrated = useRef(false);
@@ -162,6 +173,48 @@ export default function LineupDetailScreen() {
     });
   }
 
+  // Read-only lineup: each wine links to its review and its Wine Intel, and Back
+  // from either returns to this lineup.
+  const backToLineup = `&backTo=${encodeURIComponent(`/cellar/lineup/${id}`)}`;
+  function openWineReview(w: LineupWine) {
+    // A cellar bottle's review lives on that bottle; otherwise the wine's own
+    // review in Your Wine Reviews, or a new one seeded with its name.
+    if (w.cellar_wine_id) {
+      const cw = cellarWines.find((c) => c.id === w.cellar_wine_id);
+      const param = cw && entriesOf(cw).length > 0 ? 'openCellarReview' : 'openCellarReviewInput';
+      router.push(`/wines/chosen?${param}=${w.cellar_wine_id}${backToLineup}` as any);
+      return;
+    }
+    const existing = findExistingReview(chosenWines, { producer: w.producer ?? '', wineName: w.wine_name ?? '', vintage: w.vintage != null ? String(w.vintage) : null });
+    if (existing) { router.push(`/wines/chosen?openReview=${existing.id}${backToLineup}` as any); return; }
+    const q = (v: string | number | null | undefined) => encodeURIComponent(v != null ? String(v) : '');
+    router.push(`/wines/chosen?seedAdd=1&sp=${q(w.producer)}&sw=${q(w.wine_name)}&sv=${q(w.vintage)}${backToLineup}` as any);
+  }
+  function openWineIntel(w: LineupWine) {
+    const ls = useLabelStore.getState();
+    ls.reset();
+    // Classification + appellation for a classified Bordeaux château, which a
+    // lineup row doesn't carry.
+    ls.setWineDetailsConfirmed(withBordeauxInfo({
+      producer: w.producer ?? '',
+      region: '',
+      wineName: w.wine_name || null,
+      vintage: w.vintage != null ? String(w.vintage) : 'NV',
+    }) as any);
+    // Header photo in the background: the cellar bottle's own label, else a web
+    // label. The card shows its title alone until one lands.
+    void (async () => {
+      let img: string | null = null;
+      const cw = w.cellar_wine_id ? cellarWines.find((c) => c.id === w.cellar_wine_id) : null;
+      if (cw?.label_image_path) { try { img = await labelSignedUrl(cw.label_image_path); } catch { /* fall through */ } }
+      if (!img) { try { img = await fetchAutoLabelUri(w.producer, w.wine_name); } catch { /* photoless */ } }
+      if (img) useLabelStore.getState().setImageUri(img);
+    })();
+    // gen=1 builds the intel on the card; confirmed=1 skips "which wine?";
+    // noRecent=1 keeps a lineup view out of recent scans.
+    router.push(`/label/results?context=intel&confirmed=1&gen=1&noRecent=1${backToLineup}` as any);
+  }
+
   async function saveLineup() {
     if (!begin('saveLineup')) return;
     setSavingLineup(true);
@@ -170,7 +223,7 @@ export default function LineupDetailScreen() {
       await persistStamp();
       await persistNote();
       invalidateLineup();
-      setLineupSaved(true);
+      setEditing(false);
     } catch (err) {
       showAlert({ title: 'Could not save lineup', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -196,7 +249,6 @@ export default function LineupDetailScreen() {
       await setLineupWines(lineup.id, next);
       patchCachedLineup({ wines: next });
       invalidateLineup();
-      setLineupSaved(false);
       return true;
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -298,7 +350,6 @@ export default function LineupDetailScreen() {
     try {
       await setLineupRestaurant(lineup.id, sessionId);
       invalidateLineup();
-      setLineupSaved(false);
       setRestaurantPickerOpen(false);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -484,7 +535,6 @@ export default function LineupDetailScreen() {
       const path = await replaceLineupImage(session.user.id, lineup.id, res.assets[0].uri);
       setPhotoUrl(await lineupSignedUrl(path)); setPhotoFailed(false);
       invalidateLineup();
-      setLineupSaved(false);
     } catch (err) {
       showAlert({ title: 'Could not update photo', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -555,17 +605,26 @@ export default function LineupDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        {/* Back on its own row; Share and Save Lineup sit at the foot of the page. */}
+        {/* Back (and Edit, when read-only) on the top row; Share and Save Lineup
+            sit at the foot of the page. */}
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 16 }}>
             <Text accessibilityLabel="Back" style={styles.back}>←</Text>
           </TouchableOpacity>
+          {!editing ? (
+            <TouchableOpacity onPress={() => setEditing(true)} hitSlop={{ top: 10, bottom: 10, left: 16, right: 10 }} accessibilityLabel="Edit lineup">
+              <Text style={styles.editLink}>Edit</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         {/* The lineup's own name IS the title (no fixed "Your Lineup" heading). */}
+        {!editing ? (
+          name.trim() ? <Text style={styles.titleInput}>{name.trim()}</Text> : null
+        ) : (
         <TextInput
           style={styles.titleInput}
           value={name}
-          onChangeText={edited(setName)}
+          onChangeText={setName}
           onEndEditing={() => saveOnBlur(persistTitle, 'Could not save title')}
           placeholder="Add Your Title"
           placeholderTextColor={colors.textMuted}
@@ -574,16 +633,21 @@ export default function LineupDetailScreen() {
           spellCheck={false}
           autoCorrect={false}
         />
+        )}
         {/* Date · city · venue, editable in place — the same line as the wine
             review input screens. */}
         <View style={styles.headerStampWrap}>
+          {!editing ? (
+            <Text style={styles.stampLine}>{[fmtLineupDay(dateDraft), cityDraft.trim(), venueDraft.trim()].filter(Boolean).join(' · ')}</Text>
+          ) : (
           <ReviewedLineEditable
-            date={dateDraft} onDate={edited(setDateDraft)}
-            city={cityDraft} onCity={edited(setCityDraft)}
-            venue={venueDraft} onVenue={edited(setVenueDraft)}
+            date={dateDraft} onDate={setDateDraft}
+            city={cityDraft} onCity={setCityDraft}
+            venue={venueDraft} onVenue={setVenueDraft}
             currency={currency}
             onEndEditing={() => saveOnBlur(persistStamp, 'Could not save')}
           />
+          )}
         </View>
       </View>
 
@@ -597,44 +661,57 @@ export default function LineupDetailScreen() {
                 <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="contain" onError={() => setPhotoFailed(true)} />
               </TouchableOpacity>
             ) : <ActivityIndicator color={colors.gold} style={{ marginVertical: 40 }} />}
+            {editing ? (
             <View style={styles.photoBadges}>
               {/* Change photo — upload a new image to replace this lineup's. */}
               <TouchableOpacity style={styles.photoBadge} onPress={changeLineupPhoto} disabled={replacingPhoto} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} accessibilityLabel="Change photo">
                 {replacingPhoto ? <ActivityIndicator size="small" color={colors.gold} /> : <Ionicons name="camera" size={18} color={colors.gold} />}
               </TouchableOpacity>
             </View>
+            ) : null}
           </View>
 
           {/* Your Lineup Notes & Musings — an input field styled like the wine
               review fields, with the mic + clear inside it. */}
+          {!editing ? (
+            note.trim() ? (
+              <View style={styles.noteBlock}>
+                <Text style={styles.noteHeadLabel}>Your Lineup Notes & Musings</Text>
+                <Text style={styles.noteText}>{note.trim()}</Text>
+              </View>
+            ) : null
+          ) : (
           <View style={styles.noteBlock}>
             <Text style={styles.noteHeadLabel}>Your Lineup Notes & Musings</Text>
             <View>
               <TextInput
                 style={styles.noteInput}
                 value={note}
-                onChangeText={edited(setNote)}
+                onChangeText={setNote}
                 onEndEditing={() => saveOnBlur(persistNote, 'Could not save note')}
                 placeholder="Tap to write, or use the mic to dictate your thoughts on this lineup…"
                 placeholderTextColor={colors.textMuted}
                 multiline
                 textAlignVertical="top"
               />
-              <MicButton style={styles.noteMic} value={note} onChangeText={edited(setNote)} onClear={() => edited(setNote)('')} domain="note" serverCorrect />
+              <MicButton style={styles.noteMic} value={note} onChangeText={setNote} onClear={() => setNote('')} domain="note" serverCorrect />
             </View>
           </View>
+          )}
 
           {/* Wines */}
           <View style={styles.winesHeaderRow}>
             <Text style={styles.sectionLabel}>Wines in this lineup</Text>
           </View>
-          {wines.length > 0 ? <Text style={styles.sectionHint}>Tap a wine name to edit it</Text> : null}
+          {editing && wines.length > 0 ? <Text style={styles.sectionHint}>Tap a wine name to edit it</Text> : null}
           {wines.length === 0 ? (
             <View>
               <Text style={styles.muted}>No bottles identified yet{lineup.bottle_count ? ` (${lineup.bottle_count} bottle${lineup.bottle_count === 1 ? '' : 's'} in the photo)` : ''}. Let Vinster read the labels and confirm what's in this lineup.</Text>
-              <TouchableOpacity style={[styles.identifyBtn, identifying && { opacity: 0.5 }]} onPress={identifyWines} disabled={identifying} activeOpacity={0.85}>
-                <Text style={styles.identifyBtnText}>{identifying ? 'Reading the labels…' : 'Identify wines'}</Text>
-              </TouchableOpacity>
+              {editing ? (
+                <TouchableOpacity style={[styles.identifyBtn, identifying && { opacity: 0.5 }]} onPress={identifyWines} disabled={identifying} activeOpacity={0.85}>
+                  <Text style={styles.identifyBtnText}>{identifying ? 'Reading the labels…' : 'Identify wines'}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : (
             <View style={styles.wineList}>
@@ -652,8 +729,8 @@ export default function LineupDetailScreen() {
                 return (
                 <View key={`${w.cellar_wine_id ?? 'x'}-${i}`} style={styles.wineRow}>
                   <View style={{ flex: 1 }}>
-                    {/* Tap the name to open the Edit wine pop-up. */}
-                    <TouchableOpacity onPress={() => openWineEdit(i, w)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                    {/* Editing: tap the name to open the Edit wine pop-up. */}
+                    <TouchableOpacity onPress={() => openWineEdit(i, w)} disabled={!editing} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
                       <Text style={styles.wineName}>
                         {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                       </Text>
@@ -663,14 +740,26 @@ export default function LineupDetailScreen() {
                         bottle or mark it Off Cellar. "Off Cellar" → tap to link it
                         via "This was from my cellar". */}
                     {w.cellar_wine_id ? (
-                      <TouchableOpacity onPress={() => openCellarBadgeOptions(i, w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                      <TouchableOpacity onPress={() => openCellarBadgeOptions(i, w)} disabled={!editing} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.stampTag}>Your Cellar</Text>
                       </TouchableOpacity>
                     ) : (
-                      <TouchableOpacity onPress={() => confirmFromCellar(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                      <TouchableOpacity onPress={() => confirmFromCellar(i)} disabled={!editing} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.stampTag}>Off Cellar</Text>
                       </TouchableOpacity>
                     )}
+                    {/* Read-only: Your Review · Wine Intel for each wine. */}
+                    {!editing ? (
+                      <View style={styles.wineLinks}>
+                        <TouchableOpacity onPress={() => openWineReview(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                          <Text style={styles.wineLink}>Your Review</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.wineLinkDot}>·</Text>
+                        <TouchableOpacity onPress={() => openWineIntel(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                          <Text style={styles.wineLink}>Wine Intel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
                 );
@@ -690,28 +779,32 @@ export default function LineupDetailScreen() {
               >
                 <Text style={styles.whiteButtonText}>Your Restaurant Review</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => matchRestaurant(null)} disabled={savingMatch} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                <Text style={styles.unmatchLink}>(unmatch)</Text>
-              </TouchableOpacity>
+              {editing ? (
+                <TouchableOpacity onPress={() => matchRestaurant(null)} disabled={savingMatch} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <Text style={styles.unmatchLink}>(unmatch)</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
-          ) : (
+          ) : editing ? (
             <TouchableOpacity style={[styles.whiteButton, styles.footButton]} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.85}>
               <Text style={styles.whiteButtonText}>Match to a Restaurant Review</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
           <TouchableOpacity style={[styles.whiteButton, styles.footButton]} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
             <Text style={styles.whiteButtonText}>{sharing ? 'Sharing…' : 'Share'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.goldButton, styles.footButton, savingLineup && { opacity: 0.5 }]}
-            onPress={saveLineup}
-            disabled={savingLineup || lineupSaved}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.goldButtonText}>{lineupSaved ? 'Lineup Saved' : savingLineup ? 'Saving…' : 'Save Lineup'}</Text>
-          </TouchableOpacity>
+          {editing ? (
+            <TouchableOpacity
+              style={[styles.goldButton, styles.footButton, savingLineup && { opacity: 0.5 }]}
+              onPress={saveLineup}
+              disabled={savingLineup}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.goldButtonText}>{savingLineup ? 'Saving…' : 'Save Lineup'}</Text>
+            </TouchableOpacity>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -874,6 +967,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.md },
   header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
+  editLink: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.gold },
+  stampLine: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textAlign: 'center' },
+  noteText: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22 },
+  wineLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 4 },
+  wineLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
+  wineLinkDot: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   backLink: { fontSize: 15, color: colors.gold },

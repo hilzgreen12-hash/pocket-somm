@@ -3,10 +3,11 @@ import { WineCardThumb } from './WineCardThumb';
 import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-// Generic, faded stock imagery for empty-state tiles that aren't about a single
-// wine label — a restaurant interior (dined-out / wine-list cards). We NEVER show a plain brown tile with an icon in a carousel; every
-// placeholder is an image under the "appears here" scrim.
-export const RESTAURANT_IMG = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=440&q=55';
+// Generic, faded imagery for empty-state tiles that aren't about a single wine
+// label — a restaurant interior (dined-out / restaurant-review cards). Bundled
+// with the app (the same photo as Home's Search & Discover tile), so it always
+// shows: a web photo that failed to load left a plain brown tile.
+export const RESTAURANT_IMG: ImageSourcePropType = require('../../assets/images/tiles/restaurant-interior.jpg');
 
 // Bundled generic wine-label images — shipped with the app so placeholder tiles
 // ALWAYS show real labels (no flaky per-wine web fetch). Used for the label
@@ -42,7 +43,7 @@ export function placeholderLabelImages(offset: number, n: number): ImageSourcePr
 // labels. Every card carries a scrim overlay making clear it's a placeholder.
 export type PlaceholderCard =
   | { kind: 'label'; producer: string; wineName: string; title: string; stamp: string; overlay: string }
-  | { kind: 'image'; uri: string; title: string; stamp: string; overlay: string }
+  | { kind: 'image'; image: ImageSourcePropType; title: string; stamp: string; overlay: string }
   | { kind: 'labelCollage'; images: ImageSourcePropType[]; title: string; stamp: string; overlay: string }
   // Bundled labels side by side in one row — reads as a bottle lineup.
   | { kind: 'labelLineup'; images: ImageSourcePropType[]; title: string; stamp: string; overlay: string };
@@ -82,7 +83,7 @@ export function PlaceholderCardView({ card, compact = true, stampCaps = false }:
           </View>
         ) : (
           // Faded generic photo (restaurant).
-          <Image source={{ uri: card.uri }} style={styles.genericImg} resizeMode="cover" />
+          <Image source={card.image} style={styles.genericImg} resizeMode="cover" />
         )}
         <View style={styles.overlay} pointerEvents="none">
           <View style={styles.overlayBand}>

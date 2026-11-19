@@ -132,7 +132,7 @@ export function useWineCardData(wine: CellarWine) {
           quantity: p.quantity ?? 0,
           caseName: cases.find((c) => c.id === p.case_id)?.name ?? null,
           isExternal: !!loc?.is_external,
-          href: loc?.is_external ? null : `/cellar/storage-location/${p.storage_location_id}`,
+          href: loc?.is_external ? null : `/cellar/storage-location/${p.storage_location_id}?highlight=${wine.id}`,
         });
       } else if (p.kind === 'bin') {
         const bin = bins.find((b) => b.id === binOf(p));
@@ -192,9 +192,12 @@ export function useWineCardData(wine: CellarWine) {
     const key = wineNameKey(wine.producer, wine.wine_name);
     const same = (w: CellarWine) =>
       (wineNameKey(w.producer, w.wine_name) === key && vintage(w) === vintage(wine)) || sameWineIdentity(wine, w);
+    const cellarMatches = wines.filter(same);
     const archivedMatches = archivedWines.filter(same);
     return {
-      inCellar: tally(wines.filter(same), wine.bottle_size_ml),
+      // This wine's live cellar rows (for an archived wine, the line it came from).
+      cellarRows: cellarMatches,
+      inCellar: tally(cellarMatches, wine.bottle_size_ml),
       inArchive: tally(archivedMatches, wine.bottle_size_ml),
       // Each archived entry of this wine, newest first.
       archiveEntries: archivedMatches

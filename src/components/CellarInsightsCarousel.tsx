@@ -39,7 +39,7 @@ const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
 const INSIGHT_EXAMPLES: { key: string; card: PlaceholderCard }[] = [
   { key: 'personality', card: { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY } },
   { key: 'archived', card: { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY } },
-  { key: 'restaurants', card: { kind: 'image', uri: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY } },
+  { key: 'restaurants', card: { kind: 'image', image: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY } },
   { key: 'cookbook', card: { kind: 'labelCollage', images: [KITCHEN_IMG], title: 'Recipes in Your Cookbook', stamp: '12 Recipes', overlay: INSIGHT_OVERLAY } },
   { key: 'labels-month', card: { kind: 'labelCollage', images: placeholderLabelImages(6, 4), title: 'Labels Scanned Last Month', stamp: '12 wine labels', overlay: INSIGHT_OVERLAY } },
 ];

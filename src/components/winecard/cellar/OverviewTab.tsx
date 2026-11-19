@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { showAlert } from '../../AppAlert';
@@ -14,6 +14,7 @@ import { byRecency, isSomeoneElsesBottle, visibleEntries } from '../../../utils/
 import { findExistingReview } from '../../../utils/reviewDedup';
 import { useChosenWines } from '../../../hooks/useChosenWines';
 import { reviewPlaceLabel } from '../../../utils/reviewPlace';
+import { sameWineIdentity } from '../../../utils/wineMatch';
 import type { CellarWine } from '../../../types/wine';
 import type { WineCardData } from './useWineCardData';
 import type { WineIntel } from './useWineIntel';
@@ -77,16 +78,20 @@ function ownReviewHref(wine: CellarWine): string {
   return `/wines/chosen?${qs.toString()}`;
 }
 
-// Overview's facts bar: bottles, critic score, value, drinking window. Each
-// explains itself (or opens what it summarises) when tapped.
+// Overview's facts bar: bottles (an archived wine: its archived bottles),
+// critic score, value, drinking window. Each explains itself (or opens what it
+// summarises) when tapped.
 export function OverviewFacts({ wine, data, intel, canEdit, onBottles, onWindow }: {
   wine: CellarWine;
   data: WineCardData;
   intel: WineIntel;
   canEdit: boolean;
-  onBottles: () => void;
+  // A live wine's bottle count opens its Cellar tab.
+  onBottles?: () => void;
   onWindow: () => void;
 }) {
+  const isArchived = !!wine.archived_at;
+  const bottles = isArchived ? data.inArchive : data.inCellar;
   const ev = wine.estimated_value != null ? Number(wine.estimated_value) : null;
   // The single canonical maturity (maturity.ts), so the card always agrees with
   // the cellar filters. Spirits don't mature: "NA".
@@ -100,14 +105,14 @@ export function OverviewFacts({ wine, data, intel, canEdit, onBottles, onWindow 
   return (
     <>
       <View style={wc.Facts}>
-        <TouchableOpacity style={wc.Fact} onPress={onBottles} activeOpacity={0.7}>
-          <Text style={wc.FactLabel}>Bottles</Text>
-          {data.inCellar.mixed ? (
+        <TouchableOpacity style={wc.Fact} onPress={onBottles} disabled={!onBottles} activeOpacity={0.7}>
+          <Text style={wc.FactLabel}>{isArchived ? 'Archived' : 'Bottles'}</Text>
+          {bottles.mixed ? (
             <>
-              <Text style={wc.FactValue}>{data.inCellar.total}</Text>
+              <Text style={wc.FactValue}>{bottles.total}</Text>
               <Text style={wc.FactSub}>mixed sizes</Text>
             </>
-          ) : <Text style={wc.FactValue}>{data.inCellar.label}</Text>}
+          ) : <Text style={wc.FactValue}>{bottles.label}</Text>}
         </TouchableOpacity>
         {wine.critic_score != null ? (
           <TouchableOpacity style={wc.Fact} onPress={() => showAlert({ title: 'How Vinster scored this', body: wine.critic_score_note?.trim() || "Vinster's score distils critic consensus and Wine-Searcher's aggregate rating for this wine into a single 100-point mark." })} activeOpacity={0.7}>
@@ -118,7 +123,7 @@ export function OverviewFacts({ wine, data, intel, canEdit, onBottles, onWindow 
         )}
         {ev != null ? (
           <TouchableOpacity style={wc.Fact} onPress={() => showValueSource(wine)} activeOpacity={0.7}>
-            <Text style={wc.FactLabel}>Value</Text><Text style={[wc.FactValue, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={s.per75}>{PER_75CL}</Text></Text>
+            <Text style={wc.FactLabel}>Value</Text><Text style={wc.FactValue}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={s.per75}>{PER_75CL}</Text></Text>
           </TouchableOpacity>
         ) : (
           <View style={wc.Fact}><Text style={wc.FactLabel}>Value</Text>{pending}</View>
@@ -136,7 +141,7 @@ export function OverviewFacts({ wine, data, intel, canEdit, onBottles, onWindow 
 
 type HistoryLine = { key: string; text: string; link?: string; onPress?: () => void };
 
-export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRangeWine }: {
+export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRangeWine, afterHistory }: {
   wine: CellarWine;
   data: WineCardData;
   intel: WineIntel;
@@ -144,6 +149,8 @@ export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRan
   canEdit: boolean;
   currency: string;
   onRangeWine: (name: string, tier: string | null) => void;
+  // Shown straight after the history (an archived wine's Bottles in My Archive).
+  afterHistory?: ReactNode;
 }) {
   const isArchived = !!wine.archived_at;
   const reviews = useMemo(() => byRecency(visibleEntries(wine)), [wine]);
@@ -158,45 +165,82 @@ export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRan
   const hrefs = reviewHrefs(wine);
   const placeOf = (r: { location: string | null }) => reviewPlaceLabel(r.location);
 
-  // "Your History With This Wine": bottles added, where they are (home / each
-  // external cellar), what's archived, and the latest review.
+  // "Your History With This Wine", in the Wine Intel screen's order: when
+  // bottles came and went, where they are now, and where the wine was drunk.
+  // Plain statements, except lines that open what they describe.
   const history = useMemo(() => {
     const lines: HistoryLine[] = [];
     const b = (n: number) => `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
     const cap = (t: string) => `${t.charAt(0).toUpperCase()}${t.slice(1)}`;
-    const home = data.entries.filter((e) => !e.isExternal);
-    const homeQty = home.reduce((n, e) => n + e.quantity, 0) + data.unplaced;
-    const homePlaces = Array.from(new Set(home.map((e) => e.label)));
-    const placeCount = homePlaces.length + (data.unplaced > 0 && homePlaces.length > 0 ? 1 : 0);
     const your = (name: string) => (/^(your|my|the)\b/i.test(name) ? name : `your ${name}`);
-    const everAdded = data.inCellar.total + data.inArchive.total;
-    const cellaredOn = wine.date_received ?? wine.created_at;
-    if (everAdded > 0 && cellaredOn) {
-      lines.push({ key: 'added', text: `${everAdded} ${everAdded === 1 ? 'Bottle' : 'Bottles'} added to your cellar on ${fmtDay(cellaredOn)}` });
+    const newestFirst = (x: string, y: string) => new Date(y).getTime() - new Date(x).getTime();
+
+    // 1. Each day bottles were added to the cellar, then each archive entry,
+    //    newest first. An archive copy keeps the received date of the line it
+    //    came from, so archived bottles count towards the day they were added.
+    const addedByDay = new Map<string, number>();
+    for (const w of [...data.cellarRows, ...data.archiveEntries]) {
+      const day = (w.date_received ?? w.created_at)?.slice(0, 10);
+      if (!day || !(w.quantity > 0)) continue;
+      addedByDay.set(day, (addedByDay.get(day) ?? 0) + w.quantity);
     }
-    if (homeQty > 0) {
-      const where = placeCount === 1 && homePlaces.length === 1 ? ` in ${your(homePlaces[0])}`
-        : placeCount > 1 ? ` across ${placeCount} home locations`
-        : ' at home';
-      lines.push({ key: 'home', text: `${cap(b(homeQty))}${where}` });
+    for (const day of Array.from(addedByDay.keys()).sort(newestFirst)) {
+      const n = addedByDay.get(day)!;
+      lines.push({ key: `added-${day}`, text: `${n} ${n === 1 ? 'Bottle' : 'Bottles'} added to your cellar on ${fmtDay(day)}` });
     }
-    for (const e of data.entries.filter((x) => x.isExternal)) {
-      lines.push({ key: `ext-${e.key}`, text: `${cap(b(e.quantity))} in your external cellar, ${e.label}` });
-    }
-    if (data.inArchive.total > 0) lines.push({ key: 'archive', text: `You have ${b(data.inArchive.total)} in your archive` });
-    if (latest) {
-      const place = placeOf(latest);
-      const more = reviews.length - 1;
+    // archiveEntries is already newest first. An entry opens its own card,
+    // except the one this card already shows.
+    for (const a of data.archiveEntries.filter((x) => x.quantity > 0)) {
       lines.push({
-        key: 'review',
-        text: `Reviewed on ${fmtDay(latest.date ?? latest.savedAt)}${place ? `, at ${place}` : ''}${more > 0 ? ` (and ${more} more ${more === 1 ? 'time' : 'times'})` : ''}`,
-        link: 'View review',
-        onPress: () => router.push(hrefs.open),
+        key: `archived-${a.id}`,
+        text: `${a.quantity} ${a.quantity === 1 ? 'Bottle' : 'Bottles'} added to your archive on ${fmtDay(a.archived_at)}`,
+        ...(a.id === wine.id ? {} : { link: 'View', onPress: () => router.push(`/cellar/${a.id}`) }),
+      });
+    }
+
+    // 2. Where the bottles are now, one line per rack, fridge, bin or alt
+    //    cellar, each opening that storage with the wine highlighted; bottles
+    //    held externally or not filed anywhere open the Full Cellar List
+    //    filtered to this wine. Placements are this row's own, so an archived
+    //    card (whose row holds none) skips this.
+    if (!isArchived) {
+      const listHref = `/cellar/list?wine=${wine.id}`;
+      // Keyed by destination, so a place holding several cases is one line.
+      const places = new Map<string, { n: number; place: string; href: string | null }>();
+      for (const e of data.entries) {
+        if (e.quantity <= 0) continue;
+        const key = e.href ?? e.key;
+        const prev = places.get(key);
+        if (prev) prev.n += e.quantity;
+        else places.set(key, { n: e.quantity, place: e.isExternal ? `in your external cellar, ${e.label}` : `in ${your(e.label)}`, href: e.href ?? (e.isExternal ? listHref : null) });
+      }
+      for (const [key, { n, place, href }] of places) {
+        lines.push({ key, text: `${cap(b(n))} ${place}`, ...(href ? { link: 'View', onPress: () => router.push(href) } : {}) });
+      }
+      if (data.unplaced > 0) {
+        lines.push({ key: 'loose', text: `${cap(b(data.unplaced))} in Your Cellar List`, link: 'View', onPress: () => router.push(listHref) });
+      }
+    }
+
+    // 3. Each time the user drank the wine at a restaurant, newest first,
+    //    opening that visit's restaurant review. (Chosen wines are always the
+    //    viewer's own, so this holds in a shared cellar too.)
+    const visits = chosenWines
+      .filter((c) => !!c.restaurant_name?.trim() && sameWineIdentity(wine, { producer: c.producer, wine_name: c.wine_name, vintage: c.vintage }))
+      .sort((x, y) => newestFirst(x.chosen_at, y.chosen_at));
+    for (const c of visits) {
+      const where = `${c.restaurant_name!.trim()}${c.city?.trim() ? ` in ${c.city.trim()}` : ''}`;
+      lines.push({
+        key: `drank-${c.id}`,
+        text: `You drank this wine at ${where}`,
+        link: 'View',
+        onPress: () => router.push(c.scan_session_id
+          ? `/restaurants/reviews?openSession=${c.scan_session_id}`
+          : `/wines/chosen?openReview=${c.id}&backTo=${encodeURIComponent(`/cellar/${wine.id}`)}`),
       });
     }
     return lines;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, wine, reviews]);
+  }, [data, wine, isArchived, chosenWines]);
 
   const inside = hasRealInsiderNote(wine.insider_note) ? wine.insider_note!.trim() : null;
   // Dive Deeper generates and saves a profile, so a view-only member only gets
@@ -208,20 +252,16 @@ export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRan
       {history.length ? (
         <View style={wc.History}>
           <Text style={wc.HistoryTitle}>Your History With This Wine</Text>
-          {history.map((l, i) => {
-            const style = [wc.HistoryRow, i === history.length - 1 && wc.RowLast];
-            // Bottle lines are plain here (the Cellar tab holds that detail); only the review links out.
-            return l.onPress ? (
-              <TouchableOpacity key={l.key} style={style} onPress={l.onPress} activeOpacity={0.7}>
-                <Text style={wc.HistoryText}>{l.text}</Text>
-                <Text style={wc.Link}>{l.link} ›</Text>
-              </TouchableOpacity>
-            ) : (
-              <View key={l.key} style={style}><Text style={wc.HistoryText}>{l.text}</Text></View>
-            );
-          })}
+          {history.map((l, i) => (
+            <TouchableOpacity key={l.key} style={[wc.HistoryRow, i === history.length - 1 && wc.RowLast]} onPress={l.onPress} disabled={!l.onPress} activeOpacity={0.7}>
+              <Text style={wc.HistoryText}>{l.text}</Text>
+              {l.link ? <Text style={wc.Link}>{l.link} ›</Text> : null}
+            </TouchableOpacity>
+          ))}
         </View>
       ) : null}
+
+      {afterHistory}
 
       {othersBottle ? (
         <View style={wc.Card}>

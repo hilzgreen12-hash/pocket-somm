@@ -19,7 +19,6 @@ import { useAutoLabel } from '../../src/hooks/useAutoLabel';
 import { useLabels } from '../../src/hooks/useLabels';
 import { useCellar, useArchive, invalidateCellarViews } from '../../src/hooks/useCellar';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
-import { reviewPlaceLabel } from '../../src/utils/reviewPlace';
 import { DrinkingWindowSheet } from '../../src/components/winecard/DrinkingWindowSheet';
 import { findSameCellarWine, sameWineIdentity } from '../../src/utils/wineMatch';
 import { newCellarWinePayload, findSameWineLive, purchaseOnMerge, attachLabelIfMissing, type PurchaseInput } from '../../src/services/cellarAdd';
@@ -43,6 +42,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
+import { getBinCell } from '../../src/api/bins';
 import { getRackSlots, getSlotAssignments } from '../../src/api/racks';
 import { generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
 import { generateServingSuggestion, generateRarity, generateVintageVerdict, generateMarketVintage, generatePairingIngredients, type VintageVerdictAI, type PairingIngredient } from '../../src/api/wineExtras';
@@ -1678,45 +1678,98 @@ export default function LabelResultsScreen() {
   ].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
   const latestIntelReview = intelReviews[0] ?? null;
 
-  function intelHistoryLines(): { key: string; text: string; link: string; onPress: () => void }[] {
-    const lines: { key: string; text: string; link: string; onPress: () => void }[] = [];
+  // "Your History With This Wine": plain statements (no link) and lines that
+  // open where the wine is, or the occasion it was drunk.
+  type HistoryLine = { key: string; text: string; link?: string; onPress?: () => void };
+  function intelHistoryLines(): HistoryLine[] {
+    const lines: HistoryLine[] = [];
     const b = (n: number) => `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
-    const total = cellarMatches.reduce((s, w) => s + (w.quantity ?? 0), 0);
-    const ext = new Map<string, number>();
-    for (const p of matchPlacements) {
-      if (p.kind !== 'location') continue;
-      const loc = allStorageLocations.find((l) => l.id === p.storage_location_id);
-      if (loc?.is_external) ext.set(loc.name, (ext.get(loc.name) ?? 0) + (p.quantity ?? 0));
-    }
-    const extTotal = Array.from(ext.values()).reduce((s, n) => s + n, 0);
-    const home = Math.max(0, total - extTotal);
-    const openCellar = () => { if (cellarMatches[0]) router.push(`/cellar/${cellarMatches[0].id}` as any); };
     const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-    const archived = archiveMatches.reduce((s, w) => s + (w.quantity ?? 0), 0);
-    // First line (as on the wine card): every bottle added, and when the wine
-    // first went into the cellar.
-    const everAdded = total + archived;
-    const firstAdded = [...cellarMatches, ...archiveMatches]
-      .map((w) => w.date_received ?? w.created_at)
-      .filter(Boolean)
-      .sort((a, b) => new Date(a as string).getTime() - new Date(b as string).getTime())[0];
-    if (everAdded > 0 && firstAdded) {
-      lines.push({ key: 'added', text: `${everAdded} ${everAdded === 1 ? 'Bottle' : 'Bottles'} added to your cellar on ${fmtIntelDay(firstAdded)}`, link: 'View', onPress: cellarMatches[0] ? openCellar : () => { if (archiveMatches[0]) router.push(`/cellar/${archiveMatches[0].id}` as any); } });
+    const total = cellarMatches.reduce((s, w) => s + (w.quantity ?? 0), 0);
+    const openWine = (id: string | undefined) => { if (id) router.push(`/cellar/${id}` as any); };
+
+    // 1. When bottles came and went: each day bottles were added to the cellar,
+    //    then each day bottles went to the archive, newest first in each.
+    //    Statements, except that an archive line opens that archived bottle.
+    //    An archive copy keeps the received date of the line it came from, so
+    //    archived bottles also count towards the day they were added.
+    const dayKey = (d: string) => d.slice(0, 10);
+    const addedByDay = new Map<string, number>();
+    for (const w of [...cellarMatches, ...archiveMatches]) {
+      const day = w.date_received ?? w.created_at;
+      if (!day || !(w.quantity > 0)) continue;
+      addedByDay.set(dayKey(day), (addedByDay.get(dayKey(day)) ?? 0) + w.quantity);
     }
-    if (home > 0) {
-      const where = ownedMatch ? existingWhereText(ownedMatch.id, matchPlacements).replace(/^in (?!your\b)/, 'in your ') : 'in your cellar';
-      lines.push({ key: 'home', text: `${cap(b(home))} ${where}`, link: 'View', onPress: openCellar });
+    const newestFirst = (a: string, b: string) => new Date(b).getTime() - new Date(a).getTime();
+    for (const day of Array.from(addedByDay.keys()).sort(newestFirst)) {
+      const n = addedByDay.get(day)!;
+      lines.push({ key: `added-${day}`, text: `${n} ${n === 1 ? 'Bottle' : 'Bottles'} added to your cellar on ${fmtIntelDay(day)}` });
     }
-    for (const [name, n] of ext) lines.push({ key: `ext-${name}`, text: `${cap(b(n))} in your external cellar, ${name}`, link: 'View', onPress: openCellar });
-    if (archived > 0) lines.push({ key: 'archive', text: `You have ${b(archived)} in your archive`, link: 'View', onPress: () => {
-      // The most recently archived entry's wine card (its Cellar tab lists the
-      // whole archive history), not the archive search screen.
-      const latest = [...archiveMatches].sort((a, b) => new Date(b.archived_at ?? 0).getTime() - new Date(a.archived_at ?? 0).getTime())[0];
-      if (latest) router.push(`/cellar/${latest.id}` as any);
-    } });
-    if (latestIntelReview) {
-      const more = intelReviews.length - 1;
-      lines.push({ key: 'review', text: `Reviewed on ${fmtIntelDay(latestIntelReview.date)}${reviewPlaceLabel(latestIntelReview.place) ? `, at ${reviewPlaceLabel(latestIntelReview.place)}` : ''}${more > 0 ? ` (and ${more} more ${more === 1 ? 'time' : 'times'})` : ''}`, link: 'View review', onPress: latestIntelReview.open });
+    const archivedRows = archiveMatches
+      .filter((w) => !!w.archived_at && w.quantity > 0)
+      .sort((a, b) => newestFirst(a.archived_at!, b.archived_at!));
+    for (const w of archivedRows) {
+      lines.push({ key: `archived-${w.id}`, text: `${w.quantity} ${w.quantity === 1 ? 'Bottle' : 'Bottles'} added to your archive on ${fmtIntelDay(w.archived_at!)}`, link: 'View', onPress: () => openWine(w.id) });
+    }
+
+    // 2. Where the bottles are now: one line per rack, fridge, bin or alt
+    //    cellar, each opening that storage with this wine highlighted; bottles
+    //    held externally or not filed anywhere open the Full Cellar List
+    //    filtered to this wine.
+    const wineId = ownedMatch?.id;
+    let placed = 0;
+    const units = new Map<string, HistoryLine & { n: number }>();
+    const addTo = (key: string, label: string, n: number, open: () => void) => {
+      const u = units.get(key);
+      if (u) u.n += n; else units.set(key, { key, text: label, n, link: 'View', onPress: open });
+      placed += n;
+    };
+    for (const p of wineId ? matchPlacements : []) {
+      const n = p.quantity ?? 0;
+      if (n <= 0) continue;
+      if (p.kind === 'rack' && p.rack_id) {
+        const rack = racks.find((r) => r.id === p.rack_id);
+        addTo(`rack-${p.rack_id}`, `in your ${rack?.name ?? 'rack'}`, n, () => router.push(`/cellar/rack/${p.rack_id}?highlight=${wineId}` as any));
+      } else if (p.kind === 'bin' && p.bin_cell_id) {
+        const cellId = p.bin_cell_id;
+        addTo(`bin-${cellId}`, 'in your wine bin', n, () => {
+          void getBinCell(cellId)
+            .then(({ cell }) => router.push(`/cellar/bin/${cell.bin_id}?highlight=${wineId}` as any))
+            .catch(() => openWine(wineId));
+        });
+      } else if (p.kind === 'location' && p.storage_location_id) {
+        const loc = allStorageLocations.find((l) => l.id === p.storage_location_id);
+        if (loc?.is_external) {
+          // External storage: the Full Cellar List, filtered to this wine.
+          addTo(`loc-${p.storage_location_id}`, `in your external cellar, ${loc.name}`, n, () => router.push(`/cellar/list?wine=${wineId}` as any));
+        } else {
+          addTo(`loc-${p.storage_location_id}`, `in your ${loc?.name ?? 'alt cellar'}`, n, () => router.push(`/cellar/storage-location/${p.storage_location_id}?highlight=${wineId}` as any));
+        }
+      }
+    }
+    for (const u of units.values()) lines.push({ key: u.key, text: `${cap(b(u.n))} ${u.text}`, link: u.link, onPress: u.onPress });
+    const loose = total - placed;
+    // Not filed anywhere: the Full Cellar List, filtered to this wine.
+    const listWineId = wineId ?? cellarMatches[0]?.id;
+    if (loose > 0 && listWineId) lines.push({ key: 'loose', text: `${cap(b(loose))} in Your Cellar List`, link: 'View', onPress: () => router.push(`/cellar/list?wine=${listWineId}` as any) });
+
+
+    // 3. Each time the wine was drunk at a restaurant — picked from a list,
+    // reviewed or not, cellar bottle or not — newest first, opening that visit's
+    // restaurant review. (Reviews have their own section below.)
+    const visits = chosenWines
+      .filter((c) => !!c.restaurant_name?.trim() && sameWineIdentity(intelId, { producer: c.producer, wineName: c.wine_name, vintage: c.vintage }))
+      .sort((a, b) => new Date(b.chosen_at).getTime() - new Date(a.chosen_at).getTime());
+    for (const c of visits) {
+      const where = `${c.restaurant_name!.trim()}${c.city?.trim() ? ` in ${c.city.trim()}` : ''}`;
+      lines.push({
+        key: `drank-${c.id}`,
+        text: `You drank this wine at ${where}`,
+        link: 'View',
+        onPress: () => router.push((c.scan_session_id
+          ? `/restaurants/reviews?openSession=${c.scan_session_id}`
+          : `/wines/chosen?openReview=${c.id}&backTo=${intelReturn}&fromIntel=1`) as any),
+      });
     }
     return lines;
   }
@@ -1785,7 +1838,7 @@ export default function LabelResultsScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={wc.Fact} onPress={openValueInfo} disabled={intelLoading || intel.estimatedValue == null} activeOpacity={0.7}>
                 <Text style={wc.FactLabel}>Value</Text>
-                {intelLoading ? <ActivityIndicator size="small" color={colors.gold} /> : <Text style={[wc.FactValue, { color: colors.gold }]}>{intel.estimatedValue != null ? <>{fmt(intel.estimatedValue)}<Text style={styles.per75}>{PER_75CL}</Text></> : '—'}</Text>}
+                {intelLoading ? <ActivityIndicator size="small" color={colors.gold} /> : <Text style={wc.FactValue}>{intel.estimatedValue != null ? <>{fmt(intel.estimatedValue)}<Text style={styles.per75}>{PER_75CL}</Text></> : '—'}</Text>}
               </TouchableOpacity>
               <TouchableOpacity style={[wc.Fact, wc.FactLast]} onPress={openWindowInfo} disabled={intelLoading || intel.isSpirit || (!windowYears && intel.drinkingWindowStatus === 'unknown')} activeOpacity={0.7}>
                 <Text style={wc.FactLabel}>Window</Text>
@@ -1814,9 +1867,9 @@ export default function LabelResultsScreen() {
                 <View style={wc.History}>
                   <Text style={wc.HistoryTitle}>Your History With This Wine</Text>
                   {lines.map((l, i) => (
-                    <TouchableOpacity key={l.key} style={[wc.HistoryRow, i === lines.length - 1 && wc.RowLast]} onPress={l.onPress} activeOpacity={0.7}>
+                    <TouchableOpacity key={l.key} style={[wc.HistoryRow, i === lines.length - 1 && wc.RowLast]} onPress={l.onPress} disabled={!l.onPress} activeOpacity={0.7}>
                       <Text style={wc.HistoryText}>{l.text}</Text>
-                      <Text style={wc.Link}>{l.link} ›</Text>
+                      {l.link ? <Text style={wc.Link}>{l.link} ›</Text> : null}
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -1914,7 +1967,7 @@ export default function LabelResultsScreen() {
             <View style={[wc.Card, { gap: 2, paddingVertical: 10 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
                 <Text style={wc.Label}>Estimated Market Value</Text>
-                <Text style={wc.VsValue}>{intel.estimatedValue != null ? <>{fmt(intel.estimatedValue)}<Text style={styles.per75}>{PER_75CL}</Text></> : '—'}</Text>
+                <Text style={[wc.VsValue, styles.marketValue]}>{intel.estimatedValue != null ? <>{fmt(intel.estimatedValue)}<Text style={styles.per75}>{PER_75CL}</Text></> : '—'}</Text>
               </View>
               {intel.estimatedValue != null ? (
                 <Text style={wc.Small} numberOfLines={1}>
@@ -2833,6 +2886,9 @@ export default function LabelResultsScreen() {
 const styles = StyleSheet.create({
   // "/75cl" after a value: same size and font as the figure, in white.
   per75: { color: colors.text },
+  // A price reads white like the rest of the card's figures (gold is kept for
+  // comparisons such as "+12% vs market").
+  marketValue: { color: colors.text },
   container: { flex: 1, backgroundColor: colors.background },
   // Off-screen host for the share card — positioned far off-canvas so it renders
   // for the captureRef snapshot but never appears on screen.

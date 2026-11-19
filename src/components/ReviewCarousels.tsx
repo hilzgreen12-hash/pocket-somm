@@ -41,8 +41,12 @@ const WINE_EXAMPLES: PlaceholderCard[] = [
   { kind: 'labelCollage', images: placeholderLabelImages(0, 1), title: 'Your Wine Review', stamp: '20 Dec 2029 · 94 pts', overlay: 'Your wine reviews appear here as you use Vinster' },
   { kind: 'labelCollage', images: placeholderLabelImages(1, 1), title: 'Your Wine Review', stamp: '12 Dec 2029 · 92 pts', overlay: 'Your wine reviews appear here as you use Vinster' },
 ];
+// Three example tiles, so a new user sees a carousel rather than one lone card.
+const RESTAURANT_OVERLAY = 'Your restaurant reviews appear here as you use Vinster';
 const RESTAURANT_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'image', uri: RESTAURANT_IMG, title: 'Your Restaurant Review', stamp: '18 Dec 2029 · London', overlay: 'Your restaurant reviews appear here as you use Vinster' },
+  { kind: 'image', image: RESTAURANT_IMG, title: 'Your Restaurant Review', stamp: '18 Dec 2029 · London', overlay: RESTAURANT_OVERLAY },
+  { kind: 'image', image: RESTAURANT_IMG, title: 'Your Restaurant Review', stamp: '9 Dec 2029 · Paris', overlay: RESTAURANT_OVERLAY },
+  { kind: 'image', image: RESTAURANT_IMG, title: 'Your Restaurant Review', stamp: '30 Nov 2029 · Bordeaux', overlay: RESTAURANT_OVERLAY },
 ];
 
 // Gold stats bar under each Review-tab carousel title — mirrors Your Cookbook's.
@@ -107,8 +111,14 @@ export function RestaurantReviewsCarousel({ onViewAll }: { onViewAll: () => void
             <LabelThumb path={a.restaurantPhotoPath} fallbackText={a.restaurantName ?? ''} style={styles.image} radius={0} frame={0} />
           </View>
           <Text style={styles.name} numberOfLines={2} allowFontScaling={false}>{a.restaurantName?.trim() || UNNAMED_RESTAURANT}</Text>
+          {/* The overall rating sits on its own line between the name and the date. */}
+          {a.ratingOverall != null && a.ratingOverall > 0 ? (
+            <Text style={styles.stamp} numberOfLines={1} allowFontScaling={false}>
+              {'★'.repeat(Math.min(5, a.ratingOverall))}
+            </Text>
+          ) : null}
           <Text style={styles.stamp} numberOfLines={1} allowFontScaling={false}>
-            {[formatVisitDate(a.capturedAt), a.city, a.ratingOverall != null ? '★'.repeat(Math.max(0, Math.min(5, a.ratingOverall))) : null].filter(Boolean).join(' · ')}
+            {[formatVisitDate(a.capturedAt), a.city].filter(Boolean).join(' · ')}
           </Text>
         </TouchableOpacity>
       ))}

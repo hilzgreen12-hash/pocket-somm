@@ -134,7 +134,8 @@ export default function ArchiveNightScreen() {
     try {
       const row = await saveLineupArchive(session.user.id, uri, { wines: lineupWines, city: params.city || city, visit });
       qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
-      router.replace(`/cellar/lineup/${row.id}` as any);
+      // A new lineup opens ready to fill in (title, notes, wines).
+      router.replace(`/cellar/lineup/${row.id}?new=1` as any);
     } catch (err) {
       showSaveError(err);
     }

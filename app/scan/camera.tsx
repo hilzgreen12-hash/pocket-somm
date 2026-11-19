@@ -74,6 +74,11 @@ export default function CameraScreen() {
   const [steadyOpen, setSteadyOpen] = useState(cameraPages.length === 0);
   // Torch for dim restaurants.
   const [torchOn, setTorchOn] = useState(false);
+  // One capture at a time — a double tap on the shutter used to push two
+  // previews (and so two paid scans). Declared with the other hooks, above the
+  // permission early returns: a hook after them crashes the screen once the
+  // permission check resolves.
+  const capturing = useRef(false);
 
   if (!permission) return <View style={styles.container} />;
 
@@ -88,10 +93,6 @@ export default function CameraScreen() {
     setAutofocus('off');
     setTimeout(() => setAutofocus('on'), 50);
   }
-
-  // One capture at a time — a double tap on the shutter used to push two
-  // previews (and so two paid scans).
-  const capturing = useRef(false);
 
   async function handleCapture() {
     if (!cameraRef.current || capturing.current) return;

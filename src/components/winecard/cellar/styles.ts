@@ -62,6 +62,13 @@ export const s = StyleSheet.create({
   // other actions, below a rule separating them from the locations.
   cellarCommand: { fontSize: 14.5, marginTop: 6 },
   cellarCommandRule: { height: 1, backgroundColor: 'rgba(255,255,255,0.18)', marginTop: 6, marginBottom: 2 },
+  // The recommended temperature, stacked under its label (a row runs off narrow screens).
+  tempBar: { flexDirection: 'column', alignItems: 'flex-start', gap: 2 },
+
+  // An archived wine's card: one page under a large "Archived Wine" heading
+  // (the tab pages' title family) and a short faded-gold rule.
+  archivedHeading: { fontSize: 32, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1, textAlign: 'center', marginTop: spacing.lg },
+  archivedRule: { width: 120, height: 1, backgroundColor: colors.gold, opacity: 0.6, alignSelf: 'center', marginTop: spacing.sm, marginBottom: spacing.md },
 
   // Buttons at the foot of the card.
   exportBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md },

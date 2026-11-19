@@ -5,7 +5,9 @@ import { fonts } from '../../constants/fonts';
 // The wine card's visual language (tabs, facts bar, cards, history, verdict,
 // cellar picks) — shared so the Wine Intel screen reads the same.
 export const wc = StyleSheet.create({
-  TabBar: { flexDirection: 'row', gap: 6, backgroundColor: '#3E2120', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  // The tab buttons sit straight on the page's terracotta (no dark band), so
+  // the card carries less brown; the history and review boxes keep theirs.
+  TabBar: { flexDirection: 'row', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   Tab: { flex: 1, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 19, borderWidth: 1, borderColor: 'rgba(224,184,74,0.55)' },
   TabOn: { backgroundColor: colors.gold, borderColor: colors.gold },
   TabText: { fontFamily: fonts.headingBold, fontSize: 15, color: colors.gold },

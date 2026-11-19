@@ -41,6 +41,18 @@ function pct(n: number, total: number): string {
   return `${Math.round((n / total) * 100)}%`;
 }
 
+// "23% Bordeaux · 21% Tuscany · 10% Piedmont · 46% Other Regions": the top
+// regions plus everything else, so the shares always add up to 100%. "Other"
+// is the remainder of the rounded figures shown, not rounded separately.
+function regionShareLine(top: [string, number][], total: number): string {
+  if (total === 0) return '';
+  const shares = top.map(([region, count]) => ({ region, share: Math.round((count / total) * 100) }));
+  const other = 100 - shares.reduce((sum, r) => sum + r.share, 0);
+  const parts = shares.map((r) => `${r.share}% ${r.region}`);
+  if (other > 0) parts.push(`${other}% Other Regions`);
+  return parts.join('  ·  ');
+}
+
 // The four drinking-window buckets, matching the rack colour statuses.
 type WindowStatus = 'too_young' | 'approaching' | 'peak' | 'declining';
 const WINDOW_BUCKETS: { status: WindowStatus; label: string }[] = [
@@ -355,7 +367,7 @@ export default function CellarStatsScreen() {
           <>
             <View style={styles.summaryDivider} />
             <Text style={styles.summarySub}>
-              {topRegions.map(([region, count]) => `${pct(count, classifiedBottles)} ${region}`).join('  ·  ')}
+              {regionShareLine(topRegions, classifiedBottles)}
             </Text>
             {totalBottles - classifiedBottles > 0 ? (
               <Text style={styles.summaryNote}>

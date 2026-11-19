@@ -17,7 +17,7 @@ function monthKey(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 }
 
-// One lineup row: thumbnail left, date · city / venue / note right.
+// One lineup row: thumbnail left, date · venue / title / note right.
 function LineupTile({ item, size, onPress, onLongPress }: { item: LineupArchive; size: number; onPress: () => void; onLongPress: () => void }) {
   const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   return (
@@ -26,11 +26,11 @@ function LineupTile({ item, size, onPress, onLongPress }: { item: LineupArchive;
         <LineupThumb path={item.image_path} width={size} height={Math.round(size * 0.78)} borderRadius={5} />
       </View>
       <View style={styles.rowBody}>
-        {/* Date · location stamp. */}
+        {/* Date · venue (the city when no venue was given). */}
         <View style={styles.rowStampRow}>
-          <Text style={[styles.rowStamp, { flex: 1 }]} numberOfLines={1}>{date}{item.city ? ` · ${item.city}` : ''}</Text>
+          <Text style={[styles.rowStamp, { flex: 1 }]} numberOfLines={1}>{date}{(item.venue?.trim() || item.city) ? ` · ${item.venue?.trim() || item.city}` : ''}</Text>
         </View>
-        {item.venue ? <Text style={styles.rowVenue} numberOfLines={1}>{item.venue}</Text> : null}
+        {item.name?.trim() ? <Text style={styles.rowTitle} numberOfLines={1}>{item.name.trim()}</Text> : null}
         {item.note ? <Text style={styles.rowNote} numberOfLines={2}>{item.note}</Text> : null}
       </View>
     </TouchableOpacity>
@@ -204,10 +204,6 @@ export default function LineupLibraryScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.blurb}>
-        A visual record of your vinous adventures for you to revisit, review, and share.
-      </Text>
-
       {isLoading ? (
         <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>
       ) : isError ? (
@@ -335,7 +331,6 @@ const styles = StyleSheet.create({
 
   addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
-  blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, paddingHorizontal: spacing.xl, paddingTop: spacing.md, textAlign: 'center' },
   // Gold whole-library tally, same treatment as the Full Cellar List summary.
   lineupSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   lineupAwaiting: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: 4 },
@@ -360,7 +355,7 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1 },
   rowStampRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rowStamp: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
-  rowVenue: { fontSize: 13.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3 },
+  rowTitle: { fontSize: 13.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3 },
 
   rowNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
 

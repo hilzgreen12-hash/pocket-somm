@@ -3,8 +3,8 @@ import { useLabelImageState } from '../../hooks/useLabelImageUrl';
 import { colors, spacing } from '../../constants/theme';
 import { fonts } from '../../constants/fonts';
 
-// Wine card hero: the label photo large across the top, fading into the dark
-// band below, with the wine's identity laid over its foot. Tap the photo to
+// Wine card hero: the label photo large across the top, with a see-through
+// terracotta band at its foot, with the wine's identity laid over its foot. Tap the photo to
 // view it (or add one); long-press to change / delete; tap the name to edit.
 type Props = {
   path: string | null | undefined;
@@ -65,8 +65,9 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
         </View>
       ) : null}
 
-      {/* One even shade behind the title (no lighter upper tier). */}
-      <View pointerEvents="none" style={[styles.fade, { height: 130, opacity: 0.7 }]} />
+      {/* One even see-through terracotta band behind the title, so the hero
+          runs into the page colour below rather than a dark brown block. */}
+      <View pointerEvents="none" style={[styles.fade, { height: 130 }]} />
       <View pointerEvents="none" style={styles.topShade} />
 
       <View style={styles.topBar}>
@@ -93,7 +94,7 @@ const styles = StyleSheet.create({
   busyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.text },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted },
-  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: DARK },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(127,79,76,0.86)' },
   topShade: { position: 'absolute', left: 0, right: 0, top: 0, height: 96, backgroundColor: 'rgba(62,33,32,0.45)' },
   topBar: { position: 'absolute', left: spacing.md, right: spacing.md, top: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },

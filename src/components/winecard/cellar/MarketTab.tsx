@@ -233,7 +233,7 @@ export function MarketTab({ wine, market, intel, canEdit, currency }: {
             <Text style={[wc.Value, s.statValueMuted]}>Estimating…</Text>
           ) : ev != null ? (
             <>
-              <Text style={[wc.Value, { color: colors.gold }]}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={s.per75}>{PER_75CL}</Text>{canEdit ? <Text style={s.estimateUpdateLink}> (update)</Text> : null}</Text>
+              <Text style={wc.Value}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={s.per75}>{PER_75CL}</Text>{canEdit ? <Text style={s.estimateUpdateLink}> (update)</Text> : null}</Text>
               {wine.estimated_value_low != null && wine.estimated_value_high != null ? (
                 <Text style={wc.Small}>Range {formatCurrency(Number(wine.estimated_value_low), wine.estimated_value_currency, { decimals: 0 })}–{formatCurrency(Number(wine.estimated_value_high), wine.estimated_value_currency, { decimals: 0 })}</Text>
               ) : null}

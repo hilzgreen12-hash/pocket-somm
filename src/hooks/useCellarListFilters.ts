@@ -117,6 +117,8 @@ export function useCellarListFilters(input: {
   binOfCell: Map<string, string>;
   customLocations: CustomFilter[];
   initialRegion: string | null;
+  // One wine only (?wine=<id>, from Wine Intel's "in Your Cellar List" line).
+  initialWineId: string | null;
 }) {
   const { wines, isArchiveView, placementsByWine, externalLocIds, binOfCell, customLocations } = input;
   const [location, setLocation] = useState('All');
@@ -124,6 +126,7 @@ export function useCellarListFilters(input: {
   const [colour, setColour] = useState('All');
   const [maturity, setMaturity] = useState('All');
   const [region, setRegion] = useState<string | null>(input.initialRegion);
+  const [onlyWineId, setOnlyWineId] = useState<string | null>(input.initialWineId);
   const [sort, setSort] = useState<SortMode>('recent');
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
@@ -173,6 +176,7 @@ export function useCellarListFilters(input: {
       const bottles = bottlesInLocation(w);
       if (location !== 'All' && bottles <= 0) continue;
       if (country !== 'All' && inferCountry(w.region) !== country) continue;
+      if (onlyWineId && w.id !== onlyWineId) continue;
       if (region && baseRegionGroup(w.region) !== region) continue;
       if (colour !== 'All' && wineColour(w) !== colour) continue;
       if (maturity !== 'All' && effectiveMaturity(w) !== maturity) continue;
@@ -180,7 +184,7 @@ export function useCellarListFilters(input: {
       out.push({ wine: w, bottles });
     }
     return out;
-  }, [wines, bottlesInLocation, location, country, region, colour, maturity, query]);
+  }, [wines, bottlesInLocation, location, country, region, onlyWineId, colour, maturity, query]);
 
   // Your Cellar Archive: one line per wine (see archiveLines), carrying the
   // total bottles archived. `groupIds` maps each line to every archived row it
@@ -223,7 +227,7 @@ export function useCellarListFilters(input: {
 
   return {
     location, setLocation, country, setCountry, colour, setColour, maturity, setMaturity,
-    region, setRegion, sort, setSort, search, setSearch,
+    region, setRegion, onlyWineId, setOnlyWineId, sort, setSort, search, setSearch,
     countries,
     rows,
     totalBottles,

@@ -45,6 +45,7 @@ import { OverviewFacts, OverviewTab } from './OverviewTab';
 import { MarketTab } from './MarketTab';
 import { ServeTab } from './ServeTab';
 import { CellarTab } from './CellarTab';
+import { ArchiveBottlesCard } from './ArchiveBottlesCard';
 import { AddBottlesSheet } from './AddBottlesSheet';
 import { MoveBottlesSheet } from './MoveBottlesSheet';
 import { ArchiveBottlesSheet } from './ArchiveBottlesSheet';
@@ -106,13 +107,13 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
   const [sharing, setSharing] = useState(false);
   const [sharePayload, setSharePayload] = useState<ComponentProps<typeof WineIntelShareCard> | null>(null);
 
+  // A live wine's tabs (an archived wine's card is a single page).
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'market', label: 'Market' },
     { id: 'cellar', label: 'Cellar' },
-    ...(!isArchived ? [{ id: 'somm' as const, label: 'Serve' }] : []),
+    { id: 'somm', label: 'Serve' },
   ];
-  const activeTab = tabs.some((t) => t.id === tab) ? tab : 'overview';
   const wineTitle = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
 
   function openEdit() {
@@ -374,7 +375,7 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
         busy={uploadingPhoto}
         title={wineTitle}
         subtitle={[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}
-        chip={isArchived ? 'Archived Wine' : ''}
+        chip=""
         onBack={() => router.back()}
         onPhotoPress={() => (wine.label_image_path ? setPhotoViewerOpen(true) : canEdit ? addPhoto() : undefined)}
         onPhotoLongPress={() => (canEdit ? (wine.label_image_path ? photoMenu() : addPhoto()) : undefined)}
@@ -383,65 +384,86 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
         badge={wine.is_spirit ? <SpiritBadge /> : null}
       />
 
-      <View style={wc.TabBar} accessibilityRole="tablist">
-        {tabs.map((t) => {
-          const on = activeTab === t.id;
-          return (
-            <TouchableOpacity key={t.id} style={[wc.Tab, on && wc.TabOn]} onPress={() => setTab(t.id)} accessibilityRole="tab" accessibilityState={{ selected: on }} activeOpacity={0.7}>
-              <Text style={[wc.TabText, on && wc.TabTextOn]}>{t.label}</Text>
+      {isArchived ? (
+        // An archived wine is one page: its history, archive entries and
+        // reviews, with no market, serving or storage tabs.
+        <>
+          <Text style={s.archivedHeading}>Archived Wine</Text>
+          <View style={s.archivedRule} />
+          <OverviewFacts wine={wine} data={data} intel={intel} canEdit={canEdit} onWindow={() => setWindowSheetOpen(true)} />
+          <View style={wc.Body}>
+            <OverviewTab
+              wine={wine}
+              data={data}
+              intel={intel}
+              range={range}
+              canEdit={canEdit}
+              currency={currency}
+              onRangeWine={(name, tier) => setRangeNote({ name, tier })}
+              afterHistory={<ArchiveBottlesCard data={data} canEdit={canEdit} returning={returnToCellar.returning} onReturn={() => returnToCellar.start(data.archiveLine)} />}
+            />
+            {canEdit ? (
+              <TouchableOpacity style={[s.exportBtn, s.archivedDeleteBtn, actions.working && s.buttonDisabled]} onPress={() => confirmDelete(wine.quantity)} disabled={actions.working}>
+                <Text style={s.exportBtnText}>Delete Wine From Your Records</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={wc.TabBar} accessibilityRole="tablist">
+            {tabs.map((t) => {
+              const on = tab === t.id;
+              return (
+                <TouchableOpacity key={t.id} style={[wc.Tab, on && wc.TabOn]} onPress={() => setTab(t.id)} accessibilityRole="tab" accessibilityState={{ selected: on }} activeOpacity={0.7}>
+                  <Text style={[wc.TabText, on && wc.TabTextOn]}>{t.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {tab === 'overview' ? (
+            <OverviewFacts wine={wine} data={data} intel={intel} canEdit={canEdit} onBottles={() => setTab('cellar')} onWindow={() => setWindowSheetOpen(true)} />
+          ) : null}
+
+          <View style={wc.Body}>
+            {tab === 'overview' ? (
+              <OverviewTab wine={wine} data={data} intel={intel} range={range} canEdit={canEdit} currency={currency} onRangeWine={(name, tier) => setRangeNote({ name, tier })} />
+            ) : null}
+            {tab === 'market' ? <MarketTab wine={wine} market={market} intel={intel} canEdit={canEdit} currency={currency} /> : null}
+            {tab === 'somm' ? <ServeTab wine={wine} serving={serving} canEdit={canEdit} onFindPairings={findPairings} /> : null}
+            {tab === 'cellar' ? (
+              <CellarTab
+                wine={wine}
+                data={data}
+                canEdit={canEdit}
+                moving={actions.moving}
+                onPlace={() => setPlaceOpen(true)}
+                onAddToLocation={actions.openPlaceMenu}
+                onAdd={() => setAddOpen(true)}
+                onMove={() => {
+                  if (data.homeBottles === 0) {
+                    showAlert({ title: 'Nothing to move', body: 'All bottles of this wine are in external storage. To bring them home, hold the wine in your cellar list and choose Move to Home Storage.' });
+                    return;
+                  }
+                  setMoveOpen(true);
+                }}
+                onArchive={() => startArchive(1)}
+                onDelete={() => confirmDelete(wine.quantity)}
+              />
+            ) : null}
+
+            {cameFromReviews ? (
+              <TouchableOpacity style={[s.chefBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted) && s.buttonDisabled]} onPress={postToCommunity} disabled={!COMMUNITY_ENABLED || postingReview || reviewPosted} activeOpacity={0.7}>
+                <Text style={s.chefBtnText}>{!COMMUNITY_ENABLED ? 'Share Review To Community (coming soon)' : reviewPosted ? '✓ Shared to Community' : postingReview ? 'Sharing…' : 'Share Review To Community'}</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity style={s.exportBtn} onPress={() => void shareIntel()} disabled={sharing} activeOpacity={0.85}>
+              <Text style={s.exportBtnText}>{sharing ? 'Preparing…' : 'Export Wine Intel'}</Text>
             </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {activeTab === 'overview' ? (
-        <OverviewFacts wine={wine} data={data} intel={intel} canEdit={canEdit} onBottles={() => setTab('cellar')} onWindow={() => setWindowSheetOpen(true)} />
-      ) : null}
-
-      <View style={wc.Body}>
-        {activeTab === 'overview' ? (
-          <OverviewTab wine={wine} data={data} intel={intel} range={range} canEdit={canEdit} currency={currency} onRangeWine={(name, tier) => setRangeNote({ name, tier })} />
-        ) : null}
-        {activeTab === 'market' ? <MarketTab wine={wine} market={market} intel={intel} canEdit={canEdit} currency={currency} /> : null}
-        {activeTab === 'somm' ? <ServeTab wine={wine} serving={serving} canEdit={canEdit} onFindPairings={findPairings} /> : null}
-        {activeTab === 'cellar' ? (
-          <CellarTab
-            wine={wine}
-            data={data}
-            canEdit={canEdit}
-            moving={actions.moving}
-            returning={returnToCellar.returning}
-            onPlace={() => setPlaceOpen(true)}
-            onAddToLocation={actions.openPlaceMenu}
-            onAdd={() => setAddOpen(true)}
-            onMove={() => {
-              if (data.homeBottles === 0) {
-                showAlert({ title: 'Nothing to move', body: 'All bottles of this wine are in external storage. To bring them home, hold the wine in your cellar list and choose Move to Home Storage.' });
-                return;
-              }
-              setMoveOpen(true);
-            }}
-            onArchive={() => startArchive(1)}
-            onDelete={() => confirmDelete(wine.quantity)}
-            onReturn={() => returnToCellar.start(data.archiveLine)}
-          />
-        ) : null}
-
-        {!isArchived && cameFromReviews ? (
-          <TouchableOpacity style={[s.chefBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted) && s.buttonDisabled]} onPress={postToCommunity} disabled={!COMMUNITY_ENABLED || postingReview || reviewPosted} activeOpacity={0.7}>
-            <Text style={s.chefBtnText}>{!COMMUNITY_ENABLED ? 'Share Review To Community (coming soon)' : reviewPosted ? '✓ Shared to Community' : postingReview ? 'Sharing…' : 'Share Review To Community'}</Text>
-          </TouchableOpacity>
-        ) : null}
-        {!isArchived ? (
-          <TouchableOpacity style={s.exportBtn} onPress={() => void shareIntel()} disabled={sharing} activeOpacity={0.85}>
-            <Text style={s.exportBtnText}>{sharing ? 'Preparing…' : 'Export Wine Intel'}</Text>
-          </TouchableOpacity>
-        ) : canEdit ? (
-          <TouchableOpacity style={[s.exportBtn, s.archivedDeleteBtn, actions.working && s.buttonDisabled]} onPress={() => confirmDelete(wine.quantity)} disabled={actions.working}>
-            <Text style={s.exportBtnText}>Delete Wine From Your Records</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+          </View>
+        </>
+      )}
 
       <PlaceWinesSheet visible={placeOpen} onClose={() => setPlaceOpen(false)} wine={wine} available={data.unplaced} racks={data.racks} bins={data.bins} locations={data.storageLocations} />
       <AddBottlesSheet visible={addOpen} wine={wine} data={data} actions={actions} onClose={() => setAddOpen(false)} />

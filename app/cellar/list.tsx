@@ -82,7 +82,7 @@ export default function CellarListScreen() {
   const { role, ownerId } = useCellarContext();
   const canEdit = role !== 'view';
   const cellarId = ownerId ?? userId;
-  const { archived, added, add, region } = useLocalSearchParams<{ archived?: string; added?: string; add?: string; region?: string }>();
+  const { archived, added, add, region, wine } = useLocalSearchParams<{ archived?: string; added?: string; add?: string; region?: string; wine?: string }>();
   const isArchiveView = archived === '1';
 
   const { wines, isLoading, isError } = useCellar();
@@ -157,6 +157,7 @@ export default function CellarListScreen() {
     binOfCell,
     customLocations,
     initialRegion: region ? String(region) : null,
+    initialWineId: wine ? String(wine) : null,
   });
 
   // ---- Background upkeep (editors only) ----
@@ -756,6 +757,9 @@ export default function CellarListScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
             {/* A Region chip leads when the list was opened from Most Collected —
                 tap it to clear the region. Location and Maturity are live-list only. */}
+            {filters.onlyWineId ? (
+              <FilterChip label="Showing" value="This wine" active marker="✕" onPress={() => filters.setOnlyWineId(null)} accessibilityLabel="Show all wines" />
+            ) : null}
             {filters.region ? (
               <FilterChip label="Region" value={filters.region} active marker="✕" onPress={() => filters.setRegion(null)} accessibilityLabel={`Clear the ${filters.region} filter`} />
             ) : null}
