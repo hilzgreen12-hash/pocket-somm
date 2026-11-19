@@ -86,8 +86,8 @@ function toTsv(rows: string[][]): string {
 }
 
 // A long list is read in parts of this many rows: one read of thousands of rows
-// runs out of reply room part-way through.
-const CHUNK_ROWS = 100;
+// runs out of reply room part-way through, and 100-row parts came close to it.
+const CHUNK_ROWS = 40;
 
 // The sheet as TSV parts of up to CHUNK_ROWS data rows. Every part repeats the
 // lines down to the header row (titles, account lines, the column names), so
@@ -114,6 +114,8 @@ function nonEmpty(rows: string[][]): string[][] {
   return rows.map((r) => (Array.isArray(r) ? r.map(fixMojibake) : [])).filter((r) => r.some((c) => c.trim() !== ''));
 }
 
+const UNZIP_FIRST = "That's a zip file — unzip it and choose cellar.csv";
+
 export function fileToSheets(bytes: Uint8Array, fileName: string, base64?: string): ImportSheet[] {
   const name = (fileName || '').toLowerCase();
   const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b; // PK — xlsx/ods
@@ -121,15 +123,24 @@ export function fileToSheets(bytes: Uint8Array, fileName: string, base64?: strin
   const looksSpreadsheet = /\.(xlsx|xls|ods)$/.test(name) || isZip || isCfb;
 
   if (looksSpreadsheet) {
+    // A .zip that isn't a workbook is usually Vivino's data export, which
+    // holds cellar.csv: say so rather than show SheetJS's own error.
+    if (/\.zip$/.test(name)) throw new Error(UNZIP_FIRST);
     // SheetJS MUST be fed base64 here. metro.config.js maps xlsx's Node
     // `stream`/`fs` requires to empty modules on the strength of "we only ever
     // hand XLSX base64" — the `type: 'array'` read path reaches into those now-
     // empty stubs and throws at runtime (Excel imports silently failing while
     // CSVs worked). base64 comes from the Expo File API at the call site; the
     // array fall-back only covers a legacy caller that didn't pass it.
-    const wb = base64 != null
-      ? XLSX.read(base64, { type: 'base64' })
-      : XLSX.read(bytes, { type: 'array' });
+    let wb: XLSX.WorkBook;
+    try {
+      wb = base64 != null
+        ? XLSX.read(base64, { type: 'base64' })
+        : XLSX.read(bytes, { type: 'array' });
+    } catch {
+      const namedWorkbook = /\.(xlsx|xls|ods)$/.test(name);
+      throw new Error(isZip && !namedWorkbook ? UNZIP_FIRST : "Vinster couldn't open that spreadsheet. Try saving it again as Excel (.xlsx) or CSV.");
+    }
     return wb.SheetNames
       .map((sn) => {
         const sheet = wb.Sheets[sn];

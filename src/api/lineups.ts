@@ -17,9 +17,10 @@ export interface LineupWine {
   cellar_wine_id: string | null;
   archived: boolean;
   count: number;
-  // Optional detail set from the lineup's Edit wine pop-up (the column is
-  // jsonb, so older rows simply lack these).
+  // Optional detail read off the label (or set from the lineup's Edit wine
+  // pop-up). The column is jsonb, so older rows simply lack these.
   region?: string | null;
+  grape?: string | null;
   style?: string | null;
   bottle_size_ml?: number | null;
 }

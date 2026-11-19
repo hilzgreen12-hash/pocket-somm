@@ -193,11 +193,11 @@ export default function LineupDetailScreen() {
   function openWineIntel(w: LineupWine) {
     const ls = useLabelStore.getState();
     ls.reset();
-    // Classification + appellation for a classified Bordeaux château, which a
-    // lineup row doesn't carry.
+    // The row's region as read off the label; classification + appellation
+    // are filled in for a classified Bordeaux château.
     ls.setWineDetailsConfirmed(withBordeauxInfo({
       producer: w.producer ?? '',
-      region: '',
+      region: w.region ?? '',
       wineName: w.wine_name || null,
       vintage: w.vintage != null ? String(w.vintage) : 'NV',
     }) as any);
@@ -722,7 +722,7 @@ export default function LineupDetailScreen() {
                 const linkedCellar = w.cellar_wine_id ? cellarWines.find((c) => c.id === w.cellar_wine_id) : null;
                 const subParts = [
                   w.region ?? linkedCellar?.region,
-                  linkedCellar?.grape_variety,
+                  w.grape ?? linkedCellar?.grape_variety,
                   w.style,
                   w.bottle_size_ml && w.bottle_size_ml !== 750 ? bottleSizeLabel(w.bottle_size_ml) : null,
                 ].filter(Boolean) as string[];

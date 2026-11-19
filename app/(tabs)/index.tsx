@@ -6,7 +6,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 // Page scroll from the gesture library, so a picked-up carousel section cancels
 // the page scroll instead of fighting it.
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useRootNavigationState } from 'expo-router';
 import { useShareIntentContext } from 'expo-share-intent';
 import { launchImageLibrary } from '../../src/utils/imagePicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -43,6 +43,7 @@ import type { WineDetailsComplete } from '../../src/types/wine';
 import { HOME_TILE, colors, spacing } from '../../src/constants/theme';
 import { withBordeauxInfo } from '../../src/constants/bordeauxClassification';
 import { fonts } from '../../src/constants/fonts';
+import { MAX_SHARED_PDF_BYTES } from '../../src/api/scanJob';
 
 // Module-level so it survives the Scan tab unmounting/remounting on navigation:
 // the welcome overlay shows once per app session (a fresh launch resets it),
@@ -87,9 +88,6 @@ function colourDotColour(c: string | null | undefined): string {
     default: return 'transparent';
   }
 }
-
-// Largest PDF that can be shared straight into Vinster (the server reads up to ~10 MB).
-const MAX_SHARED_PDF_BYTES = 10 * 1024 * 1024;
 
 // The web link in a share: the shared URL itself, or the first link in shared
 // text ("Our list (https://…pdf)." → without the trailing bracket and full stop).
@@ -413,10 +411,14 @@ export default function ScanLandingScreen() {
   //   a photo / screenshot    → a label (Wine Intel) or, if it's a list, the list scan
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const sharedHandledRef = useRef<string | null>(null);
+  // A share can restart Vinster's screen (Android opens it inside the sharing
+  // app first), and Home then appears before the app's navigation is ready —
+  // opening the list at that moment crashed to a white screen. Wait for it.
+  const navReady = !!useRootNavigationState()?.key;
   useEffect(() => {
-    // Opening from a share can beat the login restoring — wait for it, or a
-    // signed-in user would be asked to sign in.
-    if (!hasShareIntent || authLoading) return;
+    // Opening from a share can also beat the login restoring — wait for that
+    // too, or a signed-in user would be asked to sign in.
+    if (!hasShareIntent || authLoading || !navReady) return;
     const intent = shareIntent;
     resetShareIntent();
     const files = intent?.files ?? [];
@@ -443,7 +445,7 @@ export default function ScanLandingScreen() {
       showAlert({ title: "Vinster can't read that", body: 'Share a photo or screenshot of a wine list or label, a PDF wine list, or the web link to a wine list.' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasShareIntent, shareIntent, authLoading]);
+  }, [hasShareIntent, shareIntent, authLoading, navReady]);
 
   // A wine list that arrived from outside (a shared link, PDF or screenshot):
   // open Wine List Preferences with it ready; Read Wine List then reads it.

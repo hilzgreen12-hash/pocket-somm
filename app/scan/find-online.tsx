@@ -11,6 +11,17 @@ import { isNetworkError } from '../../src/api/invokeResilient';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
+const VIEW_DOWNLOAD_TIMEOUT_MS = 20000;
+
+// Whether a downloaded file is really a PDF (it begins "%PDF").
+function startsWithPdfMarker(file: File): boolean {
+  try {
+    const handle = file.open();
+    try { return String.fromCharCode(...handle.readBytes(4)) === '%PDF'; }
+    finally { handle.close(); }
+  } catch { return false; }
+}
+
 // Find Online: search the web for a restaurant's wine list, let the user pick
 // the right result, then read it through the same pipeline as a photographed
 // list (extracting → results). Reached from Home's "Read A Wine List" pop-up;
@@ -33,14 +44,24 @@ export default function FindOnlineScreen() {
     try {
       const dest = new File(Paths.cache, 'wine-list-preview.pdf');
       if (dest.exists) dest.delete();
-      const file = await File.downloadFileAsync(r.url, dest);
+      // A slow site mustn't leave "Opening…" up for ever: after 20 s the
+      // browser takes over (the download can't be cancelled, so it's ignored).
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const file = await Promise.race([
+        File.downloadFileAsync(r.url, dest),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('download timed out')), VIEW_DOWNLOAD_TIMEOUT_MS); }),
+      ]).finally(() => clearTimeout(timer));
+      // A ".pdf" link can answer with a web page (a cookie wall, a login, a
+      // "file moved" notice) — the PDF viewer can't show that, the browser can.
+      if (!startsWithPdfMarker(dest)) throw new Error('not a PDF');
       await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
         data: file.contentUri,
         type: 'application/pdf',
         flags: 1, // FLAG_GRANT_READ_URI_PERMISSION — lets the viewer read our cached file
       });
     } catch {
-      // No PDF viewer on the phone, or the download failed — the browser copes.
+      // No PDF viewer on the phone, or the download failed, was slow or wasn't
+      // a PDF — the browser copes.
       void openInBrowser();
     } finally {
       setOpening(null);
@@ -90,7 +111,9 @@ export default function FindOnlineScreen() {
     const name = isLink ? '' : restaurant.trim();
     let site = domain;
     if (!site) { try { site = new URL(url).hostname.replace(/^www\./, ''); } catch { site = undefined; } }
-    setOnlineSource({ url, restaurant: name, city: city.trim() || null, title: titleFallback || site, domain: site });
+    // The town box is hidden while it holds a link, so a town typed earlier
+    // mustn't ride along with the link.
+    setOnlineSource({ url, restaurant: name, city: isLink ? null : city.trim() || null, title: titleFallback || site, domain: site });
     router.push('/scan/wine-list?online=1');
   }
 

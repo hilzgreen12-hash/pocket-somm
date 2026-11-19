@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ExtractedWine, RecommendationResponse } from '../types/wine';
+import type { StartedScanJob } from '../api/scanJob';
 
 interface ScanPreferences {
   wineTypes: string[];
@@ -21,6 +22,14 @@ interface ScanPreferences {
   profileStyleProfiles: string[];
 }
 
+// A scan that has been started but hasn't finished. Leaving the reading
+// screen (Back) doesn't stop the paid job on the server, so coming back to the
+// same list with the same preferences picks this job up again instead of
+// starting (and paying for, or using a guest's allowance on) a second one.
+// key: the list + preferences it was started for; job: null until scan-start
+// answers (a retry with the same clientRef still gets the same job back).
+export interface ScanAttempt { key: string; clientRef: string; job: StartedScanJob | null; currency: string | null }
+
 interface ScanState {
   imageUri: string | null;
   imageUris: string[] | null;
@@ -37,6 +46,8 @@ interface ScanState {
   error: string | null;
   preferences: ScanPreferences;
   needsReset: boolean;
+  scanAttempt: ScanAttempt | null;
+  setScanAttempt: (a: ScanAttempt | null) => void;
   // Set by Try Again on the scan error screen: Home opens "How should Vinster
   // read the list?" when it next comes into view, to start again from scratch.
   restartListChoice: boolean;
@@ -55,7 +66,9 @@ interface ScanState {
   setError: (message: string) => void;
   setPreferences: (prefs: Partial<ScanPreferences>) => void;
   clearNeedsReset: () => void;
-  reset: () => void;
+  // keepOnlineSource: Back from an online list's results returns to its
+  // preferences form, which should still show that list (not the camera).
+  reset: (opts?: { keepOnlineSource?: boolean }) => void;
 }
 
 const DEFAULT_PREFERENCES: ScanPreferences = {
@@ -84,6 +97,8 @@ export const useScanStore = create<ScanState>((set) => ({
   error: null,
   preferences: DEFAULT_PREFERENCES,
   needsReset: false,
+  scanAttempt: null,
+  setScanAttempt: (a) => set({ scanAttempt: a }),
   restartListChoice: false,
   setRestartListChoice: (v) => set({ restartListChoice: v }),
   cameraPages: [],
@@ -98,5 +113,10 @@ export const useScanStore = create<ScanState>((set) => ({
   setError: (message) => set({ error: message }),
   setPreferences: (prefs) => set((s) => ({ preferences: { ...s.preferences, ...prefs } })),
   clearNeedsReset: () => set({ needsReset: false }),
-  reset: () => set({ imageUri: null, imageUris: null, imageSource: 'camera', onlineSource: null, cameraPages: [], extractedWines: null, recommendation: null, error: null, preferences: DEFAULT_PREFERENCES, needsReset: true }),
+  reset: (opts) => set((s) => ({
+    imageUri: null, imageUris: null, imageSource: 'camera', cameraPages: [],
+    onlineSource: opts?.keepOnlineSource ? s.onlineSource : null,
+    extractedWines: null, recommendation: null, error: null, scanAttempt: null,
+    preferences: DEFAULT_PREFERENCES, needsReset: true,
+  })),
 }));

@@ -86,11 +86,7 @@
             "image/*",
             "text/*",
             "application/pdf"
-          ],
-          "androidMainActivityAttributes": {
-            "android:launchMode": "singleTask",
-            "android:documentLaunchMode": "never"
-          }
+          ]
         }
       ]
     ],

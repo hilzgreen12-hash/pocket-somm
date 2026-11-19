@@ -141,6 +141,15 @@ export async function createStorageCases(
   if (error) throw error;
 }
 
+// Remove cases a cellar import just created, when filing bottles into them
+// failed. In slices, so a large import's ids fit in the request URL.
+export async function deleteStorageCases(ids: string[]): Promise<void> {
+  for (let i = 0; i < ids.length; i += 100) {
+    const { error } = await supabase.from('storage_cases').delete().in('id', ids.slice(i, i + 100));
+    if (error) throw error;
+  }
+}
+
 // All cases in a location (oldest first, so the list order is stable).
 export async function fetchStorageLocationCases(locationId: string): Promise<StorageCase[]> {
   const { data, error } = await supabase

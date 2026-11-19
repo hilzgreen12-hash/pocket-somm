@@ -34,6 +34,16 @@ class NetworkError extends Error {
   }
 }
 
+// The stream closed cleanly but no result came. That usually means the function
+// itself stopped (its time limit), not that the connection dropped.
+class StreamEndedError extends NetworkError {}
+
+export interface StreamOptions {
+  // false: don't run the call again after a StreamEndedError — for long reads
+  // that would only stop again at the same point, each run paid for.
+  retryEndedStream?: boolean;
+}
+
 async function streamOnce(functionName: string, body: Record<string, unknown>): Promise<unknown> {
   const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/${functionName}`;
   const { data: { session } } = await supabase.auth.getSession();
@@ -118,7 +128,7 @@ async function streamOnce(functionName: string, body: Record<string, unknown>): 
     if (idleTimer) clearTimeout(idleTimer);
   }
 
-  if (!payload) throw new NetworkError(`${functionName} stream ended without a result`);
+  if (!payload) throw new StreamEndedError(`${functionName} stream ended without a result`);
   // A server-side application error is NOT a transport problem — surface it
   // directly so we don't pointlessly retry.
   if (payload.error) throw new Error(payload.message ?? payload.error);
@@ -128,13 +138,17 @@ async function streamOnce(functionName: string, body: Record<string, unknown>): 
 // Stream a long edge call, retrying only on transport drops / idle timeouts
 // (never on an application error). On exhaustion throws a NetworkError so the
 // caller can fall back to the buffered path.
-export async function streamEdgeFunction(functionName: string, body: Record<string, unknown>): Promise<unknown> {
+export async function streamEdgeFunction(functionName: string, body: Record<string, unknown>, options: StreamOptions = {}): Promise<unknown> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= RETRIES; attempt++) {
     try {
       return await streamOnce(functionName, body);
     } catch (err) {
       if (!(err instanceof NetworkError)) throw err; // app error — don't retry
+      // A plain Error, so the caller doesn't fall back to a buffered re-run either.
+      if (err instanceof StreamEndedError && options.retryEndedStream === false) {
+        throw new Error('Vinster stopped before it finished reading this. Please try again.');
+      }
       lastError = err;
       if (attempt < RETRIES) {
         await new Promise((resolve) => setTimeout(resolve, 800 * 2 ** attempt));

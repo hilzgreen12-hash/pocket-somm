@@ -5,7 +5,7 @@
 // "Quantity in Bottles" column, headers aren't always the first row, names come
 // as one long description, and a single workbook can hold several unrelated
 // lists. Rather than hand-code rules per format, we hand ONE already-decoded
-// list (clean rows, encoding fixed on the client; a long one ~100 rows at a
+// list (clean rows, encoding fixed on the client; a long one ~40 rows at a
 // time) to Claude and get back normalized wines with the case structure preserved.
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
@@ -14,15 +14,19 @@ import { signedInUserId } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-// Usage limits per account. The app sends a big spreadsheet ~100 rows per call,
-// so a ~9,000-row cellar is ~90 calls in one sitting: the hourly limit lets one
+// Usage limits per account. The app sends a big spreadsheet ~40 rows per call,
+// so a ~9,000-row cellar is ~225 calls in one sitting: the hourly limit lets one
 // such import finish with room for retries, the daily one allows about two and
 // a half. Files from a known merchant are read on the phone and never get here.
-const HOURLY_LIMIT = 120;
-const DAILY_LIMIT = 240;
+const HOURLY_LIMIT = 300;
+const DAILY_LIMIT = 600;
+
+// Reply room. A 40-row part needs a few thousand tokens; the headroom is for
+// long PDF statements, which arrive whole.
+const MAX_REPLY_TOKENS = 32000;
 
 // A storage statement PDF is a few hundred KB; anything near Claude's request
-// cap isn't one. Text arrives in ~100-row chunks, well under the text cap.
+// cap isn't one. Text arrives in ~40-row chunks, well under the text cap.
 const MAX_PDF_CHARS = 14_000_000; // ≈ 10 MB decoded
 const MAX_TEXT_CHARS = 120_000;
 const MAX_BODY_BYTES = MAX_PDF_CHARS + 64 * 1024;
@@ -49,7 +53,7 @@ PACKAGING — preserve the case structure:
 - "mixed" if explicitly a mixed case.
 - "loose" if the holding is loose bottles with no case.
 
-For each wine return these keys (use null when unknown, never invent data):
+For each wine return these keys (leave a key out when its value is unknown — never invent data):
 - producer: the maker/estate (split from the description when you can, e.g. "Château Ducru-Beaucaillou").
 - wineName: the specific cuvée/bottling if distinct from the producer, else null.
 - vintage: 4-digit string, or "NV", or null.
@@ -69,7 +73,7 @@ For each wine return these keys (use null when unknown, never invent data):
 - currency: 3-letter code if determinable (GBP/USD/EUR…), else null.
 - notes: a tasting note from the row if present, else null.
 
-Return ONLY a JSON object: {"wines": [ ... ]}. No markdown, no commentary.`;
+Return ONLY a JSON object: {"wines": [ ... ]}, written compactly on a single line with no indentation or line breaks. No markdown, no commentary.`;
 
 Deno.serve(async (req) => {
   try {
@@ -105,34 +109,39 @@ Deno.serve(async (req) => {
       content = `Source hint: ${hint}\n\nList rows:\n${truncated ? body.slice(0, MAX_TEXT_CHARS) : body}`;
     }
 
-    const resp = await client.messages.create({
+    // Streamed from Claude because the SDK refuses a reply this size as one
+    // buffered request.
+    const resp = await client.messages.stream({
       model: 'claude-sonnet-5-5',
       thinking: { type: 'between_tools' },
-      max_tokens: 16000,
+      max_tokens: MAX_REPLY_TOKENS,
       system: SYSTEM,
       messages: [{ role: 'user', content: content as any }],
-    });
-    if (resp.stop_reason === 'max_tokens') truncated = true;
+    }).finalMessage();
 
     // With thinking on, the reply's first block isn't necessarily the text.
     const raw = resp.content.find((b) => b.type === 'text')?.text ?? '';
     const winesIn = winesFromReply(raw);
+    // Out of reply room, or a reply that wasn't the JSON asked for: some or all
+    // of this list wasn't read.
+    if (resp.stop_reason === 'max_tokens' || winesIn === null) truncated = true;
 
     // Normalise + sanity-clamp every field so the client can trust the shape.
-    const wines = winesIn.map((w: any) => {
+    const wines = (winesIn ?? []).map((w: any) => {
       const sizeNum = toInt(w?.bottleSizeMl);
       // null when the file gave no bottle size — the client defaults to 750ml and
       // flags it, rather than silently assuming a format.
       const bottleSizeMl = sizeNum && sizeNum >= 50 && sizeNum <= 30000 ? sizeNum : null;
       const perCase = toInt(w?.bottlesPerCase);
       const cases = toInt(w?.cases);
-      const loose = toInt(w?.looseBottles);
+      let loose = toInt(w?.looseBottles);
       let total = toInt(w?.totalBottles);
-      // Recompute from the case parts when the model gave them but the total is
-      // missing or inconsistent — the parts are the trustworthy signal.
+      // The stated total is what the list says the owner holds, so it's never
+      // overwritten (a case count misread from a format like "6x75cl" would
+      // shrink or inflate it). The case parts only fill in what's missing.
       if (perCase && cases != null) {
-        const computed = perCase * cases + (loose ?? 0);
-        if (!total || total !== computed) total = computed;
+        if (!total) total = perCase * cases + (loose ?? 0);
+        else if (loose == null) loose = Math.max(0, total - perCase * cases);
       }
       if (!total || total < 1) total = 1;
       const pk = ['owc', 'non_owc', 'mixed', 'loose'].includes(w?.packaging) ? w.packaging : (perCase ? 'owc' : 'loose');
@@ -202,21 +211,22 @@ Deno.serve(async (req) => {
   }
 });
 
-// The { wines: [...] } object in Claude's reply. A reply cut off at max_tokens
-// ends part-way through a wine; the wines are flat objects, so cutting back to
-// the last closing brace and closing the array keeps every complete one.
-function winesFromReply(raw: string): any[] {
+// The { wines: [...] } object in Claude's reply, or null when there isn't one.
+// A reply cut off at max_tokens ends part-way through a wine; the wines are
+// flat objects, so cutting back to the last closing brace and closing the array
+// keeps every complete one.
+function winesFromReply(raw: string): any[] | null {
   const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   const start = cleaned.indexOf('{');
-  if (start < 0) return [];
+  if (start < 0) return null;
   const body = cleaned.slice(start, cleaned.lastIndexOf('}') + 1);
   for (const candidate of [body, `${body}]}`]) {
     try {
       const parsed = JSON.parse(candidate);
-      return Array.isArray(parsed?.wines) ? parsed.wines : [];
+      return Array.isArray(parsed?.wines) ? parsed.wines : null;
     } catch { /* try the next */ }
   }
-  return [];
+  return null;
 }
 
 function str(v: unknown): string | null {

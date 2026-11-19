@@ -355,10 +355,14 @@ async function runScanJob(job: ScanJob): Promise<void> {
 
     const perPhoto: ExtractedWine[][] = [];
     const failures: FnError[] = [];
+    // An online list's pages (or text pieces) read and not read, as counted by
+    // find-wine-list — reported to the app like photos (see 'done' below).
+    let webParts = { read: 0, unread: 0 };
     for (const r of results) {
       if (r.status === 'fulfilled') {
         const ws = Array.isArray(r.value?.wines) ? r.value.wines : [];
         perPhoto.push(ws.map(cleanWine).filter((w: ExtractedWine | null): w is ExtractedWine => !!w));
+        if (fromWeb) webParts = { read: Number(r.value?.partsRead) || 0, unread: Number(r.value?.partsUnread) || 0 };
       } else {
         failures.push(r.reason instanceof FnError ? r.reason : new FnError('ocr', 0, String(r.reason), 'other'));
       }
@@ -369,12 +373,22 @@ async function runScanJob(job: ScanJob): Promise<void> {
     log('read', {
       photos: fromWeb ? 0 : images.length, photosRead: perPhoto.length, photosFailed: failures.length,
       failures: failures.map((f) => `${f.fn}:${f.detail}`), wines: wines.length,
+      ...(fromWeb ? { partsRead: webParts.read, partsUnread: webParts.unread } : {}),
     });
 
     if (!wines.length) {
       const f = failures[0];
+      // find-wine-list's own answers carry a message for the user (no list
+      // found, site blocked, too many reads); a timeout or a crashed worker
+      // only has callFn's technical fallback ("find-wine-list timed out"), so
+      // it gets a plain "try again".
+      const userFacing = !!f && !f.message.startsWith(f.fn);
       const msg = fromWeb
-        ? (f?.message ?? "Vinster couldn't find a wine list on that website. Try another result, or use Scan a List or Upload a List instead.")
+        ? (!f
+          ? "Vinster couldn't find a wine list on that website. Try another result, or use Scan a List or Upload a List instead."
+          : userFacing
+            ? f.message
+            : "Vinster couldn't read this list just now. Please try again in a moment.")
         : f?.detail === 'truncated'
           ? 'This list has too much on it to read in one photo. Take it in two or three photos, one section at a time, and upload them together.'
           : f && ['timeout', 'network', 'overloaded', 'parse', 'other'].includes(f.detail) && f.status !== 429
@@ -460,8 +474,11 @@ async function runScanJob(job: ScanJob): Promise<void> {
     // Tidy the picks into the shape every app version accepts (see tidyPick).
     rec = { ...rec, summary: typeof rec?.summary === 'string' ? rec.summary : '', wines: recWines.slice(0, 3).map(tidyPick) };
 
-    // How many photos couldn't be read, so the app can say so beside the picks.
-    const photos = fromWeb ? {} : { photosSent: images.length, photosFailed: failures.length };
+    // How many photos (or online-list parts) couldn't be read, so the app can
+    // say the picks come from part of the list.
+    const photos = fromWeb
+      ? { photosSent: webParts.read + webParts.unread, photosFailed: webParts.unread }
+      : { photosSent: images.length, photosFailed: failures.length };
     await patch({ status: 'done', extracted_wines: wines, result: rec, params: { ...params, ...photos } });
     // A guest's scan counts against their two a day only once it has succeeded.
     if (guest && params.guestDeviceKey) await recordGuestUse(admin, params.guestDeviceKey, 'scan');
@@ -471,12 +488,16 @@ async function runScanJob(job: ScanJob): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     log('failed', { stage, fn: fe?.fn, detail: fe?.detail, status: fe?.status, message: message.slice(0, 200) });
     // Say which step failed and whose problem it is — never blame the photo
-    // for a server hiccup.
+    // for a server hiccup (and never mention a photo for a list read online).
     const userMsg = fe?.status === 429
       ? message
       : stage === 'reading'
-        ? "Vinster couldn't read the list just now — this usually isn't your photo. Please try again in a moment."
-        : 'Vinster read your list but couldn\'t finish choosing your wines just now — it isn\'t your photo. Please try again in a moment.';
+        ? (fromWeb
+          ? "Vinster couldn't read this list just now. Please try again in a moment."
+          : "Vinster couldn't read the list just now — this usually isn't your photo. Please try again in a moment.")
+        : (fromWeb
+          ? "Vinster read this list but couldn't finish choosing your wines just now. Please try again in a moment."
+          : 'Vinster read your list but couldn\'t finish choosing your wines just now — it isn\'t your photo. Please try again in a moment.');
     await patch({
       // The real reason (step, function, code), kept with the job so the app
       // shows it beside the reference code and it can be looked up later.

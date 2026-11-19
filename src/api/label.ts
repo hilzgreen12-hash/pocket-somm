@@ -663,12 +663,14 @@ export interface CellarListRead {
 // directly by Claude as a document rather than decoded on the phone). Prefers
 // the streamed path (heartbeat-kept SSE survives a cellular blip on a long
 // read); falls back to the buffered invoke on a transport drop. A real
-// application error propagates without falling back.
+// application error propagates without falling back, and so does a read that
+// stopped without a result: running it again would stop the same way, and the
+// import screen already retries a failed part once.
 async function readCellarList(body: { text: string } | { pdfBase64: string }, source?: string): Promise<CellarListRead> {
   const payload = { ...body, source: source ?? '' };
   let data: { wines?: CellarImportWine[]; truncated?: boolean };
   try {
-    data = await streamEdgeFunction('parse-cellar-import', payload) as typeof data;
+    data = await streamEdgeFunction('parse-cellar-import', payload, { retryEndedStream: false }) as typeof data;
   } catch (err) {
     if (!isNetworkError(err)) throw err;
     data = await invokeFunction('parse-cellar-import', payload) as typeof data;

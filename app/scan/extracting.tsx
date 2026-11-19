@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useKeepAwake } from 'expo-keep-awake';
-import { router } from 'expo-router';
-import { useScanStore } from '../../src/stores/scanStore';
+import { router, useNavigation } from 'expo-router';
+import { useScanStore, type ScanAttempt } from '../../src/stores/scanStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { prepareScanTiles } from '../../src/services/ocr';
 import { finalizeRecommendation } from '../../src/services/recommender';
-import { startScanJob, pollScanJob, logScanClientError, type StartedScanJob } from '../../src/api/scanJob';
+import { startScanJob, pollScanJob, logScanClientError, MAX_SHARED_PDF_BYTES, type StartedScanJob } from '../../src/api/scanJob';
 import { useAuth } from '../../src/hooks/useAuth';
 import { showAlert } from '../../src/components/AppAlert';
 import { isNetworkError } from '../../src/api/invokeResilient';
@@ -23,6 +23,8 @@ import { handleGuestLimit } from '../../src/services/guestLimit';
 // online list), starts the scan on the server (scan-start), polls until the
 // picks are ready, then hands them to the results screen. On failure it shows
 // "The Problem:" with a reference code; Try Again returns to Home to start over.
+// Leaving mid-scan doesn't lose the job: coming back to the same list resumes
+// it (see ScanAttempt in the scan store).
 //
 //   prepare photos → currency → start job → poll → finalise picks → results
 
@@ -38,11 +40,12 @@ export default function ExtractingScreen() {
   // on the phone) and the real reason, so any failure can be traced.
   const [errorRef, setErrorRef] = useState<{ ref: string; reason: string } | null>(null);
   const { session } = useAuth();
+  const navigation = useNavigation();
   const stepRef = useRef('checking the connection');
-  // One id for this scan attempt (see startScanJob) — retries reuse the job.
-  const clientRefRef = useRef(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
   const jobRef = useRef<StartedScanJob | null>(null);
   const source = onlineSource ? 'online' : imageSource;
+  // Online lists never get photo advice ("clear and well lit", "isn't your photo").
+  const notYourPhoto = onlineSource ? '' : ' — it isn\'t your photo';
 
   // A failure on the phone: show its reference and send it to the server log.
   function phoneFailure(reason: string) {
@@ -68,59 +71,98 @@ export default function ExtractingScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefsLoading]);
 
+  // The scan in progress for this list and these preferences: the one left
+  // running when the user last went Back, or a new one.
+  function currentAttempt(): ScanAttempt {
+    const list = onlineSource ? (onlineSource.fileUri ?? onlineSource.url) : (imageUris ?? [imageUri]).join('|');
+    const key = JSON.stringify({ list, preferences });
+    const store = useScanStore.getState();
+    if (store.scanAttempt?.key === key) return store.scanAttempt;
+    // One id per scan (see startScanJob): a retried upload gets the same job.
+    const attempt = { key, clientRef: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`, job: null, currency: null };
+    store.setScanAttempt(attempt);
+    return attempt;
+  }
+
+  // Prepare the list and start its job on the server. Null when it can't be
+  // started (the error is already on screen) or the screen closed before the
+  // upload.
+  async function startJob(token: { active: boolean }, clientRef: string): Promise<{ job: StartedScanJob; currency: string } | null> {
+    // Pre-flight the connection before the heavy upload: block if offline,
+    // warn+confirm on a weak signal, otherwise proceed as usual.
+    if (!(await ensureConnectionForUpload())) { router.dismissTo('/scan/wine-list'); return null; }
+    // Step 1: prepare the image(s) locally (resize/compress to base64). Only
+    // the prep is client-side now; the OCR itself runs server-side in the job.
+    setStage('reading');
+    stepRef.current = 'preparing the photos';
+    const uris = onlineSource ? [] : (imageUris ?? (imageUri ? [imageUri] : []));
+    const images: string[] = [];
+    for (const u of uris) {
+      // A tall photo becomes 2–4 overlapping tiles so small print stays sharp.
+      try { images.push(...await prepareScanTiles(u, imageSource)); }
+      catch { /* skip an unreadable image; the batch continues */ }
+    }
+    if (!token.active) return null;
+    if (!images.length && !onlineSource) {
+      setErrorDetail('Could not read the photo. Please try a clearer, well-lit shot with the full list in frame.');
+      phoneFailure('none of the photos could be opened on this phone');
+      setStage('error');
+      return null;
+    }
+    // A shared PDF over the limit would be refused by the server as if no list
+    // had been sent; say what's wrong instead. (Home checks the size the share
+    // reports, but some apps don't report one.)
+    if (onlineSource?.fileUri && new File(onlineSource.fileUri).size > MAX_SHARED_PDF_BYTES) {
+      setErrorDetail("That PDF is too large (10 MB max). Share the wine list's web link instead, or a screenshot of the page you want.");
+      setStage('error');
+      return null;
+    }
+
+    // Step 2: local-currency detection (client-side — GPS). Only PROMPTS when
+    // the detected country's currency differs from the diner's home currency,
+    // so home users are never asked. Done up front so the background job runs
+    // uninterrupted.
+    const profileCurrency = (userProfile?.defaultCurrency ?? 'GBP').toUpperCase();
+    // Abroad, ask once per app session whether to use the local currency (the
+    // answer is remembered). A list found online isn't where the phone is, so
+    // it always uses the home currency.
+    const currency = onlineSource ? profileCurrency : await resolveIntelCurrency(profileCurrency);
+    if (!token.active) return null;
+
+    // Step 3: start the async job (returns in <1s); run() then polls for the
+    // result. The colour "no {colour} wines" check and the preference
+    // pre-filters run server-side inside the job — the app never holds the
+    // ~90s connection.
+    const profile = userProfile ? {
+      dislikedRegions: userProfile.dislikedRegions,
+      dislikedGrapes: userProfile.dislikedGrapes,
+      defaultBudget: userProfile.defaultBudget,
+      favouriteRegions: userProfile.favouriteRegions,
+      favouriteGrapes: userProfile.favouriteGrapes,
+    } : null;
+
+    stepRef.current = 'sending the list';
+    const input = onlineSource?.fileUri
+      ? { pdfBase64: await new File(onlineSource.fileUri).base64() }
+      : onlineSource ? { sourceUrl: onlineSource.url } : { images };
+    const job = await startScanJob(input, { scanPreferences: preferences, profile, currency }, clientRef);
+    return { job, currency };
+  }
+
   async function run(token: { active: boolean }) {
+    const attempt = currentAttempt();
     try {
-      // Pre-flight the connection before the heavy upload: block if offline,
-      // warn+confirm on a weak signal, otherwise proceed as usual.
-      if (!(await ensureConnectionForUpload())) { router.dismissTo('/scan/wine-list'); return; }
-      // Step 1: prepare the image(s) locally (resize/compress to base64). Only
-      // the prep is client-side now; the OCR itself runs server-side in the job.
-      setStage('reading');
-      stepRef.current = 'preparing the photos';
-      const uris = onlineSource ? [] : (imageUris ?? (imageUri ? [imageUri] : []));
-      const images: string[] = [];
-      for (const u of uris) {
-        // A tall photo becomes 2–4 overlapping tiles so small print stays sharp.
-        try { images.push(...await prepareScanTiles(u, imageSource)); }
-        catch { /* skip an unreadable image; the batch continues */ }
+      let job = attempt.job;
+      let scanCurrency = attempt.currency;
+      if (!job || !scanCurrency) {
+        const fresh = await startJob(token, attempt.clientRef);
+        if (!fresh) return;
+        ({ job, currency: scanCurrency } = fresh);
+        // Kept even if the screen has just closed, so coming back resumes it.
+        useScanStore.getState().setScanAttempt({ ...attempt, job, currency: scanCurrency });
+        if (!token.active) return;
       }
-      if (!token.active) return;
-      if (!images.length && !onlineSource) {
-        setErrorDetail('Could not read the photo. Please try a clearer, well-lit shot with the full list in frame.');
-        phoneFailure('none of the photos could be opened on this phone');
-        setStage('error');
-        return;
-      }
-
-      // Step 2: local-currency detection (client-side — GPS). Only PROMPTS when
-      // the detected country's currency differs from the diner's home currency,
-      // so home users are never asked. Done up front so the background job runs
-      // uninterrupted.
-      const profileCurrency = (userProfile?.defaultCurrency ?? 'GBP').toUpperCase();
-      // Abroad, ask once per app session whether to use the local currency (the
-      // answer is remembered). A list found online isn't where the phone is, so
-      // it always uses the home currency.
-      const scanCurrency = onlineSource ? profileCurrency : await resolveIntelCurrency(profileCurrency);
-      if (!token.active) return;
-
-      // Step 3: start the async job (returns in <1s), then poll for the result.
-      // The colour "no {colour} wines" check and the preference pre-filters now
-      // run server-side inside the job — the app never holds the ~90s connection.
-      const profile = userProfile ? {
-        dislikedRegions: userProfile.dislikedRegions,
-        dislikedGrapes: userProfile.dislikedGrapes,
-        defaultBudget: userProfile.defaultBudget,
-        favouriteRegions: userProfile.favouriteRegions,
-        favouriteGrapes: userProfile.favouriteGrapes,
-      } : null;
-
-      stepRef.current = 'sending the list';
-      const input = onlineSource?.fileUri
-        ? { pdfBase64: await new File(onlineSource.fileUri).base64() }
-        : onlineSource ? { sourceUrl: onlineSource.url } : { images };
-      const job = await startScanJob(input, { scanPreferences: preferences, profile, currency: scanCurrency }, clientRefRef.current);
       jobRef.current = job;
-      if (!token.active) return;
 
       stepRef.current = 'waiting for the result';
       const outcome = await pollScanJob(job, {
@@ -129,6 +171,8 @@ export default function ExtractingScreen() {
         onStatus: (s) => { if (s === 'recommending') setStage('recommending'); },
       });
       if (!token.active) return;
+      // The job has finished: the next scan of this list starts afresh.
+      useScanStore.getState().setScanAttempt(null);
 
       if (outcome.status === 'error' || !outcome.recommendation) {
         // The server's own record of what went wrong, under this job's code.
@@ -161,17 +205,23 @@ export default function ExtractingScreen() {
       router.dismissTo('/scan/wine-list');
       router.push('/scan/results');
       noteHappyMoment('wine-list-scan');
-      // Some photos couldn't be read: the picks are real, but from part of the list.
-      // (Photos are sent as tiles, so this is "part of the list", not a count.)
+      // Some photos (or pages of an online list) couldn't be read: the picks are
+      // real, but from part of the list. (Photos are sent as tiles, so this is
+      // "part of the list", not a count.)
       if (outcome.photosFailed && outcome.photosFailed > 0) {
         setTimeout(() => showAlert({
           title: "Part of the list couldn't be read",
-          body: 'Your picks come from the rest of it. For the full list next time, take each page straight on, well lit and in focus.',
+          body: onlineSource
+            ? 'Your picks come from the rest of it.'
+            : 'Your picks come from the rest of it. For the full list next time, take each page straight on, well lit and in focus.',
         }), 600);
       }
     } catch (err) {
       if (!token.active) return;
       if (err instanceof Error && err.message === 'cancelled') return;
+      // Lost connection: the job may still be running, so a retry of this list
+      // resumes it. Anything else ends this scan.
+      if (!isNetworkError(err)) useScanStore.getState().setScanAttempt(null);
       // A guest who has used their two scans: offer sign-in, back on the form.
       if (handleGuestLimit(err)) {
         router.back();
@@ -182,17 +232,32 @@ export default function ExtractingScreen() {
       const friendly = isNetworkError(err)
         ? "Vinster couldn't reach the internet — you may be offline or on a weak signal. Find better reception and tap Try Again."
         : err instanceof Error && err.name === 'ScanTimeout'
-        ? "This scan is taking much longer than usual — it isn't your photo. Please try again in a moment."
+        ? `This scan is taking much longer than usual${notYourPhoto}. Please try again in a moment.`
         : err instanceof Error && err.name === 'ScanLost'
-        ? "Vinster lost touch with this scan — it isn't your photo. Please try again; signing in again may help."
+        ? `Vinster lost touch with this scan${notYourPhoto}. Please try again; signing in again may help.`
         : isRateLimit
         ? message
+        : onlineSource
+        ? "Vinster couldn't read this list just now. Please try again in a moment."
         : 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.';
       setErrorDetail(friendly);
       setError(message);
       phoneFailure(message);
       setStage('error');
     }
+  }
+
+  // An online list that couldn't be read: pick another. Find Online is still
+  // open beneath (with its search and results) unless the link was shared in
+  // from another app — then a fresh search starts.
+  function chooseAnotherList() {
+    if (navigation.getState()?.routes.some((r) => r.name === 'scan/find-online')) {
+      router.dismissTo('/scan/find-online');
+      return;
+    }
+    useScanStore.getState().reset();
+    router.dismissAll();
+    router.push('/scan/find-online');
   }
 
   if (stage === 'error') {
@@ -205,6 +270,11 @@ export default function ExtractingScreen() {
         <Text style={styles.errorBody}>{errorDetail}</Text>
         {errorRef ? (
           <Text style={styles.errorRef} selectable>Ref {errorRef.ref} · {errorRef.reason.slice(0, 160)}</Text>
+        ) : null}
+        {onlineSource && !onlineSource.fileUri ? (
+          <TouchableOpacity style={[styles.retryButton, styles.buttonGap]} onPress={chooseAnotherList}>
+            <Text style={styles.retryText}>{onlineSource.restaurant ? 'Choose Another Result' : 'Search Online'}</Text>
+          </TouchableOpacity>
         ) : null}
         {/* Start again from the beginning: back to Home, with "How should
             Vinster read the list?" open (no half-remembered route or photo). */}
@@ -279,6 +349,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
+  },
+  buttonGap: {
+    marginBottom: spacing.md,
   },
   retryText: {
     color: '#fff',

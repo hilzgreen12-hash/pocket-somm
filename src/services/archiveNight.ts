@@ -43,6 +43,11 @@ export function buildLineupWines(detected: DetectedBottle[], cellar: CellarWine[
       producer: identity.producer,
       wine_name: identity.wineName,
       vintage: identity.vintage,
+      // Keep what the label read gave beyond the name ("Pomerol, Bordeaux",
+      // Merlot, Red), so the lineup row shows where the wine is from.
+      region: b.region?.trim() || null,
+      grape: b.grape?.trim() || null,
+      style: b.style?.trim() || null,
       cellar_wine_id: match?.id ?? null,
       archived: false,
       count: b.quantity ?? 1,

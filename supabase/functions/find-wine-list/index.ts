@@ -14,11 +14,12 @@ const GUEST_LIMITS = { hourly: 4, daily: 4 };
 //     the user confirms the right restaurant before anything is read.
 //
 //   { action: 'read', url, currency? }
-//     → { wines: ExtractedWine[], sourceUrl }
+//     → { wines: ExtractedWine[], sourceUrl, partsRead, partsUnread }
 //     Fetches the page. A PDF is read directly; a web page is read if it holds
 //     the list, otherwise we follow its "Wine list" / "Drinks" / "Menus" links
 //     (a couple of hops, same site) to find it. Long lists are split into
-//     chunks read in parallel, so a 30-page list takes about as long as a photo.
+//     chunks read in parallel (up to 10 at a time); parts that couldn't be read
+//     are counted so the app can say the picks come from part of the list.
 //     Called server-to-server by scan-start, which then runs the usual
 //     recommend step on the wines — so results, reviews and saving all work
 //     exactly as for a photographed list.
@@ -30,9 +31,10 @@ const SERPER_API_KEY = Deno.env.get('SERPER_API_KEY') ?? '';
 
 const MAX_BYTES = 15 * 1024 * 1024;   // largest PDF/page we'll download
 const PAGES_PER_CHUNK = 1;            // PDF pages per parallel read (small = fast)
-const MAX_PAGES = 40;                 // ignore anything past this (40 parallel reads)
+const MAX_PAGES = 40;                 // pages past this are not read (counted as unread)
 const TEXT_CHUNK = 5000;              // characters of page text per parallel read
 const MAX_TEXT_CHUNKS = 24;
+const MAX_PARALLEL_READS = 10;        // reads in flight at once (a 40-wide burst got throttled)
 const MAX_HOPS = 6;                   // pages fetched while hunting for the list
 const FIND_BUDGET_MS = 30_000;         // stop hunting for the list after this
 const READ_BUDGET_MS = 70_000;         // the parallel reads must finish inside this
@@ -127,9 +129,25 @@ async function resolvesPublic(host: string): Promise<boolean> {
 // 'blocked' = the site answered but refused us (bot protection, login wall).
 type Fetched = { url: string; kind: 'pdf'; bytes: Uint8Array } | { url: string; kind: 'html'; html: string } | { url: string; kind: 'blocked' };
 
+// Google Drive and Dropbox share links open a viewer page, not the file:
+// point them at the file itself.
+function directFileUrl(raw: string): string {
+  const u = safeUrl(raw);
+  if (!u) return raw;
+  const host = u.hostname.replace(/^www\./, '');
+  const drive = host === 'drive.google.com' ? /\/file\/d\/([^/]+)/.exec(u.pathname)?.[1] : null;
+  if (drive) return `https://drive.google.com/uc?export=download&id=${drive}`;
+  if (host === 'dropbox.com' || host.endsWith('.dropbox.com')) {
+    u.searchParams.delete('dl');
+    u.searchParams.set('raw', '1');
+    return u.toString();
+  }
+  return raw;
+}
+
 async function fetchPage(raw: string): Promise<Fetched | null> {
   // Follow redirects by hand so every hop is checked.
-  let current = raw;
+  let current = directFileUrl(raw);
   for (let i = 0; i < 5; i++) {
     const u = safeUrl(current);
     if (!u) return null;
@@ -300,11 +318,13 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(s);
 }
 
-async function pdfChunks(bytes: Uint8Array): Promise<string[]> {
+// The PDF split into one-page documents, plus how many pages lie past MAX_PAGES.
+async function pdfChunks(bytes: Uint8Array): Promise<{ chunks: string[]; skipped: number }> {
   try {
     const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
-    const count = Math.min(src.getPageCount(), MAX_PAGES);
-    if (count <= PAGES_PER_CHUNK) return [toBase64(bytes)];
+    const total = src.getPageCount();
+    const count = Math.min(total, MAX_PAGES);
+    if (count <= PAGES_PER_CHUNK) return { chunks: [toBase64(bytes)], skipped: 0 };
     const chunks: string[] = [];
     for (let start = 0; start < count; start += PAGES_PER_CHUNK) {
       const doc = await PDFDocument.create();
@@ -313,16 +333,17 @@ async function pdfChunks(bytes: Uint8Array): Promise<string[]> {
       pages.forEach((p) => doc.addPage(p));
       chunks.push(toBase64(await doc.save()));
     }
-    return chunks;
+    return { chunks, skipped: total - count };
   } catch (err) {
     // Couldn't split it (unusual encoding) — send it whole; Claude reads PDFs
     // up to 100 pages directly.
     console.warn('[find-wine-list] pdf split failed, sending whole:', err instanceof Error ? err.message : String(err));
-    return [toBase64(bytes)];
+    return { chunks: [toBase64(bytes)], skipped: 0 };
   }
 }
 
-function textChunks(text: string): string[] {
+// The page text in read-sized pieces, plus how many pieces lie past MAX_TEXT_CHUNKS.
+function textChunks(text: string): { chunks: string[]; skipped: number } {
   const lines = text.split('\n');
   const chunks: string[] = [];
   let cur = '';
@@ -331,7 +352,7 @@ function textChunks(text: string): string[] {
     cur += l + '\n';
   }
   if (cur.trim()) chunks.push(cur);
-  return chunks.slice(0, MAX_TEXT_CHUNKS);
+  return { chunks: chunks.slice(0, MAX_TEXT_CHUNKS), skipped: Math.max(0, chunks.length - MAX_TEXT_CHUNKS) };
 }
 
 async function extract(content: Anthropic.MessageParam['content'], currency: string, deadline: number): Promise<any[]> {
@@ -359,43 +380,66 @@ async function extract(content: Anthropic.MessageParam['content'], currency: str
   return [];
 }
 
-async function readSource(src: Source, currency: string): Promise<any[]> {
-  const deadline = Date.now() + READ_BUDGET_MS;
-  const instruction = 'Extract all wines from this part of the wine list. Use the bottle price. Return only JSON.';
-  const jobs: Promise<any[]>[] = src.kind === 'pdf'
-    ? (await pdfChunks(src.bytes)).map((b64) => extract([
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
-        { type: 'text', text: instruction },
-      ] as any, currency, deadline))
-    : textChunks(src.text).map((t) => extract([{ type: 'text', text: `${instruction}\n\n---\n${t}` }], currency, deadline));
-  // Whatever has been read by the deadline is used; a straggler can't hold the
-  // whole scan past the server's time limit. Each read records its own outcome as it lands; at the deadline, reads
-  // still running count as failed.
-  const outcomes: (PromiseSettledResult<any[]> | undefined)[] = jobs.map(() => undefined);
-  const tracked = jobs.map((j, i) => j.then(
-    (value) => { outcomes[i] = { status: 'fulfilled', value }; },
-    (reason) => { outcomes[i] = { status: 'rejected', reason }; },
-  ));
+// Run the reads at most MAX_PARALLEL_READS at a time. Each slot holds its
+// read's outcome, or undefined if it never started or was still running at
+// the deadline. None starts in the last 10 s — it couldn't finish in time.
+async function runReads(reads: (() => Promise<any[]>)[], deadline: number): Promise<(PromiseSettledResult<any[]> | undefined)[]> {
+  const outcomes: (PromiseSettledResult<any[]> | undefined)[] = reads.map(() => undefined);
+  let next = 0;
+  const worker = async () => {
+    while (next < reads.length && Date.now() < deadline - 10_000) {
+      const i = next++;
+      try { outcomes[i] = { status: 'fulfilled', value: await reads[i]() }; }
+      catch (reason) { outcomes[i] = { status: 'rejected', reason }; }
+    }
+  };
   let timer: number | undefined;
   await Promise.race([
-    Promise.all(tracked),
+    Promise.all(Array.from({ length: Math.min(MAX_PARALLEL_READS, reads.length) }, worker)),
     new Promise<void>((r) => { timer = setTimeout(r, Math.max(5_000, deadline - Date.now())); }),
   ]);
   clearTimeout(timer);
-  const settled: PromiseSettledResult<any[]>[] = outcomes.map((o) => o ?? { status: 'rejected', reason: new Error('out of time') });
+  // A copy: reads still running at the deadline mustn't change the count later.
+  return outcomes.slice();
+}
+
+// The wines read from a list, and how many of its parts (pages or text
+// pieces) were read and how many weren't (failed, out of time, or past the
+// page cap) — so the app can say when the picks come from part of the list.
+type ReadResult = { wines: any[]; partsRead: number; partsUnread: number };
+
+async function readSource(src: Source, currency: string): Promise<ReadResult> {
+  const deadline = Date.now() + READ_BUDGET_MS;
+  const instruction = 'Extract all wines from this part of the wine list. Use the bottle price. Return only JSON.';
+  const { chunks, skipped } = src.kind === 'pdf' ? await pdfChunks(src.bytes) : textChunks(src.text);
+  const reads = chunks.map((c) => () => extract(src.kind === 'pdf'
+    ? [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: c } },
+        { type: 'text', text: instruction },
+      ] as any
+    : [{ type: 'text', text: `${instruction}\n\n---\n${c}` }], currency, deadline));
+  // Whatever has been read by the deadline is used; a straggler can't hold the
+  // whole scan past the server's time limit.
+  const outcomes = await runReads(reads, deadline);
   const wines: any[] = [];
-  for (const r of settled) if (r.status === 'fulfilled') wines.push(...r.value);
-  if (!wines.length && settled.every((r) => r.status === 'rejected')) {
-    throw new Error((settled[0] as PromiseRejectedResult).reason?.message ?? 'read failed');
+  let partsRead = 0;
+  for (const o of outcomes) if (o?.status === 'fulfilled') { partsRead += 1; wines.push(...o.value); }
+  if (partsRead === 0) {
+    const firstFailure = outcomes.find((o): o is PromiseRejectedResult => o?.status === 'rejected');
+    throw new Error(firstFailure?.reason?.message ?? 'read failed');
   }
+  const partsUnread = chunks.length - partsRead + skipped;
+  if (partsUnread) console.warn('[find-wine-list] partial read', JSON.stringify({ partsRead, partsUnread, skipped }));
   const seen = new Set<string>();
-  return wines.filter((w) => {
+  const unique = wines.filter((w) => {
     if (!w || typeof w.name !== 'string') return false;
-    const key = `${w.name}__${w.producer ?? ''}__${w.vintage ?? ''}`.toLowerCase();
+    // Size is part of the wine: the bottle and the magnum lines both stay.
+    const key = `${w.name}__${w.producer ?? ''}__${w.vintage ?? ''}__${w.format ?? ''}`.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  return { wines: unique, partsRead, partsUnread };
 }
 
 // ---- Search ----------------------------------------------------------------------
@@ -448,6 +492,12 @@ async function search(restaurant: string, city: string) {
   };
   const ownSite = (domain: string) => nameWords.length > 0 && nameHits(domain) > 0
     && !/^(shop|store|boutique|giftcards?|vouchers?)\./.test(domain);
+  // A PDF on a website builder's file store (Squarespace, Wix, Shopify…) is
+  // usually the restaurant's own list: its address isn't the restaurant's, so
+  // the file name or title has to carry the name instead
+  // ("static1.squarespace.com/…/BANCONE+WINE+LIST.pdf").
+  const hostedPdfHits = (domain: string, path: string, title: string) =>
+    (FILE_HOSTS.test(domain) ? nameHits(`${path} ${title}`) : 0);
   const seen = new Set<string>();
   const scored = items
     .map((it) => {
@@ -456,10 +506,13 @@ async function search(restaurant: string, city: string) {
       if (!u) return null;
       const domain = u.hostname.replace(/^www\./, '');
       if (SKIP_DOMAINS.test(domain)) return null;
-      if (!ownSite(domain)) return null;
       const title = String(it.title ?? domain);
       const snippet = String(it.snippet ?? '');
       const isPdf = /\.pdf($|\?)/i.test(u.pathname + u.search) || /\[pdf\]/i.test(title);
+      let path = u.pathname;
+      try { path = decodeURIComponent(path); } catch { /* keep it encoded */ }
+      const hosted = isPdf ? hostedPdfHits(domain, path, title) : 0;
+      if (!ownSite(domain) && hosted === 0) return null;
       const hay = `${title} ${snippet} ${domain} ${u.pathname}`.toLowerCase();
       let score = 0;
       if (nameWords.some((w) => hay.includes(w))) score += 5;
@@ -468,7 +521,11 @@ async function search(restaurant: string, city: string) {
       if (nameWords.some((w) => domain.includes(w))) score += 4;
       // The town the user gave, so the Islington pub beats the Canterbury one.
       if (cityLc && hay.includes(cityLc)) score += 6;
-      if (/wine/.test(hay)) score += 3;
+      // A real list ("wine list", "drinks menu", "carte des vins") beats a page
+      // that only mentions wine ("a guide to food and wine pairing").
+      const tier = listTier(`${title} ${u.pathname}`);
+      if (tier === 2) score += 6;
+      else if (/wine/.test(hay)) score += 2;
       if (isPdf) score += 2;
       // A food or set menu is not the wine list.
       if (/food|lunch menu|set menu|dinner menu|dessert|allergen/.test(hay) && !/wine/.test(hay)) score -= 5;
@@ -476,7 +533,7 @@ async function search(restaurant: string, city: string) {
       // A web page on someone else's site is usually an article ABOUT the
       // restaurant, not its list (PDFs on other hosts are often the real list).
       if (!isPdf && nameWords.length && !nameWords.some((w) => domain.includes(w))) score -= 4;
-      return { title: title.replace(/^\[pdf\]\s*/i, ''), url: u.toString(), domain, snippet, isPdf, score, hits: nameHits(domain) };
+      return { title: title.replace(/^\[pdf\]\s*/i, ''), url: u.toString(), domain, snippet, isPdf, score, tier, hosted: hosted > 0, hits: Math.max(nameHits(domain), hosted) };
     })
     .filter((r): r is NonNullable<typeof r> => !!r && r.score >= 5);
   const bestHits = Math.max(0, ...scored.map((r) => r.hits));
@@ -486,20 +543,39 @@ async function search(restaurant: string, city: string) {
   const cityDomains = new Set(
     cityLc ? scored.filter((r) => `${r.title} ${r.snippet} ${r.url}`.toLowerCase().includes(cityLc)).map((r) => r.domain) : [],
   );
+  // A file-store PDF carrying the name is kept whatever the town filter says
+  // (a bare PDF rarely names the town).
   const candidates = scored
     .filter((r) => r.hits === bestHits)
-    .filter((r) => cityDomains.size === 0 || cityDomains.has(r.domain))
+    .filter((r) => r.hosted || cityDomains.size === 0 || cityDomains.has(r.domain))
     .sort((a, b) => b.score - a.score)
     .filter((r) => { const k = urlKey(r.url); return seen.has(k) ? false : (seen.add(k), true); });
 
   // Only actual wine lists: the title or address must say so. Homepages,
   // restaurant pages and private-dining brochures are dropped.
   // (Separators in addresses — "soho_wine.pdf", "wine-list" — count as spaces.)
-  const lists = candidates.filter((r) => WINE_LIST_SIGNAL.test(`${r.title} ${new URL(r.url).pathname}`.replace(/[_\-./]+/g, ' ')));
+  // Real lists first: when any result is clearly a list, pages that only
+  // mention wine are left out.
+  const looksListy = candidates.filter((r) => r.tier >= 1);
+  const strong = looksListy.filter((r) => r.tier === 2);
+  const lists = strong.length ? strong : looksListy;
   // Nothing that looks like a list → offer the restaurant's own site (at most
   // two pages) so Vinster can look for the list there when it reads it.
   const chosen = lists.length ? latestEditions(lists) : candidates.slice(0, 2);
-  return chosen.slice(0, 6).map(({ score: _s, hits: _h, ...r }) => r);
+  return chosen.slice(0, 6).map(({ score: _s, hits: _h, tier: _t, hosted: _o, ...r }) => r);
+}
+
+// Website builders' file stores, where restaurants' PDFs usually live.
+const FILE_HOSTS = /(^|\.)(squarespace\.com|squarespace-cdn\.com|wixstatic\.com|shopify\.com|amazonaws\.com|cloudfront\.net|ctfassets\.net|prismic\.io|website-files\.com|webflow\.com|wp\.com|storage\.googleapis\.com|godaddysites\.com|img1\.wsimg\.com)$/i;
+
+// How surely a title/address is a wine list: 2 = says so ("wine list",
+// "drinks menu", "carte des vins", "by the bottle"…), 1 = only mentions wine
+// or drinks, 0 = neither. Separators in addresses count as spaces.
+const STRONG_LIST_SIGNAL = /\b(wine|wines|drinks?|beverages?)\s*(list|lists|menu|menus|card|book|selection|cellar)\b|\bwinelist\b|\bby the (bottle|glass)\b|\bcellar list\b|\bcarte des vins\b|\bcarte (de |des )?boissons\b|\bcarta (de |dei )?vin(o|i|os)\b|\bweinkarte\b|\bgetr[aä]nkekarte\b|\blista (dei )?vini\b/i;
+function listTier(text: string): 0 | 1 | 2 {
+  const t = text.replace(/[_\-./+%]+|%20/g, ' ');
+  if (STRONG_LIST_SIGNAL.test(t)) return 2;
+  return WINE_LIST_SIGNAL.test(t) ? 1 : 0;
 }
 
 // Words that mark a result as a wine (or drinks) list, in the languages lists
@@ -601,14 +677,14 @@ Deno.serve(async (req) => {
       const { source: src, blocked } = await locateList(url);
       if (!src) {
         return json(blocked
-          ? { error: 'blocked', message: "This website wouldn't let Vinster in. Tap View List, take a screenshot of the wine list, and share that to Vinster instead." }
+          ? { error: 'blocked', message: "This website wouldn't let Vinster in. Open the list in your browser, take a screenshot of it, and share that to Vinster instead." }
           : { error: 'not_found', message: "Vinster couldn't find a wine list on that website. Try another result, or use Scan a List or Upload a List instead." }, 404);
       }
-      const wines = await readSource(src, currency);
+      const { wines, partsRead, partsUnread } = await readSource(src, currency);
       if (!wines.length) {
         return json({ error: 'no_wines', message: "Vinster couldn't find a wine list on that website. Try another result, or use Scan a List or Upload a List instead." }, 404);
       }
-      return json({ wines, sourceUrl: src.url });
+      return json({ wines, sourceUrl: src.url, partsRead, partsUnread });
     }
 
     // A PDF wine list shared straight into Vinster (not a link): read its pages.
@@ -622,9 +698,9 @@ Deno.serve(async (req) => {
       if (!isPdf || bytes.length > MAX_BYTES) {
         return json({ error: 'bad_pdf', message: "Vinster couldn't open that file. Share the wine list's web link instead, or a screenshot of it." }, 400);
       }
-      const wines = await readSource({ url: 'shared.pdf', kind: 'pdf', bytes }, currency);
+      const { wines, partsRead, partsUnread } = await readSource({ url: 'shared.pdf', kind: 'pdf', bytes }, currency);
       if (!wines.length) return json({ error: 'no_wines', message: "Vinster couldn't find any wines in that PDF." }, 404);
-      return json({ wines, sourceUrl: null });
+      return json({ wines, sourceUrl: null, partsRead, partsUnread });
     }
 
     return json({ error: 'unknown action' }, 400);

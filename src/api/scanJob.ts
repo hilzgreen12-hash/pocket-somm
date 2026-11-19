@@ -36,6 +36,13 @@ export interface StartedScanJob { jobId: string; pollToken: string | null }
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 180000; // 3 min hard ceiling — well past a normal scan
+// A running job whose row hasn't moved for this long has lost its worker (the
+// same rule scan-start applies to guest jobs).
+const STALLED_AFTER_MS = 240000;
+const STALLED_MESSAGE = 'This scan took too long to finish — it usually works on a second try.';
+
+// The largest shared PDF scan-start accepts (it takes up to ~14 MB of base64).
+export const MAX_SHARED_PDF_BYTES = 10 * 1024 * 1024;
 
 // Kick off the background job. Returns the jobId immediately (sub-second).
 // Pass `sourceUrl` (Find Online) instead of images to read a list from the web.
@@ -60,6 +67,7 @@ export async function startScanJob(input: ScanInput, params: ScanJobParams, clie
 type JobState = {
   status: string; extracted_wines: any; result: any; error: string | null;
   failure?: string | null; photosSent?: number | null; photosFailed?: number | null;
+  updated_at?: string | null;
 };
 
 async function readJob(job: StartedScanJob): Promise<JobState | null> {
@@ -70,7 +78,7 @@ async function readJob(job: StartedScanJob): Promise<JobState | null> {
   }
   const { data, error } = await supabase
     .from('scan_jobs')
-    .select('status, extracted_wines, result, error, params')
+    .select('status, extracted_wines, result, error, params, updated_at')
     .eq('id', job.jobId)
     .maybeSingle();
   if (error || !data) return null;
@@ -98,6 +106,10 @@ export async function pollScanJob(
   // login mid-scan, or a rejected guest code) end the wait early instead of
   // running the full ceiling.
   let misses = 0;
+  // When the row last changed, timed by the phone's own clock (comparing the
+  // server's updated_at with the phone's time would trip on a phone whose
+  // clock is a few minutes out).
+  let lastChange = { stamp: '', at: Date.now() };
   while (true) {
     if (opts?.isCancelled?.()) throw new Error('cancelled');
     const data = await readJob(job);
@@ -109,6 +121,12 @@ export async function pollScanJob(
     // A transient read error (blip) isn't fatal — keep polling until the ceiling.
     if (data) {
       if (data.status !== lastStatus) { lastStatus = data.status; opts?.onStatus?.(data.status); }
+      const stamp = `${data.status}|${data.updated_at ?? ''}`;
+      if (stamp !== lastChange.stamp) lastChange = { stamp, at: Date.now() };
+      // Guest polls are checked by scan-start; an account's job is checked here.
+      if (!job.pollToken && data.status !== 'done' && data.status !== 'error' && Date.now() - lastChange.at > STALLED_AFTER_MS) {
+        return { status: 'error', wines: null, recommendation: null, error: STALLED_MESSAGE, failure: 'stalled' };
+      }
       if (data.status === 'done') {
         return { status: 'done', wines: data.extracted_wines ?? null, recommendation: data.result ?? null, error: null, photosSent: data.photosSent ?? null, photosFailed: data.photosFailed ?? null };
       }

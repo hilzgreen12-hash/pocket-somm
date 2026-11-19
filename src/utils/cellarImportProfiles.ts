@@ -1,4 +1,5 @@
 import type { CellarImportWine } from '../api/label';
+import { foldAccents, wineNameKey } from './wineIdentity';
 
 // Deterministic profiles for known merchant and cellar-app exports. When a
 // sheet's header matches a profile's fingerprint, we map it exactly in code —
@@ -29,7 +30,14 @@ function ci(cols: Cols, ...names: string[]): number {
 }
 function get(row: string[], i: number): string { return i >= 0 && i < row.length ? (row[i] ?? '').toString().trim() : ''; }
 function intOf(s: string): number | null { const n = parseInt(String(s).replace(/[^0-9]/g, ''), 10); return Number.isFinite(n) ? n : null; }
-function numOf(s: string): number | null { const n = parseFloat(String(s).replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : null; }
+// A number from a cell. A comma before 1–2 final digits is a decimal point
+// ("12,50" → 12.5, "1.250,50" → 1250.5); otherwise commas group thousands
+// ("1,250" → 1250).
+function numOf(s: string): number | null {
+  const t = String(s).replace(/[^0-9.,]/g, '');
+  const n = parseFloat(/^[\d.]*,\d{1,2}$/.test(t) ? t.replace(/\./g, '').replace(',', '.') : t.replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
 function yr(s: string): string | null { const m = String(s).match(/(?:19|20)\d{2}/); return m ? m[0] : null; }
 function yrTo(s: string): string | null { const m = String(s).match(/(?:19|20)\d{2}\D+((?:19|20)\d{2})/); return m ? m[1] : null; }
 function stripLeadingVintage(name: string): string { return name.replace(/^\s*(?:19|20)\d{2}\s+/, '').trim(); }
@@ -63,6 +71,20 @@ function colourOf(s: string): CellarImportWine['colour'] {
   if (/white|blanc/.test(t)) return 'White';
   if (/red|rouge|rosso/.test(t)) return 'Red';
   return null;
+}
+
+// The cuvée name with the producer taken out where it only repeats it, so a row
+// doesn't read "Château Margaux Château Margaux": "Château Margaux" /
+// "Chateau Margaux" → null, "Penfolds" / "Penfolds Grange" → "Grange".
+export function cuveeName(producer: string | null, wineName: string | null): string | null {
+  const p = (producer ?? '').trim();
+  const n = (wineName ?? '').trim();
+  if (!n) return null;
+  if (!p) return n;
+  const key = wineNameKey(p, null);
+  if (key && key === wineNameKey(n, null)) return null;
+  if (!foldAccents(n).startsWith(`${foldAccents(p)} `)) return n;
+  return n.split(/\s+/).slice(p.split(/\s+/).length).join(' ');
 }
 
 function mkWine(p: Partial<CellarImportWine>): CellarImportWine {
@@ -408,8 +430,8 @@ function sumRepeats(wines: { key: string; wine: CellarImportWine }[]): CellarImp
 // CellarTracker — the CSV from "My Cellar" → Export. The Wines view gives one
 // row per wine with its bottle count; the Bottles view one row per bottle, so
 // repeated rows of a wine (iWine) and size are added up. Price is what the
-// owner paid, Value CellarTracker's valuation. Column names are matched
-// loosely: they differ a little between views and over the years.
+// owner paid, Value (or Valuation) CellarTracker's valuation. Column names are
+// matched loosely: they differ a little between views and over the years.
 function parseCellarTracker(rows: string[][]): CellarImportWine[] | null {
   const h = headerMatch(rows, ['iwine', 'vintage', 'wine', 'producer']);
   if (!h) return null;
@@ -419,7 +441,7 @@ function parseCellarTracker(rows: string[][]): CellarImportWine[] | null {
     qty: ci(cols, 'quantity', 'totalquantity', 'qty'), size: ci(cols, 'size', 'bottlesize'), colour: ci(cols, 'color', 'colour'), type: ci(cols, 'type'),
     country: ci(cols, 'country'), region: ci(cols, 'region'), sub: ci(cols, 'subregion'), app: ci(cols, 'appellation'),
     from: ciLike(cols, 'beginconsume', 'drink from'), to: ciLike(cols, 'endconsume', 'drink to'),
-    price: ci(cols, 'price', 'nativeprice'), value: ci(cols, 'value'), cur: ci(cols, 'currency'),
+    price: ci(cols, 'price', 'nativeprice'), value: ci(cols, 'value'), valuation: ci(cols, 'valuation'), cur: ci(cols, 'currency'),
   };
   const out: { key: string; wine: CellarImportWine }[] = [];
   for (let i = idx + 1; i < rows.length; i++) {
@@ -429,19 +451,19 @@ function parseCellarTracker(rows: string[][]): CellarImportWine[] | null {
     // No count column (the Bottles view): each row is one bottle.
     const total = c.qty >= 0 ? intOf(get(r, c.qty)) ?? 0 : 1;
     if (total < 1) continue;
-    // "Wine" is the full name, usually starting with the producer.
-    const cuvee = producer && full.toLowerCase().startsWith(producer.toLowerCase()) ? full.slice(producer.length).trim() : full;
     const region = Array.from(new Set([get(r, c.app), get(r, c.sub), get(r, c.region)].filter(Boolean))).join(', ');
     const cur = get(r, c.cur);
     const size = volToMl(get(r, c.size));
     out.push({
       key: `${get(r, c.id) || full}|${size}`,
       wine: mkWine({
-        producer: producer || full, wineName: cuvee && cuvee !== producer ? cuvee : null, vintage: vintageOf(get(r, c.vint)),
+        // "Wine" is the full name, usually starting with the producer.
+        producer: producer || full, wineName: cuveeName(producer || full, full), vintage: vintageOf(get(r, c.vint)),
         region: region || null, country: get(r, c.country) || null, colour: colourOf(`${get(r, c.colour)} ${get(r, c.type)}`),
         bottleSizeMl: size, totalBottles: total, looseBottles: total,
         drinkingWindowFrom: yr(get(r, c.from)), drinkingWindowTo: yr(get(r, c.to)),
-        purchasePricePerBottle: numOf(get(r, c.price)) || null, marketPricePerBottle: numOf(get(r, c.value)) || null,
+        // Value is empty or 0 in some views, where Valuation carries it.
+        purchasePricePerBottle: numOf(get(r, c.price)) || null, marketPricePerBottle: numOf(get(r, c.value)) || numOf(get(r, c.valuation)) || null,
         currency: /^[a-z]{3}$/i.test(cur) ? cur.toUpperCase() : null,
       }),
     });
@@ -451,8 +473,10 @@ function parseCellarTracker(rows: string[][]): CellarImportWine[] | null {
 
 // Vivino — cellar.csv from "Export your data". One row per wine with its count
 // in a "cellar count" column. Vivino has renamed headers over the years, so the
-// count is matched loosely; a file with no count (the full wine list rather
-// than the cellar) falls through to the general reader.
+// count is matched loosely. A file with no count is the full wine list — every
+// wine ever scanned, not bottles owned — so it's turned away, not imported.
+const VIVINO_FULL_LIST = "That's Vivino's full wine list, which holds every wine you've scanned rather than the bottles you own. Please choose cellar.csv from the same Vivino export instead.";
+
 function parseVivinoCellar(rows: string[][]): CellarImportWine[] | null {
   const h = headerMatch(rows, ['winery', 'wine name', 'vintage']);
   if (!h) return null;
@@ -462,7 +486,7 @@ function parseVivinoCellar(rows: string[][]): CellarImportWine[] | null {
     country: ci(cols, 'country'), type: ci(cols, 'wine type'), count: ciLike(cols, 'cellar count', 'quantity', 'bottles'),
     window: ciLike(cols, 'drinking window'),
   };
-  if (c.count < 0) return null;
+  if (c.count < 0) throw new Error(VIVINO_FULL_LIST);
   const out: { key: string; wine: CellarImportWine }[] = [];
   for (let i = idx + 1; i < rows.length; i++) {
     const r = rows[i];
@@ -474,7 +498,7 @@ function parseVivinoCellar(rows: string[][]): CellarImportWine[] | null {
     out.push({
       key: `${winery}|${name}|${vintage ?? ''}`,
       wine: mkWine({
-        producer: winery || name, wineName: winery && name ? name : null, vintage,
+        producer: winery || name, wineName: cuveeName(winery || name, name), vintage,
         region: get(r, c.region) || null, country: get(r, c.country) || null, colour: colourOf(get(r, c.type)),
         totalBottles: total, looseBottles: total, drinkingWindowFrom: yr(dw), drinkingWindowTo: yrTo(dw), currency: null,
       }),

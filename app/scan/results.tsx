@@ -134,10 +134,12 @@ export default function ResultsScreen() {
   // directly below results — plain back (this, plus the native system/gesture
   // back) returns to the form. We navigate first, then clear the scan store so
   // the next scan starts fresh (resetting first would flash the null state).
+  // A list found online stays chosen, so the form still offers to read it
+  // rather than switching to the camera.
   const goBack = useCallback(() => {
     if (isFromHistory) { router.back(); return; }
     router.dismissTo('/scan/wine-list');
-    reset();
+    reset({ keepOnlineSource: true });
   }, [isFromHistory, reset]);
 
   const { autoSave, archive } = useScanHistory();
@@ -293,10 +295,12 @@ export default function ResultsScreen() {
   // wine pick and the review from both scans land in ONE Your Restaurants entry
   // for the visit rather than duplicating it. Fires once, only on a fresh scan
   // with no restaurant yet; a previous scan with no restaurant name is ignored.
+  // Never for a list read online (a search, a pasted or shared link): that
+  // says nothing about where the diner is now.
   const STILL_HERE_WINDOW_MS = 4 * 60 * 60 * 1000;
   const stillHereCheckedRef = useRef(false);
   useEffect(() => {
-    if (isFromHistory || stillHereCheckedRef.current) return;
+    if (isFromHistory || onlineSource || stillHereCheckedRef.current) return;
     if (!session?.user.id || !recommendation || restaurantName.trim()) return;
     stillHereCheckedRef.current = true;
     (async () => {
@@ -422,7 +426,11 @@ export default function ResultsScreen() {
     if (inFlightSaveRef.current) return inFlightSaveRef.current;
     if (!recommendation || !extractedWines) return null;
     const promise = autoSave
-      .mutateAsync({ extractedWines, recommendation, ...(onlineSource ? { cityOverride: onlineSource.city } : {}) })
+      .mutateAsync({
+        extractedWines, recommendation,
+        // Find Online: the restaurant searched for and its town, not the phone's location.
+        ...(onlineSource ? { restaurantNameOverride: onlineSource.restaurant || null, cityOverride: onlineSource.city } : {}),
+      })
       .then((result: any) => {
         const id = (result?.[0]?.sessionId ?? null) as string | null;
         if (id) savedSessionIdRef.current = id;
@@ -1362,6 +1370,11 @@ export default function ResultsScreen() {
               leaveForm();
               const backTo = encodeURIComponent(resultsHref());
               setTimeout(() => router.push(`/wines/chosen?openReview=${cw.id}&backTo=${backTo}` as any), DISMISS_DELAY_MS);
+            }}
+            onOpenLineup={async (lineupId, saveDraft) => {
+              await saveDraft();
+              leaveForm();
+              setTimeout(() => router.push(`/cellar/lineup/${lineupId}` as any), DISMISS_DELAY_MS);
             }}
             onAddLineup={async (upload, name, city, saveDraft) => {
               const sid = reviewSessionId ?? (await getOrCreateSession());

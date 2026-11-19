@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { HelpButton } from '../../src/components/HelpButton';
@@ -10,6 +10,7 @@ if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 import { router } from 'expo-router';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { launchImageLibrary } from '../../src/utils/imagePicker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -266,10 +267,12 @@ export default function WineListScreen() {
 
   return (
     <View style={styles.container}>
-    <ScrollView
+    {/* Keyboard-aware so a field near the foot ("What are you dining on?")
+        scrolls up above the keyboard on Android as well as iOS. */}
+    <KeyboardAwareScrollView
       style={{ flex: 1 }}
       contentContainerStyle={{ paddingBottom: 20, paddingTop: 56 }}
-      automaticallyAdjustKeyboardInsets
+      bottomOffset={24}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
     >
@@ -399,7 +402,7 @@ export default function WineListScreen() {
         onContinue={continueWithoutAccount}
       />
 
-    </ScrollView>
+    </KeyboardAwareScrollView>
     </View>
   );
 }

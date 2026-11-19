@@ -11,7 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
-import { listLineupArchives } from '../api/lineups';
+import { listLineupArchives, setLineupRestaurant } from '../api/lineups';
 import { addSessionBottle, patchChosenWine, updateSessionRestaurant } from '../api/chosenWines';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { prepareImageBase64, detectLineup } from '../api/label';
@@ -96,6 +96,9 @@ interface Props {
   // "+ Add a lineup": photograph (or upload, `upload`) a lineup from this visit.
   // Same contract as onAddPhoto — the parent closes this modal to navigate.
   onAddLineup?: (upload: boolean, name: string, city: string, saveDraft: () => Promise<void>) => void;
+  // Opens a matched lineup's card. The parent closes this modal first (saving
+  // the draft), as for "+ Add a lineup".
+  onOpenLineup?: (lineupId: string, saveDraft: () => Promise<void>) => void;
 }
 
 type Place = { restaurant_name: string | null; city: string | null };
@@ -115,19 +118,41 @@ async function writeVisit(sessionId: string, payload: Place, before: Place) {
 export function RestaurantReviewModal({
   visible, sessionId, initialName, initialNote, initialRatings, initialFavourite,
   city, date, capturedAt, wines, onReviewWine, onViewIntel, onEditWine, onDeleteWine, onClose, onSaved,
-  sessionError, onRetrySession, restaurantPhotoPath, onViewPhoto, onAddPhoto, onAddLineup,
+  sessionError, onRetrySession, restaurantPhotoPath, onViewPhoto, onAddPhoto, onAddLineup, onOpenLineup,
 }: Props) {
   const qc = useQueryClient();
   const { session } = useAuth();
   const { wines: cellarWines } = useCellar();
-  // A lineup archived under "Archive a Night" can be matched to THIS restaurant
-  // visit (its restaurant_session_id points here) — surface it as a reference.
+  // Lineups matched to THIS restaurant visit (their restaurant_session_id points
+  // here) — listed under "Matched Lineups", each opening its lineup card.
   const { data: lineups = [] } = useQuery({
     queryKey: ['lineup-archives', session?.user.id],
     queryFn: () => listLineupArchives(session!.user.id),
     enabled: !!session?.user.id,
   });
-  const matchedLineup = lineups.find((l) => l.restaurant_session_id === sessionId) ?? null;
+  const matchedLineups = sessionId ? lineups.filter((l) => l.restaurant_session_id === sessionId) : [];
+  // "Remove match": the lineup stays in the Lineup Library, just no longer
+  // linked to this visit.
+  const [unmatching, setUnmatching] = useState<string | null>(null);
+  function confirmRemoveMatch(lineupId: string, name: string) {
+    showAlert({
+      title: 'Remove this match?',
+      body: `'${name}' stays in Your Lineup Library — it just won't be linked to this restaurant review.`,
+      buttons: [
+        { text: 'Remove Match', style: 'destructive', onPress: () => {
+          setUnmatching(lineupId);
+          setLineupRestaurant(lineupId, null)
+            .then(() => {
+              void qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+              void qc.invalidateQueries({ queryKey: ['lineup', lineupId] });
+            })
+            .catch(() => showAlert({ title: "Couldn't remove the match", body: 'Check your connection and try again.' }))
+            .finally(() => setUnmatching(null));
+        } },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
   const { chosenWines } = useChosenWines();
   // Restaurant identity — prefilled from the scan but editable here so the
   // user can correct the name or place while saving their review.
@@ -138,6 +163,10 @@ export function RestaurantReviewModal({
   // word (no scrolled-down input box). A brand-new review (no saved note) opens
   // straight into the editable box. Tapping Edit (or the text) switches to edit.
   const [noteEditing, setNoteEditing] = useState(() => !(initialNote ?? '').trim());
+  // A saved review (a note or any rating) has no Save button at its foot:
+  // changes are saved from the review's Edit box, or on leaving.
+  const [savedReview, setSavedReview] = useState(() => !!(initialNote ?? '').trim()
+    || Object.values(initialRatings ?? {}).some((r) => r != null));
   const [overall, setOverall] = useState<number | null>(initialRatings?.overall ?? null);
   const [food, setFood] = useState<number | null>(initialRatings?.food ?? null);
   const [wineList, setWineList] = useState<number | null>(initialRatings?.wineList ?? null);
@@ -566,6 +595,7 @@ export function RestaurantReviewModal({
       // Once saved, collapse Your Review back to read-only text (like a wine
       // review) — Edit re-opens the box on command.
       setNoteEditing(false);
+      setSavedReview(true);
       // Saving a restaurant review no longer auto-publishes it. Community
       // sharing happens only via the explicit "Share to Community" button
       // (handleShareToCommunity) so nothing reaches the public feed silently.
@@ -758,12 +788,6 @@ export function RestaurantReviewModal({
               </View>
             </View>
 
-            {/* Matched to an Archive-a-Night lineup (its restaurant_session_id
-                points at this visit) — a gold italic reference below the image. */}
-            {matchedLineup ? (
-              <Text style={styles.matchedLineup}>Matched to ‘{matchedLineup.name?.trim() || 'Your Lineup'}’ from your Lineup Archive</Text>
-            ) : null}
-
             <View style={styles.divider} />
 
             {/* Your review — moved to the top, right under the date. A saved
@@ -841,15 +865,33 @@ export function RestaurantReviewModal({
               ) : null}
             </View>
 
+            {matchedLineups.length ? (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Matched Lineups</Text>
+                {matchedLineups.map((l) => (
+                  <TouchableOpacity key={l.id} style={styles.lineupRow} onPress={() => onOpenLineup?.(l.id, saveDraft)} disabled={!onOpenLineup} activeOpacity={0.7}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lineupName} numberOfLines={1}>{l.name?.trim() || 'Your Lineup'}</Text>
+                      <Text style={styles.lineupDate}>{new Date(l.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Text>
+                      <TouchableOpacity onPress={() => confirmRemoveMatch(l.id, l.name?.trim() || 'Your Lineup')} disabled={unmatching === l.id} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
+                        <Text style={styles.removeMatch}>{unmatching === l.id ? 'Removing…' : 'Remove match'}</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {onOpenLineup ? <Text style={styles.lineupLink}>View ›</Text> : null}
+                  </TouchableOpacity>
+                ))}
+              </>
+            ) : null}
+
             {!sessionId && sessionError ? (
               <TouchableOpacity style={styles.saveButton} onPress={onRetrySession}>
                 <Text style={styles.saveButtonText}>Couldn't start this visit · Tap to Retry</Text>
               </TouchableOpacity>
-            ) : (
+            ) : !savedReview || noteEditing ? (
               <TouchableOpacity style={[styles.saveButton, (saving || !sessionId) && styles.btnDisabled]} onPress={handleSave} disabled={saving || !sessionId}>
                 <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save to Your Restaurant Reviews'}</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </KeyboardAwareScrollView>
 
           {/* Add-a-Bottle chooser. */}
@@ -1104,8 +1146,12 @@ const styles = StyleSheet.create({
   bannerNameInput: { fontFamily: fonts.bodyRegular, fontSize: 28, color: '#fff', letterSpacing: 0.3, paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
   // Location + date stacked (date on its own line beneath the location).
   bannerMetaCol: { alignItems: 'flex-start', marginTop: 2 },
-  // Gold italic "Matched to … from your Lineup Archive", sized like the location.
-  matchedLineup: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  // Matched Lineups: title on the left, date beneath, gold View link.
+  lineupRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  lineupName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  lineupDate: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, marginTop: 1 },
+  lineupLink: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
+  removeMatch: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline', marginTop: 4 },
   bannerMetaInput: { flexShrink: 1, fontFamily: fonts.bodyRegular, fontSize: 15, color: 'rgba(255,255,255,0.92)', paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   bannerDateInput: { flexShrink: 0, width: 118, fontStyle: 'normal', fontFamily: fonts.bodyRegular },
 

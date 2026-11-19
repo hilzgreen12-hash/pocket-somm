@@ -668,6 +668,10 @@ export default function RestaurantReviewsScreen() {
             hasPhoto: !!editing.restaurantPhotoPath,
             leaveModal: () => leaveFormAndResume(saveDraft),
           })}
+          onOpenLineup={async (lineupId, saveDraft) => {
+            await leaveFormAndResume(saveDraft);
+            setTimeout(() => router.push(`/cellar/lineup/${lineupId}` as any), DISMISS_DELAY_MS);
+          }}
           onAddLineup={async (upload, name, city, saveDraft) => {
             const visit = editing;
             await leaveFormAndResume(saveDraft);
