@@ -7,7 +7,9 @@ import { inferWineStyle } from './wineStyle';
 // the app already has (no extra AI call).
 
 type VintageVerdict = {
-  rows: (VintageComparisonRow & { ppt: number | null })[];
+  // noData: the wine's own vintage, added when Wine-Searcher has no exact
+  // listing for it — shown as "No market data", never with a price.
+  rows: (VintageComparisonRow & { ppt: number | null; noData?: boolean })[];
   bestValueVintage: number | null;
   topScoreVintage: number | null; // highest critic score in the run
   qualityRank: number | null; // this vintage's rank by critic score (1 = best)
@@ -28,7 +30,16 @@ export function tooFewVintagesNote(comparable: number, vintage: string | number 
 }
 
 export function vintageVerdict(rows: VintageComparisonRow[], thisVintage: string | number | null | undefined, fmt: (n: number) => string): VintageVerdict {
-  const withPpt = rows.map((r) => ({ ...r, ppt: r.price != null && r.score ? r.price / r.score : null }));
+  const withPpt: VintageVerdict['rows'] = rows.map((r) => ({ ...r, ppt: r.price != null && r.score ? r.price / r.score : null }));
+  // The comparison only fetches vintages Wine-Searcher lists exactly, so the
+  // wine's OWN vintage silently vanished when it had no listing (a 2002 showing
+  // only 1999 and 1998). Always give it a row — empty, never a guessed price.
+  // Done here, at display, so tables saved before this also gain the row.
+  const own = /^\d{4}$/.test(String(thisVintage ?? '').trim()) ? Number(String(thisVintage).trim()) : null;
+  if (own != null && withPpt.length > 0 && !withPpt.some((r) => r.vintage === own)) {
+    withPpt.push({ vintage: own, score: null, price: null, ppt: null, noData: true });
+    withPpt.sort((a, b) => b.vintage - a.vintage);
+  }
   const scored = withPpt.filter((r) => r.ppt != null);
   const empty: VintageVerdict = { rows: withPpt, bestValueVintage: null, topScoreVintage: null, qualityRank: null, valueRank: null, total: scored.length, text: null };
   if (scored.length < 2) return empty;

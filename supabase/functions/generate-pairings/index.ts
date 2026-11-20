@@ -2,6 +2,7 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { guestAllowanceLeft, guestLimitResponse, guestPhone, recordGuestUse } from '../_shared/guest.ts';
+import { getTasteProfile, tasteProfileSection } from '../_shared/tasteProfile.ts';
 
 // Per guest phone, per hour and per day: room for their one pairing plus a retry.
 const GUEST_LIMITS = { hourly: 3, daily: 3 };
@@ -56,6 +57,7 @@ function buildPrompt(
   filters: Record<string, unknown>,
   excludeChefs: string[],
   additionalRequest: string | null,
+  tasteSection: string,
 ): string {
   const vintageStr = wine.vintage === 'NV' ? 'Non-Vintage (NV)' : wine.vintage;
   const wineNameStr = wine.wineName ? `\n- Wine Name: ${wine.wineName}` : '';
@@ -202,7 +204,7 @@ Wine Details:
 - Producer: ${wine.producer}
 - Region: ${wine.region}${wineNameStr}
 - Vintage: ${vintageStr}${colourStr}${grapeStr}
-${courseBlock}${constraintBlock}${servingsBlock}${softBlock}${asianBlock}${regionalDiversityBlock}${chefPoolBlock}${excludeChefsBlock}${additionalRequestBlock}${difficultyBlock}${diversityBlock}${timeBlock}
+${courseBlock}${constraintBlock}${servingsBlock}${softBlock}${tasteSection}${asianBlock}${regionalDiversityBlock}${chefPoolBlock}${excludeChefsBlock}${additionalRequestBlock}${difficultyBlock}${diversityBlock}${timeBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 
 Wine recognition (HARD RULE): if you don't genuinely recognise this specific wine from this producer (the name may be misheard, misread or not a real wine), base the pairings ONLY on the style / grape / region / vintage given and make NO producer-specific claims (no house style, cuvée details, scores or reputation). Never describe the wine as if you know it when you don't.
@@ -266,6 +268,8 @@ Deno.serve(async (req) => {
     const additionalRequestText = typeof additionalRequest === 'string' && additionalRequest.trim().length > 0
       ? additionalRequest
       : null;
+    // Guests have no Vinster's Observations to read.
+    const tasteSection = guest ? '' : tasteProfileSection(await getTasteProfile(req));
 
     // Chef variety now comes from the shuffled CHEF_POOL + the excludeChefs list in the
     // prompt — NOT temperature, which sonnet-5-5 rejects outright (400 "temperature is
@@ -277,7 +281,7 @@ Deno.serve(async (req) => {
       // 16000 — which also stays under the SDK's non-streaming 10-minute guard so the
       // buffered fallback works too.
       max_tokens: 16000,
-      messages: [{ role: 'user' as const, content: buildPrompt(wine, filters ?? {}, excludeChefsList, additionalRequestText) }],
+      messages: [{ role: 'user' as const, content: buildPrompt(wine, filters ?? {}, excludeChefsList, additionalRequestText, tasteSection) }],
     };
 
     // Buffered path (stream !== true): unchanged behaviour, one JSON response.

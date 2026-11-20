@@ -18,11 +18,6 @@ import { fonts } from '../constants/fonts';
 // across devices; the thumbnail resolves from the stored photo path.
 // A wine-list card with no photo shows a "+ Add Image" tile (onAddImage) that
 // runs the restaurant-photo flow; opening a list card revisits it read-only.
-
-// A unified "recent scan" — either a single-bottle label→intel scan or a wine-
-// list scan — merged by recency for the Home tab carousel. Both now read from the
-// cloud (labels table + scan_sessions), so scans survive reinstalls and appear
-// across devices; the thumbnail resolves from the stored photo path.
 type Recent =
   | { kind: 'label'; ts: number; title: string; stamp: string; path: string | null; producer: string | null; wineName: string | null; open: () => void; onLongPress?: () => void }
   | { kind: 'list'; ts: number; title: string; stamp: string; path: string | null; open: () => void; onAddImage?: () => void; onLongPress?: () => void };

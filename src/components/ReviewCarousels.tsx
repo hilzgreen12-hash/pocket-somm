@@ -5,7 +5,7 @@ import { useScanHistory } from '../hooks/useScanHistory';
 import { UNNAMED_RESTAURANT, formatVisitDate, isRestaurantVisit, sessionsWithWines, visitStats } from '../utils/restaurantReview';
 import { LabelThumb } from './LabelThumb';
 import { WineCardThumb } from './WineCardThumb';
-import { PlaceholderCardView, type PlaceholderCard, placeholderLabelImages, RESTAURANT_IMG } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, NAMED_LABELS, RESTAURANT_IMG, RESTAURANT_WARM_IMG, RESTAURANT_LANTERNS_IMG } from './ExamplePlaceholder';
 import { reviewTotals, type UnifiedReview } from '../utils/reviewModel';
 import { drinkingDateTime } from '../utils/cellarReview';
 import { HOME_TILE, colors, spacing } from '../constants/theme';
@@ -37,16 +37,18 @@ function openWineReview(card: UnifiedReview) {
     : `/wines/chosen?openCellarReview=${card.cellarWines[0].id}${backTo}`) as any);
 }
 
+// Three example tiles, so a new user sees a carousel rather than one or two lone cards.
+const WINE_OVERLAY = 'Your wine reviews appear here as you use Vinster';
 const WINE_EXAMPLES: PlaceholderCard[] = [
-  { kind: 'labelCollage', images: placeholderLabelImages(0, 1), title: 'Your Wine Review', stamp: '20 Dec 2029 · 94 pts', overlay: 'Your wine reviews appear here as you use Vinster' },
-  { kind: 'labelCollage', images: placeholderLabelImages(1, 1), title: 'Your Wine Review', stamp: '12 Dec 2029 · 92 pts', overlay: 'Your wine reviews appear here as you use Vinster' },
+  { kind: 'labelCollage', images: [NAMED_LABELS.denisMortet], title: 'Your Wine Review', stamp: '20 Dec 2029 · 94 pts', overlay: WINE_OVERLAY },
+  { kind: 'labelCollage', images: [NAMED_LABELS.benditoDestino], title: 'Your Wine Review', stamp: '12 Dec 2029 · 92 pts', overlay: WINE_OVERLAY },
+  { kind: 'labelCollage', images: [NAMED_LABELS.lynchBages], title: 'Your Wine Review', stamp: '3 Dec 2029 · 95 pts', overlay: WINE_OVERLAY },
 ];
-// Three example tiles, so a new user sees a carousel rather than one lone card.
 const RESTAURANT_OVERLAY = 'Your restaurant reviews appear here as you use Vinster';
 const RESTAURANT_EXAMPLES: PlaceholderCard[] = [
   { kind: 'image', image: RESTAURANT_IMG, title: 'Your Restaurant Review', stamp: '18 Dec 2029 · London', overlay: RESTAURANT_OVERLAY },
-  { kind: 'image', image: RESTAURANT_IMG, title: 'Your Restaurant Review', stamp: '9 Dec 2029 · Paris', overlay: RESTAURANT_OVERLAY },
-  { kind: 'image', image: RESTAURANT_IMG, title: 'Your Restaurant Review', stamp: '30 Nov 2029 · Bordeaux', overlay: RESTAURANT_OVERLAY },
+  { kind: 'image', image: RESTAURANT_WARM_IMG, title: 'Your Restaurant Review', stamp: '9 Dec 2029 · Paris', overlay: RESTAURANT_OVERLAY },
+  { kind: 'image', image: RESTAURANT_LANTERNS_IMG, title: 'Your Restaurant Review', stamp: '30 Nov 2029 · Bordeaux', overlay: RESTAURANT_OVERLAY },
 ];
 
 // Gold stats bar under each Review-tab carousel title — mirrors Your Cookbook's.

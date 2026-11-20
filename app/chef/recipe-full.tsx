@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -8,17 +8,16 @@ import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { useAuth } from '../../src/hooks/useAuth';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { showAlert } from '../../src/components/AppAlert';
-import { RecipeShareCard } from '../../src/components/RecipeShareCard';
+import { MessageScreen } from '../../src/components/MessageScreen';
 import { buildRecipeHtml } from '../../src/utils/recipeHtml';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { Pairing, WineDetailsComplete } from '../../src/types/wine';
 
 // Full-screen "artifact" view of a single pairing — the surface users
-// hand to friends (Share) and to printers (Print). Designed to feel like
-// a recipe document rather than an in-app card: more breathing room,
-// branded header, prominent wine + dish, and a Get Vinster footer so
-// the receiver knows where to find Vinster.
+// hand to friends as a PDF (Export). Designed to feel like a recipe
+// document rather than an in-app card: more breathing room, branded
+// header, prominent wine + dish.
 //
 // Sources:
 //   - Fresh result: ?index=N reads labelStore.pairings[N] + wineDetailsConfirmed
@@ -28,7 +27,6 @@ export default function RecipeFullScreen() {
   const { session } = useAuth();
   const { wineDetailsConfirmed, pairings: freshPairings, filters: labelFilters } = useLabelStore();
   const { sessions: labelSessions, updateNotes, save: saveLabelSession } = useChefLabelHistory();
-  const shareCardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
   // The user's own pairing notes on this saved recipe (chef_label_sessions
   // .user_notes, migration 036). Editable via the "Add Your Pairing Notes" link.
@@ -115,18 +113,11 @@ export default function RecipeFullScreen() {
 
   if (!pairing || !wine) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
-          </TouchableOpacity>
-          <View style={{ flex: 1 }} />
-        </View>
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Recipe not available</Text>
-          <Text style={styles.emptyBody}>The pairing couldn't be loaded — try opening it again from your Chef results.</Text>
-        </View>
-      </View>
+      <MessageScreen
+        title="Recipe not available"
+        body="The pairing couldn't be loaded — try opening it again from your Chef results."
+        onBack={() => router.back()}
+      />
     );
   }
 
@@ -196,24 +187,12 @@ export default function RecipeFullScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* The "Get Vinster" footer is retired from the on-screen card (it still
-            appears on the shared/printed export via buildRecipeHtml). */}
-
         {sharing && (
           <View style={styles.busyOverlay}>
             <ActivityIndicator color={colors.gold} />
           </View>
         )}
       </ScrollView>
-
-      {/* Off-screen share card captured by handleShare to produce the
-          branded PNG that ends up in the user's share sheet. Identical
-          look to the share inside chef/results so the artefact users
-          send out is consistent regardless of which surface they share
-          from. */}
-      <View style={styles.offscreen} pointerEvents="none">
-        <RecipeShareCard ref={shareCardRef} pairing={pairing} wineHeader={wineLine || null} />
-      </View>
 
       {/* Add / edit the user's own pairing notes on this recipe. */}
       <Modal visible={notesOpen} transparent animationType="fade" onRequestClose={() => setNotesOpen(false)}>
@@ -292,12 +271,8 @@ const styles = StyleSheet.create({
   body: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },
   bullet: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24, marginBottom: 4 },
 
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
-  emptyTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center' },
-  emptyBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
 
   busyOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   // Render the share card off-screen so captureRef can produce the PNG
   // without affecting the visible layout.
-  offscreen: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
 });

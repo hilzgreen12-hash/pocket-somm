@@ -41,38 +41,62 @@ Deno.serve(async (req) => {
       return json({ wines: [], summary: null }, 200);
     }
 
-    // Cache hit → return the exact same range as last time (deterministic).
-    const cacheKey = cacheKeyOf(String(producer), String(wineName ?? ''));
+    // Catalogue first (cheap, no model call): this producer's REAL cuvées from
+    // Vinster's own wines_catalog. Read before the cache so a cached range can be
+    // checked against it — the catalogue grows as wines are identified
+    // (recordIdentifiedWine), and a range cached before a cuvée was added would
+    // otherwise go on missing it for ever. Keep only the best-matching producer
+    // variant(s) so a different producer sharing a word (e.g. "Domaine Dutraive"
+    // vs "Domaine Leflaive") doesn't leak in.
+    let catalogLines: string[] = [];
+    let catalogOk = false;
     try {
-      const { data: cached } = await admin.from('producer_range_cache').select('response').eq('cache_key', cacheKey).maybeSingle();
-      if (cached?.response) return json(cached.response, 200);
-    } catch (e) { console.warn('[producer-range] cache read failed (continuing):', e); }
-
-    // Saved results above are free; only new (paid) work counts towards the limit.
-    const limited = await checkRateLimit(req, 'producer-range', 30, 100, GUEST_LIMITS);
-    if (limited) return limited;
-
-    // Catalog-first: pull this producer's REAL cuvées from Vinster's own
-    // wines_catalog (thousands of seeded bottlings) and hand them to Claude as
-    // the authoritative set to order/band/summarise — so the range is grounded
-    // in Vinster's database, not just the model's recall. Keep only the
-    // best-matching producer variant(s) so a different producer sharing a word
-    // (e.g. "Domaine Dutraive" vs "Domaine Leflaive") doesn't leak in.
-    let catalogBlock = '';
-    try {
-      const { data: rows } = await admin.rpc('catalog_producer_wines', { p: String(producer), lim: 40 });
+      const { data: rows, error } = await admin.rpc('catalog_producer_wines', { p: String(producer), lim: 40 });
+      if (error) throw error;
+      catalogOk = true;
       if (Array.isArray(rows) && rows.length) {
         const topSim = Number(rows[0].sim) || 0;
         const cutoff = Math.max(0.4, topSim - 0.15);
         const kept = rows.filter((r: any) => (Number(r.sim) || 0) >= cutoff);
-        const lines = Array.from(new Set(
+        catalogLines = Array.from(new Set(
           kept.map((r: any) => `- ${r.producer} — ${r.wine_name}`),
         )).slice(0, 40);
-        if (lines.length >= 2) {
-          catalogBlock = `\n\nVinster's catalogue lists these REAL wines for this producer — treat them as the AUTHORITATIVE set: use these exact wines (merging obvious variant spellings of the SAME wine, e.g. "Domaine Georges Roumier" and "Georges Roumier"), and do NOT invent others beyond this list. Only use entries whose producer matches the scanned producer; ignore any that clearly belong to a different producer. You MAY add the scanned wine if it's genuinely missing.\n${lines.join('\n')}`;
-        }
       }
     } catch (e) { console.warn('[producer-range] catalog lookup failed (continuing):', e); }
+    // What the catalogue held when a range was generated, stored with the cached
+    // range so we can tell when it has since gained a wine.
+    const catalogSig = catalogLines.map(lineKey).sort();
+
+    // Cache hit → return the exact same range as last time (deterministic) —
+    // unless the catalogue now has a wine it didn't when the range was made
+    // (or the entry predates this check), in which case regenerate once so the
+    // new wine is folded in.
+    const cacheKey = cacheKeyOf(String(producer), String(wineName ?? ''));
+    let staleCached: any = null;
+    try {
+      const { data: cached } = await admin.from('producer_range_cache').select('response').eq('cache_key', cacheKey).maybeSingle();
+      if (cached?.response) {
+        const seen: unknown = cached.response._catalog;
+        const fresh = !catalogOk
+          || (Array.isArray(seen) && catalogSig.every((k) => (seen as string[]).includes(k)));
+        if (fresh) return json(publicRange(cached.response), 200);
+        staleCached = cached.response;
+      }
+    } catch (e) { console.warn('[producer-range] cache read failed (continuing):', e); }
+
+    // Saved results above are free; only new (paid) work counts towards the limit.
+    // A stale cached range is still better than nothing for a rate-limited caller.
+    const limited = await checkRateLimit(req, 'producer-range', 30, 100, GUEST_LIMITS);
+    if (limited) return staleCached ? json(publicRange(staleCached), 200) : limited;
+
+    // The catalogue is a FLOOR, not a ceiling: it holds only the cuvées Vinster
+    // has seen so far, so capping the range at it dropped real wines until
+    // someone happened to scan them. Its wines must appear; the model adds the
+    // producer's other real core wines it genuinely knows, under the same
+    // never-invent rules as the prompt below.
+    const catalogBlock = catalogLines.length >= 1
+      ? `\n\nVinster's catalogue already lists these REAL wines for this producer — CONFIRMED wines: include every one of them in the range (merging obvious variant spellings of the SAME wine, e.g. "Domaine Georges Roumier" and "Georges Roumier"). Only use entries whose producer matches the scanned producer; ignore any that clearly belong to a different producer. This list may be INCOMPLETE — Vinster only holds the wines it has seen so far — so ALSO add this producer's other real core wines that you genuinely know they make. Never pad it with guesses: anything you add must be a real bottling of THIS estate.\n${catalogLines.join('\n')}`
+      : '';
 
     const prompt = `A wine label was scanned and identified as:
 - Producer: "${producer ?? ''}"
@@ -178,11 +202,12 @@ If you do not genuinely recognise the producer, or cannot confidently identify t
       : null;
 
     const result = { wines, summary };
-    // Cache it so this wine's range is stable on every future open. Only cache a
-    // non-empty result — an empty range (failed generation OR unrecognised
+    // Cache it so this wine's range is stable on every future open, with the
+    // catalogue snapshot it was built from (see the staleness check above).
+    // Only cache a non-empty result — an empty range (failed generation OR unrecognised
     // producer) is never cached, so it's retried next time.
     if (wines.length > 0) {
-      try { await admin.from('producer_range_cache').upsert({ cache_key: cacheKey, response: result }); }
+      try { await admin.from('producer_range_cache').upsert({ cache_key: cacheKey, response: { ...result, _catalog: catalogSig } }); }
       catch (e) { console.warn('[producer-range] cache write failed:', e); }
     }
     return json(result, 200);
@@ -192,6 +217,16 @@ If you do not genuinely recognise the producer, or cannot confidently identify t
     return json({ wines: [], summary: null }, 200);
   }
 });
+
+// Normalised catalogue line, for comparing snapshots across calls.
+function lineKey(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+// The cached row carries an internal catalogue snapshot; the app never sees it.
+function publicRange(r: any): { wines: unknown[]; summary: string | null } {
+  return { wines: Array.isArray(r?.wines) ? r.wines : [], summary: r?.summary ?? null };
+}
 
 // Coerce band to an integer in [1, 5]; default the middle when unparseable.
 function clampBand(v: unknown): number {

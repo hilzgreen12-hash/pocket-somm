@@ -1,6 +1,7 @@
-// Single source of truth for the install URL + Get Vinster CTA wording.
-// Used by every share surface (image share cards and plain-text shares)
-// so all outbound content carries an identical call-to-action.
+// Single source of truth for the install URL, tagline and Get Vinster wording.
+// Image share cards carry no link (it can't be tapped on an image) —
+// shareResult puts it in the message text; plain-text shares append
+// VINSTER_TEXT_SHARE_FOOTER.
 //
 // If the domain ever changes, this is the one place to update.
 
@@ -8,7 +9,6 @@
 // Store straight onto Vinster, ready to install — a plain website link doesn't
 // open the store. This is the single canonical install link every share uses.
 export const VINSTER_APP_STORE_URL = 'https://apps.apple.com/app/id6763607127';
-export const VINSTER_INSTALL_URL = VINSTER_APP_STORE_URL;
 export const VINSTER_GET_LABEL = 'GET VINSTER';
 export const VINSTER_TAGLINE = 'Real Wine Experience, AI Delivered';
 

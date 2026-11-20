@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, type ImageSourcePropType } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
@@ -13,7 +13,7 @@ import { wineNameKey } from '../utils/wineIdentity';
 import { isSomeoneElsesBottle } from '../utils/cellarReview';
 import { LabelThumb } from './LabelThumb';
 import { WineCardThumb } from './WineCardThumb';
-import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, placeholderLabelImages, NAMED_LABELS } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, RESTAURANT_WARM_IMG, KITCHEN_IMG, placeholderLabelImages, NAMED_LABELS } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
 import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -25,23 +25,13 @@ import type { CellarWine } from '../types/wine';
 const MAX_TILES = 6;
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
-// Restaurant interior photo (bundled; also the Read A Wine List tile) — for the
-// Dined Out tile when none of the visits has a photo.
-const RESTAURANT_TILE_IMG = require('../../assets/images/tiles/restaurant-interior.jpg');
-// Cookbook spines photo — Your Cookbook's artwork on the Pair tab.
-const KITCHEN_IMG = require('../../assets/images/kitchen-favourites.jpg');
-
 const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
-// Order mirrors the real tiles so a populated tile replaces its own placeholder.
-// Wine tiles are label collages; Dined Out stays a restaurant photo.
-// Each example is keyed to the real tile it stands in for, so an example only
-// ever shows when THAT tile has no data (never beside its own real tile).
-const INSIGHT_EXAMPLES: { key: string; card: PlaceholderCard }[] = [
-  { key: 'personality', card: { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY } },
-  { key: 'archived', card: { kind: 'labelCollage', images: placeholderLabelImages(4, 4), title: 'Archived Last Month', stamp: '6 bottles', overlay: INSIGHT_OVERLAY } },
-  { key: 'restaurants', card: { kind: 'image', image: RESTAURANT_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY } },
-  { key: 'cookbook', card: { kind: 'labelCollage', images: [KITCHEN_IMG], title: 'Recipes in Your Cookbook', stamp: '12 Recipes', overlay: INSIGHT_OVERLAY } },
-  { key: 'labels-month', card: { kind: 'labelCollage', images: placeholderLabelImages(6, 4), title: 'Labels Scanned Last Month', stamp: '12 wine labels', overlay: INSIGHT_OVERLAY } },
+// Exactly three examples (one per kind of picture — label collage, restaurant,
+// cookbook), shown only while there are no real tiles at all.
+const INSIGHT_EXAMPLES: PlaceholderCard[] = [
+  { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY },
+  { kind: 'image', image: RESTAURANT_WARM_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY },
+  { kind: 'image', image: KITCHEN_IMG, title: 'Recipes in Your Cookbook', stamp: '12 Recipes', overlay: INSIGHT_OVERLAY },
 ];
 
 // Every insight tile shows a real IMAGE — a label collage or a photo. Tiles with
@@ -55,7 +45,7 @@ type Tile = {
   // is looked up (used when the user has no photo of that wine).
   collage: CollageItem[];
   // A bundled picture instead of a collage (the cookbook spines).
-  image?: number;
+  image?: ImageSourcePropType;
   onTap?: () => void;
 };
 
@@ -186,7 +176,7 @@ export function CellarInsightsCarousel() {
       key: 'restaurants',
       title: 'Dined Out Last Month', meta: `${distinctRestos.size} restaurant${distinctRestos.size === 1 ? '' : 's'}`,
       collage: restoPhotos,
-      image: restoPhotos.length ? undefined : RESTAURANT_TILE_IMG,
+      image: restoPhotos.length ? undefined : RESTAURANT_IMG, // bundled restaurant photo when no visit has one
       onTap: () => router.push('/restaurants/reviews' as any),
     });
   }
@@ -256,7 +246,7 @@ export function CellarInsightsCarousel() {
   // Only tiles with a real image (collage) ever render — no brown/icon tiles.
   const shown = tiles.filter((t) => t.collage.length > 0 || t.image != null).slice(0, MAX_TILES);
   // Examples only before there's anything real to show — never beside real tiles.
-  const fill = shown.length === 0 ? INSIGHT_EXAMPLES.map((e) => e.card) : [];
+  const fill = shown.length === 0 ? INSIGHT_EXAMPLES : [];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>

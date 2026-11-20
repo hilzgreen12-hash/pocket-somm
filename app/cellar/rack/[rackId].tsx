@@ -42,6 +42,7 @@ import { CountModal, type CountPrompt } from '../../../src/components/rack/modal
 import { PlaceCountModal } from '../../../src/components/rack/modals/PlaceCountModal';
 import { SlotChooserModal } from '../../../src/components/rack/modals/SlotChooserModal';
 import { DestinationPickerModal, type Destination } from '../../../src/components/rack/modals/DestinationPickerModal';
+import { MessageScreen } from '../../../src/components/MessageScreen';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
@@ -707,19 +708,20 @@ export default function RackGridScreen() {
   // ---- Render ----
 
   if (!rack) {
-    return (
-      <View style={styles.center}>
-        {racksLoading || slotsLoading ? (
+    if (racksLoading || slotsLoading) {
+      return (
+        <View style={styles.center}>
           <ActivityIndicator color={colors.gold} />
-        ) : (
-          <>
-            <Text style={styles.missing}>This {noun} no longer exists</Text>
-            <TouchableOpacity onPress={handleBack} style={styles.missingBack} activeOpacity={0.8}>
-              <Text style={styles.missingBackText}>Back</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+        </View>
+      );
+    }
+    return (
+      <MessageScreen
+        title={`${noun.charAt(0).toUpperCase()}${noun.slice(1)} not found`}
+        body={`This ${noun} no longer exists.`}
+        action={{ label: 'Back', onPress: handleBack }}
+        onBack={null}
+      />
     );
   }
 
@@ -938,9 +940,6 @@ export default function RackGridScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.md, padding: spacing.xl },
-  missing: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center' },
-  missingBack: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl },
-  missingBackText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 50 },
   // Centred nav cluster: ‹ rack name › — gold arrows hop between storage units.

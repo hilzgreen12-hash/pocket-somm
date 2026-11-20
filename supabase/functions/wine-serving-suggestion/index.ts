@@ -80,12 +80,24 @@ Return ONLY valid JSON:
   ]
 }
 
-Exactly nine ingredients: three proteins (meat, poultry, game, fish, shellfish, cheese, eggs, tofu), three herbs or spices, three vegetables (mushrooms count as vegetables), best first within each group. Food only: NEVER a wine, grape, spirit, beer or any other drink, and never this wine itself. Single ingredients, not dishes. All names in lower case. Tailor them to THIS wine's colour, body, age and style. Raw JSON only. No markdown.`;
+Exactly nine ingredients: three proteins (meat, poultry, game, fish, shellfish, cheese, eggs, tofu), three herbs, spices or seasonings (butter, cream, olive oil and other dairy or fats belong HERE when they are a key part of the pairing — e.g. 'brown butter' with a rich Chardonnay), three vegetables (plants only — mushrooms count as vegetables; NEVER butter, cream, cheese, oil or any other dairy or fat), best first within each group. Food only: NEVER a wine, grape, spirit, beer or any other drink, and never this wine itself. Single ingredients, not dishes. All names in lower case. Tailor them to THIS wine's colour, body, age and style. Raw JSON only. No markdown.`;
 }
 
 // Drinks never belong in the ingredients list (the model once returned the
 // wine's own grape as a "protein"). Vinegars are food, so they're allowed.
 const DRINK_RE = /\b(wine|wines|champagne|cava|prosecco|cr[eé]mant|sherry|port|madeira|marsala|vermouth|cognac|brandy|armagnac|calvados|whisk(e)?y|gin|vodka|rum|tequila|liqueur|beer|ale|lager|cider|sake|pinot|noir|chardonnay|riesling|syrah|shiraz|grenache|merlot|cabernet|sauvignon|malbec|tempranillo|sangiovese|nebbiolo|barbera|zinfandel|gamay|viognier|chenin|semillon|s[eé]millon|gew[uü]rztraminer|muscat|moscato|gr[uü]ner|albari[nñ]o|verdejo|mourv[eè]dre|carignan|cinsault|aglianico|primitivo|montepulciano|tannat|carm[eé]n[eè]re|pinotage|furmint|vermentino|marsanne|roussanne|torront[eé]s|blanc|rouge|ros[eé])\b/i;
+// The app shows three groups only (Proteins, Herbs & Spices, Vegetables).
+// Dairy and fats aren't vegetables — the model once put "butter" there — so
+// butter, cream, oils etc. go with the seasonings, and cheese with proteins,
+// whatever type the model gave.
+const DAIRY_FAT_RE = /\b(butter|beurre|cream|cr[eè]me fra[iî]che|ghee|lard|duck fat|goose fat|oil|yog(h)?urt|mascarpone|milk)\b/;
+const CHEESE_RE = /\b(cheese|parmesan|parmigiano|pecorino|grana padano|gruy[eè]re|comt[eé]|ch[eè]vre|brie|camembert|roquefort|stilton|cheddar|feta|ricotta|mozzarella|burrata|manchego|gorgonzola|taleggio|[eé]poisses|halloumi|paneer)\b/;
+function ingredientType(name: string, given: 'protein' | 'herb' | 'vegetable' | null) {
+  if (CHEESE_RE.test(name)) return 'protein';
+  if (DAIRY_FAT_RE.test(name)) return 'herb';
+  return given;
+}
+
 function isDrink(name: string, grape?: string): boolean {
   const n = name.toLowerCase();
   if (/vinegar/.test(n)) return false;
@@ -120,8 +132,9 @@ Deno.serve(async (req) => {
             .map((x: any) => {
               // Normalise the type: 'Herb', 'spice', 'spices' → herb; drop anything unknown.
               const t = String(x.type ?? '').toLowerCase().trim();
-              const type = /^(herb|spice)/.test(t) ? 'herb' : /^protein|^meat|^fish/.test(t) ? 'protein' : /^veg|^mushroom/.test(t) ? 'vegetable' : null;
+              const given = /^(herb|spice|season)/.test(t) ? 'herb' : /^protein|^meat|^fish/.test(t) ? 'protein' : /^veg|^mushroom/.test(t) ? 'vegetable' : null;
               const name = String(x.name).trim().toLowerCase().slice(0, 40);
+              const type = ingredientType(name, given);
               return type && !isDrink(name, grape) ? { name, type } : null;
             })
             .filter(Boolean)

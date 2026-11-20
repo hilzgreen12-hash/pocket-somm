@@ -282,7 +282,7 @@ export default function PersonalityScreen() {
           {text ? (
             <View style={styles.topRightStack}>
               <TouchableOpacity onPress={handleShare} style={styles.shareBtn} activeOpacity={0.7}>
-                <Text style={styles.shareText}>+ Export</Text>
+                <Text style={styles.shareText}>+ Share</Text>
               </TouchableOpacity>
               {/* Community isn't live yet — the "post to community" link is
                   faded out and non-interactive until there's a feed to post to. */}

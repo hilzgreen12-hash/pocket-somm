@@ -101,14 +101,14 @@ function CollageBg({ offset }: { offset: number }) {
   );
 }
 
-// The five empty-state templates shown when a user has no storage yet — four
-// named types plus the "+ Add" tile (rendered separately). Tapping one starts
-// that type's add flow, where the user names it.
-const TEMPLATES: { type: string; name: string; kind: 'rack' | 'fridge' | 'bin' | 'location' }[] = [
+// The three empty-state templates shown when a user has no storage yet (every
+// empty carousel shows exactly three), then the "+ Add" tile (rendered
+// separately), which also offers Alt Cellars. Tapping a template starts that
+// type's add flow, where the user names it.
+const TEMPLATES: { type: string; name: string; kind: 'rack' | 'fridge' | 'bin' }[] = [
   { type: 'Rack', name: 'Wine Rack', kind: 'rack' },
   { type: 'Fridge', name: 'Wine Fridge', kind: 'fridge' },
   { type: 'Bin', name: 'Wine Bin', kind: 'bin' },
-  { type: 'Alt Cellar', name: 'Alt Cellar', kind: 'location' },
 ];
 
 // Shown after deleting a location but KEEPING its bottles (the plain "Delete X",
@@ -411,7 +411,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
         ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carouselScroll} contentContainerStyle={styles.carousel}>
           {
-            // No storage yet — four setup templates the user can name.
+            // No storage yet — three setup templates the user can name.
             TEMPLATES.map((t, i) => (
               <View key={t.kind}>
                 <StorageTile

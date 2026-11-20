@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useCellarContext } from '../../src/hooks/useCellarContext';
@@ -8,6 +8,7 @@ import { CellarWineCard } from '../../src/components/winecard/cellar/CellarWineC
 import { GrapeConfirmModal } from '../../src/components/winecard/cellar/GrapeConfirmModal';
 import { useWineIntel, wineCardKey } from '../../src/components/winecard/cellar/useWineIntel';
 import { s } from '../../src/components/winecard/cellar/styles';
+import { MessageScreen } from '../../src/components/MessageScreen';
 import { colors } from '../../src/constants/theme';
 
 // The cellar wine card (live and archived wines alike). This screen is only the
@@ -61,12 +62,10 @@ export default function WineCardScreen() {
     content = <View style={s.center}><ActivityIndicator color={colors.gold} size="large" /></View>;
   } else if (!wine) {
     content = (
-      <View style={s.center}>
-        <Text style={s.errorText}>Wine not found.</Text>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={s.linkText}>Go back</Text>
-        </TouchableOpacity>
-      </View>
+      <MessageScreen
+        title="Wine not found"
+        onBack={() => router.back()}
+      />
     );
   } else if (intel.showTracker) {
     content = (

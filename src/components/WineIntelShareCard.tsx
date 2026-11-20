@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { share } from '../constants/theme';
-import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
+import { ShareCardHeader } from './ShareCardHeader';
 import { wineHeaderLine } from '../utils/wineHeader';
 
 // Branded card for sharing a wine's Vinster "intelligence" — critic score,
@@ -39,14 +39,7 @@ export const WineIntelShareCard = forwardRef<View, Props>(
     return (
       <View ref={ref} collapsable={false} style={styles.card}>
         <View style={styles.inner}>
-          <View style={styles.topRow}>
-            <Text style={styles.brand}>VINSTER</Text>
-            <Text style={styles.brandTagline}>Real Wine Experience, AI Delivered</Text>
-          </View>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.subhead}>Wine Intelligence</Text>
+          <ShareCardHeader title="Wine Intelligence" />
 
           {imageUri ? (
             <View style={styles.photoFrame}>
@@ -86,12 +79,6 @@ export const WineIntelShareCard = forwardRef<View, Props>(
               <Text style={styles.noteBody} numberOfLines={10}>{tastingNote.trim()}</Text>
             ) : null}
           </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerLine}>{VINSTER_GET_LABEL}</Text>
-            <Text style={styles.footerCta}>{VINSTER_TAGLINE}</Text>
-            <Text style={styles.footerUrl}>{VINSTER_APP_STORE_URL.replace(/^https?:\/\//, '')}</Text>
-          </View>
         </View>
       </View>
     );
@@ -115,11 +102,6 @@ const styles = StyleSheet.create({
     paddingVertical: 72,
     backgroundColor: share.bg,
   },
-  topRow: { alignItems: 'center' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: share.brand, letterSpacing: 14 },
-  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.inkMuted, marginTop: 8, letterSpacing: 1.5 },
-  divider: { height: 1, backgroundColor: share.rule, marginVertical: 36 },
-  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 34, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center', marginBottom: 16 },
   photoFrame: { alignSelf: 'center', width: 520, height: 560, borderRadius: 22, borderWidth: 2, borderColor: share.brand, overflow: 'hidden', marginBottom: 28, backgroundColor: 'rgba(127,79,76,0.06)' },
   photo: { width: '100%', height: '100%' },
   wineBlock: {
@@ -140,8 +122,4 @@ const styles = StyleSheet.create({
   statUnit: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: share.gold },
   statLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 20, color: share.inkMuted, textTransform: 'uppercase', letterSpacing: 2, marginTop: 4 },
   noteBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: share.ink, lineHeight: 40, marginTop: 4 },
-  footer: { alignItems: 'center', marginTop: 44 },
-  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4 },
-  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, marginTop: 8, textAlign: 'center' },
-  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: share.brand, marginTop: 8, letterSpacing: 0.5, textDecorationLine: 'underline' },
 });

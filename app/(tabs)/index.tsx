@@ -1,8 +1,8 @@
-import { NAMED_LABELS } from '../../src/components/ExamplePlaceholder';
+import { NAMED_LABELS, RESTAURANT_IMG } from '../../src/components/ExamplePlaceholder';
 import { JournalCarousel } from '../../src/components/JournalCarousel';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 // Page scroll from the gesture library, so a picked-up carousel section cancels
 // the page scroll instead of fighting it.
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
@@ -52,9 +52,8 @@ let welcomeShownThisSession = false;
 
 // "How Scan works" — the help body behind the underlined Scan title, matching
 // the other tabs' tappable titles.
-// Search & Discover tile images (bundled). The restaurant photo is from Unsplash
-// (free licence) — see assets/images/tiles/CREDITS.md.
-const SD_RESTAURANT_IMAGE: number | null = require('../../assets/images/tiles/restaurant-interior.jpg');
+// Search & Discover tile images (bundled). The restaurant photo (RESTAURANT_IMG)
+// is from Unsplash (free licence) — see assets/images/tiles/CREDITS.md.
 // Light labels only — the Search tile reads best bright (Piper Rare was too dark).
 // Compare Wines tile: two Bordeaux labels side by side.
 const SD_COMPARE_IMAGES = [NAMED_LABELS.gruaudLarose, NAMED_LABELS.rocDeCambes];
@@ -586,13 +585,7 @@ export default function ScanLandingScreen() {
                         onLongPress={() => requireAccount(handleViewLastListResult)}
                         activeOpacity={0.85}
                       >
-                        {SD_RESTAURANT_IMAGE ? (
-                          <Image source={SD_RESTAURANT_IMAGE} style={styles.sdImage} resizeMode="cover" />
-                        ) : (
-                          <View style={[styles.sdImage, styles.sdFallback]}>
-                            <Ionicons name="restaurant-outline" size={40} color="rgba(255,255,255,0.55)" allowFontScaling={false} />
-                          </View>
-                        )}
+                        <Image source={RESTAURANT_IMG} style={styles.sdImage} resizeMode="cover" />
                       </TouchableOpacity>
                       <Text style={styles.sdName} numberOfLines={1} allowFontScaling={false}>Read A Wine List</Text>
                       <Text style={styles.sdStamp} numberOfLines={1} allowFontScaling={false}>Restaurant Bottle Picks</Text>
@@ -827,7 +820,6 @@ const styles = StyleSheet.create({
   sdThumb: { width: HOME_TILE.w, height: HOME_TILE.h, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite },
   // Faded like the Community Musings cards: image at 55% under a dark scrim.
   sdImage: { width: '100%', height: '100%', opacity: 0.85 },
-  sdFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   sdCollage: { width: '100%', height: '100%', flexDirection: 'row', flexWrap: 'wrap' },
   sdCompareCell: { width: '50%', height: '100%', opacity: 0.85 },
   // White name + gold line beneath, matching the carousels below.

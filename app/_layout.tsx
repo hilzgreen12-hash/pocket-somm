@@ -217,6 +217,7 @@ export default function RootLayout() {
             <Stack.Screen name="profile/settings" />
             <Stack.Screen name="profile/share-cellar" />
             <Stack.Screen name="profile/personality" />
+            <Stack.Screen name="profile/observations" />
             <Stack.Screen name="profile/personality-archive" />
             <Stack.Screen name="wines/chosen" />
             <Stack.Screen name="recipes/chosen" />

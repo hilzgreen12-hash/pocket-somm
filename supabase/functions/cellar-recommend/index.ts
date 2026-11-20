@@ -2,6 +2,7 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { HOUSE_RULES } from '../_shared/houseRules.ts';
 import { signedInUserId } from '../_shared/auth.ts';
+import { getTasteProfile, tasteProfileSection } from '../_shared/tasteProfile.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -38,12 +39,12 @@ function wineLine(w: CmdWine, i: number): string {
   return `${i + 1}. [id: ${w.id}] ${bits}${extra ? ` (${extra})` : ''}`;
 }
 
-function buildPrompt(transcript: string, wines: CmdWine[]): string {
+function buildPrompt(transcript: string, wines: CmdWine[], tasteSection: string): string {
   const wineBlock = wines.length ? wines.map(wineLine).join('\n') : '(the cellar is empty)';
   return `You are a warm, knowledgeable sommelier helping someone choose a bottle from THEIR OWN cellar based on their mood tonight.
 
 Their spoken mood / request: "${transcript}"
-
+${tasteSection}
 Bottles from their cellar (choose ONLY from these — use the exact ids):
 ${wineBlock}
 
@@ -65,7 +66,7 @@ Deno.serve(async (req) => {
     if (typeof transcript !== 'string' || !transcript.trim()) return json({ error: 'transcript required' }, 400);
 
     const list: CmdWine[] = Array.isArray(wines) ? wines.slice(0, MAX_WINES) : [];
-    const prompt = buildPrompt(transcript, list);
+    const prompt = buildPrompt(transcript, list, tasteProfileSection(await getTasteProfile(req)));
 
     const response = await client.messages.create({
       system: HOUSE_RULES,

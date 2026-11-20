@@ -41,6 +41,7 @@ import { usePreferences } from '../../../src/hooks/usePreferences';
 import { UNNAMED_RESTAURANT, isRestaurantVisit, sessionsWithWines } from '../../../src/utils/restaurantReview';
 import { WINE_STYLES, inferWineStyle } from '../../../src/utils/wineStyle';
 import { SearchProgress } from '../../../src/components/SearchProgress';
+import { MessageScreen } from '../../../src/components/MessageScreen';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 
@@ -101,6 +102,11 @@ export default function LineupDetailScreen() {
   const [cityDraft, setCityDraft] = useState('');
   const [venueDraft, setVenueDraft] = useState('');
   const [savingLineup, setSavingLineup] = useState(false);
+  // After Save Lineup: the unarchived "Your Cellar" rows offered for archiving
+  // (indexes), which of them are ticked, and whether that archive is running.
+  const [archiveOffer, setArchiveOffer] = useState<number[] | null>(null);
+  const [archiveTicked, setArchiveTicked] = useState<Set<number>>(new Set());
+  const [archivingOffer, setArchivingOffer] = useState(false);
   // Which wine row (index) is being linked to a cellar wine via the picker.
   const [cellarPickerFor, setCellarPickerFor] = useState<number | null>(null);
   const hydrated = useRef(false);
@@ -224,6 +230,13 @@ export default function LineupDetailScreen() {
       await persistNote();
       invalidateLineup();
       setEditing(false);
+      // Offer to archive cellar bottles not yet taken out. Unticked by default:
+      // archiving removes bottles from the cellar, so it should be a choice.
+      const pending = currentWines().flatMap((w, i) => (w.cellar_wine_id && !w.archived ? [i] : []));
+      if (pending.length) {
+        setArchiveTicked(new Set());
+        setArchiveOffer(pending);
+      }
     } catch (err) {
       showAlert({ title: 'Could not save lineup', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -258,18 +271,25 @@ export default function LineupDetailScreen() {
 
   // Move the cellar bottles behind these lineup rows into the cellar archive,
   // dated to the night, and mark each row archived. archiveBottles re-reads the
-  // cellar row, so two rows linked to one wine each take their own bottles.
-  async function archiveRows(indexes: number[]): Promise<void> {
-    if (!lineup || !begin('archive')) return;
+  // cellar row, so two rows linked to one wine each take their own bottles,
+  // and caps each at what's left in the cellar. Resolves to the number of
+  // bottles archived, or null when it failed (already reported) or was a
+  // double tap.
+  async function archiveRows(indexes: number[]): Promise<number | null> {
+    if (!lineup || !begin('archive')) return null;
     const day = lineupDay(lineup.archived_at);
     const done: Array<{ index: number; cellarId: string }> = [];
+    let bottles = 0;
+    let failed = false;
     try {
       for (const index of indexes) {
         const w = currentWines()[index];
         if (!w?.cellar_wine_id || w.archived) continue;
-        if ((await archiveBottles(w.cellar_wine_id, w.count ?? 1, day)).archived > 0) done.push({ index, cellarId: w.cellar_wine_id });
+        const { archived } = await archiveBottles(w.cellar_wine_id, w.count ?? 1, day);
+        if (archived > 0) { done.push({ index, cellarId: w.cellar_wine_id }); bottles += archived; }
       }
     } catch (err) {
+      failed = true;
       showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       // Record whatever did get archived, even after a failure part-way. Rows are
@@ -280,6 +300,31 @@ export default function LineupDetailScreen() {
       invalidateCellarViews(qc);
       end('archive');
     }
+    return failed ? null : bottles;
+  }
+
+  // Tell the user what an archive did. Nothing archived means the cellar had
+  // no bottles of it left (already drunk, or archived elsewhere).
+  function reportArchived(bottles: number | null) {
+    if (bottles == null) return;
+    if (bottles === 0) {
+      showAlert({ title: 'Nothing to archive', body: 'Vinster found no bottles of this wine left in your cellar.' });
+      return;
+    }
+    const date = lineup ? ` dated ${fmtLineupDay(lineupDay(lineup.archived_at))}` : '';
+    showAlert({ title: 'Archived', body: `${bottles} ${bottles === 1 ? 'bottle' : 'bottles'} moved from your cellar to your archive${date}.` });
+  }
+
+  const bottlesLabel = (w: LineupWine) => `${w.count ?? 1} ${(w.count ?? 1) === 1 ? 'bottle' : 'bottles'}`;
+
+  // "Archive Selected" in the after-save pop-up: archive the ticked rows, then
+  // close the pop-up and confirm.
+  async function archiveOfferSelected() {
+    setArchivingOffer(true);
+    const bottles = await archiveRows([...archiveTicked]);
+    setArchivingOffer(false);
+    setArchiveOffer(null);
+    reportArchived(bottles);
   }
 
   // "Off Cellar" tapped → confirm the bottle came from the cellar, then pick
@@ -303,20 +348,31 @@ export default function LineupDetailScreen() {
     const linked = await updateWines((ws) => ws.map((w, i) => (
       i === index ? { ...w, cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, archived: false } : w
     )));
-    if (linked) await archiveRows([index]);
+    if (linked) reportArchived(await archiveRows([index]));
   }
 
-  // Tap the "Your Cellar" badge → archive the bottle from its wine card, or
-  // mark it as not from the cellar after all.
+  // Tap the "Your Cellar" badge → archive the bottle here, or mark it as not
+  // from the cellar after all. Archiving stays on this screen: opening the wine
+  // card instead started a Wine Intel lookup and never archived anything.
   function openCellarBadgeOptions(index: number, w: LineupWine) {
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || 'This wine',
+      body: w.archived ? 'Already moved from your cellar to your archive for this lineup.' : undefined,
       buttons: [
-        // The wine card resolves the id itself, so this works even when the wine
-        // isn't in the locally loaded cellar list. Back returns to this lineup.
-        ...(w.cellar_wine_id ? [{ text: 'Archive this bottle', onPress: () => router.push(`/cellar/${w.cellar_wine_id}` as any) }] : []),
+        ...(w.archived ? [] : [{ text: 'Archive this bottle', onPress: () => confirmArchiveRow(index, w) }]),
         { text: 'This wine was Off Cellar', onPress: () => { void markOffCellar(index); } },
         { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+  function confirmArchiveRow(index: number, w: LineupWine) {
+    const date = lineup ? `, dated ${fmtLineupDay(lineupDay(lineup.archived_at))}` : '';
+    showAlert({
+      title: 'Archive from your cellar?',
+      body: `Vinster moves ${bottlesLabel(w)} of this wine from your cellar to your archive${date}.`,
+      buttons: [
+        { text: 'Archive', onPress: () => { void archiveRows([index]).then(reportArchived); } },
+        { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
@@ -594,10 +650,11 @@ export default function LineupDetailScreen() {
     />
   );
   if (!lineup) return (
-    <View style={styles.center}>
-      <Text style={styles.muted}>This lineup no longer exists.</Text>
-      <TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>← Back</Text></TouchableOpacity>
-    </View>
+    <MessageScreen
+      title="Lineup not found"
+      body="This lineup no longer exists."
+      onBack={() => router.back()}
+    />
   );
 
   const wines: LineupWine[] = lineup.wines ?? [];
@@ -949,13 +1006,57 @@ export default function LineupDetailScreen() {
         </View>
       </Modal>
 
+      {/* After Save Lineup: offer to archive the cellar bottles drunk at this
+          lineup that are still in the cellar. Nothing is ticked to start. */}
+      <Modal visible={archiveOffer !== null} transparent animationType="fade" onRequestClose={() => { if (!archivingOffer) setArchiveOffer(null); }}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { maxHeight: '82%' }]}>
+            <Text style={styles.modalTitle}>Lineup Saved</Text>
+            <Text style={styles.confirmBlurb}>Would you like the following bottles from your cellar to be archived?</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {(archiveOffer ?? []).map((index) => {
+                const w = lineup.wines?.[index];
+                if (!w) return null;
+                const on = archiveTicked.has(index);
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.confirmRow}
+                    onPress={() => setArchiveTicked((prev) => { const n = new Set(prev); if (n.has(index)) n.delete(index); else n.add(index); return n; })}
+                    disabled={archivingOffer}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.confirmCheck, on && styles.confirmCheckOn]}>{on ? '☑' : '☐'}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.confirmWineName}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+                      <Text style={styles.confirmCellarTag}>{bottlesLabel(w)}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.goldButton, styles.footButton, (archivingOffer || archiveTicked.size === 0) && { opacity: 0.5 }]}
+              onPress={() => { void archiveOfferSelected(); }}
+              disabled={archivingOffer || archiveTicked.size === 0}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.goldButtonText}>{archivingOffer ? 'Archiving…' : 'Archive Selected'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.confirmCancel} onPress={() => setArchiveOffer(null)} disabled={archivingOffer}>
+              <Text style={styles.confirmCancelText}>Not Now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Full-screen zoomable viewer for the lineup photo. */}
       <LabelPhotoViewer visible={zoomOpen} uri={photoUrl} onClose={() => setZoomOpen(false)} contain />
 
       {/* Off-screen share card. */}
       {shareData ? (
         <View style={styles.offscreen} pointerEvents="none">
-          <LineupShareCard ref={shareCardRef} imageUrl={shareData.url} title={name.trim() || lineup.name} date={shareData.date} location={lineup.city} note={shareData.note} onImageReady={captureAndShare} />
+          <LineupShareCard ref={shareCardRef} imageUrl={shareData.url} name={name.trim() || lineup.name} venue={lineup.venue} city={lineup.city} date={shareData.date} note={shareData.note} wines={lineup.wines ?? []} onImageReady={captureAndShare} />
         </View>
       ) : null}
 
@@ -975,7 +1076,6 @@ const styles = StyleSheet.create({
   wineLinkDot: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
-  backLink: { fontSize: 15, color: colors.gold },
 
   // The lineup's own name — the large gold heading.
   titleInput: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, paddingVertical: 4, marginTop: spacing.xs, alignSelf: 'stretch', paddingHorizontal: spacing.xl },

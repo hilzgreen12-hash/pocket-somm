@@ -102,7 +102,7 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
   const [localPhotoUri, setLocalPhotoUri] = useState<string | null>(null);
   const [postingReview, setPostingReview] = useState(false);
   const [reviewPosted, setReviewPosted] = useState(false);
-  // Export Wine Intel renders a share card off-screen and captures it.
+  // Share Result renders the Wine Intel share card off-screen and captures it.
   const intelShareRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
   const [sharePayload, setSharePayload] = useState<ComponentProps<typeof WineIntelShareCard> | null>(null);
@@ -257,7 +257,7 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
     router.push(`/chef/review-requirements?from=cellar&wineId=${wine.id}`);
   }
 
-  // Export Wine Intel: Vinster's scores, value and tasting note as an image
+  // Share Result: Vinster's scores, value and tasting note as an image
   // (or plain text where the share sheet can't take one).
   async function shareIntel() {
     if (sharing) return;
@@ -459,7 +459,7 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity style={s.exportBtn} onPress={() => void shareIntel()} disabled={sharing} activeOpacity={0.85}>
-              <Text style={s.exportBtnText}>{sharing ? 'Preparing…' : 'Export Wine Intel'}</Text>
+              <Text style={s.exportBtnText}>{sharing ? 'Preparing…' : 'Share Result'}</Text>
             </TouchableOpacity>
           </View>
         </>

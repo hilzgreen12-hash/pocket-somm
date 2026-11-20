@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
@@ -11,8 +11,8 @@ import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { buildRecipeHtml } from '../../src/utils/recipeHtml';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
-import { RecipeShareCard } from '../../src/components/RecipeShareCard';
 import { PairMasthead } from '../../src/components/PairMasthead';
+import { MessageScreen } from '../../src/components/MessageScreen';
 import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -232,13 +232,9 @@ export default function ChefResultsScreen() {
     return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
-  // Share-card render state. We keep a single off-screen RecipeShareCard
-  // and point it at whichever pairing the user just tapped Share on.
-  // sharingIndex tracks which card is in flight so the button can show
-  // "Preparing..." without freezing all three.
-  const shareCardRef = useRef<View>(null);
+  // sharingIndex tracks which recipe's share is in flight so its button can
+  // show "Preparing..." without freezing all three.
   const [sharingIndex, setSharingIndex] = useState<number | null>(null);
-  const [sharePairing, setSharePairing] = useState<Pairing | null>(null);
 
   async function handleSharePairing(idx: number) {
     const pairing = pairings[idx];
@@ -270,7 +266,6 @@ export default function ChefResultsScreen() {
       }
     } finally {
       setSharingIndex(null);
-      setSharePairing(null);
     }
   }
 
@@ -442,12 +437,11 @@ export default function ChefResultsScreen() {
 
   if (!wine || pairings.length === 0) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>No pairings available.</Text>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/chef')}>
-          <Text style={styles.linkText}>Scan a label</Text>
-        </TouchableOpacity>
-      </View>
+      <MessageScreen
+        title="No pairings yet"
+        body="No pairings are available for this wine. Scan a label to start again."
+        action={{ label: 'Scan a Label', onPress: () => router.replace('/(tabs)/chef') }}
+      />
     );
   }
 
@@ -643,18 +637,6 @@ export default function ChefResultsScreen() {
         </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
-
-      {/* Off-screen branded share card. Mounted only while a share is in
-          flight so the remote QR image gets a fresh render each time. */}
-      {sharePairing && (
-        <View style={styles.shareCardWrap} pointerEvents="none">
-          <RecipeShareCard
-            ref={shareCardRef}
-            pairing={sharePairing}
-            wineHeader={wine ? wineHeaderLine(wine.producer, wine.wineName, wine.vintage) : null}
-          />
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -668,8 +650,6 @@ const styles = StyleSheet.create({
   stampDate: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   stampLocation: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  errorText: { color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 16 },
-  linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
 
   section: { padding: spacing.xl },
 
@@ -689,7 +669,6 @@ const styles = StyleSheet.create({
 
   cardSaveButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, letterSpacing: 0.3 },
 
-  shareCardWrap: { position: 'absolute', top: 100000, left: 0, opacity: 0 },
   cardSavedBlock: { alignItems: 'center', marginTop: spacing.md, gap: 4 },
   cardSavedLabel: { color: colors.gold, fontFamily: fonts.bodySemibold, fontSize: 14, letterSpacing: 0.5 },
   cardViewArchiveLink: { color: colors.gold, fontFamily: fonts.bodyItalic, fontSize: 14, textDecorationLine: 'underline' },

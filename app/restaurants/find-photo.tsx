@@ -9,6 +9,7 @@ import { uploadRestaurantPhotoFromUrl } from '../../src/api/labelPhotos';
 import { setRestaurantPhotoPath } from '../../src/api/restaurantSessions';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
+import { MessageScreen } from '../../src/components/MessageScreen';
 
 // "Find Online" for a restaurant visit — searches the web for photos of the
 // restaurant (by name + city), lets the user pick one, and stores it as the
@@ -68,17 +69,14 @@ export default function FindRestaurantPhotoScreen() {
 
   if (stage === 'empty' || stage === 'error') {
     return (
-      <View style={styles.center}>
-        <Text style={styles.title}>{stage === 'empty' ? 'No photos found' : 'Search failed'}</Text>
-        <Text style={styles.body}>
-          {stage === 'empty'
-            ? "Vinster couldn't find a photo for this restaurant online. You can add one from your camera or library instead."
-            : "Vinster couldn't run the search just now. Please try again in a moment."}
-        </Text>
-        <TouchableOpacity style={styles.btn} onPress={() => router.back()} activeOpacity={0.85}>
-          <Text style={styles.btnText}>Back</Text>
-        </TouchableOpacity>
-      </View>
+      <MessageScreen
+        title={stage === 'empty' ? 'No photos found' : 'Search failed'}
+        body={stage === 'empty'
+          ? "Vinster couldn't find a photo for this restaurant online. You can add one from your camera or library instead."
+          : "Vinster couldn't run the search just now. Please try again in a moment."}
+        action={{ label: 'Back', onPress: () => router.back() }}
+        onBack={null}
+      />
     );
   }
 
@@ -117,9 +115,5 @@ const styles = StyleSheet.create({
   thumb: { width: '100%', flex: 1, borderRadius: 10, backgroundColor: colors.surface },
   source: { fontSize: 10, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: spacing.xl },
-  title: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
   spinnerText: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
-  body: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
-  btn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
-  btnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
 });

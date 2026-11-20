@@ -138,6 +138,12 @@ export default function YouScreen() {
 
       <View style={styles.divider} />
 
+      {/* What Vinster has learned from the user's reviews, cellar and choices —
+          and the place to correct it. */}
+      <TouchableOpacity style={[styles.prefButton, styles.observationsButton]} onPress={() => router.push('/profile/observations')} activeOpacity={0.7}>
+        <Text style={styles.prefButtonText}>Vinster's Observations</Text>
+      </TouchableOpacity>
+
       {/* Vinster's Review of You — the alter-ego sketch carousel, moved here from
           the Review tab; sits below the Settings button. */}
       <Text style={styles.sectionHeader}>Vinster's Review of You</Text>
@@ -241,6 +247,7 @@ const styles = StyleSheet.create({
 
   prefButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
   prefButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
+  observationsButton: { marginBottom: spacing.lg },
   // "Vinster's Review of You" carousel section (moved from the Review tab).
   sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 23, marginBottom: spacing.lg, paddingHorizontal: spacing.sm },

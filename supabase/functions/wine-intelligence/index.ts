@@ -1,5 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
-import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine } from '../_shared/vintageFacts.ts';
+import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine, verifiedProducerWines } from '../_shared/vintageFacts.ts';
 import { intelCacheKey, readIntelCache, saveIntelCache } from '../_shared/intelCache.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
@@ -129,10 +129,17 @@ Return only the raw JSON — no markdown, no explanation.`;
 
     // VARIABLE per-request content: the specific wine identity plus the
     // WS-score-anchoring guidance (both change every call).
+    // The producer's VERIFIED catalogue wines, so the identity check can
+    // recognise a real wine asked for under its label wording.
+    const knownWines = producer ? await verifiedProducerWines(String(producer)) : [];
+    const knownWinesStr = knownWines.length
+      ? `\n\nVinster's verified catalogue lists these wines from ${producer}: ${knownWines.join('; ')}. If the wine asked about is one of these — allowing for extra label words such as "Single Vineyard", "Viñedo Singular" or "Vieilles Vignes" — it is real: treat it as identified and name it as the catalogue does. A wine NOT on this list may still be real; judge it as usual.`
+      : '';
+
     const userContent = `Provide intelligence on this wine:
 - Producer: ${producer}
 - Region: ${region}${wineNameStr}
-- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}${scoreGuidance}${recordedGuidance}`;
+- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}${scoreGuidance}${recordedGuidance}${knownWinesStr}`;
 
     // Up to 2 attempts. Claude is non-deterministic, so an occasional response
     // that leads with a non-text block, wraps the JSON in prose/markdown, or gets

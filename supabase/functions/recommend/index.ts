@@ -1,6 +1,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
 import { HOUSE_RULES } from '../_shared/houseRules.ts';
+import { getTasteProfile, tasteProfileSection } from '../_shared/tasteProfile.ts';
 
 // maxRetries covers transient request-setup failures (429/5xx/529 overloaded,
 // connection resets) with the SDK's own exponential backoff. Bumped above the
@@ -139,7 +140,11 @@ For each recommended wine return:
 - rarityAssessment: object with:
     - label: one of "Very Rare" | "Rare" | "Uncommon" | "Widely Available" (string)
     - notes: 1 sentence on the producer's standing and/or the wine's rarity (e.g. production size, limited distribution, estate reputation). This line is shown on the card under the label "Producer Note", so it MUST OPEN with the producer or the wine's rarity/availability — e.g. "A tiny Mosel grower with barely 4ha…", "Widely available, but…". Never open this sentence with a grape variety, region, or vintage — those each appear elsewhere on the card and leading with them loses the reader. (string)
-- outsidePreferences: colour, budget and excluded regions/grapes are HARD rules — a pick never breaks them. Use this only when a pick departs from a SOFT preference (style, food, preferred country, favourites), as a short note on why it's still the right choice — e.g. "Lighter than the rich style you asked for, but the best match for the fish on this list." Otherwise null.
+- outsidePreferences: string | null — almost always null. Colour, budget and excluded regions/grapes are HARD rules: a pick never breaks them. Set this ONLY when a pick CLEARLY goes against a soft preference the user EXPLICITLY stated (a style word they used, a preferred country/region/grape they named, their favourites) — e.g. they asked for "light" and this is a big, heavy red; or they named "Italian" and this is French. It is a short note, quoting their own words, on why it's still worth choosing. Strict rules:
+  • Judge style by THIS wine's actual character, never by grape or region stereotypes. Elegance, freshness, richness, etc. are found in many grapes: a Côte-Rôtie or a cool-climate Syrah IS elegant; never imply only Pinot Noir is elegant, only Burgundy is fine, etc. If the wine genuinely has the style asked for, the note is null.
+  • The FOOD is never a preference to depart from — how a wine suits the dish belongs in standoutNote. Never write a note about the dish or cuisine, and never compare a wine's origin to a dish (an Italian white for a Thai curry is simply a pairing, not a departure).
+  • Never mention a country, region, grape or style the user did not name.
+  • If in doubt, null. A note that apologises for a good match confuses the user.
 - standoutNote: FOR ALL THREE WINES — ONE to TWO concise sentences (NOT bullet points, ~35 words max) in Vinster's warm, characterful voice. This is the "why THIS one" hook, and it covers two things: (a) PAIRING / occasion — what to drink it with or when (a dish, a moment, a mood), and (b) HOW IT COMPARES with the OTHER TWO wines on this list — the specific reason it earns its place among the three (e.g. the value pick of the trio, the most ready to drink tonight, the boldest, the surest crowd-pleaser, the splurge worth saving for the main). It is NOT a tasting note (that is flavourProfile — never describe fruit/acidity/tannin/body here) and must NOT restate the four labelled param notes (critic score, value, vintage, producer) verbatim. Keep it punchy and specific to THIS list — never generic. Examples: "The one to open with dinner — its savoury depth loves roast lamb, and of the three it's the surest all-rounder tonight." / "Brighter and leaner than the other two, so the pick for shellfish or a warm evening — and the best value of the trio." / "The splurge of the group: rarer and more age-worthy than the others, worth saving for the main course." (string)
 - repeatNote: string | null. Set this ONLY when this wine's producer AND name EXACTLY match an entry in the ALREADY-SEEN set (see the rule below) and you are DELIBERATELY recommending that same wine AGAIN because it is genuinely outstanding. NEVER set it on a new or different wine — not even one from the same region or grape as a seen wine (two different Trebbiano d'Abruzzo, or two different Barolos, are NOT the same wine; do not confuse them). It MUST open with EXACTLY "Vinster is recommending this wine again because of its outstanding " and finish with the specific reason. For EVERY other wine — including all wines on a first recommendation, and any fresh alternative — set repeatNote to null.
 
@@ -237,6 +242,7 @@ Deno.serve(async (req) => {
       profileStyleProfiles,
       currency,
       stream,
+      useTasteProfile,
     } = await req.json();
 
     const cur = (currency ?? 'GBP').toString().toUpperCase();
@@ -295,6 +301,13 @@ SUMMARY FIELD — TOP SCORING MODE (MANDATORY OPENING):
 The top-level "summary" MUST open by explicitly acknowledging that the diner asked for the highest-scoring wines on the list. This acknowledgement is the VERY FIRST thing in the summary — before any discussion of individual wines, regions, value, or anything else. Address the diner directly in the second person. Open with a sentence along the lines of "You've requested the three top-scoring wines from this list…" — you may vary the wording (e.g. "You asked for the three highest-scoring bottles on this list, so that's what I've sorted for…", "As requested, here are the three top-scoring wines on the list…") but it MUST state up front, in the first sentence, that the selection criterion was top critic score. Only AFTER that opening acknowledgement may you go on to discuss the three picks and their attributes (1–2 further sentences). A summary that opens by describing a wine instead of acknowledging the top-scoring request is a failure.
 ` : '';
 
+    // What Vinster has learned about this diner (Vinster's Observations) — left
+    // out for guests, in top-scoring mode, and when scan-start retries without
+    // the soft preferences.
+    const tasteSection = internal || topScoringMode || useTasteProfile === false
+      ? ''
+      : tasteProfileSection(await getTasteProfile(req));
+
     const mergedStyleProfiles = [...new Set([...(styleProfiles ?? []), ...(profileStyleProfiles ?? [])])];
 
     const today = new Date().toISOString().split('T')[0];
@@ -320,7 +333,7 @@ ${budgetMinLine}
 ${dislikedRegionsLine}
 ${dislikedGrapesLine}
 ${countryLine}
-`;
+${tasteSection}`;
 
     const wineListText = JSON.stringify(wines, null, 2);
 

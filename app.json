@@ -82,7 +82,13 @@
             "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
             "NSExtensionActivationSupportsFileWithMaxCount": 1
           },
-          "androidIntentFilters": [
+          "disableAndroid": true
+        }
+      ],
+      [
+        "./plugins/withShareReceiverActivity",
+        {
+          "mimeTypes": [
             "image/*",
             "text/*",
             "application/pdf"

@@ -7,6 +7,7 @@ import { runComparison, compareMode, type Comparison, type CompareWineInput } fr
 import { usePreferences } from '../src/hooks/usePreferences';
 import { useChosenWines } from '../src/hooks/useChosenWines';
 import { SearchProgress } from '../src/components/SearchProgress';
+import { MessageScreen } from '../src/components/MessageScreen';
 import { isNetworkError } from '../src/api/invokeResilient';
 import { wineHeaderLine } from '../src/utils/wineHeader';
 import { wineNameKey } from '../src/utils/wineIdentity';
@@ -89,16 +90,12 @@ export default function CompareScreen() {
 
   if (error) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <Text style={styles.errorTitle}>Please try again!</Text>
-        <Text style={styles.errorBody}>{error}</Text>
-        <TouchableOpacity style={styles.button} onPress={() => setAttempt((n) => n + 1)}>
-          <Text style={styles.buttonText}>Try Again</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: spacing.md }}>
-          <Text style={styles.link}>Back</Text>
-        </TouchableOpacity>
-      </View>
+      <MessageScreen
+        title="Please try again"
+        body={error}
+        action={{ label: 'Try Again', onPress: () => setAttempt((n) => n + 1) }}
+        onBack={() => router.back()}
+      />
     );
   }
 
@@ -356,7 +353,6 @@ function Para({ title, text }: { title: string; text: string }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   topBar: { paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
   backArrow: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignItems: 'center' },
@@ -394,8 +390,4 @@ const styles = StyleSheet.create({
   fullIntel: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.gold },
   mine: { fontFamily: fonts.bodyItalic, fontSize: 13.5, color: colors.text, marginTop: spacing.md },
   link: { fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline' },
-  errorTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
-  errorBody: { fontSize: 17, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 24, marginBottom: spacing.xl },
-  button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
-  buttonText: { color: '#fff', fontFamily: fonts.headingSemibold, fontSize: 16 },
 });

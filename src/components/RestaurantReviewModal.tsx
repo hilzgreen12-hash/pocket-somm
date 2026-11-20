@@ -14,6 +14,7 @@ import { supabase } from '../api/supabase';
 import { listLineupArchives, setLineupRestaurant } from '../api/lineups';
 import { addSessionBottle, patchChosenWine, updateSessionRestaurant } from '../api/chosenWines';
 import { uploadLabelImage } from '../api/labelPhotos';
+import { getCachedLabelUri } from '../api/labelImageCache';
 import { prepareImageBase64, detectLineup } from '../api/label';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { useCellar, invalidateCellarViews } from '../hooks/useCellar';
@@ -182,6 +183,10 @@ export function RestaurantReviewModal({
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const shareCardRef = useRef<View>(null);
+  // The visit photo for the share card (a local file) and the resolver the
+  // card's onImageReady calls, so handleShare can wait for it to be drawn.
+  const [sharePhotoUri, setSharePhotoUri] = useState<string | null>(null);
+  const sharePhotoReady = useRef<(() => void) | null>(null);
 
   // The scan_sessions patch this review writes. Kept in one place so the Save
   // button, the community share, and the silent autosave-on-leave all write
@@ -640,6 +645,18 @@ export function RestaurantReviewModal({
     if (sharing) return;
     setSharing(true);
     try {
+      // The photo goes into the captured image, so resolve it to a local file
+      // and wait for the card to draw it (capped, so a bad image can't hang the
+      // share) before snapshotting.
+      let photoUri: string | null = null;
+      if (restaurantPhotoPath) {
+        try { photoUri = await getCachedLabelUri(restaurantPhotoPath); } catch { /* share without it */ }
+      }
+      const photoDrawn = photoUri
+        ? new Promise<void>((resolve) => { sharePhotoReady.current = resolve; })
+        : Promise.resolve();
+      setSharePhotoUri(photoUri);
+      await Promise.race([photoDrawn, new Promise((r) => setTimeout(r, 5000))]);
       // One paint to mount the off-screen branded card before the snapshot.
       await new Promise((r) => setTimeout(r, 250));
       const restaurant = restaurantName || 'Restaurant visit';
@@ -670,6 +687,8 @@ export function RestaurantReviewModal({
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
+      sharePhotoReady.current = null;
+      setSharePhotoUri(null);
       setSharing(false);
     }
   }
@@ -717,18 +736,13 @@ export function RestaurantReviewModal({
     <Modal visible={visible} animationType="slide" onRequestClose={handleBack}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          {/* Top bar: gold back arrow (left); Share + favourite star (right).
-              Centred title names the page for a first-time user. */}
+          {/* Top bar: gold back arrow (left). Centred title names the page for
+              a first-time user. Share Review sits at the foot of the page. */}
           <View style={styles.topBar}>
             <TouchableOpacity onPress={handleBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
               <Text accessibilityLabel="Back" style={styles.backArrow}>←</Text>
             </TouchableOpacity>
             <Text style={styles.topTitle} numberOfLines={1} pointerEvents="none">Your Restaurant Review</Text>
-            <View style={styles.topRight}>
-              <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 10, bottom: 6, left: 10, right: 10 }} activeOpacity={0.7}>
-                <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Export'}</Text>
-              </TouchableOpacity>
-            </View>
           </View>
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
@@ -892,6 +906,10 @@ export function RestaurantReviewModal({
                 <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save to Your Restaurant Reviews'}</Text>
               </TouchableOpacity>
             ) : null}
+
+            <TouchableOpacity style={[styles.shareButton, sharing && styles.btnDisabled]} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
+              <Text style={styles.shareButtonText}>{sharing ? 'Preparing…' : 'Share Review'}</Text>
+            </TouchableOpacity>
           </KeyboardAwareScrollView>
 
           {/* Add-a-Bottle chooser. */}
@@ -1108,6 +1126,8 @@ export function RestaurantReviewModal({
             ratingValue={value}
             note={note.trim() || null}
             wines={(wines ?? []).map((w) => ({ producer: w.producer, wineName: w.wineName, vintage: w.vintage, userScore: w.userScore }))}
+            imageUri={sharePhotoUri}
+            onImageReady={() => sharePhotoReady.current?.()}
           />
         </View>
       )}
@@ -1118,13 +1138,11 @@ export function RestaurantReviewModal({
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: colors.background },
   sheet: { flex: 1, backgroundColor: colors.background },
-  // Top bar — gold back arrow (left), Share + favourite star stacked (right).
+  // Top bar — gold back arrow (left); the title is overlaid centrally.
   topBar: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
   backArrow: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
-  // Centred page title, overlaid on the top bar between the back arrow and Export.
+  // Centred page title, overlaid on the top bar.
   topTitle: { position: 'absolute', top: 58, left: 0, right: 0, textAlign: 'center', fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, letterSpacing: 0.4 },
-  topRight: { alignItems: 'flex-end', gap: 4 },
-  topShareText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
 
   content: { padding: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
   // Large photo-of-the-night banner: bleeds to the screen edges and fills the
@@ -1226,6 +1244,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // White foot button, matching the lineup page's Share.
+  shareButton: { alignSelf: 'center', minWidth: '82%', alignItems: 'center', borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.md },
+  shareButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
 
   // Off-screen wrapper so the branded share card can be snapshotted while
   // staying out of the visible layout (off-screen position only — no opacity).

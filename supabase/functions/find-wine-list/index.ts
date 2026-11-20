@@ -2,6 +2,7 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
 import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { rankResults, safeUrl } from './rank.ts';
 
 // Per guest phone, per hour and per day: room for finding their two lists online.
 const GUEST_LIMITS = { hourly: 4, daily: 4 };
@@ -39,8 +40,6 @@ const MAX_HOPS = 6;                   // pages fetched while hunting for the lis
 const FIND_BUDGET_MS = 30_000;         // stop hunting for the list after this
 const READ_BUDGET_MS = 70_000;         // the parallel reads must finish inside this
 
-// Sites that never hold a readable list (reviews, bookings, social).
-const SKIP_DOMAINS = /(^|\.)(tripadvisor\.[a-z.]+|opentable\.[a-z.]+|thefork\.[a-z.]+|yelp\.[a-z.]+|facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|google\.[a-z.]+|youtube\.com|squaremeal\.co\.uk|timeout\.com|resy\.com|sevenrooms\.com|designmynight\.com|michelin\.com|guide\.michelin\.com|ubereats\.com|deliveroo\.[a-z.]+|just-eat\.[a-z.]+|reddit\.com|podcasts\.apple\.com|spotify\.com|ft\.com|nytimes\.com|theguardian\.com|telegraph\.co\.uk|standard\.co\.uk|thetimes\.co\.uk|bbc\.co\.uk|eater\.com|hot-dinners\.com|wine-pages\.com|decanter\.com|jancisrobinson\.com|wikipedia\.org|linkedin\.com)$/i;
 
 const WINE_FIELDS = `For each wine return a JSON object with these fields:
 - name: the wine name (string)
@@ -86,19 +85,7 @@ function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-// ---- Safety: only fetch public web addresses --------------------------------
-
-function safeUrl(raw: string): URL | null {
-  let u: URL;
-  try { u = new URL(raw); } catch { return null; }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
-  const h = u.hostname.toLowerCase();
-  if (!h.includes('.') || h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal')) return null;
-  // Literal IPs (v4 or v6) are never a restaurant website.
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(':') || h.startsWith('[')) return null;
-  if (u.port && u.port !== '80' && u.port !== '443') return null;
-  return u;
-}
+// ---- Safety: only fetch public web addresses (safeUrl is in rank.ts) ---------
 
 // Private, loopback, link-local and other non-public address ranges.
 function privateAddress(ip: string): boolean {
@@ -470,164 +457,8 @@ async function search(restaurant: string, city: string) {
     ...(pdfs.status === 'fulfilled' ? pdfs.value : []),
     ...(general.status === 'fulfilled' ? general.value : []),
   ];
-  const cityLc = city.trim().toLowerCase();
-  const fold = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  // Words that identify THIS restaurant — generic words ("wine", "bar",
-  // "kitchen"…) would let wine magazines and guides through.
-  const GENERIC = new Set(['the', 'and', 'restaurant', 'restaurants', 'bar', 'wine', 'wines', 'kitchen', 'cafe', 'bistro', 'brasserie', 'pub', 'house', 'club', 'hotel', 'room', 'dining', 'grill', 'cellar', 'london', 'paris']);
-  const allWords = fold(restaurant).split(/[^a-z0-9]+/).filter((w) => w.length > 2 && w !== 'the' && w !== 'and');
-  const specific = allWords.filter((w) => !GENERIC.has(w));
-  // A name made only of generic words ("The Wine Bar") keeps them.
-  const nameWords = specific.length ? specific : allWords;
-  // The restaurant's own site: its domain carries the name ("thedrapersarms.com",
-  // "noblerot.co.uk", "bratrestaurant.co.uk"). Only those results are offered —
-  // never guides, magazines or list aggregators. (A list PDF the restaurant
-  // links to on another host is still found when its page is read.)
-  // How many of the name's words the domain carries ("drapersarms" = 2 of 2,
-  // "thedrapers" = 1 of 2). Results must match as many as the best one does,
-  // so a namesake (Drapers' Hall) drops out when the real site is found.
-  const nameHits = (domain: string) => {
-    const squashed = fold(domain).replace(/[^a-z0-9]/g, '');
-    return nameWords.filter((w) => squashed.includes(w)).length;
-  };
-  const ownSite = (domain: string) => nameWords.length > 0 && nameHits(domain) > 0
-    && !/^(shop|store|boutique|giftcards?|vouchers?)\./.test(domain);
-  // A PDF on a website builder's file store (Squarespace, Wix, Shopify…) is
-  // usually the restaurant's own list: its address isn't the restaurant's, so
-  // the file name or title has to carry the name instead
-  // ("static1.squarespace.com/…/BANCONE+WINE+LIST.pdf").
-  const hostedPdfHits = (domain: string, path: string, title: string) =>
-    (FILE_HOSTS.test(domain) ? nameHits(`${path} ${title}`) : 0);
-  const seen = new Set<string>();
-  const scored = items
-    .map((it) => {
-      const url = typeof it.link === 'string' ? it.link : '';
-      const u = safeUrl(url);
-      if (!u) return null;
-      const domain = u.hostname.replace(/^www\./, '');
-      if (SKIP_DOMAINS.test(domain)) return null;
-      const title = String(it.title ?? domain);
-      const snippet = String(it.snippet ?? '');
-      const isPdf = /\.pdf($|\?)/i.test(u.pathname + u.search) || /\[pdf\]/i.test(title);
-      let path = u.pathname;
-      try { path = decodeURIComponent(path); } catch { /* keep it encoded */ }
-      const hosted = isPdf ? hostedPdfHits(domain, path, title) : 0;
-      if (!ownSite(domain) && hosted === 0) return null;
-      const hay = `${title} ${snippet} ${domain} ${u.pathname}`.toLowerCase();
-      let score = 0;
-      if (nameWords.some((w) => hay.includes(w))) score += 5;
-      // Every word of the name ("Drapers" AND "Arms"), not a namesake.
-      if (nameWords.length > 1 && nameWords.every((w) => hay.includes(w))) score += 4;
-      if (nameWords.some((w) => domain.includes(w))) score += 4;
-      // The town the user gave, so the Islington pub beats the Canterbury one.
-      if (cityLc && hay.includes(cityLc)) score += 6;
-      // A real list ("wine list", "drinks menu", "carte des vins") beats a page
-      // that only mentions wine ("a guide to food and wine pairing").
-      const tier = listTier(`${title} ${u.pathname}`);
-      if (tier === 2) score += 6;
-      else if (/wine/.test(hay)) score += 2;
-      if (isPdf) score += 2;
-      // A food or set menu is not the wine list.
-      if (/food|lunch menu|set menu|dinner menu|dessert|allergen/.test(hay) && !/wine/.test(hay)) score -= 5;
-      if (nameWords.length && !nameWords.some((w) => hay.includes(w))) score -= 6;
-      // A web page on someone else's site is usually an article ABOUT the
-      // restaurant, not its list (PDFs on other hosts are often the real list).
-      if (!isPdf && nameWords.length && !nameWords.some((w) => domain.includes(w))) score -= 4;
-      return { title: title.replace(/^\[pdf\]\s*/i, ''), url: u.toString(), domain, snippet, isPdf, score, tier, hosted: hosted > 0, hits: Math.max(nameHits(domain), hosted) };
-    })
-    .filter((r): r is NonNullable<typeof r> => !!r && r.score >= 5);
-  const bestHits = Math.max(0, ...scored.map((r) => r.hits));
-  // A namesake in another town (the Canterbury Drapers Arms, Noble Rot in New
-  // Zealand): when some site's results mention the user's town, drop sites
-  // whose results never do. If none mention it, keep everything.
-  const cityDomains = new Set(
-    cityLc ? scored.filter((r) => `${r.title} ${r.snippet} ${r.url}`.toLowerCase().includes(cityLc)).map((r) => r.domain) : [],
-  );
-  // A file-store PDF carrying the name is kept whatever the town filter says
-  // (a bare PDF rarely names the town).
-  const candidates = scored
-    .filter((r) => r.hits === bestHits)
-    .filter((r) => r.hosted || cityDomains.size === 0 || cityDomains.has(r.domain))
-    .sort((a, b) => b.score - a.score)
-    .filter((r) => { const k = urlKey(r.url); return seen.has(k) ? false : (seen.add(k), true); });
-
-  // Only actual wine lists: the title or address must say so. Homepages,
-  // restaurant pages and private-dining brochures are dropped.
-  // (Separators in addresses — "soho_wine.pdf", "wine-list" — count as spaces.)
-  // Real lists first: when any result is clearly a list, pages that only
-  // mention wine are left out.
-  const looksListy = candidates.filter((r) => r.tier >= 1);
-  const strong = looksListy.filter((r) => r.tier === 2);
-  const lists = strong.length ? strong : looksListy;
-  // Nothing that looks like a list → offer the restaurant's own site (at most
-  // two pages) so Vinster can look for the list there when it reads it.
-  const chosen = lists.length ? latestEditions(lists) : candidates.slice(0, 2);
-  return chosen.slice(0, 6).map(({ score: _s, hits: _h, tier: _t, hosted: _o, ...r }) => r);
-}
-
-// Website builders' file stores, where restaurants' PDFs usually live.
-const FILE_HOSTS = /(^|\.)(squarespace\.com|squarespace-cdn\.com|wixstatic\.com|shopify\.com|amazonaws\.com|cloudfront\.net|ctfassets\.net|prismic\.io|website-files\.com|webflow\.com|wp\.com|storage\.googleapis\.com|godaddysites\.com|img1\.wsimg\.com)$/i;
-
-// How surely a title/address is a wine list: 2 = says so ("wine list",
-// "drinks menu", "carte des vins", "by the bottle"…), 1 = only mentions wine
-// or drinks, 0 = neither. Separators in addresses count as spaces.
-const STRONG_LIST_SIGNAL = /\b(wine|wines|drinks?|beverages?)\s*(list|lists|menu|menus|card|book|selection|cellar)\b|\bwinelist\b|\bby the (bottle|glass)\b|\bcellar list\b|\bcarte des vins\b|\bcarte (de |des )?boissons\b|\bcarta (de |dei )?vin(o|i|os)\b|\bweinkarte\b|\bgetr[aä]nkekarte\b|\blista (dei )?vini\b/i;
-function listTier(text: string): 0 | 1 | 2 {
-  const t = text.replace(/[_\-./+%]+|%20/g, ' ');
-  if (STRONG_LIST_SIGNAL.test(t)) return 2;
-  return WINE_LIST_SIGNAL.test(t) ? 1 : 0;
-}
-
-// Words that mark a result as a wine (or drinks) list, in the languages lists
-// are usually written in.
-const WINE_LIST_SIGNAL = /\b(wine|wines|vin|vins|vino|vinos|vini|wein|weine|drinks?|cellar|cave|carta|bevande|boissons|getr[aä]nke)\b|wine-?list|winelist|carte-des-vins|carta-de?-vinos/i;
-
-// The same page under different addresses (http/https, www, trailing slash,
-// tracking parameters) counts once.
-function urlKey(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.hostname.replace(/^www\./, '')}${u.pathname.replace(/\/+$/, '')}`.toLowerCase();
-  } catch { return url.toLowerCase(); }
-}
-
-const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-// A date in a list's address or title ("wine-list-9th-October-2024.pdf",
-// "Wine-list-April-24th-2025", "/2024/10/"), as a sortable number + label.
-function editionDate(r: { url: string; title: string }): { sort: number; label: string } | null {
-  const t = decodeURIComponent(`${r.url} ${r.title}`).toLowerCase();
-  const year = t.match(/\b(20[1-3]\d)\b/g)?.map(Number).pop();
-  if (!year) return null;
-  const named = t.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/g)?.pop();
-  const mIdx = named ? MONTHS.indexOf(named.slice(0, 3)) : -1;
-  const month = mIdx >= 0 ? mIdx + 1 : Number(t.match(new RegExp(`${year}[-/_.](\\d{1,2})\\b`))?.[1] ?? 0);
-  return { sort: year * 100 + (month >= 1 && month <= 12 ? month : 0), label: month >= 1 && month <= 12 ? `${MONTH_NAMES[month - 1]} ${year}` : String(year) };
-}
-
-// A restaurant often has several dated copies of the same list online. Keep
-// only the newest of each (same site + same title), and put its date in the
-// title so the diner can see how current it is.
-function latestEditions<T extends { url: string; title: string; domain: string }>(results: T[]): T[] {
-  const groups = new Map<string, T[]>();
-  for (const r of results) {
-    // Same site + same title once the site's own name ("… - quovadissoho.co.uk")
-    // and the word "pdf" are taken out.
-    const siteWords = new Set(r.domain.toLowerCase().split('.'));
-    const titleWords = r.title.toLowerCase().replace(/[^a-z]+/g, ' ').trim().split(' ').filter((w) => w && w !== 'pdf' && !siteWords.has(w));
-    const k = `${r.domain}|${titleWords.join(' ')}`;
-    groups.set(k, [...(groups.get(k) ?? []), r]);
-  }
-  const out: T[] = [];
-  for (const g of groups.values()) {
-    const dated = g.map((r) => ({ r, d: editionDate(r) }));
-    const best = dated.filter((x) => x.d).sort((a, b) => b.d!.sort - a.d!.sort)[0] ?? dated[0];
-    const title = best.d && !best.r.title.includes(best.d.label) ? `${best.r.title.replace(/\s*[-–|]\s*[a-z0-9.-]+\.[a-z]{2,}$/i, '')} — ${best.d.label}` : best.r.title;
-    out.push({ ...best.r, title: title.charAt(0).toUpperCase() + title.slice(1) });
-  }
-  // Keep the original ranking order.
-  return results.filter((r) => out.some((o) => o.url === r.url)).map((r) => out.find((o) => o.url === r.url)!);
+  // Scoring lives in rank.ts so it can be tested without the network.
+  return rankResults(items, restaurant, city);
 }
 
 async function signedInUser(req: Request): Promise<boolean> {

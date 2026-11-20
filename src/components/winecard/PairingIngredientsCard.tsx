@@ -9,6 +9,12 @@ import { fonts } from '../../constants/fonts';
 // before the server filtered them.
 const DRINK_RE = /\b(wine|wines|champagne|cava|prosecco|cr[eé]mant|sherry|port|madeira|marsala|vermouth|cognac|brandy|armagnac|calvados|whisk(e)?y|gin|vodka|rum|tequila|liqueur|beer|ale|lager|cider|sake|pinot|noir|chardonnay|riesling|syrah|shiraz|grenache|merlot|cabernet|sauvignon|malbec|tempranillo|sangiovese|nebbiolo|barbera|zinfandel|gamay|viognier|chenin|s[eé]millon|gew[uü]rztraminer|muscat|moscato|gr[uü]ner|albari[nñ]o|mourv[eè]dre|blanc|rouge|ros[eé])\b/i;
 const isDrink = (n: string) => !/vinegar/i.test(n) && DRINK_RE.test(n);
+// Lists saved before the server fixed it can have "butter" under Vegetables:
+// dairy and fats show with Herbs & Spices, cheese with Proteins.
+const DAIRY_FAT_RE = /\b(butter|beurre|cream|cr[eè]me fra[iî]che|ghee|lard|duck fat|goose fat|oil|yog(h)?urt|mascarpone|milk)\b/i;
+const CHEESE_RE = /\b(cheese|parmesan|parmigiano|pecorino|grana padano|gruy[eè]re|comt[eé]|ch[eè]vre|brie|camembert|roquefort|stilton|cheddar|feta|ricotta|mozzarella|burrata|manchego|gorgonzola|taleggio|[eé]poisses|halloumi|paneer)\b/i;
+const groupOf = (i: PairingIngredient): PairingIngredient['type'] =>
+  CHEESE_RE.test(i.name) ? 'protein' : DAIRY_FAT_RE.test(i.name) ? 'herb' : i.type;
 const GROUPS: { type: PairingIngredient['type']; label: string }[] = [
   { type: 'protein', label: 'Proteins' },
   { type: 'herb', label: 'Herbs & Spices' },
@@ -25,7 +31,7 @@ export function PairingIngredientsCard({ ingredients, loading }: { ingredients: 
       ) : (
         // A vertical list: group name on the left, its three items stacked on the right.
         <View style={styles.card}>
-          {GROUPS.map((g) => ({ g, items: (ingredients ?? []).filter((i) => i.type === g.type && !isDrink(i.name)).slice(0, 3) }))
+          {GROUPS.map((g) => ({ g, items: (ingredients ?? []).filter((i) => groupOf(i) === g.type && !isDrink(i.name)).slice(0, 3) }))
             .filter((x) => x.items.length)
             .map(({ g, items }, idx, all) => (
               <View key={g.type} style={[styles.row, idx < all.length - 1 && styles.rowRule]}>

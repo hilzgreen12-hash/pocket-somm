@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { guestAllowanceLeft, guestLimitResponse, guestPhone, recordGuestUse } from '../_shared/guest.ts';
 import { HOUSE_RULES } from '../_shared/houseRules.ts';
+import { getTasteProfile, tasteProfileSection } from '../_shared/tasteProfile.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -70,7 +71,8 @@ function buildCellarPrompt(
   stylePreference: string | null | undefined,
   budget: number | null | undefined,
   currency: string,
-  userPreferences?: Record<string, any> | null,
+  userPreferences: Record<string, any> | null | undefined,
+  tasteSection: string,
 ): string {
   const wineList = wines.map((w, i) => {
     const price = w.purchase_price != null
@@ -85,7 +87,7 @@ function buildCellarPrompt(
   return `You are a world-class sommelier. A user is cooking the following dish and wants to know which wine from their cellar to open.
 
 Dish: ${dish}
-${briefBlock}${preferenceBlock}
+${briefBlock}${preferenceBlock}${tasteSection}
 
 Their cellar:
 ${wineList}
@@ -127,7 +129,8 @@ function buildGeneralPrompt(
   stylePreference: string | null | undefined,
   budget: number | null | undefined,
   currency: string,
-  userPreferences?: Record<string, any> | null,
+  userPreferences: Record<string, any> | null | undefined,
+  tasteSection: string,
 ): string {
   const briefBlock = buildBriefBlock(stylePreference, budget, currency, 'general');
   const preferenceBlock = buildPreferenceBlock(userPreferences);
@@ -135,7 +138,7 @@ function buildGeneralPrompt(
   return `You are a world-class sommelier. A user is cooking the following dish and wants to know what wine to buy.
 
 Dish: ${dish}
-${briefBlock}${preferenceBlock}
+${briefBlock}${preferenceBlock}${tasteSection}
 
 Recommend the top 3 wines that would complement this dish, ranked from best to third-best match. All three must sit at the user's budget level (where one is given) — these are three genuine alternatives at the same price point, NOT a cheap / mid / premium ladder. Be specific — name the grape variety and region, not just a broad colour. Offer real variety across the three (different grapes, regions or styles) so the user has distinct options to choose between.
 
@@ -198,9 +201,11 @@ Deno.serve(async (req) => {
     }
     const currency = (userPreferences?.defaultCurrency as string | undefined) ?? 'GBP';
 
+    // Guests have no Vinster's Observations to read.
+    const tasteSection = guest ? '' : tasteProfileSection(await getTasteProfile(req));
     const prompt = mode === 'cellar'
-      ? buildCellarPrompt(dish, cellarWines ?? [], stylePreference, budget, currency, userPreferences)
-      : buildGeneralPrompt(dish, stylePreference, budget, currency, userPreferences);
+      ? buildCellarPrompt(dish, cellarWines ?? [], stylePreference, budget, currency, userPreferences, tasteSection)
+      : buildGeneralPrompt(dish, stylePreference, budget, currency, userPreferences, tasteSection);
 
     const response = await client.messages.create({
       system: HOUSE_RULES,

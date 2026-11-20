@@ -92,6 +92,29 @@ export async function resolveCatalogKey(producer: string, wineName: string | nul
   }
 }
 
+// This producer's wines that Vinster's catalogue has VERIFIED (Wine-Searcher or
+// a manual check — never an AI-added "plausible" row), for the identity check:
+// a wine on this list is known to exist, so a label-worded variant of its name
+// ("La Cabaña Single Vineyard") can be recognised as it.
+export async function verifiedProducerWines(producer: string): Promise<string[]> {
+  const producerKey = norm(producer);
+  if (!producerKey) return [];
+  try {
+    const { data } = await admin
+      .from('wines_catalog')
+      .select('producer, wine_name')
+      .like('search_key', `${producerKey}%`)
+      .eq('verification_status', 'verified')
+      .limit(60);
+    const names = ((data ?? []) as { producer: string; wine_name: string | null }[])
+      .filter((r) => norm(r.producer) === producerKey && r.wine_name?.trim())
+      .map((r) => r.wine_name!.trim());
+    return Array.from(new Set(names)).slice(0, 40);
+  } catch {
+    return [];
+  }
+}
+
 // A vintage as stored: 'NV' or a 4-digit year; anything else isn't recorded.
 export function vintageKey(v: unknown): string | null {
   const s = String(v ?? '').trim();

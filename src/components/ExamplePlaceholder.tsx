@@ -8,6 +8,16 @@ import { fonts } from '../constants/fonts';
 // with the app (the same photo as Home's Search & Discover tile), so it always
 // shows: a web photo that failed to load left a plain brown tile.
 export const RESTAURANT_IMG: ImageSourcePropType = require('../../assets/images/tiles/restaurant-interior.jpg');
+// More bundled restaurant and food photos (Unsplash License; credits in
+// assets/images/tiles/CREDITS.md), so example tiles side by side don't repeat.
+export const RESTAURANT_WARM_IMG: ImageSourcePropType = require('../../assets/images/tiles/restaurant-warm.jpg');
+export const RESTAURANT_GLASSES_IMG: ImageSourcePropType = require('../../assets/images/tiles/restaurant-table-glasses.jpg');
+export const RESTAURANT_LANTERNS_IMG: ImageSourcePropType = require('../../assets/images/tiles/restaurant-lanterns.jpg');
+export const FOOD_ROAST_IMG: ImageSourcePropType = require('../../assets/images/tiles/food-sunday-roast.jpg');
+export const FOOD_SUMMER_IMG: ImageSourcePropType = require('../../assets/images/tiles/food-summer-table.jpg');
+// Cookbook-spines photo (bundled) — Your Cookbook's artwork, and the stand-in
+// for any recipe / kitchen placeholder.
+export const KITCHEN_IMG: ImageSourcePropType = require('../../assets/images/kitchen-favourites.jpg');
 
 // Bundled generic wine-label images — shipped with the app so placeholder tiles
 // ALWAYS show real labels (no flaky per-wine web fetch). Used for the label

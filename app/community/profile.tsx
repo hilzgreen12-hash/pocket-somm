@@ -1,5 +1,6 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
+import { MessageScreen } from '../../src/components/MessageScreen';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -54,9 +55,7 @@ export default function CommunityProfileScreen() {
 
   if (!session) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.emptyTitle}>Sign in required</Text>
-      </View>
+      <MessageScreen title="Sign in required" />
     );
   }
 
@@ -154,7 +153,6 @@ const styles = StyleSheet.create({
   // Community isn't live yet — content is shown faded and the wrapper is
   // pointerEvents="none" so it can't be used, only previewed.
   muted: { opacity: 0.5 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   backRow: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   intro: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center', gap: spacing.xs },
@@ -165,7 +163,6 @@ const styles = StyleSheet.create({
   usernameText: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.text },
   helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 18 },
   loadingRow: { padding: spacing.xl, alignItems: 'center' },
-  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   publishedCard: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, backgroundColor: 'rgba(212,176,96,0.06)', gap: spacing.xs },
 
   publishedTitle: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold, lineHeight: 24, marginBottom: 2 },

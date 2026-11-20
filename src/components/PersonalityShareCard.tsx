@@ -2,7 +2,7 @@ import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { share } from '../constants/theme';
 import { personalityBlurb } from '../utils/personalityText';
-import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
+import { ShareCardHeader } from './ShareCardHeader';
 
 // Branded card for sharing personality sketches — 1080 wide and as tall
 // as the sketch needs (a fixed height clipped longer ones). Rendered
@@ -20,26 +20,13 @@ export const PersonalityShareCard = forwardRef<View, Props>(({ title, body, cate
   return (
     <View ref={ref} collapsable={false} style={styles.card}>
       <View style={styles.inner}>
-        <View style={styles.topRow}>
-          <Text style={styles.brand}>VINSTER</Text>
-          <Text style={styles.brandTagline}>Real Wine Experience, AI Delivered</Text>
-        </View>
-
-        <View style={styles.divider} />
-
-        <Text style={styles.subhead}>{heading}</Text>
+        <ShareCardHeader title={heading} />
 
         <Text style={styles.blurb}>{personalityBlurb(category)}</Text>
 
         {title ? <Text style={styles.title}>{title}</Text> : null}
 
         <Text style={styles.body}>{body}</Text>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerLine}>{VINSTER_GET_LABEL}</Text>
-          <Text style={styles.footerCta}>{VINSTER_TAGLINE}</Text>
-            <Text style={styles.footerUrl}>{VINSTER_APP_STORE_URL.replace(/^https?:\/\//, '')}</Text>
-        </View>
       </View>
     </View>
   );
@@ -62,42 +49,13 @@ const styles = StyleSheet.create({
     paddingVertical: PADDING - 16,
     backgroundColor: share.bg,
   },
-  topRow: {
-    alignItems: 'center',
-  },
-  brand: {
-    fontFamily: 'CormorantGaramond_700Bold',
-    fontSize: 64,
-    color: share.ink,
-    letterSpacing: 12,
-  },
-  brandTagline: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 29,
-    color: share.inkMuted,
-    marginTop: 6,
-    letterSpacing: 1.5,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: share.brandDim,
-    marginVertical: 36,
-  },
-  subhead: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 32,
-    color: share.gold,
-    textTransform: 'uppercase',
-    letterSpacing: 6,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
   blurb: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 30,
     color: share.ink,
     lineHeight: 42,
     textAlign: 'center',
+    marginTop: 8,
     marginBottom: 36,
   },
   title: {
@@ -115,22 +73,4 @@ const styles = StyleSheet.create({
     color: share.ink,
     lineHeight: 56,
   },
-  footer: {
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  footerLine: {
-    fontFamily: 'CormorantGaramond_700Bold',
-    fontSize: 26,
-    color: share.brand,
-    letterSpacing: 4,
-  },
-  footerCta: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 24,
-    color: share.inkMuted,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: share.brand, marginTop: 8, letterSpacing: 0.5, textDecorationLine: 'underline' },
 });

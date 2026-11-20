@@ -35,6 +35,7 @@ import { CellarCommandModal } from '../../../src/components/CellarCommandModal';
 import { ArchiveBottlesSheet } from '../../../src/components/winecard/cellar/ArchiveBottlesSheet';
 import { showAlert } from '../../../src/components/AppAlert';
 import { bottleSizeCl } from '../../../src/components/BottleSizePicker';
+import { MessageScreen } from '../../../src/components/MessageScreen';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { launchCamera, launchImageLibrary } from '../../../src/utils/imagePicker';
 import { confirmWineDelete, reviewsOn } from '../../../src/utils/confirmWineDelete';
@@ -646,10 +647,11 @@ export default function StorageLocationScreen() {
   }
   if (!location) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.emptyBody}>This location no longer exists.</Text>
-        <TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>← Back</Text></TouchableOpacity>
-      </View>
+      <MessageScreen
+        title="Location not found"
+        body="This location no longer exists."
+        onBack={() => router.back()}
+      />
     );
   }
 
@@ -853,7 +855,6 @@ const styles = StyleSheet.create({
   headerDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   headerSide: { width: 44, justifyContent: 'center' },
-  backLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold },
   // Matches the rack / fridge headers (size, weight, spacing) + carousel arrows.
   title: { flexShrink: 1, fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   titleNav: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
@@ -882,7 +883,6 @@ const styles = StyleSheet.create({
   emptyWinesBlock: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
   emptyWinesTitle: { fontSize: 16, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyWinesAdd: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
-  emptyBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   looseHeader: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs },
 
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },

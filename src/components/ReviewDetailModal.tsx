@@ -155,7 +155,7 @@ export function ReviewDetailModal({
         <TouchableOpacity style={styles.addBtn} onPress={onAddReview} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
           <Text style={styles.addText}>+ Add Review</Text>
         </TouchableOpacity>
-        {/* Export moved to a full-width gold button at the foot of the card. */}
+        {/* Share Review is a full-width gold button at the foot of the card. */}
         {/* Centred card-type label — matches the Cellar wine card's gold chip so
             the two cards read as the same family. */}
         <Text style={styles.cardTypeLabel} pointerEvents="none">Wine Review</Text>
@@ -279,10 +279,10 @@ export function ReviewDetailModal({
             );
           })}
 
-          {/* Export — a full-width gold button at the foot of the card. */}
+          {/* Share Review — a full-width gold button at the foot of the card. */}
           {onShare ? (
             <TouchableOpacity style={styles.exportBtn} onPress={onShare} activeOpacity={0.85}>
-              <Text style={styles.exportBtnText}>Export</Text>
+              <Text style={styles.exportBtnText}>Share Review</Text>
             </TouchableOpacity>
           ) : null}
         </ScrollView>
@@ -338,12 +338,12 @@ const styles = StyleSheet.create({
   addBtn: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, padding: 4 },
   addText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
 
-  // Foot-of-card Export — gold outline + gold font only (no fill), sized to match
+  // Foot-of-card Share Review — gold outline + gold font only (no fill), sized to match
   // the Cellar tab buttons (paddingVertical sm / paddingHorizontal md, 14pt).
   exportBtn: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   exportBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
   // Centred gold card-type chip — same face/size/spacing as the Cellar card's.
-  // Sits BELOW the top controls (back / +Add Review / Export) rather than level
+  // Sits BELOW the top controls (back / +Add Review) rather than level
   // with them, so the card's title and everything under it clear the header.
   cardTypeLabel: { position: 'absolute', top: 112, left: 0, right: 0, textAlign: 'center', zIndex: 5, fontFamily: fonts.headingBold, fontSize: 16, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   // Extra top padding drops the header clear of the back / Share controls.

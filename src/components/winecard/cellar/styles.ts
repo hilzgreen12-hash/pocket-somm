@@ -7,8 +7,6 @@ import { fonts } from '../../../constants/fonts';
 export const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  errorText: { color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 16 },
-  linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
 
   // "Wine has been removed from your records", shown briefly after a delete.
   toastOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },

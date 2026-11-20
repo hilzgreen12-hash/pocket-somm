@@ -137,9 +137,15 @@ function VintageComparison({ wine, market, canEdit, currency }: { wine: CellarWi
           return (
             <View key={r.vintage} style={wc.TRow}>
               <Text style={[wc.TCell, wc.TYear, mine && wc.TMine]}>{r.vintage}{mine ? ' · yours' : ''}</Text>
-              <Text style={[wc.TCell, mine && wc.TMine]}>{r.score ?? '—'}</Text>
-              <Text style={[wc.TCell, mine && wc.TMine]}>{r.price != null ? fmtMoney(r.price) : '—'}</Text>
-              <Text style={[wc.TCell, mine && wc.TMine]}>{r.ppt != null ? `${currencySymbol(currency)}${r.ppt.toFixed(2)}` : '—'}{best ? <Text style={wc.BestStar}> ★</Text> : null}</Text>
+              {r.noData ? (
+                <Text style={[wc.TCell, wc.TNoData, mine && wc.TMine]}>No market data</Text>
+              ) : (
+                <>
+                  <Text style={[wc.TCell, mine && wc.TMine]}>{r.score ?? '—'}</Text>
+                  <Text style={[wc.TCell, mine && wc.TMine]}>{r.price != null ? fmtMoney(r.price) : '—'}</Text>
+                  <Text style={[wc.TCell, mine && wc.TMine]}>{r.ppt != null ? `${currencySymbol(currency)}${r.ppt.toFixed(2)}` : '—'}{best ? <Text style={wc.BestStar}> ★</Text> : null}</Text>
+                </>
+              )}
             </View>
           );
         })}

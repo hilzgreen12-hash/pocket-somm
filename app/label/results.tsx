@@ -25,6 +25,7 @@ import { newCellarWinePayload, findSameWineLive, purchaseOnMerge, attachLabelIfM
 import { marketValuePer75 } from '../../src/services/purchaseEstimate';
 import { canEditCellar, VIEW_ONLY_MESSAGE } from '../../src/api/cellarContext';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
+import { MessageScreen } from '../../src/components/MessageScreen';
 import { wc } from '../../src/components/winecard/wcStyles';
 import { PER_75CL, priceForSize } from '../../src/utils/bottleValue';
 import { vintageVerdict, tooFewVintagesNote, pickFromCellar, ordinal, type CellarPick } from '../../src/utils/wineCardInsights';
@@ -992,32 +993,32 @@ export default function LabelResultsScreen() {
   if (notFound && !intelligence) {
     const asked = [wineDetailsConfirmed?.producer, wineDetailsConfirmed?.wineName, wineDetailsConfirmed?.vintage].filter(Boolean).join(' ');
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{asked ? `Vinster couldn't find ${asked}.` : "Vinster couldn't find this wine."}</Text>
-        <Text style={styles.errorText}>Check the name and try again.</Text>
-        <TouchableOpacity onPress={openSearchAgain}>
-          <Text style={styles.linkText}>Search again</Text>
-        </TouchableOpacity>
-      </View>
+      <MessageScreen
+        title="Vinster couldn't find this wine"
+        body={asked ? `There's no record of ${asked}. Check the producer, wine name and vintage, then search again.` : 'Check the producer, wine name and vintage, then search again.'}
+        action={{ label: 'Search Again', onPress: openSearchAgain }}
+        onBack={intelGoBack}
+      />
     );
   }
 
   if (!wineDetailsConfirmed || (!intelligence && !isAddFlow && !awaitingConfirm && !intelLoading)) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{genError ? "Vinster couldn't generate this wine's intel just now." : 'No results available.'}</Text>
-        {genError ? (
-          <TouchableOpacity onPress={() => { void runGenerate(); }}>
-            <Text style={styles.linkText}>Try again</Text>
-          </TouchableOpacity>
-        ) : (
-          // Back to the camera in the SAME flow this screen was opened for (Wine
-          // Intel, cellar add…) — a bare /label/camera dropped into the cellar flow.
-          <TouchableOpacity onPress={() => router.replace(`/label/camera${context ? `?context=${context}` : ''}` as any)}>
-            <Text style={styles.linkText}>Scan a label</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+    return genError ? (
+      <MessageScreen
+        title="Wine Intel isn't ready"
+        body="Vinster couldn't generate this wine's intel just now. It usually works on a second try."
+        action={{ label: 'Try Again', onPress: () => { void runGenerate(); } }}
+        onBack={intelGoBack}
+      />
+    ) : (
+      // Back to the camera in the SAME flow this screen was opened for (Wine
+      // Intel, cellar add…) — a bare /label/camera dropped into the cellar flow.
+      <MessageScreen
+        title="No results yet"
+        body="Scan the label again to see this wine's intel."
+        action={{ label: 'Scan a Label', onPress: () => router.replace(`/label/camera${context ? `?context=${context}` : ''}` as any) }}
+        onBack={intelGoBack}
+      />
     );
   }
 
@@ -1953,7 +1954,7 @@ export default function LabelResultsScreen() {
                 <Text style={wc.outlineBtnText}>Save to Your Cellar</Text>
               </TouchableOpacity>
               <TouchableOpacity style={wc.outlineBtn} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
-                <Text style={wc.outlineBtnText}>{sharing ? 'Exporting…' : 'Export Wine Intel'}</Text>
+                <Text style={wc.outlineBtnText}>{sharing ? 'Preparing…' : 'Share Result'}</Text>
               </TouchableOpacity>
               <Text style={[wc.Small, { textAlign: 'center' }]}>Community notes on this wine · coming soon</Text>
             </View>
@@ -1998,9 +1999,15 @@ export default function LabelResultsScreen() {
                     return (
                       <View key={r.vintage} style={wc.TRow}>
                         <Text style={[wc.TCell, wc.TYear, mine && wc.TMine]}>{r.vintage}{mine ? ' · this' : ''}</Text>
-                        <Text style={[wc.TCell, mine && wc.TMine]}>{r.score ?? '—'}</Text>
-                        <Text style={[wc.TCell, mine && wc.TMine]}>{r.price != null ? fmt(r.price) : '—'}</Text>
-                        <Text style={[wc.TCell, mine && wc.TMine]}>{r.ppt != null ? `${currencySymbol(userCurrency)}${r.ppt.toFixed(2)}` : '—'}{best ? <Text style={wc.BestStar}> ★</Text> : null}</Text>
+                        {r.noData ? (
+                          <Text style={[wc.TCell, wc.TNoData, mine && wc.TMine]}>No market data</Text>
+                        ) : (
+                          <>
+                            <Text style={[wc.TCell, mine && wc.TMine]}>{r.score ?? '—'}</Text>
+                            <Text style={[wc.TCell, mine && wc.TMine]}>{r.price != null ? fmt(r.price) : '—'}</Text>
+                            <Text style={[wc.TCell, mine && wc.TMine]}>{r.ppt != null ? `${currencySymbol(userCurrency)}${r.ppt.toFixed(2)}` : '—'}{best ? <Text style={wc.BestStar}> ★</Text> : null}</Text>
+                          </>
+                        )}
                       </View>
                     );
                   })}
@@ -2158,8 +2165,8 @@ export default function LabelResultsScreen() {
         <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
-      {/* Top-right action: Edit Wine (correct the wine or re-scan). Export moved
-          to a gold button in the actions section. */}
+      {/* Top-right action: Edit Wine (correct the wine or re-scan). Share Result
+          is a gold button in the actions section. */}
       {isIntelOnlyFlow && intelligence ? (
         <View style={styles.topRightActions}>
           <TouchableOpacity
@@ -2221,8 +2228,7 @@ export default function LabelResultsScreen() {
           </View>
         </View>
 
-        {/* The correction action moved to the top-right ("Edit / Scan Again",
-            below Export) — see the header actions above. */}
+        {/* The correction action moved to the top-right ("Edit / Scan Again") — see the header actions above. */}
       </View>
 
       </>
@@ -2894,13 +2900,11 @@ const styles = StyleSheet.create({
   // for the captureRef snapshot but never appears on screen.
   shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  errorText: { color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 16 },
-  linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm, alignSelf: 'flex-start' },
   backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
 
   scanAgainText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  // Stacked top-right actions (Export, then Edit / Scan Again), same gold font.
+  // Stacked top-right actions (Edit / Scan Again), same gold font.
   topRightActions: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, alignItems: 'flex-end', gap: spacing.xs },
 
   pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },

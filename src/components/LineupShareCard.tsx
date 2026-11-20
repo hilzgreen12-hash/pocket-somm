@@ -1,38 +1,50 @@
 import { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { share } from '../constants/theme';
-import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
+import { ShareCardHeader } from './ShareCardHeader';
 
-// Branded card for sharing an archived night's lineup: the photo + a date (and
-// location, once lineups record one) stamp + the user's memory note. Rendered
-// off-screen and captured as a PNG, matching the other Vinster share surfaces.
-// `onImageReady` fires once the remote photo has loaded so the caller knows it's
-// safe to snapshot.
+// Branded card for sharing an archived night's lineup: the photo + the user's
+// memory note under the lineup's title, its venue · city and its date. Rendered off-screen and
+// captured as a PNG, matching the other Vinster share surfaces. `onImageReady`
+// fires once the remote photo has loaded so the caller knows it's safe to
+// snapshot.
 
 interface Props {
   imageUrl: string;
-  title?: string | null;        // the user's name for this lineup
+  name?: string | null;         // the user's name for this lineup
+  venue?: string | null;
+  city?: string | null;
   date: string;                 // pre-formatted, e.g. "24 June 2026"
-  location?: string | null;     // optional — not stored on lineups yet
   note?: string | null;
+  // The lineup's bottles, listed beneath the note.
+  wines?: { producer: string | null; wine_name: string; vintage: string | number | null; count: number; region?: string | null }[];
   onImageReady?: () => void;
 }
 
+// "Louis Roederer · Cristal 2012" — the producer is left out when the wine's
+// name already says it ("Château Plince").
+function wineLine(w: { producer: string | null; wine_name: string; vintage: string | number | null }): string {
+  const producer = w.producer?.trim() || '';
+  const name = w.wine_name?.trim() || '';
+  const repeats = !!producer && name.toLowerCase().startsWith(producer.toLowerCase());
+  const label = [repeats ? '' : producer, name].filter(Boolean).join(' · ');
+  return w.vintage ? `${label} ${w.vintage}` : label;
+}
+
 export const LineupShareCard = forwardRef<View, Props>(
-  ({ imageUrl, title, date, location, note, onImageReady }, ref) => {
-    const stamp = [date, location].filter((s) => s && String(s).trim().length > 0).join(' · ');
+  ({ imageUrl, name, venue, city, date, note, wines = [], onImageReady }, ref) => {
+    const venueName = venue?.trim() || '';
+    const lineupName = name?.trim() || '';
+    // Three lines: the lineup's own title, then where (venue · city), then when.
+    // With no title the venue leads instead, so it isn't repeated beneath.
+    const title = lineupName || venueName || 'Your Lineup';
+    const place = [lineupName ? venueName : '', city?.trim()].filter(Boolean).join(' · ');
     return (
       <View ref={ref} collapsable={false} style={styles.card}>
         <View style={styles.inner}>
-          <View style={styles.topRow}>
-            <Text style={styles.brand}>VINSTER</Text>
-            <Text style={styles.brandTagline}>Real Wine Experience, AI Delivered</Text>
-          </View>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.subhead}>{(title ?? '').trim() || 'Your Lineup'}</Text>
-          {stamp ? <Text style={styles.stamp}>{stamp}</Text> : null}
+          <ShareCardHeader title={title} />
+          {place ? <Text style={styles.place}>{place}</Text> : null}
+          {date ? <Text style={styles.date}>{date}</Text> : null}
 
           <View style={styles.photoWrap}>
             <Image
@@ -46,11 +58,19 @@ export const LineupShareCard = forwardRef<View, Props>(
 
           {note && note.trim() ? <Text style={styles.note} numberOfLines={8}>“{note.trim()}”</Text> : null}
 
-          <View style={styles.footer}>
-            <Text style={styles.footerLine}>{VINSTER_GET_LABEL}</Text>
-            <Text style={styles.footerCta}>{VINSTER_TAGLINE}</Text>
-            <Text style={styles.footerUrl}>{VINSTER_APP_STORE_URL.replace(/^https?:\/\//, '')}</Text>
-          </View>
+          {wines.length > 0 ? (
+            <View style={styles.winesBlock}>
+              <Text style={styles.winesLabel}>The Lineup</Text>
+              {wines.slice(0, 10).map((w, i) => (
+                <Text key={i} style={styles.wineLine} numberOfLines={2}>
+                  {w.count > 1 ? `${w.count}× ` : ''}{wineLine(w)}
+                  {/* Where it's from, when the lineup knows ("Pomerol, Bordeaux"). */}
+                  {w.region?.trim() ? <Text style={styles.wineRegion}>{`  ${w.region.trim()}`}</Text> : null}
+                </Text>
+              ))}
+              {wines.length > 10 ? <Text style={styles.wineMore}>+ {wines.length - 10} more</Text> : null}
+            </View>
+          ) : null}
         </View>
       </View>
     );
@@ -60,6 +80,11 @@ export const LineupShareCard = forwardRef<View, Props>(
 const CARD_WIDTH = 1080;
 
 const styles = StyleSheet.create({
+  winesBlock: { marginTop: 36, gap: 8 },
+  winesLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 28, color: share.brand, textTransform: 'uppercase', letterSpacing: 4, textAlign: 'center', marginBottom: 6 },
+  wineLine: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 30, lineHeight: 38, color: share.ink, textAlign: 'center' },
+  wineRegion: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.brand },
+  wineMore: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, textAlign: 'center' },
   card: { width: CARD_WIDTH, backgroundColor: share.bg, padding: 28 },
   inner: {
     borderWidth: 4,
@@ -69,14 +94,10 @@ const styles = StyleSheet.create({
     paddingVertical: 64,
     backgroundColor: share.bg,
   },
-  topRow: { alignItems: 'center' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: share.brand, letterSpacing: 14 },
-  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.inkMuted, marginTop: 8, letterSpacing: 1.5 },
-  divider: { height: 1, backgroundColor: share.brandDim, marginVertical: 32 },
-  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 38, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center' },
-  stamp: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: share.ink, textAlign: 'center', marginTop: 10 },
+  place: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 34, color: share.ink, textAlign: 'center', marginTop: -4 },
+  date: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: share.brand, textTransform: 'uppercase', letterSpacing: 2.5, textAlign: 'center', marginTop: 6 },
   photoWrap: {
-    marginTop: 32,
+    marginTop: 24,
     borderWidth: 2,
     borderColor: share.brand,
     borderRadius: 22,
@@ -85,8 +106,4 @@ const styles = StyleSheet.create({
   },
   photo: { width: '100%', height: 660 },
   note: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.ink, lineHeight: 44, marginTop: 32, textAlign: 'center' },
-  footer: { alignItems: 'center', marginTop: 40 },
-  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4 },
-  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, marginTop: 8, textAlign: 'center' },
-  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: share.brand, marginTop: 8, letterSpacing: 0.5, textDecorationLine: 'underline' },
 });

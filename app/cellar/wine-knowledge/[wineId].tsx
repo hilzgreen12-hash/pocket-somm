@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { getWineKnowledge } from '../../../src/api/label';
 import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
+import { MessageScreen } from '../../../src/components/MessageScreen';
 import type { WineKnowledgeData } from '../../../src/types/wine';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -99,10 +100,11 @@ export default function WineKnowledgeScreen() {
       </View>
 
       {!hasWine ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Wine not found</Text>
-          <Text style={styles.emptyBody}>Open this from a wine card or review to dive deeper.</Text>
-        </View>
+        <MessageScreen
+          title="Wine not found"
+          body="Open this from a wine card or review to dive deeper."
+          onBack={null}
+        />
       ) : (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           {/* Branded masthead — mirrors the recipe pairing page. */}
@@ -236,7 +238,5 @@ const styles = StyleSheet.create({
   loadingBlock: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   loadingText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
 
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
-  emptyTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center' },
   emptyBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
 });

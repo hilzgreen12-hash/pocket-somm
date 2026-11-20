@@ -8,6 +8,7 @@ import { useChefArchiveCollections } from '../hooks/useChefArchiveCollections';
 import { useAuth } from '../hooks/useAuth';
 import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
 import { ReorderableRow } from './ReorderableRow';
+import { PlaceholderCardView, type PlaceholderCard, KITCHEN_IMG, FOOD_ROAST_IMG, FOOD_SUMMER_IMG } from './ExamplePlaceholder';
 import { showAlert } from './AppAlert';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { uploadCookbookPhoto } from '../api/labelPhotos';
@@ -20,10 +21,17 @@ import { fonts } from '../constants/fonts';
 // are copied here verbatim, but the folders render as boxes (like the Cellar /
 // Review carousels) rather than the chips used on the Cookbook page itself.
 // Tapping any box drills into /chef/archive, where the format switches back to
-// that page's own layout.
-// Stand-in cover for Favourite Recipes until the user adds their own image
-// (a photo of cookbook spines, bundled with the app).
-const KITCHEN_IMG = require('../../assets/images/kitchen-favourites.jpg');
+// that page's own layout. KITCHEN_IMG (cookbook spines, bundled) is Favourite
+// Recipes' stand-in cover until the user adds their own image.
+
+// A new cook (no recipes, no folders) sees three example tiles instead of an
+// empty Favourites box, each with its own food photo.
+const COOKBOOK_OVERLAY = 'Your recipes and folders appear here as you use Vinster';
+const COOKBOOK_EXAMPLES: PlaceholderCard[] = [
+  { kind: 'image', image: KITCHEN_IMG, title: '★ Favourite Recipes', stamp: 'Cookbook · 12 Recipes', overlay: COOKBOOK_OVERLAY },
+  { kind: 'image', image: FOOD_ROAST_IMG, title: 'Sunday Roasts', stamp: 'Your Folder · 6 Recipes', overlay: COOKBOOK_OVERLAY },
+  { kind: 'image', image: FOOD_SUMMER_IMG, title: 'Summer Suppers', stamp: 'Your Folder · 4 Recipes', overlay: COOKBOOK_OVERLAY },
+];
 
 function recipeLabel(n: number): string {
   return `${n} ${n === 1 ? 'Recipe' : 'Recipes'}`;
@@ -158,7 +166,9 @@ export function CookbookFoldersCarousel() {
         holdToDrag
         onHold={(id) => { const c = collections.find((x) => x.id === id); if (c) openFolderMenu(c); }}
         onReorder={(ids) => void saveOrder(ids)}
-        leading={
+        leading={recipeCount === 0 && collections.length === 0 ? (
+          <>{COOKBOOK_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} stampCaps />)}</>
+        ) : (
           <View style={styles.tileWrap}>
             <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
               {/* Kitchen photo always underneath, so the tile is never blank (a saved
@@ -171,7 +181,7 @@ export function CookbookFoldersCarousel() {
             </TouchableOpacity>
             <Text style={styles.cardMeta} numberOfLines={1}>Cookbook · {recipeLabel(favouritesCount)}</Text>
           </View>
-        }
+        )}
         items={collections.map((c) => ({
           key: c.id,
           label: c.name,

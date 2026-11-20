@@ -452,12 +452,13 @@ async function runScanJob(job: ScanJob): Promise<void> {
     let recWines = Array.isArray(rec?.wines) ? rec.wines : [];
     // Safety net: wines passed the colour/budget filters but no picks came
     // back — ask once more without the soft preferences (style, food,
-    // country), so a list that HAS suitable wines never ends in an error.
+    // country, Vinster's Observations), so a list that HAS suitable wines
+    // never ends in an error.
     if (!recWines.length && winesForRecommend.length && elapsed() < 120_000) {
       log('empty_picks_retry', { qualifying: winesForRecommend.length });
       try {
         const retry = await callFn('recommend', {
-          ...recBody, styleProfiles: [], foodPairing: '', preferredCountry: '', profileWineTypes: [], profileStyleProfiles: [],
+          ...recBody, styleProfiles: [], foodPairing: '', preferredCountry: '', profileWineTypes: [], profileStyleProfiles: [], useTasteProfile: false,
         }, authHeader, guest, 80_000);
         const again = Array.isArray(retry?.wines) ? retry.wines : [];
         if (again.length) { rec = retry; recWines = again; }

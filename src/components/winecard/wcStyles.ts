@@ -62,6 +62,8 @@ export const wc = StyleSheet.create({
   THead: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   TCell: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 13.5, color: colors.text },
   TYear: { flex: 1.5 },
+  // Spans the score, price and per-point columns for a vintage with no data.
+  TNoData: { flex: 3 },
   TMine: { color: colors.gold, fontFamily: fonts.bodySemibold },
   BestStar: { color: colors.gold },
   Verdict: { marginTop: 6, padding: spacing.sm, borderRadius: 12, backgroundColor: 'rgba(224,184,74,0.08)', borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', gap: 8 },

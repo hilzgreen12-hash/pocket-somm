@@ -936,7 +936,7 @@ export default function ResultsScreen() {
               activeOpacity={0.7}
             >
               <Text style={[styles.shareBtnText, sharing && { opacity: 0.5 }]}>
-                {sharing ? 'Preparing…' : '+ Export Results'}
+                {sharing ? 'Preparing…' : '+ Share Results'}
               </Text>
             </TouchableOpacity>
           </View>

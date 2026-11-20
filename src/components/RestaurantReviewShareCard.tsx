@@ -1,14 +1,13 @@
 import { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { share } from '../constants/theme';
-import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
+import { ShareCardHeader } from './ShareCardHeader';
 
 // Branded card for sharing a restaurant visit out of Your Restaurants
-// Reviews. Mirrors WineListShareCard / WineReviewShareCard so the three
-// share surfaces feel like one family — same gold-on-terracotta frame,
-// same Cormorant Garamond hierarchy, same VINSTER footer. Replaces the
-// previous plain-text Share.share path so a friend seeing the share
-// gets a proper editorial card rather than an SMS-looking blob.
+// Reviews. Mirrors WineListShareCard / WineReviewShareCard so the share
+// surfaces feel like one family. Order: venue stamp, the visit's photo, the
+// note, compact star ratings, then the wines. `onImageReady` fires once the
+// photo has loaded (or failed) so the caller snapshots only after it's drawn.
 
 interface WineRow {
   producer: string | null;
@@ -31,6 +30,7 @@ interface Props {
   note: string | null;
   wines: WineRow[];                           // wines chosen on this visit
   imageUri?: string | null;                   // resolved local uri for the venue photo
+  onImageReady?: () => void;
 }
 
 // Renders a five-star line for a rating that fits the brand palette.
@@ -54,21 +54,14 @@ function wineRowLine(w: WineRow): string {
 }
 
 export const RestaurantReviewShareCard = forwardRef<View, Props>(
-  ({ restaurantName, city, date, ratingOverall, ratingFood, ratingService, ratingWineList, ratingAtmosphere, ratingGlassware, ratingValue, note, wines, imageUri }, ref) => {
+  ({ restaurantName, city, date, ratingOverall, ratingFood, ratingService, ratingWineList, ratingAtmosphere, ratingGlassware, ratingValue, note, wines, imageUri, onImageReady }, ref) => {
     const stampLocation = [restaurantName, city].filter(Boolean).join(' · ');
     const hasAnyRating = ratingOverall != null || ratingFood != null || ratingService != null || ratingWineList != null || ratingAtmosphere != null || ratingGlassware != null || ratingValue != null;
 
     return (
       <View ref={ref} collapsable={false} style={styles.card}>
         <View style={styles.inner}>
-          <View style={styles.topRow}>
-            <Text style={styles.brand}>VINSTER</Text>
-            <Text style={styles.brandTagline}>Real Wine Experience, AI Delivered</Text>
-          </View>
-
-          <View style={styles.divider} />
-
-          <Text style={styles.subhead}>My Restaurant Review</Text>
+          <ShareCardHeader title="My Restaurant Review" />
 
           <View style={styles.stamp}>
             <Text style={styles.stampName} numberOfLines={2}>{stampLocation}</Text>
@@ -77,8 +70,12 @@ export const RestaurantReviewShareCard = forwardRef<View, Props>(
 
           {imageUri ? (
             <View style={styles.photoFrame}>
-              <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" />
+              <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" onLoad={onImageReady} onError={onImageReady} />
             </View>
+          ) : null}
+
+          {note && note.trim() ? (
+            <Text style={styles.noteBody} numberOfLines={8}>“{note.trim()}”</Text>
           ) : null}
 
           {hasAnyRating ? (
@@ -91,10 +88,6 @@ export const RestaurantReviewShareCard = forwardRef<View, Props>(
               <StarRow label="Glassware" value={ratingGlassware} />
               <StarRow label="Value"     value={ratingValue} />
             </View>
-          ) : null}
-
-          {note && note.trim() ? (
-            <Text style={styles.noteBody} numberOfLines={8}>“{note.trim()}”</Text>
           ) : null}
 
           {wines.length > 0 ? (
@@ -113,12 +106,6 @@ export const RestaurantReviewShareCard = forwardRef<View, Props>(
               ) : null}
             </View>
           ) : null}
-
-          <View style={styles.footer}>
-            <Text style={styles.footerLine}>{VINSTER_GET_LABEL}</Text>
-            <Text style={styles.footerCta}>{VINSTER_TAGLINE}</Text>
-            <Text style={styles.footerUrl}>{VINSTER_APP_STORE_URL.replace(/^https?:\/\//, '')}</Text>
-          </View>
         </View>
       </View>
     );
@@ -141,29 +128,27 @@ const styles = StyleSheet.create({
     paddingVertical: 72,
     backgroundColor: share.bg,
   },
-  topRow: { alignItems: 'center' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: share.brand, letterSpacing: 14 },
-  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.inkMuted, marginTop: 8, letterSpacing: 1.5 },
-  divider: { height: 1, backgroundColor: share.brandDim, marginVertical: 36 },
-  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 34, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center', marginBottom: 16 },
   stamp: { alignItems: 'center', marginBottom: 32, gap: 8 },
   photoFrame: { width: '100%', height: 480, borderRadius: 22, borderWidth: 2, borderColor: share.brand, overflow: 'hidden', marginBottom: 28, backgroundColor: 'rgba(127,79,76,0.06)' },
   photo: { width: '100%', height: '100%' },
   stampName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 44, color: share.ink, textAlign: 'center', lineHeight: 52 },
   stampDate: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 28, color: share.brand, textTransform: 'uppercase', letterSpacing: 2.5 },
+  // Compact two-column ratings — secondary to the note, so kept small.
   ratingsBlock: {
-    borderWidth: 2,
-    borderColor: share.brand,
-    borderRadius: 22,
-    paddingHorizontal: 36,
-    paddingVertical: 28,
-    backgroundColor: 'rgba(127,79,76,0.06)',
-    gap: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 8,
+    borderWidth: 1,
+    borderColor: share.brandDim,
+    borderRadius: 18,
+    paddingHorizontal: 28,
+    paddingVertical: 20,
     marginBottom: 32,
   },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  ratingLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 30, color: share.ink, textTransform: 'uppercase', letterSpacing: 3 },
-  ratingStars: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 38, color: share.gold, letterSpacing: 4 },
+  ratingRow: { width: '47%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  ratingLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 20, color: share.ink, textTransform: 'uppercase', letterSpacing: 2 },
+  ratingStars: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: share.gold, letterSpacing: 2 },
   ratingStarsEmpty: { color: 'rgba(181,133,42,0.30)' },
   noteBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.ink, lineHeight: 44, marginBottom: 32 },
   winesBlock: {
@@ -178,8 +163,4 @@ const styles = StyleSheet.create({
   wineLine: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 28, color: share.ink, lineHeight: 36 },
   wineScore: { fontFamily: 'CormorantGaramond_700Bold', color: share.brand },
   wineMore: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 24, color: share.inkMuted, marginTop: 4 },
-  footer: { alignItems: 'center', marginTop: 44 },
-  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4 },
-  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, marginTop: 8, textAlign: 'center' },
-  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: share.brand, marginTop: 8, letterSpacing: 0.5, textDecorationLine: 'underline' },
 });
