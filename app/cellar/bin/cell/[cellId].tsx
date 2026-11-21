@@ -363,7 +363,7 @@ export default function BinCellScreen() {
               <View key={w.bin_placement_id ?? w.id} style={styles.row}>
                 {/* Long-press the label to view or change the photo. */}
                 <TouchableOpacity onPress={() => router.push(`/cellar/${w.id}` as any)} onLongPress={() => openImageMenu(w)} delayLongPress={350} activeOpacity={0.8}>
-                  <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} radius={4} frame={3} />
+                  <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} size="thumb" style={styles.rowThumb} radius={4} frame={3} />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.rowMain} onPress={() => router.push(`/cellar/${w.id}` as any)} onLongPress={canEdit ? () => openEdit(w) : undefined} delayLongPress={400} activeOpacity={0.7}>
                   <WineIdentityHeader producer={w.producer} wineName={w.wine_name} vintage={w.vintage} region={w.region} grape={w.grape_variety} size="sm" align="left" />

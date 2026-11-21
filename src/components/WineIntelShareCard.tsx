@@ -29,10 +29,13 @@ interface Props {
   // Label photo — a resolved local uri (caller pre-resolves the stored path so the
   // off-screen capture includes it). Omitted → the card renders without a photo.
   imageUri?: string | null;
+  // Fires once the photo has drawn (or failed), so the caller can wait for it
+  // before capturing the card.
+  onImageReady?: () => void;
 }
 
 export const WineIntelShareCard = forwardRef<View, Props>(
-  ({ producer, wineName, vintage, region, grape, criticScore, drinkingWindow, estimatedValue, tastingNote, imageUri }, ref) => {
+  ({ producer, wineName, vintage, region, grape, criticScore, drinkingWindow, estimatedValue, tastingNote, imageUri, onImageReady }, ref) => {
     const header = wineHeaderLine(producer, wineName, vintage);
     const hasStats = criticScore != null || !!drinkingWindow || !!estimatedValue;
 
@@ -43,7 +46,7 @@ export const WineIntelShareCard = forwardRef<View, Props>(
 
           {imageUri ? (
             <View style={styles.photoFrame}>
-              <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" />
+              <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" onLoad={onImageReady} onError={onImageReady} />
             </View>
           ) : null}
 

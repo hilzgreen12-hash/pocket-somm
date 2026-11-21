@@ -5,7 +5,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../api/supabase';
 import { clearAllStores } from '../stores/clearAllStores';
-import { loadCellarContext, subscribeCellarContext } from '../api/cellarContext';
+import { getCellarContext, loadCellarContext, subscribeCellarContext } from '../api/cellarContext';
+import { clearPersistedQueries, savePersistedQueries, setPersistedQueryUser } from '../api/queryPersistence';
 
 interface AuthContextValue {
   session: Session | null;
@@ -31,6 +32,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     function syncUser(next: Session | null) {
       const nextUserId = next?.user.id ?? null;
       if (prevUserId.current !== undefined && prevUserId.current !== nextUserId) {
+        // Stop saving first, so the wipe below can't be written over the
+        // next user's saved lists; then delete the previous user's saved copy
+        // (see queryPersistence) so it can't be restored on this device again.
+        setPersistedQueryUser(null);
+        if (prevUserId.current) clearPersistedQueries(prevUserId.current);
         qc.clear();
         // The Zustand stores live in module scope and survive sign-out, so
         // clearing only the React Query cache left the previous account's
@@ -49,7 +55,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Shared household cellar: work out whose cellar this user is in. Loaded
       // whenever the user changes (incl. first load); a change refetches all
       // cellar data via the subscription below.
-      if (prevUserId.current !== nextUserId) void loadCellarContext(nextUserId);
+      if (prevUserId.current !== nextUserId) {
+        void loadCellarContext(nextUserId);
+        setPersistedQueryUser(nextUserId);
+      }
       prevUserId.current = nextUserId;
       setSession(next);
     }
@@ -79,7 +88,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Joining/leaving a shared cellar (or finishing the first load) switches
     // which cellar every screen reads — refetch everything.
-    const unsubCellar = subscribeCellarContext(() => { void qc.invalidateQueries(); });
+    let lastCellar: { userId: string | null; ownerId: string | null } | null = null;
+    let switchCount = 0;
+    const unsubCellar = subscribeCellarContext(() => {
+      const { userId, ownerId } = getCellarContext();
+      const switched = !!userId && lastCellar?.userId === userId && lastCellar.ownerId !== ownerId;
+      lastCellar = { userId, ownerId };
+      if (!switched) { void qc.invalidateQueries(); return; }
+      // Switched cellar: cellar queries are keyed by the user, not the cellar,
+      // so the saved lists now describe the wrong cellar. Delete them, drop
+      // what no screen is showing (label images are per photo, so they stay),
+      // and only save again once the refetch has replaced the rest.
+      const thisSwitch = ++switchCount;
+      setPersistedQueryUser(null);
+      clearPersistedQueries(userId);
+      qc.removeQueries({ type: 'inactive', predicate: (q) => q.queryKey[0] !== 'label-image' && q.queryKey[0] !== 'auto-label' });
+      void qc.invalidateQueries().finally(() => {
+        // Signed out, or switched again, meanwhile.
+        if (thisSwitch !== switchCount || getCellarContext().userId !== userId) return;
+        setPersistedQueryUser(userId);
+        savePersistedQueries(qc);
+      });
+    });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       syncUser(session);

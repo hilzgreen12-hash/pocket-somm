@@ -63,6 +63,10 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEnt
   const [shareLabelUri, setShareLabelUri] = useState<string | null>(null);
 
   const shareCardRef = useRef<View>(null);
+  // Resolved by the share card's onImageReady, so the capture waits for the photo.
+  const sharePhotoReady = useRef<(() => void) | null>(null);
+  // Synchronous in-flight guard: `sharing` lands a render late, after the photo lookup.
+  const shareBusy = useRef(false);
   // Set while the user is away on the Edit Wine Details screen, so re-opening
   // the same wine keeps the review they'd already started typing.
   const suspendedForEditRef = useRef<string | null>(null);
@@ -179,13 +183,20 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEnt
   }
 
   async function handleShare() {
-    if (!wine || sharing) return;
+    if (!wine || shareBusy.current) return;
+    shareBusy.current = true;
     Keyboard.dismiss();
     let labelUri: string | null = null;
     if (wine.label_image_path) { try { labelUri = await getCachedLabelUri(wine.label_image_path); } catch { /* no photo */ } }
+    const photoDrawn = labelUri
+      ? new Promise<void>((resolve) => { sharePhotoReady.current = resolve; })
+      : Promise.resolve();
     setShareLabelUri(labelUri);
     setSharing(true);
     try {
+      // Wait for the photo to draw (capped, so a bad image can't hang the
+      // share), then one paint to let the off-screen card settle.
+      await Promise.race([photoDrawn, new Promise((r) => setTimeout(r, 5000))]);
       await new Promise((r) => setTimeout(r, 250));
       if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
@@ -199,6 +210,8 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEnt
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
+      sharePhotoReady.current = null;
+      shareBusy.current = false;
       setSharing(false);
     }
   }
@@ -316,6 +329,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEnt
             location={[locName.trim(), locCity.trim()].filter(Boolean).join(', ') || null}
             isFavourite={wine.is_favourite}
             imageUri={shareLabelUri}
+            onImageReady={() => sharePhotoReady.current?.()}
           />
         </View>
       )}

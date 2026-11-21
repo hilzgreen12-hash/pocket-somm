@@ -25,7 +25,7 @@ export const AltCellarWineRow = memo(function AltCellarWineRow({ row, inCase, on
       delayLongPress={400}
       activeOpacity={0.7}
     >
-      <LabelThumb path={row.label_image_path} fallbackText={row.wine_name} style={styles.thumb} />
+      <LabelThumb path={row.label_image_path} fallbackText={row.wine_name} size="thumb" style={styles.thumb} />
       <View style={styles.main}>
         <WineIdentityHeader
           producer={row.producer}

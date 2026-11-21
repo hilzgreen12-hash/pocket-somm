@@ -210,12 +210,12 @@ Return ONLY raw JSON, no markdown: {"observations":[{"group":"…","text":"…",
 }
 
 // Is the message a fact about their taste, and does it ask to remove (or
-// plainly contradict) any current observation? Falls back to "store it, remove
-// nothing" if the call fails — the user's words are never lost.
+// plainly contradict) any current observation? Asked even with no observations,
+// so a bare "remove that note" is never stored as a taste fact. Falls back to
+// "store it, remove nothing" if the call fails — the user's words are never lost.
 async function classifyTell(text: string, observations: Observation[]): Promise<{ isTasteFact: boolean; removeIds: string[] }> {
-  if (!observations.length) return { isTasteFact: true, removeIds: [] };
   try {
-    const list = observations.map((o) => `[${o.id}] ${o.text}`).join('\n');
+    const list = observations.length ? observations.map((o) => `[${o.id}] ${o.text}`).join('\n') : '(none)';
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,

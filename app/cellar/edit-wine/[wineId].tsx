@@ -7,6 +7,7 @@ import { useCellar, invalidateCellarViews } from '../../../src/hooks/useCellar';
 import { useAttachLabelPhoto } from '../../../src/hooks/useAttachLabelPhoto';
 import { usePreferences } from '../../../src/hooks/usePreferences';
 import { valueWine, isWineNotFound } from '../../../src/services/pricing';
+import { valueAndScorePatch } from '../../../src/services/bulkIntel';
 import { fetchPlacementsForWine, placedCount } from '../../../src/api/placements';
 import { fetchWineCandidates } from '../../../src/api/label';
 import { getCellarWineById, updateCellarWine, stampPurchasePriceDate } from '../../../src/api/cellar';
@@ -232,11 +233,15 @@ export default function EditWineScreen() {
             { producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || 'NV', grape: grape.trim() || null, style: style.trim() || null },
             currency,
           );
-          // Wine-Searcher couldn't be asked: for the same wine and vintage, keep
-          // the existing value rather than a stand-in estimate.
-          const keepValue = !!v.wsUnavailable && !newWine && wine.estimated_value != null;
+          // The same wine re-valued follows the app's one keep rule (a value the
+          // user entered, imported or got from Wine-Searcher is only replaced by a
+          // new Wine-Searcher price; nothing is overwritten with a blank). A
+          // DIFFERENT wine takes the new lookup outright — the old figures
+          // belonged to another bottle.
+          const kept = newWine ? null : valueAndScorePatch(wine, v);
+          const keepValue = !!kept?.keepValue;
           Object.assign(updates, {
-            ...(keepValue ? {} : {
+            ...(kept ? kept.patch : {
               estimated_value: v.estimatedValue,
               estimated_value_currency: v.currency,
               estimated_value_at: v.estimatedValue != null ? new Date().toISOString() : null,
@@ -257,8 +262,9 @@ export default function EditWineScreen() {
             ws_wine_id: v.wsWineId ?? null,
             ws_wine_name: v.wsWineName ?? null,
           });
-          // Never refreshed from a stand-in made while Wine-Searcher was down.
-          if (!v.wsUnavailable) estimatedPrice = { price: v.estimatedValue != null ? priceForSize(v.estimatedValue, bottleSizeMl) : null, currency: v.currency };
+          // Never refreshed from a stand-in made while Wine-Searcher was down, nor
+          // from a lookup whose value wasn't taken.
+          if (!v.wsUnavailable && !keepValue) estimatedPrice = { price: v.estimatedValue != null ? priceForSize(v.estimatedValue, bottleSizeMl) : null, currency: v.currency };
         } catch (e) {
           lookupFailed = isWineNotFound(e) ? 'not-found' : 'failed';
           // Never leave the old wine's score, value and notes on a different wine.

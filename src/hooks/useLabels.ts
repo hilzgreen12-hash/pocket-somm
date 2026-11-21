@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
+import { useWarmLabelThumbs } from './useLabelImageUrl';
 import { fetchLabels, createLabel, deleteLabel, setLabelFavourite, updateLabelLocation, type CreateLabelInput } from '../api/labels';
 
 // Your Label Library — the `labels` table (migration 066).
@@ -13,6 +14,8 @@ export function useLabels() {
     queryFn: () => fetchLabels(userId!),
     enabled: !!userId,
   });
+  // Newest first, so these are the Recent Label Scans carousel's tiles.
+  useWarmLabelThumbs(labels, (l) => l.label_image_path, 8);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['labels', userId] });
 

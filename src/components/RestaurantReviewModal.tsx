@@ -98,8 +98,8 @@ interface Props {
   // Same contract as onAddPhoto — the parent closes this modal to navigate.
   onAddLineup?: (upload: boolean, name: string, city: string, saveDraft: () => Promise<void>) => void;
   // Opens a matched lineup's card. The parent closes this modal first (saving
-  // the draft), as for "+ Add a lineup".
-  onOpenLineup?: (lineupId: string, saveDraft: () => Promise<void>) => void;
+  // the draft), as for "+ Add a lineup"; name/city are the form's edits.
+  onOpenLineup?: (lineupId: string, saveDraft: () => Promise<void>, name: string, city: string) => void;
 }
 
 type Place = { restaurant_name: string | null; city: string | null };
@@ -883,7 +883,7 @@ export function RestaurantReviewModal({
               <>
                 <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Matched Lineups</Text>
                 {matchedLineups.map((l) => (
-                  <TouchableOpacity key={l.id} style={styles.lineupRow} onPress={() => onOpenLineup?.(l.id, saveDraft)} disabled={!onOpenLineup} activeOpacity={0.7}>
+                  <TouchableOpacity key={l.id} style={styles.lineupRow} onPress={() => onOpenLineup?.(l.id, saveDraft, restaurantName.trim(), cityValue.trim())} disabled={!onOpenLineup} activeOpacity={0.7}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.lineupName} numberOfLines={1}>{l.name?.trim() || 'Your Lineup'}</Text>
                       <Text style={styles.lineupDate}>{new Date(l.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Text>

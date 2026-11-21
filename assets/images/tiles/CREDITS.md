@@ -8,5 +8,6 @@
 - `restaurant-lanterns.jpg` — photo by hiding ninja (@hidingninjatokyo), https://unsplash.com/photos/Rpw5dto_LP4
 - `food-sunday-roast.jpg` — photo by Salman Sidheek (@salman_sidheek), https://unsplash.com/photos/wmwcKGjrNwI
 - `food-summer-table.jpg` — photo by Ines Iachelini (@nekoburro), https://unsplash.com/photos/GpqAKmR8oxY
+- `food-plated.jpg` — photo by Urban Gyllström (@gyllstrom_photo), https://unsplash.com/photos/MaWMfm-HCqQ
 
   All free to use under the Unsplash License (https://unsplash.com/license); attribution not required.

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
+import { useWarmLabelThumbs } from './useLabelImageUrl';
 import { useCellar, useArchive } from './useCellar';
 import { saveChosenWine, saveManualChosenWine, fetchChosenWines, updateChosenWine, deleteChosenWine, patchChosenWine, type SaveChosenWineInput, type ManualSaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
 import type { ChosenWine, CellarWine } from '../types/wine';
@@ -20,6 +21,8 @@ export function useChosenWines() {
     queryFn: () => fetchChosenWines(userId!),
     enabled: !!userId,
   });
+  // The Review tab's wine carousel tiles.
+  useWarmLabelThumbs(chosenWines, (w) => w.label_image_path, 12);
 
   // A review saved without a label photo gets one in the background: the user's
   // own photo of that wine from the cellar/archive when there is one, else the

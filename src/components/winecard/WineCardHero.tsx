@@ -1,5 +1,8 @@
-import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
-import { useLabelImageState } from '../../hooks/useLabelImageUrl';
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
+import { repairLabelImage, useLabelImageState } from '../../hooks/useLabelImageUrl';
+import { LabelImage } from '../LabelImage';
 import { colors, spacing } from '../../constants/theme';
 import { fonts } from '../../constants/fonts';
 
@@ -34,20 +37,31 @@ function heroHeight(width: number): number {
   return Math.round(Math.min(620, Math.max(400, width * 1.4)));
 }
 const DARK = '#3E2120';
+// The band's usual height, and the headroom it keeps above the identity block.
+const BAND_MIN = 130;
+const BAND_HEADROOM = 20;
+const IDENTITY_BOTTOM = 16;
 
 export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress, onPhotoLongPress, onTitlePress, badge, uri: uriProp, placeholder, rightAction, busy }: Props) {
+  const qc = useQueryClient();
   const stored = useLabelImageState(uriProp ? null : path);
   const uri = uriProp ?? stored.uri;
   const pending = uriProp ? false : stored.pending;
   const { width } = useWindowDimensions();
+  // The identity block's measured height: a long title (3 lines) with a
+  // 2-line subtitle and a badge outgrows the usual band, so the band grows to
+  // keep the text over it.
+  const [identityHeight, setIdentityHeight] = useState(0);
+  const bandHeight = Math.max(BAND_MIN, Math.ceil(identityHeight) + IDENTITY_BOTTOM + BAND_HEADROOM);
   return (
     <View style={[styles.hero, { height: heroHeight(width) }]}>
       <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onPhotoPress} onLongPress={onPhotoLongPress} delayLongPress={350} activeOpacity={0.9} accessibilityLabel={path ? 'View label photo' : 'Add a label photo'}>
         {uri ? (
           <>
             {/* Blurred-out fill behind so a tall label never leaves bare edges. */}
-            <Image source={{ uri }} style={[StyleSheet.absoluteFill, { opacity: 0.35 }]} resizeMode="cover" blurRadius={18} />
-            <Image source={{ uri }} style={styles.photo} resizeMode="contain" />
+            <LabelImage uri={uri} style={[StyleSheet.absoluteFill, { opacity: 0.35 }]} blurRadius={18} />
+            {/* A stored photo whose cached file won't draw is re-downloaded. */}
+            <LabelImage uri={uri} style={styles.photo} contentFit="contain" onError={uriProp ? undefined : () => repairLabelImage(qc, path)} />
           </>
         ) : pending ? (
           <View style={styles.empty}><ActivityIndicator color={colors.gold} /></View>
@@ -67,7 +81,7 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
 
       {/* One even see-through terracotta band behind the title, so the hero
           runs into the page colour below rather than a dark brown block. */}
-      <View pointerEvents="none" style={[styles.fade, { height: 130 }]} />
+      <View pointerEvents="none" style={[styles.fade, { height: bandHeight }]} />
       <View pointerEvents="none" style={styles.topShade} />
 
       <View style={styles.topBar}>
@@ -78,7 +92,7 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
         {rightAction ?? <View style={styles.backBtn} />}
       </View>
 
-      <TouchableOpacity style={styles.identity} onPress={onTitlePress} activeOpacity={0.8} accessibilityLabel="Edit wine details">
+      <TouchableOpacity style={styles.identity} onLayout={(e) => setIdentityHeight(e.nativeEvent.layout.height)} onPress={onTitlePress} activeOpacity={0.8} accessibilityLabel="Edit wine details">
         <Text style={styles.title} numberOfLines={3}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text> : null}
         {badge}
@@ -100,7 +114,7 @@ const styles = StyleSheet.create({
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   backText: { color: colors.gold, fontSize: 24, fontFamily: fonts.bodyRegular },
   chip: { fontFamily: fonts.headingBold, fontSize: 15, letterSpacing: 1.5, color: colors.gold, textTransform: 'uppercase' },
-  identity: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: 16, gap: 4 },
+  identity: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: IDENTITY_BOTTOM, gap: 4 },
   title: { fontFamily: fonts.headingBold, fontSize: 28, lineHeight: 31, color: colors.text, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 6 },
   subtitle: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.gold, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4 },
 });

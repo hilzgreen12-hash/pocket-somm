@@ -12,7 +12,7 @@ import { useAttachRestaurantPhoto, DISMISS_DELAY_MS } from '../../src/hooks/useA
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
-import { labelSignedUrl } from '../../src/api/labelPhotos';
+import { getCachedLabelUri } from '../../src/api/labelImageCache';
 import { fetchAutoLabelUri } from '../../src/api/label';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
@@ -267,7 +267,8 @@ export default function RestaurantReviewsScreen() {
     // web label. Best-effort — title-only until it lands.
     void (async () => {
       try {
-        let img = cw.label_image_path ? await labelSignedUrl(cw.label_image_path) : null;
+        // The disk-cached copy: instant when already seen, no fresh signed URL.
+        let img = await getCachedLabelUri(cw.label_image_path);
         if (!img) img = await fetchAutoLabelUri(cw.producer, cw.wine_name);
         if (img) useLabelStore.getState().setImageUri(img);
       } catch { /* photoless */ }
@@ -594,7 +595,7 @@ export default function RestaurantReviewsScreen() {
                         delayLongPress={400}
                         activeOpacity={0.8}
                       >
-                        <LabelThumb path={item.restaurantPhotoPath} fallbackText={item.restaurantName} style={styles.restaurantThumb} radius={5} frame={3} />
+                        <LabelThumb path={item.restaurantPhotoPath} fallbackText={item.restaurantName} size="thumb" style={styles.restaurantThumb} radius={5} frame={3} />
                       </TouchableOpacity>
                     ) : (
                       <AddPhotoThumb

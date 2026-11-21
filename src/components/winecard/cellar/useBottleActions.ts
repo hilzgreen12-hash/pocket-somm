@@ -106,7 +106,7 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
             { text: 'Done', style: 'cancel', onPress: () => router.back() },
           ]
           : [
-            { text: 'View In Archive', onPress: () => router.push(`/cellar/${archivedWineId}`) },
+            { text: 'View In Archive', onPress: () => void openArchiveCopy(archivedWineId) },
             { text: 'Done', style: 'cancel' },
           ],
       });
@@ -116,6 +116,17 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
     } finally {
       setWorking(false);
     }
+  }
+
+  // A part-archive's new copy isn't in the archive cache until the refetch
+  // lands; seeded first, its card opens straight away instead of flashing
+  // "Wine not found".
+  async function openArchiveCopy(id: string) {
+    const copy = await getCellarWineById(id).catch(() => null);
+    if (copy && userId) {
+      qc.setQueryData<CellarWine[]>(['cellar-archive', userId], (old) => [copy, ...(old ?? []).filter((w) => w.id !== id)]);
+    }
+    router.push(`/cellar/${id}`);
   }
 
   // Delete `count` bottles. All of them deletes the row — and the reviews stored

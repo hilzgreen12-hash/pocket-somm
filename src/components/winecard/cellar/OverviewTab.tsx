@@ -55,14 +55,16 @@ function showValueSource(wine: CellarWine) {
 }
 
 // A review opened from the card returns to it when it closes; an archived
-// wine's review also confirms it was saved to Your Wine Reviews.
-export function reviewHrefs(wine: CellarWine) {
+// wine's review also confirms it was saved to Your Wine Reviews. `reviewRow`:
+// the bottle line whose reviews to open, when it isn't the card's own (an
+// archived bottle's reviews live on its cellar line).
+export function reviewHrefs(wine: CellarWine, reviewRow: CellarWine = wine) {
   const title = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ') || wine.wine_name || 'this wine';
   const back = `&backTo=${encodeURIComponent(`/cellar/${wine.id}`)}${wine.archived_at ? `&savedToast=${encodeURIComponent(title)}` : ''}`;
   return {
-    open: `/wines/chosen?openCellarReview=${wine.id}${back}`,
-    write: `/wines/chosen?openCellarReviewInput=${wine.id}${back}`,
-    edit: `/wines/chosen?openCellarReviewEdit=${wine.id}${back}`,
+    open: `/wines/chosen?openCellarReview=${reviewRow.id}${back}`,
+    write: `/wines/chosen?openCellarReviewInput=${reviewRow.id}${back}`,
+    edit: `/wines/chosen?openCellarReviewEdit=${reviewRow.id}${back}`,
   };
 }
 
@@ -153,7 +155,23 @@ export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRan
   afterHistory?: ReactNode;
 }) {
   const isArchived = !!wine.archived_at;
-  const reviews = useMemo(() => byRecency(visibleEntries(wine)), [wine]);
+  // An archived bottle starts with no reviews of its own (they stay on its
+  // cellar line), so its card gathers the wine's reviews from every line of it
+  // — this bottle, the live line and the other archived bottles — and remembers
+  // which line holds the latest, for "View Review Card".
+  const reviewSources = useMemo(() => {
+    if (!isArchived) return [wine];
+    const seen = new Set<string>();
+    return [wine, ...data.cellarRows, ...data.archiveLine].filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+  }, [isArchived, wine, data.cellarRows, data.archiveLine]);
+  const { reviews, rowOfEntry } = useMemo(() => {
+    const rowOf = new Map<string, CellarWine>();
+    for (const row of reviewSources) for (const e of visibleEntries(row)) if (!rowOf.has(e.id)) rowOf.set(e.id, row);
+    // One copy of each entry (older archive copies can carry the live line's).
+    const seen = new Set<string>();
+    const unique = reviewSources.flatMap((row) => visibleEntries(row)).filter((e) => (seen.has(e.id) ? false : (seen.add(e.id), true)));
+    return { reviews: byRecency(unique), rowOfEntry: rowOf };
+  }, [reviewSources]);
   // In someone else's shared cellar the owner's reviews stay hidden; the
   // member's own review of the wine lives in their Wine Reviews.
   const othersBottle = isSomeoneElsesBottle(wine);
@@ -162,7 +180,10 @@ export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRan
     ? findExistingReview(chosenWines, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage })
     : null), [othersBottle, chosenWines, wine]);
   const latest = reviews[0] ?? null;
-  const hrefs = reviewHrefs(wine);
+  // Reviews open on the line that holds them: the latest review's line, else the
+  // live cellar line (where a new review of an archived bottle belongs).
+  const reviewRow = (latest ? rowOfEntry.get(latest.id) : undefined) ?? (isArchived ? data.cellarRows[0] : undefined) ?? wine;
+  const hrefs = reviewHrefs(wine, reviewRow);
   const placeOf = (r: { location: string | null }) => reviewPlaceLabel(r.location);
 
   // "Your History With This Wine", in the Wine Intel screen's order: when
@@ -272,6 +293,28 @@ export function OverviewTab({ wine, data, intel, range, canEdit, currency, onRan
             activeOpacity={0.7}
           >
             <Text style={[wc.Link, { marginTop: 6 }]}>{myReview ? 'View your review ›' : 'Add your review ›'}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : isArchived && (latest || canEdit) ? (
+        // Archived bottle: the latest review of the wine, and one way into its
+        // review card (history, and adding a review).
+        <View style={wc.Card}>
+          <View style={wc.CardHead}>
+            <Text style={wc.H2}>Your Reviews</Text>
+            {reviews.length > 0 ? <Text style={wc.Small}>{reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}</Text> : null}
+          </View>
+          {latest ? (
+            <>
+              <Text style={wc.Label}>Latest</Text>
+              <View style={wc.ScoreRow}>
+                {latest.score != null ? <Text style={wc.BigScore}>{latest.score}<Text style={wc.BigScoreOf}>/100</Text></Text> : null}
+                <Text style={wc.Small}>{[fmtDay(latest.date ?? latest.savedAt), placeOf(latest)].filter(Boolean).join(' · ')}</Text>
+              </View>
+              {latest.note ? <Text style={wc.BodyText} numberOfLines={8}>{latest.note}</Text> : null}
+            </>
+          ) : null}
+          <TouchableOpacity onPress={() => router.push(latest ? hrefs.open : hrefs.write)} activeOpacity={0.7}>
+            <Text style={[wc.Link, latest ? null : { marginTop: 2 }]}>View Review Card ›</Text>
           </TouchableOpacity>
         </View>
       ) : latest || canEdit ? (

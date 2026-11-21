@@ -1,5 +1,7 @@
-import { View, Image, Text, ActivityIndicator, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
+import { View, Text, ActivityIndicator, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
+import { repairLabelImage, useLabelImageState, type LabelImageSize } from '../hooks/useLabelImageUrl';
+import { LabelImage } from './LabelImage';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -19,23 +21,23 @@ interface Props {
   // label tiles; 'contain' shows the WHOLE shot (used by the restaurant-review
   // banner so wide photos aren't cropped).
   resizeMode?: 'cover' | 'contain';
+  // 'thumb' for small tiles (grid slots, list rows, carousel tiles) — a small
+  // cached thumbnail decodes far faster than the full 1000px photo.
+  size?: LabelImageSize;
 }
 
 // A wine label presented as a framed picture: the photo sits inside a cream
 // mat so a grid of them reads as a cohesive gallery against any background.
-export function LabelThumb({ path, fallbackText, style, radius = 6, frame = 4, fallbackFontSize = 11, resizeMode = 'cover' }: Props) {
-  const url = useLabelImageUrl(path);
+export function LabelThumb({ path, fallbackText, style, radius = 6, frame = 4, fallbackFontSize = 11, resizeMode = 'cover', size = 'full' }: Props) {
+  const qc = useQueryClient();
+  const url = useLabelImageState(path, size).uri;
   // A real path whose signed URL hasn't resolved yet is "loading" — show a
   // plain framed tile rather than the "No photo" card so we don't flash it.
   const loading = !!path && !url;
   return (
     <View style={[styles.frame, { padding: frame, borderRadius: radius + frame }, style]}>
       {url ? (
-        <Image
-          source={{ uri: url }}
-          style={[styles.img, { borderRadius: radius }]}
-          resizeMode={resizeMode}
-        />
+        <LabelImage uri={url} style={[styles.img, { borderRadius: radius }]} contentFit={resizeMode} onError={() => repairLabelImage(qc, path)} />
       ) : loading ? (
         // The photo is being fetched (signed URL + download) — a quiet swirl on
         // the cream tile so a slow label reads as "loading", not "no photo".

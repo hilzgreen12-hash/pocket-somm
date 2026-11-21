@@ -36,9 +36,10 @@ export interface StartedScanJob { jobId: string; pollToken: string | null }
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 180000; // 3 min hard ceiling — well past a normal scan
-// A running job whose row hasn't moved for this long has lost its worker (the
-// same rule scan-start applies to guest jobs).
-const STALLED_AFTER_MS = 240000;
+// A running job whose row hasn't moved for this long has lost its worker.
+// Kept under the photo ceiling above so it can fire before the timeout does
+// (scan-start allows guest jobs a little longer).
+const STALLED_AFTER_MS = 150000;
 const STALLED_MESSAGE = 'This scan took too long to finish — it usually works on a second try.';
 
 // The largest shared PDF scan-start accepts (it takes up to ~14 MB of base64).

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
+import { useWarmLabelThumbs } from './useLabelImageUrl';
 import { getCellarWines, addCellarWine, updateCellarWine, getArchivedWines, setAutoLabelIfMissing, type NewCellarWine } from '../api/cellar';
 import { fetchAutoLabelUri } from '../api/label';
 import { uploadLabelImage, removeLabelImage } from '../api/labelPhotos';
@@ -36,6 +37,8 @@ export function useCellar() {
     queryFn: () => getCellarWines(userId),
     enabled: !!userId,
   });
+  // Have the first rows' thumbnails ready before the list is opened.
+  useWarmLabelThumbs(wines, (w) => w.label_image_path);
 
   // Adding a wine is kept deliberately FAST — no wine-intel generation here.
   // Intel (critic score, value, tasting note) is generated lazily when the user

@@ -90,7 +90,9 @@ const DRINK_RE = /\b(wine|wines|champagne|cava|prosecco|cr[eé]mant|sherry|port|
 // Dairy and fats aren't vegetables — the model once put "butter" there — so
 // butter, cream, oils etc. go with the seasonings, and cheese with proteins,
 // whatever type the model gave.
-const DAIRY_FAT_RE = /\b(butter|beurre|cream|cr[eè]me fra[iî]che|ghee|lard|duck fat|goose fat|oil|yog(h)?urt|mascarpone|milk)\b/;
+// Not butter beans / butter lettuce / butter squash, nor milk thistle — those
+// are vegetables and herbs.
+const DAIRY_FAT_RE = /\b(butter(?!\s+(?:beans?|lettuce|squash))|beurre|cream|cr[eè]me fra[iî]che|ghee|lard|duck fat|goose fat|oil|yog(h)?urt|mascarpone|milk(?!\s+thistle))\b/;
 const CHEESE_RE = /\b(cheese|parmesan|parmigiano|pecorino|grana padano|gruy[eè]re|comt[eé]|ch[eè]vre|brie|camembert|roquefort|stilton|cheddar|feta|ricotta|mozzarella|burrata|manchego|gorgonzola|taleggio|[eé]poisses|halloumi|paneer)\b/;
 function ingredientType(name: string, given: 'protein' | 'herb' | 'vegetable' | null) {
   if (CHEESE_RE.test(name)) return 'protein';

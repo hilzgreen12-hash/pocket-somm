@@ -35,7 +35,7 @@ export async function gatherTasteData(db: SupabaseClient, uid: string): Promise<
     db.from('profiles').select(PREFERENCE_COLUMNS).eq('user_id', uid).maybeSingle().then(({ data }) => data as Row | null),
     readCellar(db, uid),
     rows('chosen_wines', db.from('chosen_wines')
-      .select('wine_name, producer, region, grape, style, vintage, menu_price, currency, user_score, tasting_note, restaurant_name, city, is_favourite')
+      .select('id, review_group_id, wine_name, producer, region, grape, style, vintage, menu_price, currency, user_score, tasting_note, restaurant_name, city, is_favourite')
       .eq('user_id', uid).order('chosen_at', { ascending: false }).limit(1000)),
     rows('scan_sessions', db.from('scan_sessions')
       .select('restaurant_name, city, restaurant_note, rating_overall, rating_food, rating_wine_list, rating_service, rating_value, rating_atmosphere')
@@ -66,7 +66,7 @@ async function readCellar(db: SupabaseClient, uid: string): Promise<Row[]> {
   const all: Row[] = [];
   for (let page = 0; page < CELLAR_MAX_PAGES; page++) {
     const batch = await rows('cellar_wines', db.from('cellar_wines')
-      .select('producer, wine_name, region, grape_variety, style, vintage, quantity, purchase_price, purchase_price_currency, purchase_price_estimated, bottle_size_ml, review_entries, review_score, archived_at, is_favourite, is_spirit')
+      .select('id, producer, wine_name, region, grape_variety, style, vintage, quantity, purchase_price, purchase_price_currency, purchase_price_estimated, bottle_size_ml, review_entries, review_score, archived_at, is_favourite, is_spirit')
       .eq('user_id', uid).order('id').range(page * CELLAR_PAGE, (page + 1) * CELLAR_PAGE - 1));
     all.push(...batch);
     if (batch.length < CELLAR_PAGE) break;
@@ -74,9 +74,12 @@ async function readCellar(db: SupabaseClient, uid: string): Promise<Row[]> {
   return all;
 }
 
-// A cheap fingerprint of the user's data — counts per source plus a hash of
-// their saved preferences — so `get` can tell whether anything has changed since
-// the last refresh without reading every row.
+// A cheap fingerprint of the user's data — counts per source, edit markers and
+// a hash of their saved preferences — so `get` can tell whether anything has
+// changed since the last refresh without reading every row. Counts alone miss
+// an edited score or note: cellar rows carry updated_at (the app stamps every
+// edit); restaurant reviews have no edit stamp, so their scores and notes are
+// hashed.
 export async function dataSignature(db: SupabaseClient, uid: string): Promise<string> {
   const count = async (table: string, filter?: (q: any) => any) => {
     let q = db.from(table).select('user_id', { count: 'exact', head: true }).eq('user_id', uid);
@@ -84,7 +87,7 @@ export async function dataSignature(db: SupabaseClient, uid: string): Promise<st
     const { count: n } = await q;
     return n ?? 0;
   };
-  const [active, archived, reviewed, chosen, scored, visits, lineups, fromWine, forDish, cooked, prefs] = await Promise.all([
+  const [active, archived, reviewed, chosen, scored, visits, lineups, fromWine, forDish, cooked, prefs, cellarEdited, chosenReviews] = await Promise.all([
     count('cellar_wines', (q) => q.is('archived_at', null)),
     count('cellar_wines', (q) => q.not('archived_at', 'is', null)),
     count('cellar_wines', (q) => q.not('review_score', 'is', null)),
@@ -96,8 +99,12 @@ export async function dataSignature(db: SupabaseClient, uid: string): Promise<st
     count('chef_pairing_sessions'),
     count('chosen_recipes'),
     db.from('profiles').select(PREFERENCE_COLUMNS).eq('user_id', uid).maybeSingle().then(({ data }) => data),
+    db.from('cellar_wines').select('updated_at').eq('user_id', uid).order('updated_at', { ascending: false, nullsFirst: false }).limit(1).maybeSingle()
+      .then(({ data }) => (data as Row | null)?.updated_at ?? ''),
+    db.from('chosen_wines').select('user_score, tasting_note').eq('user_id', uid).not('reviewed_at', 'is', null).order('id').limit(1000)
+      .then(({ data }) => data ?? []),
   ]);
-  return `c${active}/${archived}/${reviewed} w${chosen}/${scored} r${visits} l${lineups} p${fromWine}/${forDish}/${cooked} h${hash(JSON.stringify(prefs ?? {}))}`;
+  return `c${active}/${archived}/${reviewed}@${cellarEdited} w${chosen}/${scored}#${hash(JSON.stringify(chosenReviews))} r${visits} l${lineups} p${fromWine}/${forDish}/${cooked} h${hash(JSON.stringify(prefs ?? {}))}`;
 }
 
 function hash(s: string): string {
@@ -191,7 +198,8 @@ function ratingOf(value: unknown): number | null {
   return Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
 }
 
-interface ScoredWine { label: string; region: string; grape: string; style: string; score: number; note: string }
+// `wine`: one key per wine, so repeat tastings of it count as one wine.
+interface ScoredWine { wine: string; label: string; region: string; grape: string; style: string; score: number; note: string }
 
 export interface TasteSummary {
   // Meaningful data points across sources, for the MIN_SIGNAL gate.
@@ -232,7 +240,9 @@ export function summariseTasteData(d: TasteData): TasteSummary {
   // manual reviews — the strongest signal of what they actually enjoy.
   const scored: ScoredWine[] = [];
   const notes: string[] = [];
-  let reviewCount = 0;
+  // Wines with a review — each counted once however many tastings it has, so
+  // the evidence gate isn't met by one wine reviewed again and again.
+  let reviewedWines = 0;
 
   // Cellar.
   const wines = d.cellar.filter((w) => !w.is_spirit);
@@ -267,14 +277,16 @@ export function summariseTasteData(d: TasteData): TasteSummary {
     const entries: Row[] = Array.isArray(w.review_entries) && w.review_entries.length
       ? w.review_entries
       : w.review_score != null ? [{ score: w.review_score }] : [];
+    let reviewed = false;
     for (const e of entries) {
       const score = scoreOf(e.score);
       const note = snippet(e.note);
       if (score == null && !note) continue;
-      reviewCount++;
-      if (score != null) scored.push({ label: wineLabel(w), region: clean(w.region), grape: clean(w.grape_variety), style: clean(w.style), score, note });
+      reviewed = true;
+      if (score != null) scored.push({ wine: `c:${w.id}`, label: wineLabel(w), region: clean(w.region), grape: clean(w.grape_variety), style: clean(w.style), score, note });
       if (note) notes.push(`${wineLabel(w)}${score != null ? ` (${score})` : ''}: "${note}"`);
     }
+    if (reviewed) reviewedWines++;
   }
   const sortedVintages = [...vintages].sort((a, b) => a - b);
   section('CELLAR (their own bottles; archived = drunk or gone)', [
@@ -293,26 +305,39 @@ export function summariseTasteData(d: TasteData): TasteSummary {
     line('What they paid per bottle (prices they entered)', priceBand(cellarPrices)),
   ]);
 
-  // Wines chosen at restaurants and manual reviews.
+  // Wines chosen at restaurants and manual reviews. Repeat tastings of one
+  // review share a review_group_id: the wine counts once (tallies, prices,
+  // evidence), while each tasting's score and note still counts.
   const chosenRegions = new Tally(), chosenGrapes = new Tally(), chosenStyles = new Tally();
   const menuPrices: { amount: number; currency: string }[] = [];
-  let unreviewedChoices = 0;
+  const chosenGroups = new Map<string, Row[]>();
   for (const c of d.chosen) {
+    const key = String(c.review_group_id ?? c.id);
+    chosenGroups.set(key, [...(chosenGroups.get(key) ?? []), c]);
+  }
+  let unreviewedChoices = 0;
+  for (const [group, tastings] of chosenGroups) {
+    const c = tastings[0];
     chosenRegions.add(c.region);
     grapesOf(c.grape).forEach((g) => chosenGrapes.add(g));
     chosenStyles.add(c.style);
     const price = Number(c.menu_price);
     if (price > 0 && c.currency) menuPrices.push({ amount: price, currency: String(c.currency).toUpperCase() });
-    const score = scoreOf(c.user_score);
-    const note = snippet(c.tasting_note);
-    if (score == null && !note) { unreviewedChoices++; continue; }
-    reviewCount++;
-    const where = clean(c.restaurant_name) ? ` at ${clean(c.restaurant_name)}` : '';
-    if (score != null) scored.push({ label: `${wineLabel(c)}${where}`, region: clean(c.region), grape: clean(c.grape), style: clean(c.style), score, note });
-    if (note) notes.push(`${wineLabel(c)}${where}${score != null ? ` (${score})` : ''}: "${note}"`);
+    let reviewed = false;
+    for (const t of tastings) {
+      const score = scoreOf(t.user_score);
+      const note = snippet(t.tasting_note);
+      if (score == null && !note) continue;
+      reviewed = true;
+      const where = clean(t.restaurant_name) ? ` at ${clean(t.restaurant_name)}` : '';
+      if (score != null) scored.push({ wine: `w:${group}`, label: `${wineLabel(t)}${where}`, region: clean(t.region), grape: clean(t.grape), style: clean(t.style), score, note });
+      if (note) notes.push(`${wineLabel(t)}${where}${score != null ? ` (${score})` : ''}: "${note}"`);
+    }
+    if (reviewed) reviewedWines++;
+    else unreviewedChoices++;
   }
   section('WINES CHOSEN OR REVIEWED AWAY FROM THE CELLAR (restaurant picks and manual reviews)', [
-    line('Wines chosen', d.chosen.length || null),
+    line('Wines chosen', chosenGroups.size || null),
     line('Regions chosen', chosenRegions.top(6)),
     line('Grapes chosen', chosenGrapes.top(6)),
     line('Styles chosen', chosenStyles.top(5)),
@@ -335,7 +360,7 @@ export function summariseTasteData(d: TasteData): TasteSummary {
     const median = quantile(sortedScores, 0.5);
     const best = [...scored].sort((a, b) => b.score - a.score);
     section('HOW THEY SCORE (their own scores out of 100)', [
-      line('Scored wines', `${scored.length}, average ${Math.round(mean(sortedScores))}, median ${median}, range ${sortedScores[0]}–${sortedScores[sortedScores.length - 1]}`),
+      line('Scored wines', `${new Set(scored.map((x) => x.wine)).size} wines (${scored.length} scores), average ${Math.round(mean(sortedScores))}, median ${median}, range ${sortedScores[0]}–${sortedScores[sortedScores.length - 1]}`),
       line('Spread', Object.entries(bands).filter(([, n]) => n).map(([band, n]) => `${band}: ${n}`)),
       line('Average by region', byRegion.summary(6)),
       line('Average by grape', byGrape.summary(6)),
@@ -416,6 +441,6 @@ export function summariseTasteData(d: TasteData): TasteSummary {
     ]);
   }
 
-  const signal = reviewCount + reviewedVisits.length + unreviewedChoices + d.lineups.length + pairingCount + Math.floor(wines.length / 3);
+  const signal = reviewedWines + reviewedVisits.length + unreviewedChoices + d.lineups.length + pairingCount + Math.floor(wines.length / 3);
   return { signal, text: sections.join('\n\n') };
 }

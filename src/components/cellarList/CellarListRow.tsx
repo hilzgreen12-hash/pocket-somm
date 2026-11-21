@@ -44,7 +44,7 @@ export const CellarListRow = memo(function CellarListRow({
           {selected && <Text style={styles.tickMark}>✓</Text>}
         </View>
       )}
-      <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.thumb} />
+      <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} size="thumb" style={styles.thumb} />
       <View style={styles.main}>
         <WineIdentityHeader
           producer={w.producer}

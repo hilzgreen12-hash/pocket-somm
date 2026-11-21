@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { launchImageLibrary } from '../../src/utils/imagePicker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -32,15 +32,18 @@ export default function ArchiveNightScreen() {
   // ?upload=1 (the "upload instead" entry) uses the photo library, never the camera.
   // ?session (+ venue, city, date) — opened from a restaurant review's "+ Add a
   // lineup": the lineup is saved against that visit, with its place and date.
-  const params = useLocalSearchParams<{ upload?: string; session?: string; venue?: string; city?: string; date?: string }>();
-  const isUpload = params.upload === '1';
+  // ?photo — a photo shared into Vinster from another app: straight to preview.
+  const params = useLocalSearchParams<{ upload?: string; session?: string; venue?: string; city?: string; date?: string; photo?: string }>();
+  const sharedPhoto = params.photo ? String(params.photo) : null;
+  // A shared photo behaves like an upload: Retake picks from the library.
+  const isUpload = params.upload === '1' || !!sharedPhoto;
   const visit = params.session
     ? { sessionId: params.session, venue: params.venue || null, date: params.date || null }
     : undefined;
   const uploadTriggeredRef = useRef(false);
 
-  const [stage, setStage] = useState<Stage>('capture');
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [stage, setStage] = useState<Stage>(sharedPhoto ? 'preview' : 'capture');
+  const [imageUri, setImageUri] = useState<string | null>(sharedPhoto);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [showInstruction, setShowInstruction] = useState(true);
@@ -66,7 +69,7 @@ export default function ArchiveNightScreen() {
 
   // Upload path: open the library picker once on arrival.
   useEffect(() => {
-    if (isUpload && !uploadTriggeredRef.current) {
+    if (isUpload && !sharedPhoto && !uploadTriggeredRef.current) {
       uploadTriggeredRef.current = true;
       void pickFromLibrary(true);
     }
@@ -114,7 +117,8 @@ export default function ArchiveNightScreen() {
           title: 'No bottles read',
           body: 'Vinster couldn’t read any bottles in this photo. Retake it with the front labels facing the camera, or save the photo anyway and identify the wines later.',
           buttons: [
-            { text: 'Retake', onPress: retake },
+            // iOS won't show the picker while this alert is still fading out.
+            { text: 'Retake', onPress: () => { if (Platform.OS === 'ios') setTimeout(retake, 350); else retake(); } },
             { text: 'Save anyway', onPress: () => { void persist(uri, [], city); } },
           ],
         });

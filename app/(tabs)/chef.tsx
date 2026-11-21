@@ -17,7 +17,7 @@ const CHEF_HELP = `Start with a wine and Vinster generates original, chef-inspir
 
 Set your dietary preferences and restrictions in the You tab (or adjust them per search) and Vinster shapes every recipe and pairing around them.
 
-Keep the recipes and pairing notes you love in Your Cookbook, and share them with friends and the community.`;
+Keep the recipes and pairing notes you love in Your Cookbook, and share them with friends.`;
 
 export default function ChefTab() {
   const { height } = useWindowDimensions();

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import { supabase } from '../api/supabase';
 import { useAuth } from './useAuth';
+import { useWarmLabelThumbs } from './useLabelImageUrl';
 import type { ExtractedWine, RecommendationResponse } from '../types/wine';
 import { normaliseCity } from '../utils/city';
 import { deleteScanSession } from '../api/restaurantSessions';
@@ -155,6 +156,8 @@ export function useScanHistory() {
       }));
     },
   });
+  // Restaurant photos for the Review tab's restaurant carousel.
+  useWarmLabelThumbs(archive, (v) => v.restaurantPhotoPath, 8);
 
   const autoSave = useMutation({
     // cityOverride (Find Online): the list came from the web, so the phone's

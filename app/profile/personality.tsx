@@ -71,6 +71,9 @@ export default function PersonalityScreen() {
   // sketch (its server-side sufficiency gate) — hold the milestone.
   const [notReady, setNotReady] = useState(false);
   const shareCardRef = useRef<View>(null);
+  // In-flight guard: a second tap while the share sheet is opening would
+  // capture and share twice.
+  const sharingRef = useRef(false);
 
   // When the user has the current sketch on screen, mark it acknowledged
   // so the "your personality is ready" popup on the home screen stops
@@ -244,7 +247,8 @@ export default function PersonalityScreen() {
   }
 
   async function handleShare() {
-    if (!text) return;
+    if (!text || sharingRef.current) return;
+    sharingRef.current = true;
     const { title, body } = splitPersonality(text);
     const heading = cat === 'wine' ? 'My Wine Personality, by Vinster' : cat === 'recipe' ? 'My Foodie Personality, by Vinster' : 'My Vinster Alter-Ego';
     const caption = [heading, title ? `\n${title}` : ''].filter(Boolean).join('\n');
@@ -269,6 +273,8 @@ export default function PersonalityScreen() {
       await Share.share({ message: `${caption}\n\n${body}`, title: heading });
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      sharingRef.current = false;
     }
   }
 

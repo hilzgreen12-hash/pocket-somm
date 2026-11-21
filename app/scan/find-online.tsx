@@ -42,8 +42,9 @@ export default function FindOnlineScreen() {
     if (Platform.OS !== 'android' || !r.isPdf) { void openInBrowser(); return; }
     setOpening(r.url);
     try {
-      const dest = new File(Paths.cache, 'wine-list-preview.pdf');
-      if (dest.exists) dest.delete();
+      // A fresh name each time: a download abandoned after the timeout below
+      // may still be writing to the last one.
+      const dest = new File(Paths.cache, `wine-list-preview-${Date.now()}.pdf`);
       // A slow site mustn't leave "Opening…" up for ever: after 20 s the
       // browser takes over (the download can't be cancelled, so it's ignored).
       let timer: ReturnType<typeof setTimeout> | undefined;

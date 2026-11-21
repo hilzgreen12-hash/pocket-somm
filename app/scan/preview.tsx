@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Animated } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useScanStore } from '../../src/stores/scanStore';
 import { colors, spacing, typography } from '../../src/constants/theme';
 
@@ -96,17 +96,34 @@ export default function PreviewScreen() {
 
   // One tap only — a double tap used to start two (paid) scans.
   const confirmed = useRef(false);
+  // The pages handed to the scan, so Back from it can show them again (sending
+  // them as one list clears the current photo).
+  const sentPages = useRef<string[] | null>(null);
   function handleConfirm() {
     if (confirmed.current || !imageUri) return;
     confirmed.current = true;
     leaving.current = true;
     // Several camera pages → send them all as one list.
     if (cameraPages.length) {
-      setImageUris([...cameraPages, imageUri], 'camera');
+      sentPages.current = [...cameraPages, imageUri];
+      setImageUris(sentPages.current, 'camera');
       clearCameraPages();
     }
     router.push('/scan/extracting');
   }
+
+  // Back from the scan: the buttons work again, and a multi-page list is
+  // restored (the same pages resume the same job rather than starting a new one).
+  useFocusEffect(useCallback(() => {
+    if (!confirmed.current) return;
+    confirmed.current = false;
+    leaving.current = false;
+    const pages = sentPages.current;
+    sentPages.current = null;
+    if (pages && !useScanStore.getState().imageUri) {
+      useScanStore.setState({ imageUri: pages[pages.length - 1], imageUris: null, imageSource: 'camera', cameraPages: pages.slice(0, -1) });
+    }
+  }, []));
 
   // Keep this page and go back to the camera for the next section of the list.
   function handleAddPage() {

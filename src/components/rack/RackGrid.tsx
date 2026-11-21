@@ -117,6 +117,7 @@ const RackSlot = memo(function RackSlot({ row, col, size, wineId, labelPath, win
           <LabelThumb
             path={labelPath}
             fallbackText={wineName}
+            size="thumb"
             style={styles.thumb}
             radius={2}
             frame={2}

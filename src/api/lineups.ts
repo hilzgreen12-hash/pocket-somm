@@ -1,6 +1,6 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { supabase } from './supabase';
-import { evictCachedLabel } from './labelImageCache';
+import { evictCachedLabel, primeCachedLabel } from './labelImageCache';
 
 // Lineup photos share the wine-labels bucket (per-user-folder RLS already
 // covers the lineups/ subfolder). Records live in public.lineup_archives.
@@ -89,6 +89,8 @@ async function uploadLineupPhoto(userId: string, localUri: string): Promise<stri
     contentType: 'image/jpeg', upsert: true,
   });
   if (error) throw error;
+  // Prime the local cache with these bytes, so the new photo shows at once.
+  primeCachedLabel(path, bytes);
   return path;
 }
 
@@ -219,11 +221,4 @@ export async function deleteLineupArchive(id: string): Promise<void> {
     throw new Error('That lineup could not be deleted — please pull to refresh (you may need to sign in again).');
   }
   await removeLineupPhoto((row as { image_path?: string | null } | null)?.image_path);
-}
-
-export async function lineupSignedUrl(path: string | null | undefined, expiresIn = 3600): Promise<string | null> {
-  if (!path) return null;
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, expiresIn);
-  if (error) return null;
-  return data?.signedUrl ?? null;
 }

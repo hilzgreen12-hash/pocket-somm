@@ -130,10 +130,12 @@ Return only the raw JSON — no markdown, no explanation.`;
     // VARIABLE per-request content: the specific wine identity plus the
     // WS-score-anchoring guidance (both change every call).
     // The producer's VERIFIED catalogue wines, so the identity check can
-    // recognise a real wine asked for under its label wording.
+    // recognise a real wine asked for under its label wording. Only a few named
+    // qualifier words are allowed for: any other difference must pass the normal
+    // identity check, so a near-miss name can't borrow a real wine's existence.
     const knownWines = producer ? await verifiedProducerWines(String(producer)) : [];
     const knownWinesStr = knownWines.length
-      ? `\n\nVinster's verified catalogue lists these wines from ${producer}: ${knownWines.join('; ')}. If the wine asked about is one of these — allowing for extra label words such as "Single Vineyard", "Viñedo Singular" or "Vieilles Vignes" — it is real: treat it as identified and name it as the catalogue does. A wine NOT on this list may still be real; judge it as usual.`
+      ? `\n\nVinster's verified catalogue lists these wines from ${producer}: ${knownWines.join('; ')}. If the wine asked about is one of these — exactly, or differing ONLY by one of these qualifier words: "Single Vineyard", "Viñedo Singular", "Vieilles Vignes", "Old Vines", "Estate" — it is real: treat it as identified and name it as the catalogue does. Any other extra or different word (a vineyard, cuvée or place name, a colour, a reserve tier) makes it a different wine: it gets the normal identity check, and is never identified just because it resembles a listed wine. A wine NOT on this list may still be real; judge it as usual.`
       : '';
 
     const userContent = `Provide intelligence on this wine:

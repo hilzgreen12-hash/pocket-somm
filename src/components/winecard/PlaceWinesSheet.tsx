@@ -6,6 +6,7 @@ import { getRackSlots, assignSlots } from '../../api/racks';
 import { getBinCells } from '../../api/bins';
 import { addLocationPlacement, addBinPlacement } from '../../api/placements';
 import { updateCellarWine } from '../../api/cellar';
+import { invalidateCellarViews } from '../../hooks/useCellar';
 import { showAlert } from '../AppAlert';
 import type { CellarWine, WineRack, StorageLocation } from '../../types/wine';
 import { colors, spacing } from '../../constants/theme';
@@ -119,13 +120,16 @@ export function PlaceWinesSheet({ visible, onClose, wine, available, racks, bins
       if (chosen >= available && wine.awaiting_placement) {
         await updateCellarWine(wine.id, { awaiting_placement: false, awaiting_placement_unit_id: null } as Partial<CellarWine>);
       }
-      for (const k of ['cellar', 'placements', 'placements-list', 'storage-location-wines', 'storage-locations', 'racks', 'rack-slots', 'slot-assignments', 'bins', 'bin-cells']) qc.invalidateQueries({ queryKey: [k] });
       setPlaced((prev) => [...(prev ?? []), ...done]);
       setCounts({});
     } catch (err) {
       showAlert({ title: 'Could not place wines', body: err instanceof Error ? err.message : 'Please try again.' });
       if (done.length) setPlaced((prev) => [...(prev ?? []), ...done]);
     } finally {
+      // Every view of where bottles sit (plus the racks' fill), also after a
+      // part-way failure — the bottles placed before it did move.
+      invalidateCellarViews(qc);
+      void qc.invalidateQueries({ queryKey: ['racks'] });
       setPlacing(false);
     }
   }

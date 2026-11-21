@@ -46,7 +46,7 @@ function contentsBody({ bottles, wines, reviewsLost }: UnitContents): string {
 // the bundled example labels until bottles are added.
 function CollageItemView({ item, w, h }: { item: LocationCollageItem; w: number; h: number }) {
   const st = { width: w, height: h };
-  if (typeof item === 'string') return <LabelThumb path={item} style={st} radius={0} frame={0} />;
+  if (typeof item === 'string') return <LabelThumb path={item} size="thumb" style={st} radius={0} frame={0} />;
   return <View style={[st, { overflow: 'hidden' }]}><WineCardThumb producer={item.producer} wineName={item.wineName} fallbackText={item.wineName ?? item.producer ?? ''} style={st} /></View>;
 }
 function WinesCollage({ items, offset }: { items?: LocationCollageItem[]; offset: number }) {

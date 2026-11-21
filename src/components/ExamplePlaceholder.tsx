@@ -15,6 +15,7 @@ export const RESTAURANT_GLASSES_IMG: ImageSourcePropType = require('../../assets
 export const RESTAURANT_LANTERNS_IMG: ImageSourcePropType = require('../../assets/images/tiles/restaurant-lanterns.jpg');
 export const FOOD_ROAST_IMG: ImageSourcePropType = require('../../assets/images/tiles/food-sunday-roast.jpg');
 export const FOOD_SUMMER_IMG: ImageSourcePropType = require('../../assets/images/tiles/food-summer-table.jpg');
+export const FOOD_PLATED_IMG: ImageSourcePropType = require('../../assets/images/tiles/food-plated.jpg');
 // Cookbook-spines photo (bundled) — Your Cookbook's artwork, and the stand-in
 // for any recipe / kitchen placeholder.
 export const KITCHEN_IMG: ImageSourcePropType = require('../../assets/images/kitchen-favourites.jpg');

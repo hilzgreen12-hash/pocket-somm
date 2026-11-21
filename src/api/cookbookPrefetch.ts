@@ -2,12 +2,13 @@ import type { QueryClient } from '@tanstack/react-query';
 import { listChefArchiveCollections } from './chefArchiveCollections';
 import { listChefLabelSessions } from './chef';
 import { getFavouritesCover } from './cookbookFavouritesCover';
-import { getCachedLabelUri } from './labelImageCache';
+import { labelImageQuery } from '../hooks/useLabelImageUrl';
 
 // Warm the Pair tab's cookbook carousel in the background after sign-in, so the
 // folders, counts and cover images are already there when the tab opens
 // (otherwise it waits on a chain of network calls that only starts on open).
-// Keys match the hooks that read them; covers land in the on-disk image cache.
+// Keys match the hooks that read them; covers land in the on-disk image cache
+// as the small thumbnails the folder tiles draw.
 const LONG = 24 * 60 * 60 * 1000;
 
 export async function prefetchCookbook(qc: QueryClient, userId: string): Promise<void> {
@@ -20,6 +21,6 @@ export async function prefetchCookbook(qc: QueryClient, userId: string): Promise
     const paths = [favCover, ...collections.map((c) => c.image_path)]
       .filter((p): p is string => !!p && !/^https?:\/\//i.test(p));
     await Promise.all(paths.map((path) =>
-      qc.prefetchQuery({ queryKey: ['label-image', path], queryFn: () => getCachedLabelUri(path), staleTime: 60 * 1000, gcTime: LONG })));
+      qc.prefetchQuery({ ...labelImageQuery(path, 'thumb', true), gcTime: LONG })));
   } catch { /* best-effort: the carousel still loads itself on open */ }
 }

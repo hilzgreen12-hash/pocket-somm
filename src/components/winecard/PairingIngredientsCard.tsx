@@ -11,7 +11,9 @@ const DRINK_RE = /\b(wine|wines|champagne|cava|prosecco|cr[eé]mant|sherry|port|
 const isDrink = (n: string) => !/vinegar/i.test(n) && DRINK_RE.test(n);
 // Lists saved before the server fixed it can have "butter" under Vegetables:
 // dairy and fats show with Herbs & Spices, cheese with Proteins.
-const DAIRY_FAT_RE = /\b(butter|beurre|cream|cr[eè]me fra[iî]che|ghee|lard|duck fat|goose fat|oil|yog(h)?urt|mascarpone|milk)\b/i;
+// Not butter beans / butter lettuce / butter squash, nor milk thistle — those
+// are vegetables and herbs.
+const DAIRY_FAT_RE = /\b(butter(?!\s+(?:beans?|lettuce|squash))|beurre|cream|cr[eè]me fra[iî]che|ghee|lard|duck fat|goose fat|oil|yog(h)?urt|mascarpone|milk(?!\s+thistle))\b/i;
 const CHEESE_RE = /\b(cheese|parmesan|parmigiano|pecorino|grana padano|gruy[eè]re|comt[eé]|ch[eè]vre|brie|camembert|roquefort|stilton|cheddar|feta|ricotta|mozzarella|burrata|manchego|gorgonzola|taleggio|[eé]poisses|halloumi|paneer)\b/i;
 const groupOf = (i: PairingIngredient): PairingIngredient['type'] =>
   CHEESE_RE.test(i.name) ? 'protein' : DAIRY_FAT_RE.test(i.name) ? 'herb' : i.type;

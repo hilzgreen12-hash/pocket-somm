@@ -106,6 +106,8 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
   const intelShareRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
   const [sharePayload, setSharePayload] = useState<ComponentProps<typeof WineIntelShareCard> | null>(null);
+  // Resolves when the share card's label photo has drawn (or failed).
+  const sharePhotoDrawnRef = useRef<(() => void) | null>(null);
 
   // A live wine's tabs (an archived wine's card is a single page).
   const tabs: { id: Tab; label: string }[] = [
@@ -271,13 +273,17 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
     if (wine.label_image_path) {
       try { imageUri = await getCachedLabelUri(wine.label_image_path); } catch { /* no photo */ }
     }
+    // Capture only once the photo has drawn (a fixed wait could catch it
+    // blank), capped at 5s so a stuck image can't hold the share.
+    const photoDrawn = imageUri ? new Promise<void>((r) => { sharePhotoDrawnRef.current = r; }) : Promise.resolve();
     setSharePayload({
       producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage, region: wine.region,
       grape: wine.grape_variety, criticScore: wine.critic_score, drinkingWindow, estimatedValue,
       tastingNote: wine.tasting_notes, imageUri,
     });
     try {
-      // One paint for the off-screen card to mount.
+      await Promise.race([photoDrawn, new Promise((r) => setTimeout(r, 5000))]);
+      // One paint for the off-screen card to settle.
       await new Promise((r) => setTimeout(r, 250));
       if (intelShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(intelShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
@@ -299,6 +305,7 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
+      sharePhotoDrawnRef.current = null;
       setSharing(false);
       setSharePayload(null);
     }
@@ -514,7 +521,7 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
       />
       {sharePayload ? (
         <View style={s.shareCardWrap} pointerEvents="none">
-          <WineIntelShareCard ref={intelShareRef} {...sharePayload} />
+          <WineIntelShareCard ref={intelShareRef} {...sharePayload} onImageReady={() => sharePhotoDrawnRef.current?.()} />
         </View>
       ) : null}
     </KeyboardAwareScrollView>

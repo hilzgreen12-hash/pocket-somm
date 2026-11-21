@@ -122,7 +122,12 @@ export async function archiveBottles(
     // The copy starts with no review: the wine's reviews stay on the live row,
     // and a copy of them here would drift from the original once either is edited.
     const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
-    const copy = await addCellarWine({ ...rest, ...archived, ...flatMirror(null), review_entries: [], quantity: effective });
+    // It keeps the day the bottles were cellared (a fresh row would otherwise
+    // date them to the archive day in the wine's history).
+    const copy = await addCellarWine({
+      ...rest, ...archived, ...flatMirror(null), review_entries: [], quantity: effective,
+      date_received: wine.date_received ?? wine.created_at?.slice(0, 10) ?? null,
+    });
     archivedWineId = copy.id;
     // Free the archived bottles' storage before the quantity drops (see
     // releaseLeavingBottles for why the order matters).

@@ -267,12 +267,12 @@ export function CellarInsightsCarousel() {
 // 2×2 thumbnail collage (up to 4) filling the 220×165 tile footprint.
 function CollageCell({ item, full }: { item: CollageItem; full?: boolean }) {
   const st = full ? styles.collageFull : styles.collageCell;
-  if (typeof item === 'string') return <LabelThumb path={item} style={st} radius={full ? 12 : 0} frame={0} />;
+  if (typeof item === 'string') return <LabelThumb path={item} size="thumb" style={st} radius={full ? 12 : 0} frame={0} />;
   return <View style={[st, { overflow: 'hidden' }]}><WineCardThumb producer={item.producer} wineName={item.wineName} fallbackText={item.wineName ?? item.producer ?? ''} style={st} /></View>;
 }
 function CollageSlot({ item, w, h }: { item: CollageItem; w: number; h: number }) {
   const st = { width: w, height: h };
-  if (typeof item === 'string') return <LabelThumb path={item} style={st} radius={0} frame={0} />;
+  if (typeof item === 'string') return <LabelThumb path={item} size="thumb" style={st} radius={0} frame={0} />;
   return <View style={[st, { overflow: 'hidden' }]}><WineCardThumb producer={item.producer} wineName={item.wineName} fallbackText={item.wineName ?? item.producer ?? ''} style={st} /></View>;
 }
 function Collage({ paths }: { paths: CollageItem[] }) {

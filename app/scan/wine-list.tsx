@@ -183,6 +183,14 @@ export default function WineListScreen() {
     if (action) setTimeout(action, 350);
   }
 
+  // Sign In / Create Account drop the tapped action — running it would open
+  // the camera or picker over the sign-in screen.
+  function goToAuth(path: '/(auth)/sign-in' | '/(auth)/sign-up') {
+    pendingActionRef.current = null;
+    setSignInPromptVisible(false);
+    router.push(path);
+  }
+
   function continueWithoutAccount() {
     setSignInPromptVisible(false);
     const action = pendingActionRef.current;
@@ -397,8 +405,8 @@ export default function WineListScreen() {
       <SignInPromptModal
         visible={signInPromptVisible}
         onDismiss={dismissSignInPrompt}
-        onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
+        onSignIn={() => { goToAuth('/(auth)/sign-in'); }}
+        onCreateAccount={() => { goToAuth('/(auth)/sign-up'); }}
         onContinue={continueWithoutAccount}
       />
 

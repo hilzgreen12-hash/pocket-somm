@@ -78,39 +78,60 @@ export function isBulkEligible(w: CellarWine, tried: Map<string, number>): boole
 
 // ---- The write for one wine ----
 
-// What a lookup changes on the wine, following the wine card's keep rules
-// (useWineIntel): an existing value is never replaced by nothing, nor by a
-// stand-in made while Wine-Searcher couldn't be asked, and a protected value is
-// only replaced by a new Wine-Searcher price. The value's range and scope are
-// written with it, so the card never shows an old range beside a new value.
-// An existing critic score is kept when the lookup has none.
-function intelPatch(w: CellarWine, intel: WineIntelligence, currency: string): Partial<CellarWine> {
-  const newSource = intel.valueSource ?? 'vinster';
-  const hadValue = w.estimated_value != null;
-  const keepValue = hadValue && (
-    intel.estimatedValue == null
-    || !!intel.wsUnavailable
+// A lookup's value and critic score — the part of the result both the wine
+// card (valueWine) and bulk runs (generateWineIntel) write.
+export type ValueLookup = {
+  estimatedValue: number | null;
+  estimatedValueLow?: number | null;
+  estimatedValueHigh?: number | null;
+  priceScope?: 'vintage' | 'all-vintage' | null;
+  valueSource?: 'wine-searcher' | 'vinster' | null;
+  currency: string;
+  wsUnavailable?: boolean;
+  criticScore: number | null;
+  criticScoreNote?: string | null;
+};
+
+// The one keep rule for a stored value and critic score, shared by the wine
+// card (useWineIntel) and bulk runs so they can't drift: an existing value is
+// never replaced by nothing, nor by a stand-in made while Wine-Searcher couldn't
+// be asked, and a protected value is only replaced by a new Wine-Searcher price.
+// The range and scope are written with the value, so the card never shows an
+// old range beside a new value. An existing critic score is kept when the
+// lookup has none, or when the value beside it was kept.
+export function valueAndScorePatch(w: CellarWine, lookup: ValueLookup): { keepValue: boolean; patch: Partial<CellarWine> } {
+  const newSource = lookup.valueSource ?? 'vinster';
+  const keepValue = w.estimated_value != null && (
+    lookup.estimatedValue == null
+    || !!lookup.wsUnavailable
     || (PROTECTED_SOURCES.has(w.estimated_value_source ?? '') && newSource !== 'wine-searcher')
   );
   const now = new Date().toISOString();
   const value: Partial<CellarWine> = keepValue ? {}
-    : intel.estimatedValue == null
+    : lookup.estimatedValue == null
       // Nothing to show: stamp the attempt, so Statistics lists the wine as one
       // Vinster couldn't value (for the user to fill in) rather than not yet tried.
       ? { estimated_value_at: now }
       : {
-        estimated_value: intel.estimatedValue,
-        estimated_value_currency: currency,
+        estimated_value: lookup.estimatedValue,
+        estimated_value_currency: lookup.currency,
         estimated_value_at: now,
         estimated_value_source: newSource,
-        estimated_value_low: intel.estimatedValueLow ?? null,
-        estimated_value_high: intel.estimatedValueHigh ?? null,
-        estimated_value_scope: intel.priceScope ?? null,
+        estimated_value_low: lookup.estimatedValueLow ?? null,
+        estimated_value_high: lookup.estimatedValueHigh ?? null,
+        estimated_value_scope: lookup.priceScope ?? null,
       };
 
-  const keepScore = w.critic_score != null && (intel.criticScore == null || keepValue);
+  const keepScore = w.critic_score != null && (lookup.criticScore == null || keepValue);
   const score: Partial<CellarWine> = keepScore ? {}
-    : { critic_score: intel.criticScore, critic_score_note: intel.criticScoreNote ?? null };
+    : { critic_score: lookup.criticScore, critic_score_note: lookup.criticScoreNote ?? null };
+  return { keepValue, patch: { ...value, ...score } };
+}
+
+// What a bulk lookup changes on the wine: the shared value/score keep rule,
+// plus a blank region / grape filled in.
+function intelPatch(w: CellarWine, intel: WineIntelligence, currency: string): Partial<CellarWine> {
+  const { patch } = valueAndScorePatch(w, { ...intel, currency });
 
   // Fill a blank region / grape, so region-less wines can be classified in
   // Cellar Statistics. Never overwrites what the user or an import supplied.
@@ -119,8 +140,7 @@ function intelPatch(w: CellarWine, intel: WineIntelligence, currency: string): P
   if (!w.grape_variety?.trim() && intel.grapeVariety?.trim()) classify.grape_variety = intel.grapeVariety.trim();
 
   return {
-    ...value,
-    ...score,
+    ...patch,
     ...(intel.wsWineId ? { ws_wine_id: intel.wsWineId, ws_wine_name: intel.wsWineName ?? null } : {}),
     ...classify,
   };

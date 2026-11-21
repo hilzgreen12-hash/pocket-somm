@@ -652,15 +652,19 @@ export default function ChosenWinesScreen() {
   // A review shares as a branded PNG (WineReviewShareCard, captured off-screen),
   // falling back to plain text where capture or expo-sharing isn't available.
   const reviewShareRef = useRef<View>(null);
-  const [reviewSharing, setReviewSharing] = useState(false);
   const [reviewSharePayload, setReviewSharePayload] = useState<{
     producer: string | null; wineName: string; vintage: string | number | null; region: string | null;
     userScore: number | null; criticScore: number | null; tastingNote: string | null;
     date: string | null; location: string | null; isFavourite: boolean; imageUri: string | null;
   } | null>(null);
+  // Resolved by the card's onImageReady, so the capture waits for the photo.
+  const reviewPhotoReady = useRef<(() => void) | null>(null);
+  // Synchronous in-flight guard, so a double tap can't start a second share.
+  const reviewShareBusy = useRef(false);
 
   async function handleShareReview(card: UnifiedReview) {
-    if (reviewSharing) return;
+    if (reviewShareBusy.current) return;
+    reviewShareBusy.current = true;
     const latest = card.entries[0];
     // Only the shareable "Your Review" — never the private personal note.
     const tastingNote = (latest?.note ?? '').trim();
@@ -668,6 +672,9 @@ export default function ChosenWinesScreen() {
     let imageUri: string | null = null;
     const photo = labelPathFor({ kind: 'review', card });
     if (photo) { try { imageUri = await getCachedLabelUri(photo); } catch { /* no photo */ } }
+    const photoDrawn = imageUri
+      ? new Promise<void>((resolve) => { reviewPhotoReady.current = resolve; })
+      : Promise.resolve();
     setReviewSharePayload({
       producer: card.producer,
       wineName: card.wineName ?? '',
@@ -681,9 +688,10 @@ export default function ChosenWinesScreen() {
       isFavourite: !!latest?.favourite,
       imageUri,
     });
-    setReviewSharing(true);
     try {
-      // One paint to let the off-screen card mount with the new props.
+      // Wait for the photo to draw (capped, so a bad image can't hang the
+      // share), then one paint to let the off-screen card settle.
+      await Promise.race([photoDrawn, new Promise((r) => setTimeout(r, 5000))]);
       await new Promise((r) => setTimeout(r, 250));
       if (reviewShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(reviewShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
@@ -698,7 +706,8 @@ export default function ChosenWinesScreen() {
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
-      setReviewSharing(false);
+      reviewPhotoReady.current = null;
+      reviewShareBusy.current = false;
       setReviewSharePayload(null);
     }
   }
@@ -1090,7 +1099,7 @@ export default function ChosenWinesScreen() {
       {/* Off-screen share card, mounted only while a share is in flight. */}
       {reviewSharePayload && (
         <View style={styles.shareCardWrap} pointerEvents="none">
-          <WineReviewShareCard ref={reviewShareRef} {...reviewSharePayload} otherObservations={null} />
+          <WineReviewShareCard ref={reviewShareRef} {...reviewSharePayload} otherObservations={null} onImageReady={() => reviewPhotoReady.current?.()} />
         </View>
       )}
 
@@ -1230,7 +1239,7 @@ export default function ChosenWinesScreen() {
                     <View style={styles.reviewThumb}>
                       {thumbPath ? (
                         <TouchableOpacity onPress={() => setExpandedThumb({ path: thumbPath, name: w.wine_name })} activeOpacity={0.85}>
-                          <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={5} frame={3} />
+                          <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={5} frame={3} size="thumb" />
                         </TouchableOpacity>
                       ) : (
                         <AddPhotoThumb style={styles.reviewThumb} radius={5} onPress={() => presentAddPhoto(item)} />

@@ -1,54 +1,42 @@
-import { useEffect, useState } from 'react';
-import { View, Text, Image, ActivityIndicator, StyleSheet } from 'react-native';
+import { useEffect } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
-import { lineupSignedUrl } from '../api/lineups';
+import { useQueryClient } from '@tanstack/react-query';
+import { repairLabelImage, useLabelImageState } from '../hooks/useLabelImageUrl';
+import { LabelImage } from './LabelImage';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-// A lineup photo thumbnail that never just vanishes. The photo lives in cloud
-// storage, so with no connection the signed URL or the image download fails —
-// previously that left a spinner forever or an empty box. Now it shows an
-// offline placeholder, and retries by itself as soon as the connection is back.
-
-const URL_TIMEOUT_MS = 8000;
-
+// A lineup photo thumbnail that never just vanishes. Lineup photos share the
+// label bucket, so they go through the same on-disk cache: downloaded once,
+// then drawn instantly (and offline) from a small cached thumbnail. With no
+// connection on a first view it shows an offline placeholder, and retries by
+// itself as soon as the connection is back.
 export function LineupThumb({ path, width, height, borderRadius = 0 }: {
   path: string | null | undefined;
   width: number;
   height: number;
   borderRadius?: number;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    setUrl(null);
-    setFailed(false);
-    const timeout = new Promise<null>((r) => setTimeout(() => r(null), URL_TIMEOUT_MS));
-    Promise.race([lineupSignedUrl(path).catch(() => null), timeout]).then((u) => {
-      if (!active) return;
-      if (u) setUrl(u); else setFailed(true);
-    });
-    return () => { active = false; };
-  }, [path, attempt]);
+  const qc = useQueryClient();
+  const { uri, pending } = useLabelImageState(path, 'thumb');
+  const failed = !pending && !uri;
 
   // Back online after a failure → try again.
   useEffect(() => {
-    if (!failed) return;
+    if (!failed || !path) return;
     return NetInfo.addEventListener((s) => {
-      if (s.isConnected && s.isInternetReachable !== false) setAttempt((a) => a + 1);
+      if (s.isConnected && s.isInternetReachable !== false) void qc.invalidateQueries({ queryKey: ['label-image', path] });
     });
-  }, [failed]);
+  }, [failed, path, qc]);
 
   const box = { width, height, borderRadius };
   if (failed) return <OfflinePhotoPlaceholder width={width} height={height} borderRadius={borderRadius} />;
-  if (!url) {
+  if (!uri) {
     return <View style={[styles.placeholder, box]}><ActivityIndicator color={colors.gold} /></View>;
   }
-  return <Image source={{ uri: url }} style={box} resizeMode="cover" onError={() => setFailed(true)} />;
+  return <LabelImage uri={uri} style={box} onError={() => repairLabelImage(qc, path)} />;
 }
 
 // Shown in place of a cloud photo that can't load (no connection).

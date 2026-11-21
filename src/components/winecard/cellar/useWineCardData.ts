@@ -193,22 +193,26 @@ export function useWineCardData(wine: CellarWine) {
     const same = (w: CellarWine) =>
       (wineNameKey(w.producer, w.wine_name) === key && vintage(w) === vintage(wine)) || sameWineIdentity(wine, w);
     const cellarMatches = wines.filter(same);
-    const archivedMatches = archivedWines.filter(same);
+    const newestFirst = (a: CellarWine, b: CellarWine) => new Date(b.archived_at!).getTime() - new Date(a.archived_at!).getTime();
+    // An archived wine: every entry of its line in Your Cellar Archive (same
+    // wine and bottle size), newest first — what its delete and Return to
+    // Cellar act on.
+    const archiveLine = isArchived
+      ? archiveLines(archivedWines).find((g) => g.rows.some((r) => r.id === wine.id))?.rows ?? [wine]
+      : [];
+    // What the archive card counts and lists: on an archived wine its line, so
+    // the count matches what Return to Cellar / Delete act on; on a live wine
+    // the wine's whole archive history.
+    const archived = (isArchived ? archiveLine : archivedWines.filter(same)).filter((a) => a.archived_at).sort(newestFirst);
     return {
       // This wine's live cellar rows (for an archived wine, the line it came from).
       cellarRows: cellarMatches,
-      inCellar: tally(cellarMatches, wine.bottle_size_ml),
-      inArchive: tally(archivedMatches, wine.bottle_size_ml),
-      // Each archived entry of this wine, newest first.
-      archiveEntries: archivedMatches
-        .filter((a) => a.archived_at)
-        .sort((a, b) => new Date(b.archived_at!).getTime() - new Date(a.archived_at!).getTime()),
-      // An archived wine: every entry of its line in Your Cellar Archive (same
-      // wine and bottle size), newest first — what its delete and Return to
-      // Cellar act on.
-      archiveLine: isArchived
-        ? archiveLines(archivedWines).find((g) => g.rows.some((r) => r.id === wine.id))?.rows ?? [wine]
-        : [],
+      // A live wine's bottles: this line only — the one its Move / Archive /
+      // Delete act on (another size is its own line, with its own card).
+      inCellar: tally([wine], wine.bottle_size_ml),
+      inArchive: tally(archived, wine.bottle_size_ml),
+      archiveEntries: archived,
+      archiveLine,
     };
   }, [wines, archivedWines, wine, isArchived]);
 

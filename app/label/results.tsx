@@ -191,6 +191,8 @@ export default function LabelResultsScreen() {
   const [rangeNoteTier, setRangeNoteTier] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const intelShareRef = useRef<View>(null);
+  // Resolves the share's wait once the card's label photo has drawn.
+  const intelPhotoReady = useRef<(() => void) | null>(null);
   const [intelSharePayload, setIntelSharePayload] = useState<ComponentProps<typeof WineIntelShareCard> | null>(null);
   // Confirm-first: when the scan couldn't be verified against Wine-Searcher,
   // camera.tsx routes here with confirm=1 and no intel yet. We show typo/OCR-
@@ -565,18 +567,22 @@ export default function LabelResultsScreen() {
     if (intelligence) { setAwaitingConfirm(false); return; }
     if (wineDetailsConfirmed) resolveConfirm(wineDetailsConfirmed);
   }
-  // "Search Again" — back to the Scan hub, where the user can re-scan, upload,
-  // search the catalogue, or type the wine in by hand. Reset the just-read wine
-  // so its fields don't leak into a fresh entry.
+  // Leaving the confirm step / an intel card without a card to return to: back
+  // where the user came from. Wine Intel starts on Home ('/(tabs)/scan' is the
+  // Review tab now); other label flows keep their Review-tab default.
+  const exitTo = backTo ? (decodeURIComponent(backTo) as any) : isIntelOnlyFlow ? '/(tabs)' : '/(tabs)/scan';
+  // "Search Again" — back where the user started, to re-scan, upload, search
+  // the catalogue, or type the wine in by hand. Reset the just-read wine so its
+  // fields don't leak into a fresh entry.
   function openSearchAgain() {
     useLabelStore.getState().reset();
-    router.dismissTo('/(tabs)/scan' as any);
+    router.dismissTo(exitTo);
   }
   // "Cancel" — leave the confirm screen without building a card, back to wherever
   // the user came from (mirrors the back arrow).
   function cancelConfirm() {
     if (intelligence) { setAwaitingConfirm(false); return; }
-    router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan');
+    router.dismissTo(exitTo);
   }
   // Picking a bottling from the producer's range: keep the (confident) producer,
   // vintage, size and grape from the read; take the cuvée / region / style from
@@ -745,6 +751,8 @@ export default function LabelResultsScreen() {
     const estimatedValue = intel.estimatedValue != null
       ? formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })
       : null;
+    // Capture only once the photo has drawn, else the card shares without it.
+    const photoDrawn = imageUri ? new Promise<void>((r) => { intelPhotoReady.current = r; }) : Promise.resolve();
     setIntelSharePayload({
       producer: w?.producer,
       wineName: w?.wineName,
@@ -759,7 +767,8 @@ export default function LabelResultsScreen() {
     });
     setSharing(true);
     try {
-      // One paint to let the off-screen card mount with the new props.
+      // Wait for the photo (5 s at most), then one paint for the card to settle.
+      await Promise.race([photoDrawn, new Promise((r) => setTimeout(r, 5000))]);
       await new Promise((r) => setTimeout(r, 250));
       if (intelShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(intelShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
@@ -780,6 +789,7 @@ export default function LabelResultsScreen() {
     } finally {
       setSharing(false);
       setIntelSharePayload(null);
+      intelPhotoReady.current = null;
     }
   }
 
@@ -1016,7 +1026,7 @@ export default function LabelResultsScreen() {
       <MessageScreen
         title="No results yet"
         body="Scan the label again to see this wine's intel."
-        action={{ label: 'Scan a Label', onPress: () => router.replace(`/label/camera${context ? `?context=${context}` : ''}` as any) }}
+        action={{ label: 'Scan a Label', onPress: () => router.replace(`/label/camera${context ? `?context=${context}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` : ''}` as any) }}
         onBack={intelGoBack}
       />
     );
@@ -1053,7 +1063,7 @@ export default function LabelResultsScreen() {
             style={styles.backRow}
             onPress={() => {
               if (intelligence) setAwaitingConfirm(false);
-              else router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan');
+              else router.dismissTo(exitTo);
             }}
           >
             <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
@@ -1077,7 +1087,7 @@ export default function LabelResultsScreen() {
             // return to that card (close the search), don't exit the whole flow.
             // Only leave to backTo on the initial confirm (no card yet).
             if (intelligence) setAwaitingConfirm(false);
-            else router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan');
+            else router.dismissTo(exitTo);
           }}
         >
           <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
@@ -1594,7 +1604,7 @@ export default function LabelResultsScreen() {
             // list) when the review is saved, discarded, or backed out of.
             // MUST carry context=intel — the full intel view (Vintage & Market
             // Comparison, Dive Deeper, producer range, the three action buttons)
-            // and the "back → Scan tab" behaviour are all gated on it; without it
+            // and the "back → Home" behaviour are all gated on it; without it
             // the returned card re-mounts degraded and back goes to Cellar.
             qs.set('backTo', '/label/results?context=intel');
             qs.set('fromIntel', '1');
@@ -1779,7 +1789,7 @@ export default function LabelResultsScreen() {
     router.dismissTo(
       backTo ? (decodeURIComponent(backTo) as any)
       : isLineupFlow ? '/cellar/scan-lineup'
-      : isIntelOnlyFlow ? '/(tabs)/scan'
+      : isIntelOnlyFlow ? '/(tabs)'
       : '/(tabs)/cellar',
     );
   }
@@ -2155,10 +2165,9 @@ export default function LabelResultsScreen() {
         onPress={() => router.dismissTo(
           backTo ? (decodeURIComponent(backTo) as any)
           : isLineupFlow ? '/cellar/scan-lineup'
-          // Wine Intel is launched from the Scan tab now, so return there by
-          // default rather than the old Cellar home. Non-Scan origins should
-          // still pass an explicit backTo.
-          : isIntelOnlyFlow ? '/(tabs)/scan'
+          // Wine Intel is launched from Home, so return there by default rather
+          // than the old Cellar home. Other origins pass an explicit backTo.
+          : isIntelOnlyFlow ? '/(tabs)'
           : '/(tabs)/cellar'
         )}
       >
@@ -2302,7 +2311,7 @@ export default function LabelResultsScreen() {
       <NoIntelPrompt
         visible={isIntelOnlyFlow && intelligence != null && intel.criticScore == null && intel.estimatedValue == null && !noIntelDismissed && !candidatesOpen && candidates.length === 0}
         onDismiss={() => setNoIntelDismissed(true)}
-        onEdit={() => router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
+        onEdit={() => router.dismissTo(exitTo)}
         editLabel="Check details"
       />
 
@@ -2594,7 +2603,7 @@ export default function LabelResultsScreen() {
 
       {isIntelOnlyFlow ? (
         // Wine Intel saves from the card's own "Save to Your Cellar" button.
-        <TouchableOpacity style={styles.discardButton} onPress={() => router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}>
+        <TouchableOpacity style={styles.discardButton} onPress={() => router.dismissTo(exitTo)}>
           <Text style={styles.discardText}>Discard</Text>
         </TouchableOpacity>
       ) : (
@@ -2882,7 +2891,7 @@ export default function LabelResultsScreen() {
         share is in flight, captured by react-native-view-shot. */}
     {intelSharePayload && (
       <View style={styles.shareCardWrap} pointerEvents="none">
-        <WineIntelShareCard ref={intelShareRef} {...intelSharePayload} />
+        <WineIntelShareCard ref={intelShareRef} {...intelSharePayload} onImageReady={() => intelPhotoReady.current?.()} />
       </View>
     )}
     </>

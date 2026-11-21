@@ -27,6 +27,15 @@ type AppAlertOptions = {
 };
 
 let setAlertImpl: ((opts: AppAlertOptions | null) => void) | null = null;
+// One alert shows at a time; any raised meanwhile wait their turn (a second
+// alert used to replace the first before the user had read it).
+let current: AppAlertOptions | null = null;
+const queue: AppAlertOptions[] = [];
+
+function showNext() {
+  current = queue.shift() ?? null;
+  setAlertImpl?.(current);
+}
 
 // Any connectivity failure — whatever raw wording the underlying fetch / Supabase
 // edge-function call produced — surfaces as ONE friendly popup app-wide, instead
@@ -60,8 +69,15 @@ function isOfflineText(s: string | null | undefined): boolean {
 export function showAlert(options: AppAlertOptions) {
   // Collapse any raw connectivity error into the single offline popup.
   const opts = (isOfflineText(options.body) || isOfflineText(options.title)) ? OFFLINE_ALERT : options;
-  if (setAlertImpl) setAlertImpl(opts);
-  else if (__DEV__) console.warn('AppAlertHost not mounted; alert dropped:', opts.title);
+  if (!setAlertImpl) {
+    if (__DEV__) console.warn('AppAlertHost not mounted; alert dropped:', opts.title);
+    return;
+  }
+  // Several failures while offline still make one "No Connection".
+  if (opts === OFFLINE_ALERT && (current === OFFLINE_ALERT || queue.includes(OFFLINE_ALERT))) return;
+  if (current) { queue.push(opts); return; }
+  current = opts;
+  setAlertImpl(opts);
 }
 
 function isCancelStyle(s?: AppAlertButtonStyle) {
@@ -73,16 +89,19 @@ export function AppAlertHost() {
 
   useEffect(() => {
     setAlertImpl = setOpts;
-    return () => { setAlertImpl = null; };
+    return () => { setAlertImpl = null; current = null; queue.length = 0; };
   }, []);
 
   function close() {
-    setOpts(null);
+    showNext();
   }
 
+  // A button that opens another alert shows it straight away; otherwise the
+  // next waiting alert (if any) follows.
   function handlePress(btn: AppAlertButton) {
-    close();
+    current = null;
     btn.onPress?.();
+    if (!current) showNext();
   }
 
   const visible = opts !== null;

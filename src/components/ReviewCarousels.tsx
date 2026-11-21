@@ -76,7 +76,7 @@ export function WineReviewsCarousel({ onViewAll }: { onViewAll: () => void }) {
         <TouchableOpacity key={card.key} style={styles.card} onPress={() => openWineReview(card)} activeOpacity={0.85}>
           <View style={styles.imageWrap}>
             {card.photoPath
-              ? <LabelThumb path={card.photoPath} fallbackText={card.wineName ?? card.producer ?? ''} style={styles.image} radius={0} frame={0} />
+              ? <LabelThumb path={card.photoPath} fallbackText={card.wineName ?? card.producer ?? ''} size="thumb" style={styles.image} radius={0} frame={0} />
               : <WineCardThumb producer={card.producer} wineName={card.wineName} fallbackText={card.wineName ?? card.producer ?? ''} style={styles.image} />}
           </View>
           <Text style={styles.name} numberOfLines={2} allowFontScaling={false}>
@@ -110,7 +110,7 @@ export function RestaurantReviewsCarousel({ onViewAll }: { onViewAll: () => void
       {items.map((a) => (
         <TouchableOpacity key={a.id} style={styles.card} onPress={() => router.push(`/restaurants/reviews?openSession=${a.id}` as any)} activeOpacity={0.85}>
           <View style={styles.imageWrap}>
-            <LabelThumb path={a.restaurantPhotoPath} fallbackText={a.restaurantName ?? ''} style={styles.image} radius={0} frame={0} />
+            <LabelThumb path={a.restaurantPhotoPath} fallbackText={a.restaurantName ?? ''} size="thumb" style={styles.image} radius={0} frame={0} />
           </View>
           <Text style={styles.name} numberOfLines={2} allowFontScaling={false}>{a.restaurantName?.trim() || UNNAMED_RESTAURANT}</Text>
           {/* The overall rating sits on its own line between the name and the date. */}

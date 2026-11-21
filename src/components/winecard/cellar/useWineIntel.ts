@@ -6,6 +6,7 @@ import { valueWine, isWineNotFound } from '../../../services/pricing';
 import { hasRealInsiderNote } from '../../../constants/insiderNote';
 import { priceForSize } from '../../../utils/bottleValue';
 import { showAlert } from '../../AppAlert';
+import { valueAndScorePatch } from '../../../services/bulkIntel';
 import type { CellarWine, GrapeVariant } from '../../../types/wine';
 
 // What the card's derived state is keyed on: the wine's identity, not just its
@@ -40,6 +41,13 @@ async function autoLookupDue(wineId: string): Promise<boolean> {
   } catch {
     return true;
   }
+}
+
+// Why a refresh left the stored value alone although it found an estimate.
+function keptValueCopy(source: string | null): string {
+  if (source === 'user') return "Wine-Searcher has no price for this wine, so the value you entered is kept rather than replaced with Vinster's estimate.";
+  if (source === 'imported') return "Wine-Searcher has no price for this wine, so the value your import carried is kept rather than replaced with Vinster's estimate.";
+  return "Wine-Searcher has no new price for this wine, so its last Wine-Searcher value is kept rather than replaced with Vinster's estimate.";
 }
 
 type RefreshOptions = {
@@ -130,12 +138,12 @@ export function useWineIntel(wine: CellarWine | undefined, canEdit: boolean) {
         return 'ambiguous';
       }
 
-      // A stored value is kept when Wine-Searcher couldn't be asked, and a
-      // Wine-Searcher value is only ever replaced by a new Wine-Searcher one —
-      // never by Vinster's estimate.
-      const hadValue = wine.estimated_value != null;
-      const keptWsValue = hadValue && wine.estimated_value_source === 'wine-searcher' && v.valueSource !== 'wine-searcher';
-      const keepValue = hadValue && (!!v.wsUnavailable || keptWsValue);
+      // The shared keep rule (bulkIntel): a stored value survives a lookup with
+      // none, a Wine-Searcher outage, or — when it's a Wine-Searcher, user or
+      // imported value — anything but a new Wine-Searcher price.
+      const { keepValue, patch } = valueAndScorePatch(wine, v);
+      // Kept only because it's protected — the lookup did bring an estimate.
+      const keptProtected = keepValue && !v.wsUnavailable && v.estimatedValue != null;
       // The value the card shows after this — what a missing purchase price is
       // seeded from (never a stand-in made while Wine-Searcher was down).
       const shownValue = keepValue ? Number(wine.estimated_value) : v.wsUnavailable ? null : v.estimatedValue;
@@ -143,19 +151,7 @@ export function useWineIntel(wine: CellarWine | undefined, canEdit: boolean) {
       await updateWine.mutateAsync({
         id: wine.id,
         updates: {
-          ...(keepValue ? {} : {
-            estimated_value: v.estimatedValue,
-            estimated_value_currency: v.currency,
-            estimated_value_at: new Date().toISOString(),
-            estimated_value_source: v.valueSource,
-            estimated_value_low: v.estimatedValueLow ?? null,
-            estimated_value_high: v.estimatedValueHigh ?? null,
-            estimated_value_scope: v.priceScope ?? null,
-          }),
-          ...(keepValue && wine.critic_score != null ? {} : {
-            critic_score: v.criticScore,
-            critic_score_note: v.criticScoreNote,
-          }),
+          ...patch,
           ...(v.wsWineId ? { ws_wine_id: v.wsWineId, ws_wine_name: v.wsWineName ?? null } : {}),
           tasting_notes: v.tastingNotes ?? wine.tasting_notes ?? null,
           insider_note: v.insiderNote ?? wine.insider_note ?? null,
@@ -180,11 +176,8 @@ export function useWineIntel(wine: CellarWine | undefined, canEdit: boolean) {
             ? "Wine-Searcher couldn't be checked just now, so this wine's value hasn't been changed. Please try again in a little while."
             : "Wine-Searcher couldn't be checked just now, so this value is Vinster's own estimate. Try again in a little while for the live Wine-Searcher price.",
         });
-      } else if (keptWsValue && !opts.automatic) {
-        showAlert({
-          title: 'Value kept',
-          body: "Wine-Searcher has no new price for this wine, so its last Wine-Searcher value is kept rather than replaced with Vinster's estimate.",
-        });
+      } else if (keptProtected && !opts.automatic) {
+        showAlert({ title: 'Value kept', body: keptValueCopy(wine.estimated_value_source) });
       }
       return v.criticScore != null || v.estimatedValue != null;
     } catch (e) {

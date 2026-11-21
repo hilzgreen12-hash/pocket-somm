@@ -39,6 +39,8 @@ export default function ExtractingScreen() {
   // Small print on the error screen: a reference code (the job's, or one made
   // on the phone) and the real reason, so any failure can be traced.
   const [errorRef, setErrorRef] = useState<{ ref: string; reason: string } | null>(null);
+  // The failed scan can be picked up again in place (see run's catch).
+  const [canResume, setCanResume] = useState(false);
   const { session } = useAuth();
   const navigation = useNavigation();
   const stepRef = useRef('checking the connection');
@@ -219,9 +221,11 @@ export default function ExtractingScreen() {
     } catch (err) {
       if (!token.active) return;
       if (err instanceof Error && err.message === 'cancelled') return;
-      // Lost connection: the job may still be running, so a retry of this list
-      // resumes it. Anything else ends this scan.
-      if (!isNetworkError(err)) useScanStore.getState().setScanAttempt(null);
+      // Lost connection or a slow job: it may still be running, so Try Again
+      // resumes it rather than paying for a new one. Anything else ends this scan.
+      const resumable = isNetworkError(err) || (err instanceof Error && err.name === 'ScanTimeout');
+      if (!resumable) useScanStore.getState().setScanAttempt(null);
+      setCanResume(resumable);
       // A guest who has used their two scans: offer sign-in, back on the form.
       if (handleGuestLimit(err)) {
         router.back();
@@ -276,9 +280,17 @@ export default function ExtractingScreen() {
             <Text style={styles.retryText}>{onlineSource.restaurant ? 'Choose Another Result' : 'Search Online'}</Text>
           </TouchableOpacity>
         ) : null}
-        {/* Start again from the beginning: back to Home, with "How should
+        {/* A scan that may still be running picks up where it was; otherwise
+            start again from the beginning: back to Home, with "How should
             Vinster read the list?" open (no half-remembered route or photo). */}
         <TouchableOpacity style={styles.retryButton} onPress={() => {
+          if (canResume) {
+            setCanResume(false);
+            setErrorRef(null);
+            setStage('reading');
+            run(tokenRef.current);
+            return;
+          }
           const st = useScanStore.getState();
           st.reset();
           st.setRestartListChoice(true);

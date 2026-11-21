@@ -67,6 +67,8 @@ const DrinkNowMemo = memo(DrinkNowCarousel);
 const CellarInsightsMemo = memo(CellarInsightsCarousel);
 const JournalMemo = memo(JournalCarousel);
 
+// A repeat of the same share within this window is the same event, not a re-share.
+const SHARE_REPEAT_MS = 4000;
 const HOME_ORDER_KEY = 'home_section_order_v1';
 const HOME_SECTION_DEFAULT = ['search', 'scans', 'cellar', 'insights', 'musings'];
 
@@ -165,9 +167,12 @@ export default function ScanLandingScreen() {
     action();
   }
   function dismissSignInPrompt() { setSignInPromptVisible(false); setHardGate(false); pendingActionRef.current = null; }
+  // The action waits for the prompt to close: a picker opened while it is still
+  // fading out never appears on iOS.
   function continueWithoutAccount() {
     setSignInPromptVisible(false);
-    const action = pendingActionRef.current; pendingActionRef.current = null; action?.();
+    const action = pendingActionRef.current; pendingActionRef.current = null;
+    if (action) afterAlertCloses(action)();
   }
 
   // Revisit the last restaurant-list recommendation (long-press Scan a Wine List).
@@ -409,7 +414,10 @@ export default function ScanLandingScreen() {
   //   a PDF file              → that PDF as the wine list
   //   a photo / screenshot    → a label (Wine Intel) or, if it's a list, the list scan
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
-  const sharedHandledRef = useRef<string | null>(null);
+  // The last share handled and when. The same share event can arrive twice in
+  // quick succession (the effect re-running as login or navigation settles);
+  // only that is ignored — sharing the same photo again later must work.
+  const sharedHandledRef = useRef<{ key: string; at: number } | null>(null);
   // A share can restart Vinster's screen (Android opens it inside the sharing
   // app first), and Home then appears before the app's navigation is ready —
   // opening the list at that moment crashed to a white screen. Wait for it.
@@ -425,8 +433,16 @@ export default function ScanLandingScreen() {
     const image = files.find((f) => (f.mimeType ?? '').startsWith('image/'));
     const link = sharedLink(intent?.webUrl, intent?.text);
     const key = pdf?.path ?? image?.path ?? link ?? files[0]?.path ?? intent?.text ?? '';
-    if (!key || sharedHandledRef.current === key) return;
-    sharedHandledRef.current = key;
+    // One line per share in the device log (no file contents or addresses), so
+    // a share that seems to do nothing can be traced with adb logcat.
+    const kind = pdf ? 'pdf' : image ? 'photo' : link ? 'link' : files.length ? 'file' : 'text';
+    const last = sharedHandledRef.current;
+    if (!key || (last && last.key === key && Date.now() - last.at < SHARE_REPEAT_MS)) {
+      console.log(`[Share] ${kind} ignored (${key ? 'repeat of the same share' : 'nothing usable'})`);
+      return;
+    }
+    console.log(`[Share] ${kind} received`);
+    sharedHandledRef.current = { key, at: Date.now() };
     const asUri = (p: string) => (p.startsWith('file://') || p.startsWith('content://') ? p : `file://${p}`);
     if (pdf?.path) {
       // Big PDFs can't be sent whole — the list's web link is the better route.
@@ -436,7 +452,7 @@ export default function ScanLandingScreen() {
       }
       openSharedWineList({ fileUri: asUri(pdf.path), title: pdf.fileName ?? 'Wine list (PDF)' });
     } else if (image?.path) {
-      void scanLabelFromUri(asUri(image.path));
+      chooseSharedPhotoUse(asUri(image.path));
     } else if (link) {
       openSharedWineList({ url: link, title: intent?.meta?.title ?? undefined });
     } else {
@@ -445,6 +461,21 @@ export default function ScanLandingScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasShareIntent, shareIntent, authLoading, navReady]);
+
+  // A photo shared into Vinster could be a label, a list or a lineup — guessing
+  // turned lineups into "that doesn't look like a wine label", so ask.
+  function chooseSharedPhotoUse(uri: string) {
+    const after = afterAlertCloses;
+    showAlert({
+      title: "What's in this photo?",
+      showCloseX: true,
+      buttons: [
+        { text: 'A Wine Label', onPress: after(() => requireAuth(() => { void scanLabelFromUri(uri); })) },
+        { text: 'A Wine List', onPress: after(() => openSharedWineList({ imageUri: uri })) },
+        { text: 'A Lineup', onPress: after(() => requireAccount(() => router.push(`/cellar/archive-night?photo=${encodeURIComponent(uri)}` as any))) },
+      ],
+    });
+  }
 
   // A wine list that arrived from outside (a shared link, PDF or screenshot):
   // open Wine List Preferences with it ready; Read Wine List then reads it.

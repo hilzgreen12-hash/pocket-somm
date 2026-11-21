@@ -3,7 +3,7 @@ import { ShareIntentProvider } from 'expo-share-intent';
 import { View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -20,6 +20,8 @@ import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { OfflineBanner } from '../src/components/OfflineBanner';
 import { UpdatePromptModal } from '../src/components/UpdatePromptModal';
 import { AppAlertHost } from '../src/components/AppAlert';
+import { PersistedQueryProvider } from '../src/components/PersistedQueryProvider';
+import { configurePersistedQueries } from '../src/api/queryPersistence';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -43,6 +45,9 @@ const queryClient = new QueryClient({
     },
   },
 });
+// Lists, carousels and storage grids are saved to disk and restored on the
+// next open, so they draw at once and refresh in the background.
+configurePersistedQueries(queryClient);
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = Font.useFonts({
@@ -158,7 +163,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
       <KeyboardProvider>
       <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
+      <PersistedQueryProvider client={queryClient}>
         <AuthProvider>
           <View style={{ flex: 1 }}>
           <OfflineBanner />
@@ -240,7 +245,7 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <AppAlertHost />
         </AuthProvider>
-      </QueryClientProvider>
+      </PersistedQueryProvider>
       </ErrorBoundary>
       </KeyboardProvider>
       </SafeAreaProvider>

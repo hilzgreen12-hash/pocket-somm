@@ -1,5 +1,7 @@
-import { View, Image, Text, ActivityIndicator, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { useLabelImageState } from '../hooks/useLabelImageUrl';
+import { View, Text, ActivityIndicator, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
+import { repairLabelImage, useLabelImageState } from '../hooks/useLabelImageUrl';
+import { LabelImage } from './LabelImage';
 import { useAutoLabel } from '../hooks/useAutoLabel';
 import { HOME_TILE, colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -21,7 +23,9 @@ export function WineCardThumb({
   // Default: the app-wide small tile, photo edge to edge inside a white outline.
   compact?: boolean;
 }) {
-  const { uri: resolved, pending } = useLabelImageState(path ?? null);
+  const qc = useQueryClient();
+  // Always a tile, so the small cached thumbnail rather than the full photo.
+  const { uri: resolved, pending } = useLabelImageState(path ?? null, 'thumb');
   const stored = localUri ?? resolved;
   // Only web-fetch a stand-in label when there is genuinely no stored photo. If a
   // stored photo is still resolving (pending), wait for it — never flash a
@@ -33,7 +37,7 @@ export function WineCardThumb({
   return (
     <View style={[styles.thumb, compact && styles.thumbCompact, style]}>
       {uri ? (
-        <Image source={{ uri }} style={[styles.img, compact && styles.imgCompact]} resizeMode={resizeMode} />
+        <LabelImage uri={uri} style={[styles.img, compact && styles.imgCompact]} contentFit={resizeMode} onError={uri === resolved ? () => repairLabelImage(qc, path) : undefined} />
       ) : loadingStored ? (
         <ActivityIndicator size="small" color={colors.gold} />
       ) : (

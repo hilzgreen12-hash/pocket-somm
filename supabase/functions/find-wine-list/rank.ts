@@ -234,7 +234,11 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 // A date in a list's address or title ("wine-list-9th-October-2024.pdf",
 // "Wine-list-April-24th-2025", "/2024/10/"), as a sortable number + label.
 function editionDate(r: { url: string; title: string }): { sort: number; label: string } | null {
-  const t = decodeURIComponent(`${r.url} ${r.title}`).toLowerCase();
+  const raw = `${r.url} ${r.title}`;
+  // A bare "%" (a title like "20% off") isn't valid percent-encoding and would
+  // throw — read such text as it is.
+  let t: string;
+  try { t = decodeURIComponent(raw).toLowerCase(); } catch { t = raw.toLowerCase(); }
   const year = t.match(/\b(20[1-3]\d)\b/g)?.map(Number).pop();
   if (!year) return null;
   const named = t.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/g)?.pop();

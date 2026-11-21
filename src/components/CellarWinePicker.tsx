@@ -74,7 +74,7 @@ export function CellarWinePicker({
               style={styles.list}
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.row} onPress={() => onSelect(item)} activeOpacity={0.7}>
-                  <LabelThumb path={item.label_image_path} fallbackText={item.wine_name} style={styles.thumb} />
+                  <LabelThumb path={item.label_image_path} fallbackText={item.wine_name} size="thumb" style={styles.thumb} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowName} numberOfLines={2}>
                       {wineHeaderLine(item.producer, item.wine_name, item.vintage)}

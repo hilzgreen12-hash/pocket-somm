@@ -6,9 +6,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FAVOURITES_ID, getFavouritesCover, setFavouritesCover } from '../api/cookbookFavouritesCover';
 import { useChefArchiveCollections } from '../hooks/useChefArchiveCollections';
 import { useAuth } from '../hooks/useAuth';
-import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
+import { useLabelThumbUri } from '../hooks/useLabelImageUrl';
+import { LabelImage } from './LabelImage';
 import { ReorderableRow } from './ReorderableRow';
-import { PlaceholderCardView, type PlaceholderCard, KITCHEN_IMG, FOOD_ROAST_IMG, FOOD_SUMMER_IMG } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard, KITCHEN_IMG, FOOD_ROAST_IMG, FOOD_SUMMER_IMG, FOOD_PLATED_IMG } from './ExamplePlaceholder';
 import { showAlert } from './AppAlert';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { uploadCookbookPhoto } from '../api/labelPhotos';
@@ -37,24 +38,30 @@ function recipeLabel(n: number): string {
   return `${n} ${n === 1 ? 'Recipe' : 'Recipes'}`;
 }
 
-// A folder's cover photo, faded under a scrim so the name stays readable.
+// A folder's cover photo, drawn from its small cached thumbnail (tiles are
+// small, and the thumb decodes far faster than the full upload).
 function FolderBg({ path }: { path?: string | null }) {
-  const uri = useLabelImageUrl(path ?? null);
+  const uri = useLabelThumbUri(path);
   if (!uri) return null;
-  return (
-    <>
-      <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-    </>
-  );
+  return <LabelImage uri={uri} style={StyleSheet.absoluteFill} />;
 }
 
 const TILE_W = HOME_TILE.w;
+
+// A folder without its own cover shows a food photo, picked from its id so it
+// stays the same each visit and folders don't all look alike.
+const FOLDER_FALLBACKS = [FOOD_PLATED_IMG, FOOD_ROAST_IMG, FOOD_SUMMER_IMG];
+function folderFallback(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return FOLDER_FALLBACKS[h % FOLDER_FALLBACKS.length];
+}
 
 // Folder images are added / changed by holding a folder (here or in Your
 // Cookbook) — no link under each tile.
 
 export function CookbookFoldersCarousel() {
-  const { collections, rename } = useChefArchiveCollections();
+  const { collections, rename, isLoading: foldersLoading } = useChefArchiveCollections();
   const { session } = useAuth();
   const userId = session?.user.id ?? '';
   const qc = useQueryClient();
@@ -139,8 +146,10 @@ export function CookbookFoldersCarousel() {
     catch (err) { showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' }); }
   }
 
-  const { sessions } = useChefLabelHistory();
+  const { sessions, isLoading: recipesLoading } = useChefLabelHistory();
   const recipeCount = sessions.length;
+  // The examples are for an empty cookbook only — not a flash while it loads.
+  const loading = foldersLoading || recipesLoading;
   const favouritesCount = sessions.filter((s) => !!s.is_starred).length;
 
   return (
@@ -166,14 +175,14 @@ export function CookbookFoldersCarousel() {
         holdToDrag
         onHold={(id) => { const c = collections.find((x) => x.id === id); if (c) openFolderMenu(c); }}
         onReorder={(ids) => void saveOrder(ids)}
-        leading={recipeCount === 0 && collections.length === 0 ? (
+        leading={loading ? null : recipeCount === 0 && collections.length === 0 ? (
           <>{COOKBOOK_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} stampCaps />)}</>
         ) : (
           <View style={styles.tileWrap}>
             <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
               {/* Kitchen photo always underneath, so the tile is never blank (a saved
                   cover that is missing or slow to load just leaves it showing). */}
-              <Image source={KITCHEN_IMG} style={styles.kitchenImg} resizeMode="cover" />
+              <Image source={KITCHEN_IMG} style={styles.tileImg} resizeMode="cover" />
               {favCover ? <FolderBg path={favCover} /> : null}
               <View style={styles.nameWrap} pointerEvents="none">
                 <View style={styles.nameBand}><Text style={styles.cardName} numberOfLines={2}>★ Favourite Recipes</Text></View>
@@ -190,6 +199,9 @@ export function CookbookFoldersCarousel() {
           node: (
             <View style={styles.tileWrap}>
               <TouchableOpacity style={styles.card} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} onLongPress={() => {}} delayLongPress={350} activeOpacity={0.8}>
+                {/* Food photo underneath, so a cover that is missing or slow to load
+                    never leaves a plain tile. */}
+                <Image source={folderFallback(c.id)} style={styles.tileImg} resizeMode="cover" />
                 <FolderBg path={c.image_path} />
                 <View style={styles.nameWrap} pointerEvents="none">
                   <View style={styles.nameBand}><Text style={styles.cardName} numberOfLines={2}>{c.name}</Text></View>
@@ -255,7 +267,7 @@ const styles = StyleSheet.create({
   // "Cookbook / Your Folder · X Recipes", white, beneath the tile.
   // Explicit size: a bundled image with absoluteFill alone can draw at its own
   // pixel size on Android, showing just a corner of the photo.
-  kitchenImg: { position: 'absolute', left: 0, top: 0, width: HOME_TILE.w, height: HOME_TILE.h },
+  tileImg: { position: 'absolute', left: 0, top: 0, width: HOME_TILE.w, height: HOME_TILE.h },
   cardMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   cardAdd: { width: HOME_TILE.w, height: HOME_TILE.h, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

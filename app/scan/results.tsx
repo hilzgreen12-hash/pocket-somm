@@ -1342,6 +1342,11 @@ export default function ResultsScreen() {
           : [];
         // Close the form for another screen; it reopens when this one regains focus.
         const leaveForm = () => { resumeReviewOnFocusRef.current = true; setRestaurantReviewOpen(false); };
+        // Save before leaving; on failure say so and keep the form open.
+        const saveDraftOrSay = async (saveDraft: () => Promise<void>) => {
+          try { await saveDraft(); return true; }
+          catch (err) { showAlert({ title: 'Could not save your review', body: err instanceof Error ? err.message : 'Please try again.' }); return false; }
+        };
         return (
           <RestaurantReviewModal
             visible={restaurantReviewOpen}
@@ -1371,15 +1376,18 @@ export default function ResultsScreen() {
               const backTo = encodeURIComponent(resultsHref());
               setTimeout(() => router.push(`/wines/chosen?openReview=${cw.id}&backTo=${backTo}` as any), DISMISS_DELAY_MS);
             }}
-            onOpenLineup={async (lineupId, saveDraft) => {
-              await saveDraft();
+            onOpenLineup={async (lineupId, saveDraft, name, city) => {
+              if (!(await saveDraftOrSay(saveDraft))) return;
+              // The form reopens from this screen's state, so carry the edits.
+              if (name) setRestaurantName(name);
+              setCityOverride(city || null);
               leaveForm();
               setTimeout(() => router.push(`/cellar/lineup/${lineupId}` as any), DISMISS_DELAY_MS);
             }}
             onAddLineup={async (upload, name, city, saveDraft) => {
               const sid = reviewSessionId ?? (await getOrCreateSession());
               if (!sid) return; // getOrCreateSession has already said why
-              await saveDraft();
+              if (!(await saveDraftOrSay(saveDraft))) return;
               // The form reopens from this screen's state, so carry the edits.
               if (name) setRestaurantName(name);
               setCityOverride(city || null);
