@@ -386,7 +386,7 @@ export function RestaurantReviewModal({
   // review card reads "You had this wine at …".
   async function handleLinkReviews() {
     if (linkBusy) return;
-    if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to link reviews to a visit.' }); return; }
+    if (!session?.user.id) return;
     const ids = Array.from(reviewChecked);
     if (ids.length === 0) { setReviewPickerOpen(false); return; }
     setLinkBusy(true);
@@ -415,7 +415,7 @@ export function RestaurantReviewModal({
 
   async function handleAddMulti() {
     if (bottleBusy) return;
-    if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to add bottles to a visit.' }); return; }
+    if (!session?.user.id) return;
     if (multiChecked.size === 0) { showAlert({ title: 'Nothing selected', body: 'Tick at least one bottle to add.' }); return; }
     setBottleBusy(true);
     try {
@@ -494,7 +494,7 @@ export function RestaurantReviewModal({
     if (bottleBusy) return;
     const name = cbWineName.trim();
     if (!name) { showAlert({ title: 'Wine name needed', body: 'Enter at least the wine name to add this bottle.' }); return; }
-    if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to add bottles to a visit.' }); return; }
+    if (!session?.user.id) return;
     setBottleBusy(true);
     try {
       const vint = cbVintage.trim();

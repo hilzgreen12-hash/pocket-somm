@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar, invalidateCellarViews } from '../../../src/hooks/useCellar';
 import { useAttachLabelPhoto } from '../../../src/hooks/useAttachLabelPhoto';
 import { usePreferences } from '../../../src/hooks/usePreferences';
-import { valueWine, isWineNotFound } from '../../../src/services/pricing';
+import { valueWine, forBottleSize, isWineNotFound } from '../../../src/services/pricing';
 import { valueAndScorePatch } from '../../../src/services/bulkIntel';
 import { fetchPlacementsForWine, placedCount } from '../../../src/api/placements';
 import { fetchWineCandidates } from '../../../src/api/label';
@@ -16,14 +16,18 @@ import { LabelThumb } from '../../../src/components/LabelThumb';
 import { BottleSizePicker } from '../../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
-import { priceForSize } from '../../../src/utils/bottleValue';
 import type { CellarWine } from '../../../src/types/wine';
+
+// No value: a wine that's due a fresh one (never valued, so the card asks again).
+const NO_VALUE: Partial<CellarWine> = {
+  estimated_value: null, estimated_value_currency: null, estimated_value_at: null, estimated_value_source: null,
+  estimated_value_low: null, estimated_value_high: null, estimated_value_scope: null,
+};
 
 // What a wine Vinster has no intel for carries: no score, value, notes or window.
 const NO_INTEL: Partial<CellarWine> = {
   critic_score: null, critic_score_note: null,
-  estimated_value: null, estimated_value_currency: null, estimated_value_at: null, estimated_value_source: null,
-  estimated_value_low: null, estimated_value_high: null, estimated_value_scope: null,
+  ...NO_VALUE,
   tasting_notes: null, drinking_window_from: null, drinking_window_to: null, drinking_window_status: 'unknown',
   ws_wine_id: null, ws_wine_name: null,
 };
@@ -196,11 +200,13 @@ export default function EditWineScreen() {
       region.trim() !== (wine.region ?? '').trim() ||
       grape.trim() !== (wine.grape_variety ?? '').trim() ||
       style.trim() !== (wine.style ?? '').trim();
-    // Bottle size doesn't change the wine either: its value is kept per 75cl and
-    // scaled to the size wherever it's shown, so a size change needs no lookup.
+    // A new bottle size needs a new value: a value is for one bottle at its own
+    // size, and formats aren't priced by volume.
     const sizeChanged = bottleSizeMl !== (wine.bottle_size_ml ?? 750);
-    const countSizeOrSpiritChanged = isSpirit !== !!wine.is_spirit || qty !== (wine.quantity ?? 0) || sizeChanged;
-    const shouldRevalue = detailsChanged || !countSizeOrSpiritChanged;
+    const countOrSpiritChanged = isSpirit !== !!wine.is_spirit || qty !== (wine.quantity ?? 0);
+    const shouldRevalue = detailsChanged || sizeChanged || !countOrSpiritChanged;
+    // The old value belonged to another wine, or to a bottle of another size.
+    const valueReplaced = newWine || sizeChanged;
     setSaving(true);
     try {
       const updates: Partial<CellarWine> = {
@@ -219,26 +225,24 @@ export default function EditWineScreen() {
       // "Save & Update Wine Intel" re-derives value + intel from the details the
       // user just confirmed — feeding Claude the grape + colour so it pins the
       // right cuvée (e.g. Guigal Ex-Voto Blanc, previously mis-stored as the
-      // Syrah). It's skipped only for an edit that just moved the bottle count,
-      // size or spirit flag, which can't change the intel.
+      // Syrah). It's skipped only for an edit that just moved the bottle count
+      // or spirit flag, which can't change the intel.
       let lookupFailed: 'not-found' | 'failed' | null = null;
       // A purchase price Vinster estimated (never one the user typed) follows the
-      // value: refreshed from a new one, rescaled for a new bottle size (a magnum
-      // is two bottles' worth), cleared when it belonged to a different wine.
+      // value: refreshed from a new one, cleared when it belonged to a different
+      // wine or bottle size.
       let estimatedPrice: { price: number | null; currency: string | null } | null = null;
       if (shouldRevalue) {
         try {
           const currency = (preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP').toUpperCase();
-          const v = await valueWine(
-            { producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || 'NV', grape: grape.trim() || null, style: style.trim() || null },
-            currency,
-          );
+          const asked = { producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || 'NV', grape: grape.trim() || null, style: style.trim() || null };
+          const v = await forBottleSize(await valueWine(asked, currency), asked, bottleSizeMl, currency);
           // The same wine re-valued follows the app's one keep rule (a value the
           // user entered, imported or got from Wine-Searcher is only replaced by a
           // new Wine-Searcher price; nothing is overwritten with a blank). A
-          // DIFFERENT wine takes the new lookup outright — the old figures
-          // belonged to another bottle.
-          const kept = newWine ? null : valueAndScorePatch(wine, v);
+          // DIFFERENT wine or bottle size takes the new lookup outright — the old
+          // figures belonged to another bottle.
+          const kept = valueReplaced ? null : valueAndScorePatch(wine, v);
           const keepValue = !!kept?.keepValue;
           Object.assign(updates, {
             ...(kept ? kept.patch : {
@@ -264,18 +268,17 @@ export default function EditWineScreen() {
           });
           // Never refreshed from a stand-in made while Wine-Searcher was down, nor
           // from a lookup whose value wasn't taken.
-          if (!v.wsUnavailable && !keepValue) estimatedPrice = { price: v.estimatedValue != null ? priceForSize(v.estimatedValue, bottleSizeMl) : null, currency: v.currency };
+          if (!v.wsUnavailable && !keepValue) estimatedPrice = { price: v.estimatedValue, currency: v.currency };
         } catch (e) {
           lookupFailed = isWineNotFound(e) ? 'not-found' : 'failed';
-          // Never leave the old wine's score, value and notes on a different wine.
+          // Never leave the old wine's score, value and notes on a different
+          // wine, nor the old size's value on a new size.
           if (newWine) Object.assign(updates, NO_INTEL);
+          else if (sizeChanged) Object.assign(updates, NO_VALUE);
         }
       }
       if (wine.purchase_price_estimated) {
-        if (!estimatedPrice && newWine) estimatedPrice = { price: null, currency: null };
-        else if (!estimatedPrice && sizeChanged && wine.estimated_value != null) {
-          estimatedPrice = { price: priceForSize(Number(wine.estimated_value), bottleSizeMl), currency: wine.purchase_price_currency };
-        }
+        if (!estimatedPrice && valueReplaced) estimatedPrice = { price: null, currency: null };
         if (estimatedPrice) {
           updates.purchase_price = estimatedPrice.price;
           updates.purchase_price_currency = estimatedPrice.currency;

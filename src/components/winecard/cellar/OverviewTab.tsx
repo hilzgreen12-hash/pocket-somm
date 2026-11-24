@@ -8,7 +8,7 @@ import { fmtDay } from './format';
 import { hasRealInsiderNote } from '../../../constants/insiderNote';
 import { formatCurrency, currencySymbol } from '../../../constants/currency';
 import { colors, spacing } from '../../../constants/theme';
-import { PER_75CL } from '../../../utils/bottleValue';
+import { perBottle } from '../../../utils/bottleValue';
 import { effectiveMaturity } from '../../../utils/maturity';
 import { byRecency, isSomeoneElsesBottle, visibleEntries } from '../../../utils/cellarReview';
 import { findExistingReview } from '../../../utils/reviewDedup';
@@ -125,7 +125,7 @@ export function OverviewFacts({ wine, data, intel, canEdit, onBottles, onWindow 
         )}
         {ev != null ? (
           <TouchableOpacity style={wc.Fact} onPress={() => showValueSource(wine)} activeOpacity={0.7}>
-            <Text style={wc.FactLabel}>Value</Text><Text style={wc.FactValue}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={s.per75}>{PER_75CL}</Text></Text>
+            <Text style={wc.FactLabel}>Value</Text><Text style={wc.FactValue}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={s.per75}>{perBottle(wine.bottle_size_ml)}</Text></Text>
           </TouchableOpacity>
         ) : (
           <View style={wc.Fact}><Text style={wc.FactLabel}>Value</Text>{pending}</View>

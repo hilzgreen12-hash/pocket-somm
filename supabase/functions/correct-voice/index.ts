@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
@@ -55,7 +56,9 @@ Return ONLY the corrected transcript as plain text — no quotes, no notes.`;
 Deno.serve(async (req) => {
   let original = '';
   try {
-    const limited = await checkRateLimit(req, 'correct-voice', HOURLY_LIMIT, DAILY_LIMIT);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const limited = await checkRateLimit(auth.userId, 'correct-voice', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
     const body = await req.json();
     original = typeof body?.text === 'string' ? body.text : '';

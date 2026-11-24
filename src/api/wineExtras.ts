@@ -84,3 +84,23 @@ export async function generateRarity(w: CellarWine): Promise<WineRarity | null> 
   if (data?.identified !== true || !data.level || !data.text) return null;
   return { level: data.level, label: data.label ?? '', text: data.text };
 }
+
+// What ONE bottle of this wine is worth in a size other than 75cl (Vinster's
+// estimate, with the 75cl price as its reference — formats aren't priced by
+// volume). Null when Vinster doesn't know the wine or couldn't price it.
+export type FormatValue = { value: number; low: number | null; high: number | null; confidence: 'high' | 'medium' | 'low' };
+export async function estimateFormatValue(
+  wine: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | null; grape?: string | null },
+  bottleSizeMl: number,
+  reference: { value: number; low: number | null; high: number | null; source: string } | null,
+  currency: string,
+): Promise<FormatValue | null> {
+  const data = await invokeResilient('wine-market-vintage', {
+    producer: wine.producer ?? '', wineName: wine.wineName ?? '', region: wine.region ?? '',
+    vintage: wine.vintage ?? '', grape: wine.grape ?? '',
+    mode: 'format-value', bottleSizeMl, reference, currency,
+  }) as { identified?: boolean; estimatedValue?: number | null; low?: number | null; high?: number | null; confidence?: FormatValue['confidence'] | null; error?: string };
+  if (data?.error) throw new Error(data.error);
+  if (data?.identified !== true || !data.estimatedValue) return null;
+  return { value: data.estimatedValue, low: data.low ?? null, high: data.high ?? null, confidence: data.confidence ?? 'low' };
+}

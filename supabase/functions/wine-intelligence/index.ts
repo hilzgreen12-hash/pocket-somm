@@ -1,12 +1,10 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine, verifiedProducerWines } from '../_shared/vintageFacts.ts';
 import { intelCacheKey, readIntelCache, saveIntelCache } from '../_shared/intelCache.ts';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
-// Per guest phone, per hour and per day: room for two label scans plus a few picks opened from a list scan.
-const GUEST_LIMITS = { hourly: 8, daily: 8 };
-
-// Usage limits per account (or guest device) for NEW generations; saved results
+// Usage limits per account for NEW generations; saved results
 // don't count. Covers scans, searches, compares and reopens.
 const HOURLY_LIMIT = 40;
 const DAILY_LIMIT = 150;
@@ -15,9 +13,15 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 Deno.serve(async (req) => {
   try {
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+
     // wsScoreScope 'all-vintage': the anchor is Wine-Searcher's average across
     // the wine's vintages, not a score for this vintage.
-    const { producer, region, wineName, vintage, style, colour, grape, currency, wsScore, wsScoreScope } = await req.json();
+    // webResearch: what Vinster's live web lookup (resolve-wine) found for a wine
+    // the model and Wine-Searcher don't know — a page confirming it exists, plus
+    // any prices and critic scores those pages show.
+    const { producer, region, wineName, vintage, style, colour, grape, currency, wsScore, wsScoreScope, webResearch } = await req.json();
     const anchorAllVintage = wsScoreScope === 'all-vintage';
     // Optional Wine-Searcher aggregated critic score (0–100). When present it
     // becomes the "north star" anchor for criticScore — the Vinster score is
@@ -116,7 +120,7 @@ Return only the raw JSON — no markdown, no explanation.`;
     }
 
     // New generation from here on — this is what the usage limit counts.
-    const limited = await checkRateLimit(req, 'wine-intelligence', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
+    const limited = await checkRateLimit(auth.userId, 'wine-intelligence', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     const recorded = catalogKey && vKey ? await readVintageFacts(catalogKey, vKey) : null;
@@ -138,10 +142,12 @@ Return only the raw JSON — no markdown, no explanation.`;
       ? `\n\nVinster's verified catalogue lists these wines from ${producer}: ${knownWines.join('; ')}. If the wine asked about is one of these — exactly, or differing ONLY by one of these qualifier words: "Single Vineyard", "Viñedo Singular", "Vieilles Vignes", "Old Vines", "Estate" — it is real: treat it as identified and name it as the catalogue does. Any other extra or different word (a vineyard, cuvée or place name, a colour, a reserve tier) makes it a different wine: it gets the normal identity check, and is never identified just because it resembles a listed wine. A wine NOT on this list may still be real; judge it as usual.`
       : '';
 
+    const researchStr = webResearchGuidance(webResearch, cur);
+
     const userContent = `Provide intelligence on this wine:
 - Producer: ${producer}
 - Region: ${region}${wineNameStr}
-- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}${scoreGuidance}${recordedGuidance}${knownWinesStr}`;
+- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}${scoreGuidance}${recordedGuidance}${knownWinesStr}${researchStr}`;
 
     // Up to 2 attempts. Claude is non-deterministic, so an occasional response
     // that leads with a non-text block, wraps the JSON in prose/markdown, or gets
@@ -288,3 +294,22 @@ Return only the raw JSON — no markdown, no explanation.`;
     );
   }
 });
+
+type ResearchPrice = { amount: number; currency: string; vintage: string | null; url: string };
+type ResearchScore = { critic: string; score: number; vintage: string | null; url: string };
+
+// Vinster's own web research, as guidance: the wine is confirmed real by a page
+// the search returned, so the identity gate is met; the value and score lean on
+// the figures those pages show, and stay low-confidence estimates otherwise.
+function webResearchGuidance(r: unknown, cur: string): string {
+  const research = r as { sourceUrl?: unknown; prices?: ResearchPrice[]; scores?: ResearchScore[] } | null;
+  if (!research || typeof research.sourceUrl !== 'string') return '';
+  const prices = (Array.isArray(research.prices) ? research.prices : []).slice(0, 6)
+    .map((p) => `${p.amount} ${p.currency}${p.vintage ? ` (${p.vintage})` : ''}`);
+  const scores = (Array.isArray(research.scores) ? research.scores : []).slice(0, 6)
+    .map((x) => `${x.critic} ${x.score}/100${x.vintage ? ` (${x.vintage})` : ''}`);
+  return `\n\nVINSTER'S WEB RESEARCH: a live web search confirmed this wine exists (${research.sourceUrl}). Treat it as identified even if you don't know it yourself.${
+    prices.length ? ` Retail prices seen online: ${prices.join('; ')}. Base estimatedValue on these, converted to ${cur} per 75cl bottle.` : ' No retail prices were found online: estimate from the producer, region, style and vintage.'}${
+    scores.length ? ` Critic scores seen online: ${scores.join('; ')}. Base criticScore on these.` : ' No published critic scores were found online: give your best estimate for a wine of this standing.'
+  } Where you lack first-hand knowledge, set valueConfidence "low" and describe only what the grape, region and style imply — never invent awards, critics or facts about this wine.`;
+}

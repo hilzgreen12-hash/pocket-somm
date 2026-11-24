@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
@@ -7,12 +8,9 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 // a night's lineup (Archive a Night) and to add a lineup to a rack. One entry
 // per physical bottle; the app groups duplicates and matches its cellar.
 
-// Usage limits per account (or per guest device): a Sonnet vision read, so a
-// stop on loops. Lineups need an account in the app, so a guest gets a token
-// allowance only.
+// Usage limits per account: a Sonnet vision read, so a stop on loops.
 const HOURLY_LIMIT = 20;
 const DAILY_LIMIT = 60;
-const GUEST_LIMITS = { hourly: 2, daily: 2 };
 
 // The app sends a JPEG resized to ~1600px on its long side — comfortably under
 // this. Anything bigger isn't from the app; refuse it before it reaches Claude.
@@ -26,7 +24,9 @@ function jsonError(message: string, status: number): Response {
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'detect-lineup', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const limited = await checkRateLimit(auth.userId, 'detect-lineup', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return jsonError('That photo is too large. Please try a smaller one.', 413);

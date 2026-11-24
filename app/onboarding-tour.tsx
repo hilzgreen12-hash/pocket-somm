@@ -14,7 +14,7 @@ const SLIDES: Slide[] = [
   {
     badge: 'Review',
     title: 'Scan, Discover, Review',
-    body: 'Photograph restaurant wine lists for recommendations tailored to your taste, and wine labels for deep intel. Your wine and restaurant reviews live here too.',
+    body: 'Upload or photograph restaurant wine lists for bottle picks tailored to your taste, and wine labels for deep intel. Your Wine and Restaurant Reviews live here too.',
   },
   {
     badge: 'Pair',

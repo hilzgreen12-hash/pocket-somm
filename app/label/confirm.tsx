@@ -15,7 +15,7 @@ import { formatWineTitle } from '../../src/utils/wineTitle';
 import { generateWineIntel, isWineNotFound } from '../../src/services/pricing';
 import { marketValuePer75 } from '../../src/services/purchaseEstimate';
 import { newCellarWinePayload, findSameWineLive, purchaseOnMerge, attachLabelIfMissing, type PurchaseInput } from '../../src/services/cellarAdd';
-import { priceForSize } from '../../src/utils/bottleValue';
+import { isStandardBottle } from '../../src/utils/bottleValue';
 import { freeSlotsFrom } from '../../src/utils/rackSlots';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { useRackStore } from '../../src/stores/rackStore';
@@ -124,14 +124,15 @@ export default function LabelConfirmScreen() {
   const [binPrice, setBinPrice] = useState('');
   const [binPriceEstimating, setBinPriceEstimating] = useState(false);
   // Vinster's 75cl market price for the confirmed wine. The price field shows it
-  // scaled to the chosen format until the user types their own — an untouched
-  // price is saved as an estimate, not "Entered by you".
+  // for a 75cl bottle until the user types their own — an untouched price is
+  // saved as an estimate, not "Entered by you". Another size is worth its own
+  // price, which the wine card estimates once the wine is saved.
   const [binPer75, setBinPer75] = useState<{ value: number; currency: string; source: string } | null>(null);
   const [binPriceEdited, setBinPriceEdited] = useState(false);
   const [binPopupOpen, setBinPopupOpen] = useState(false);
   const [binConfirmed, setBinConfirmed] = useState<WineDetailsComplete | null>(null);
   useEffect(() => {
-    if (binPer75 && !binPriceEdited) setBinPrice(String(priceForSize(binPer75.value, binFormat)));
+    if (binPer75 && !binPriceEdited) setBinPrice(isStandardBottle(binFormat) ? String(Math.round(binPer75.value)) : '');
   }, [binPer75, binFormat, binPriceEdited]);
 
   // Bottling picker — "Not this wine? Choose from other bottlings". Lists the
@@ -434,7 +435,7 @@ export default function LabelConfirmScreen() {
     const slot = pendingSlot;
     if (!slot || placingRef.current) return;
     const userId = session?.user.id;
-    if (!userId) { showAlert({ title: 'Sign in required', body: 'Please sign in and try again.' }); return; }
+    if (!userId) return;
     placingRef.current = true;
     setPlacing(true);
     let savedId: string | null = null;
@@ -521,7 +522,7 @@ export default function LabelConfirmScreen() {
   async function handlePlaceBinConfirm(confirmed: WineDetailsComplete) {
     if (!pendingBinCell || placingRef.current) return;
     const userId = session?.user.id;
-    if (!userId) { showAlert({ title: 'Sign in required', body: 'Please sign in and try again.' }); return; }
+    if (!userId) return;
     const { cellId } = pendingBinCell;
     const qty = Math.max(1, parseInt(binQty, 10) || 1);
     const priceNum = binPrice.trim() ? parseFloat(binPrice.replace(/[^0-9.]/g, '')) : NaN;

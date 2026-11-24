@@ -12,10 +12,8 @@
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
-
-// Per guest phone, per hour and per day: room for the occasional producer-range lookup on their two scans.
-const GUEST_LIMITS = { hourly: 4, daily: 4 };
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -36,6 +34,9 @@ interface RangeWine {
 
 Deno.serve(async (req) => {
   try {
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+
     const { producer, region, wineName, vintage } = await req.json().catch(() => ({}));
     if (!producer || !String(producer).trim()) {
       return json({ wines: [], summary: null }, 200);
@@ -86,7 +87,7 @@ Deno.serve(async (req) => {
 
     // Saved results above are free; only new (paid) work counts towards the limit.
     // A stale cached range is still better than nothing for a rate-limited caller.
-    const limited = await checkRateLimit(req, 'producer-range', 30, 100, GUEST_LIMITS);
+    const limited = await checkRateLimit(auth.userId, 'producer-range', 30, 100);
     if (limited) return staleCached ? json(publicRange(staleCached), 200) : limited;
 
     // The catalogue is a FLOOR, not a ceiling: it holds only the cuvées Vinster

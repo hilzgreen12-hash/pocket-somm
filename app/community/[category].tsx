@@ -88,9 +88,7 @@ export default function CommunityCategoryScreen() {
               onChangeText={setSearch}
             />
 
-            {!session ? (
-              <Text style={styles.emptyHint}>Sign in to see your reviews here.</Text>
-            ) : isLoading ? (
+            {isLoading ? (
               <ActivityIndicator color={colors.gold} style={{ marginTop: spacing.lg }} />
             ) : myReviews.length === 0 ? (
               <Text style={styles.emptyHint}>

@@ -1,11 +1,8 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { PDFDocument } from 'npm:pdf-lib@1.17.1';
-import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { rankResults, safeUrl } from './rank.ts';
-
-// Per guest phone, per hour and per day: room for finding their two lists online.
-const GUEST_LIMITS = { hourly: 4, daily: 4 };
 
 // Find Online — read a restaurant's wine list from the web.
 //
@@ -461,32 +458,18 @@ async function search(restaurant: string, city: string) {
   return rankResults(items, restaurant, city);
 }
 
-async function signedInUser(req: Request): Promise<boolean> {
-  const auth = req.headers.get('Authorization');
-  if (!auth) return false;
-  try {
-    const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: auth } } });
-    const { data: { user } } = await client.auth.getUser();
-    return !!user;
-  } catch { return false; }
-}
-
 // ---- Handler ---------------------------------------------------------------------
 
 Deno.serve(async (req) => {
-  if (!req.headers.get('Authorization')) return json({ error: 'Unauthorized' }, 401);
+  const auth = await requireSignedIn(req);
+  if (auth instanceof Response) return auth;
+
   try {
     const body = await req.json().catch(() => ({}));
     const action = body.action;
 
     if (action === 'search') {
-      // Searching costs a paid web search each time, and usage limits need an
-      // account — so searching needs one. (Guests can still share a list's link
-      // or a screenshot into Vinster; those are limited per device by scan-start.)
-      if (!(await signedInUser(req))) {
-        return json({ results: [], error: 'Create a free account to search for wine lists online — or share the list\'s link to Vinster from your browser.' }, 401);
-      }
-      const limited = await checkRateLimit(req, 'find-wine-list-search', 20, 60, GUEST_LIMITS);
+      const limited = await checkRateLimit(auth.userId, 'find-wine-list-search', 20, 60);
       if (limited) return limited;
       if (!SERPER_API_KEY) return json({ results: [], error: 'Search is not configured.' });
       const restaurant = String(body.restaurant ?? '').trim().slice(0, 120);
@@ -500,7 +483,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'read') {
-      const limited = await checkRateLimit(req, 'find-wine-list-read', 15, 40, GUEST_LIMITS);
+      const limited = await checkRateLimit(auth.userId, 'find-wine-list-read', 15, 40);
       if (limited) return limited;
       const url = String(body.url ?? '');
       const currency = typeof body.currency === 'string' && /^[A-Z]{3}$/.test(body.currency) ? body.currency : 'GBP';
@@ -520,7 +503,7 @@ Deno.serve(async (req) => {
 
     // A PDF wine list shared straight into Vinster (not a link): read its pages.
     if (action === 'readPdf') {
-      const limited = await checkRateLimit(req, 'find-wine-list-read', 15, 40, GUEST_LIMITS);
+      const limited = await checkRateLimit(auth.userId, 'find-wine-list-read', 15, 40);
       if (limited) return limited;
       const b64 = typeof body.pdfBase64 === 'string' ? body.pdfBase64 : '';
       const currency = typeof body.currency === 'string' && /^[A-Z]{3}$/.test(body.currency) ? body.currency : 'GBP';

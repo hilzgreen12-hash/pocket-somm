@@ -1,8 +1,23 @@
 import { createClient } from 'npm:@supabase/supabase-js';
 
-// The signed-in caller's user id, or null for a guest (the app's public key) or
-// an invalid / expired token. For account-only functions.
-export async function signedInUserId(req: Request): Promise<string | null> {
+// Every Vinster feature needs an account. Returns the caller's verified user id,
+// or the 401 reply to send back — the app turns `sign_in_required` into its
+// sign-in prompt. Call it first, before any paid work.
+export async function requireSignedIn(
+  req: Request,
+  headers: Record<string, string> = {},
+): Promise<{ userId: string } | Response> {
+  const userId = await verifiedUserId(req);
+  if (userId) return { userId };
+  return new Response(
+    JSON.stringify({ error: 'sign_in_required', message: 'Please sign in to use Vinster.' }),
+    { status: 401, headers: { ...headers, 'Content-Type': 'application/json' } },
+  );
+}
+
+// The user id behind the bearer token, checked with Supabase Auth — null for
+// the app's public key or an invalid / expired token.
+async function verifiedUserId(req: Request): Promise<string | null> {
   const auth = req.headers.get('Authorization');
   if (!auth) return null;
   try {

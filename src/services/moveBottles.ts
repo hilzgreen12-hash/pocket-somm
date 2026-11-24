@@ -1,9 +1,9 @@
 import { removeSlotsForWine } from '../api/racks';
 import { getBinOfCell } from '../api/bins';
-import { getCellarWineById, updateCellarWine } from '../api/cellar';
+import { updateCellarWine } from '../api/cellar';
 import {
   fetchPlacementsForWine, decrementPlacement, placedCount, releaseBottlesFromPlacements, releaseFromUnit,
-  addLocationPlacement, moveBottlesToLocation, type CellarPlacement, type StorageUnitRef,
+  addLocationPlacement, type CellarPlacement, type StorageUnitRef,
 } from '../api/placements';
 
 // Free `n` bottles of a wine from HOME storage only: the unit the action started
@@ -100,40 +100,4 @@ export async function moveExternalBottlesHome(
   if (dest.kind === 'location') await addLocationPlacement(wineId, dest.id, null, moved);
   if (dest.kind === 'bin') await updateCellarWine(wineId, { awaiting_placement: true, awaiting_placement_unit_id: dest.id });
   return moved;
-}
-
-// Bulk Move: bring EVERY bottle of a wine, external ones included, to one home
-// destination. Bottles already there stay put. An alt cellar takes them
-// directly (merge-aware); a rack, fridge or bin gets them flagged awaiting
-// placement, to be placed on its own screen; Your Cellar List unplaces them.
-export async function moveWholeWineHome(wineId: string, dest: HomeDestination): Promise<void> {
-  const wine = await getCellarWineById(wineId);
-  if (!wine || wine.archived_at) return;
-  const placements = await fetchPlacementsForWine(wineId);
-  if (dest.kind === 'location') {
-    const there = placedCount(placements.filter((p) => p.kind === 'location' && p.storage_location_id === dest.id));
-    if (wine.quantity > there) await moveBottlesToLocation(wine, dest.id, wine.quantity - there);
-    return;
-  }
-
-  const destCells = dest.kind === 'bin' ? new Set((await getBinOfCell([dest.id])).keys()) : new Set<string>();
-  const inDest = (p: CellarPlacement) =>
-    (dest.kind === 'rack' && p.kind === 'rack' && p.rack_id === dest.id)
-    || (dest.kind === 'bin' && p.kind === 'bin' && !!p.bin_cell_id && destCells.has(p.bin_cell_id));
-  const outside = placements.filter((p) => !inDest(p));
-  if (outside.length === 0 && wine.quantity <= placedCount(placements)) return;
-
-  // Rack placements mirror rack slots (one per bottle), so racks are freed
-  // through their slots; bins and alt cellars through their placements.
-  const slotsByRack = new Map<string, number>();
-  for (const p of outside) {
-    if (p.kind === 'rack' && p.rack_id) slotsByRack.set(p.rack_id, (slotsByRack.get(p.rack_id) ?? 0) + 1);
-  }
-  for (const [rackId, slots] of slotsByRack) await removeSlotsForWine(wineId, slots, rackId);
-  for (const p of outside) {
-    if (p.kind !== 'rack') await decrementPlacement(p.id, p.quantity ?? 0);
-  }
-  await updateCellarWine(wineId, dest.kind === 'list'
-    ? { awaiting_placement: false, awaiting_placement_unit_id: null }
-    : { awaiting_placement: true, awaiting_placement_unit_id: dest.id });
 }

@@ -12,9 +12,10 @@ import {
 } from '../../src/hooks/useCellarListFilters';
 import { useBulkIntel } from '../../src/hooks/useBulkIntel';
 import { archiveBottles } from '../../src/services/archiveNight';
-import { moveExternalBottlesHome, moveWholeWineHome, type HomeDestination } from '../../src/services/moveBottles';
+import { moveExternalBottlesHome, type HomeDestination } from '../../src/services/moveBottles';
 import { rackRoomFor, confirmRackRoom } from '../../src/services/rackMoves';
 import { backfillMissingMaturities } from '../../src/services/maturityBackfill';
+import { isImported } from '../../src/services/bulkIntel';
 import { deleteCellarWine } from '../../src/api/cellar';
 import { getBins, getBinOfCell } from '../../src/api/bins';
 import { fetchCellarLocations, createCellarLocation, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
@@ -29,7 +30,8 @@ import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { useReturnToCellar } from '../../src/components/winecard/cellar/useReturnToCellar';
-import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
+import { usePlaceInLocation } from '../../src/components/winecard/cellar/usePlaceInLocation';
+import { PackagingPrompt } from '../../src/components/PackagingPrompt';
 import { BulkIntelProgress } from '../../src/components/BulkIntelProgress';
 import { RenameModal } from '../../src/components/RenameModal';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
@@ -56,6 +58,14 @@ const NO_CUSTOM: CustomFilter[] = [];
 const NO_BINS: WineRack[] = [];
 const NO_CELLS = new Map<string, string>();
 
+// Why imported wines aren't in "Update all".
+function explainImportIntel() {
+  showAlert({
+    title: 'Why imported wines are filled one at a time',
+    body: "Every wine Vinster values needs a paid lookup with Wine-Searcher. To keep Vinster free, each account has a daily allowance of lookups, and a large import could use several days' worth in one go. So each imported wine gets its intel when you open its wine card.",
+  });
+}
+
 // The two self-heal scans below read the whole cellar, so each runs once per
 // app session per cellar rather than on every visit.
 const healedThisSession = new Set<string>();
@@ -69,9 +79,7 @@ const winesLabel = (n: number) => `${n} ${n === 1 ? 'wine' : 'wines'}`;
 const bottlesLabel = (n: number) => `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
 const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Please try again.');
 
-type MoveHomeTarget =
-  | { kind: 'one'; wine: CellarWine; externalPls: CellarPlacement[]; max: number }
-  | { kind: 'selected' };
+type MoveHomeTarget = { wine: CellarWine; externalPls: CellarPlacement[]; max: number };
 
 type LocationPicker = { mode: 'new' } | { mode: 'edit'; location: CustomFilter };
 
@@ -212,6 +220,8 @@ export default function CellarListScreen() {
   const [archiveTarget, setArchiveTarget] = useState<CellarWine | null>(null);
   const returnToCellar = useReturnToCellar();
   const [moveHome, setMoveHome] = useState<MoveHomeTarget | null>(null);
+  const homeLocations = useMemo(() => storageLocations.filter((l) => !l.is_external), [storageLocations]);
+  const place = usePlaceInLocation({ racks, homeLocations, locations: customLocations });
 
   function openWineActions(w: CellarWine) {
     const externalPls = externalPlacementsOf(w);
@@ -220,11 +230,8 @@ export default function CellarListScreen() {
       ...(canEdit ? [{ text: 'Edit Label or Wine Info', onPress: () => router.push(`/cellar/edit-wine/${w.id}`) }] : []),
       // Only for bottles held in an external cellar — they can come home, never go back.
       ...(canEdit && externalPls.length > 0 ? [{ text: 'Move to Home Storage', onPress: () => startMoveOneHome(w, externalPls) }] : []),
-      ...(live ? [{ text: 'View Location', onPress: () => viewWineLocation(w) }] : []),
-      ...(canEdit && live ? [
-        { text: 'Select', onPress: () => startSelect(w) },
-        { text: 'Archive Wine', onPress: () => setArchiveTarget(w) },
-      ] : []),
+      ...(live ? [{ text: 'View/Change Location', onPress: () => viewWineLocation(w) }] : []),
+      ...(canEdit && live ? [{ text: 'Archive Wine', onPress: () => setArchiveTarget(w) }] : []),
       ...(canEdit && !live ? [{ text: 'Return to Cellar', onPress: () => returnToCellar.start(archiveRowsOf(w)) }] : []),
       ...(canEdit ? [{ text: 'Delete Wine', style: 'destructive' as const, onPress: () => confirmDelete(w) }] : []),
     ];
@@ -236,7 +243,7 @@ export default function CellarListScreen() {
   }
 
   // Jump to where the wine's bottles are: one place goes straight there, several
-  // offer a choice, none says they're loose.
+  // offer a choice, none offers to place them.
   function viewWineLocation(w: CellarWine) {
     const dests = new Map<string, string>();   // route → label (one entry per place)
     let unresolvedBin = false;
@@ -253,10 +260,20 @@ export default function CellarListScreen() {
       }
     }
     const places = [...dests];
+    if (unresolvedBin && places.length === 0) {
+      showAlert({ title: 'Stored in a bin', body: 'This wine is filed in a storage bin — open it from Your Wines At Home on the Cellar tab.' });
+      return;
+    }
     if (places.length === 0) {
-      showAlert(unresolvedBin
-        ? { title: 'Stored in a bin', body: 'This wine is filed in a storage bin — open it from Your Wines At Home on the Cellar tab.' }
-        : { title: 'No home-storage location', body: 'This wine has no placement yet — its bottles are loose in Your Cellar List.' });
+      const n = w.quantity ?? 0;
+      showAlert({
+        title: `${wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name} is not yet placed.`,
+        body: `There ${n === 1 ? 'is' : 'are'} ${n} in Your Cellar List.`,
+        showCloseX: true,
+        buttons: canEdit
+          ? [{ text: 'Add to Location', style: 'gold', onPress: () => place.openPlaceMenu(w, placementsByWine.get(w.id) ?? []) }]
+          : undefined,
+      });
       return;
     }
     if (places.length === 1) { router.push(places[0][0]); return; }
@@ -315,10 +332,10 @@ export default function CellarListScreen() {
 
   function startMoveOneHome(w: CellarWine, externalPls: CellarPlacement[]) {
     const max = externalPls.reduce((n, p) => n + (p.quantity ?? 0), 0);
-    if (max > 0) setMoveHome({ kind: 'one', wine: w, externalPls, max });
+    if (max > 0) setMoveHome({ wine: w, externalPls, max });
   }
 
-  async function moveOneHome(target: Extract<MoveHomeTarget, { kind: 'one' }>, dest: HomeDestination, count: number) {
+  async function moveOneHome(target: MoveHomeTarget, dest: HomeDestination, count: number) {
     const w = target.wine;
     try {
       // A rack or fridge only takes as many as it has free slots for.
@@ -338,122 +355,10 @@ export default function CellarListScreen() {
     }
   }
 
-  // ---- Select mode: archive or move several wines at once (live list only) ----
-
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
-
-  function startSelect(w: CellarWine) {
-    setSelectedIds(new Set([w.id]));
-    setSelectMode(true);
-  }
-  function exitSelect() {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  }
-  function toggleSelected(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  // A bulk action only ever touches what's on screen: when filters or search
-  // hide a selected wine, it drops out of the selection.
-  useEffect(() => {
-    if (!selectMode) return;
-    const visible = new Set(filters.rows.map((r) => r.wine.id));
-    setSelectedIds((prev) => {
-      const next = new Set([...prev].filter((id) => visible.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [filters.rows, selectMode]);
-
-  // Runs `act` on each wine in turn. On a failure the wines already done leave
-  // the selection, so trying again only runs the rest.
-  async function runOnSelected(ids: string[], act: (id: string) => Promise<unknown>, verb: string, past: string): Promise<boolean> {
-    setBusy(true);
-    const done = new Set<string>();
-    try {
-      for (const id of ids) { await act(id); done.add(id); }
-      exitSelect();
-      return true;
-    } catch (err) {
-      setSelectedIds((prev) => new Set([...prev].filter((id) => !done.has(id))));
-      showAlert(done.size
-        ? { title: `Some ${past}, then hit a snag`, body: `${done.size} of ${ids.length} ${past}. The rest are still selected — try again. ${errorText(err)}` }
-        : { title: `Could not ${verb}`, body: errorText(err) });
-      return false;
-    } finally {
-      refreshAll();
-      setBusy(false);
-    }
-  }
-
-  function confirmArchiveSelected() {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    showAlert({
-      title: `Archive ${winesLabel(ids.length)}?`,
-      body: 'Every bottle of each moves to Your Cellar Archive, dated today, and leaves wherever it was stored. Your reviews and history stay.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        // Infinity = every bottle, at the wine's latest count.
-        { text: 'Archive', onPress: () => void runOnSelected(ids, (id) => archiveBottles(id, Infinity, todayYmd()), 'archive', 'archived') },
-      ],
-    });
-  }
-
-  async function moveSelectedHome(dest: HomeDestination) {
-    const ids = [...selectedIds];
-    if (dest.kind === 'rack' && !(await confirmRackRoomForWines(ids, dest))) return;
-    if (!(await runOnSelected(ids, (id) => moveWholeWineHome(id, dest), 'move', 'moved'))) return;
-    if (dest.kind === 'rack') router.push(`/cellar/rack/${dest.id}`);
-    else if (dest.kind === 'bin') router.push(`/cellar/bin/${dest.id}`);
-    else showAlert({ title: 'Moved', body: `${winesLabel(ids.length)} moved to ${dest.kind === 'location' ? dest.name : 'Your Cellar List, unplaced'}.` });
-  }
-
-  // Every bottle of the chosen wines goes to wait for a slot in the rack. When
-  // they won't all fit, say how many will (the rest stay in Your Cellar List,
-  // unplaced) and let the user back out. Resolves true to go ahead.
-  async function confirmRackRoomForWines(ids: string[], dest: { id: string; name: string }): Promise<boolean> {
-    const bySize = new Map<number, number>();
-    for (const id of ids) {
-      const w = wines.find((x) => x.id === id);
-      if (w) bySize.set(w.bottle_size_ml ?? 750, (bySize.get(w.bottle_size_ml ?? 750) ?? 0) + (w.quantity ?? 1));
-    }
-    let fit = 0;
-    let total = 0;
-    try {
-      for (const [size, n] of bySize) {
-        fit += Math.min(n, (await rackRoomFor(dest.id, size)).free);
-        total += n;
-      }
-    } catch (err) {
-      showAlert({ title: 'Could not move', body: errorText(err) });
-      return false;
-    }
-    if (fit >= total) return true;
-    return new Promise((resolve) => {
-      showAlert({
-        title: 'Not enough room',
-        body: fit > 0
-          ? `Only ${fit} of ${total} will fit in ${dest.name} — the rest stay in Your Cellar List.`
-          : `There's no free slot in ${dest.name} for these bottles. Nothing has been moved.`,
-        dismissable: false,
-        buttons: fit > 0
-          ? [{ text: 'Move', onPress: () => resolve(true) }, { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) }]
-          : [{ text: 'OK', style: 'cancel', onPress: () => resolve(false) }],
-      });
-    });
-  }
-
   function onMoveHomePick(dest: HomeDestination, count: number) {
     const target = moveHome;
     setMoveHome(null);
-    if (target?.kind === 'one') void moveOneHome(target, dest, count);
-    else if (target?.kind === 'selected') void moveSelectedHome(dest);
+    if (target) void moveOneHome(target, dest, count);
   }
 
   // ---- List rows ----
@@ -462,8 +367,8 @@ export default function CellarListScreen() {
   const rowHandlers = useRef({ press: (_w: CellarWine) => {}, longPress: (_w: CellarWine) => {} });
   useEffect(() => {
     rowHandlers.current = {
-      press: (w) => (selectMode ? toggleSelected(w.id) : router.push(`/cellar/${w.id}`)),
-      longPress: (w) => (selectMode ? toggleSelected(w.id) : openWineActions(w)),
+      press: (w) => router.push(`/cellar/${w.id}`),
+      longPress: (w) => openWineActions(w),
     };
   });
   const onRowPress = useCallback((w: CellarWine) => rowHandlers.current.press(w), []);
@@ -476,12 +381,10 @@ export default function CellarListScreen() {
       bottles={item.bottles}
       showYourScore={showYourScore}
       showArchivedDate={isArchiveView}
-      selectMode={selectMode}
-      selected={selectedIds.has(item.wine.id)}
       onPress={onRowPress}
       onLongPress={onRowLongPress}
     />
-  ), [showYourScore, isArchiveView, selectMode, selectedIds, onRowPress, onRowLongPress]);
+  ), [showYourScore, isArchiveView, onRowPress, onRowLongPress]);
 
   // ---- Location filter: custom Locations and alt cellars ----
 
@@ -655,12 +558,17 @@ export default function CellarListScreen() {
   // ---- "Update all": critic scores and values for wines missing them ----
 
   // Imported wines and wines a recent run couldn't value are left out (see
-  // services/bulkIntel); the photo-less get a label photo found while we're here.
+  // services/bulkIntel). The photo-less get a label photo found while we're here.
   const bulkIntel = useBulkIntel(refreshAll, { findLabels: true });
   const { eligible: bulkEligible } = bulkIntel;
   const intelTargets = useMemo(
     () => (isArchiveView ? [] : bulkEligible(filters.missingIntel)),
     [isArchiveView, bulkEligible, filters.missingIntel],
+  );
+  // Imported wines still without intel: not in Update all, so say why.
+  const importsMissingIntel = useMemo(
+    () => (isArchiveView ? 0 : filters.missingIntel.filter(isImported).length),
+    [isArchiveView, filters.missingIntel],
   );
 
   // ---- Filter chips and their pop-ups ----
@@ -733,133 +641,107 @@ export default function CellarListScreen() {
         </View>
       )}
 
-      {!session ? (
-        <ArchiveSignInPrompt
-          title="Sign in to view your cellar"
-          body={`Track every bottle in your collection — sign in to see ${isArchiveView ? 'Your Cellar Archive' : 'Your Cellar List'}.`}
-        />
-      ) : (
-        <>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryText}>
-              {winesLabel(filters.rows.length)} · {bottlesLabel(filters.totalBottles)}
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryText}>
+          {winesLabel(filters.rows.length)} · {bottlesLabel(filters.totalBottles)}
+        </Text>
+        {intelTargets.length > 0 ? (
+          <TouchableOpacity onPress={() => bulkIntel.start(intelTargets, 'intel', 'Update all')} activeOpacity={0.7} style={styles.missingIntelBtn}>
+            <Text style={styles.missingIntelText}>
+              {winesLabel(intelTargets.length)} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
             </Text>
-            {intelTargets.length > 0 ? (
-              <TouchableOpacity onPress={() => bulkIntel.start(intelTargets, 'intel', 'Update all')} activeOpacity={0.7} style={styles.missingIntelBtn}>
-                <Text style={styles.missingIntelText}>
-                  {winesLabel(intelTargets.length)} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
-                </Text>
+          </TouchableOpacity>
+        ) : null}
+        {importsMissingIntel > 0 ? (
+          <TouchableOpacity onPress={explainImportIntel} activeOpacity={0.7} style={styles.missingIntelBtn}>
+            <Text style={styles.missingIntelText}>
+              {importsMissingIntel} imported {importsMissingIntel === 1 ? 'wine gets its' : 'wines get their'} intel when opened · <Text style={styles.missingIntelLink}>Why?</Text>
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      <Text style={styles.filterHint}>Listed by {sortLabel} · Swipe to see all filters →</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
+        {/* A Region chip leads when the list was opened from Most Collected —
+            tap it to clear the region. Location and Maturity are live-list only. */}
+        {filters.onlyWineId ? (
+          <FilterChip label="Showing" value="This wine" active marker="✕" onPress={() => filters.setOnlyWineId(null)} accessibilityLabel="Show all wines" />
+        ) : null}
+        {filters.region ? (
+          <FilterChip label="Region" value={filters.region} active marker="✕" onPress={() => filters.setRegion(null)} accessibilityLabel={`Clear the ${filters.region} filter`} />
+        ) : null}
+        {!isArchiveView && (
+          <FilterChip label="Location" value={locationLabel} active={filters.location !== 'All'} marker={chipMarker('location')} onPress={() => setOpenSheet('location')} />
+        )}
+        {!isArchiveView && (
+          <FilterChip label="Maturity" value={maturityLabel} active={filters.maturity !== 'All'} marker={chipMarker('maturity')} onPress={() => setOpenSheet('maturity')} />
+        )}
+        <FilterChip label="Score" value={scoreActive ? sortLabel : 'Any'} active={scoreActive} marker={chipMarker('score')} onPress={() => setOpenSheet('score')} />
+        <FilterChip label="Value" value={priceActive ? sortLabel : 'Any'} active={priceActive} marker={chipMarker('price')} onPress={() => setOpenSheet('price')} />
+        <FilterChip label="Country" value={filters.country} active={filters.country !== 'All'} marker={chipMarker('country')} onPress={() => setOpenSheet('country')} />
+        <FilterChip label="Colour" value={filters.colour} active={filters.colour !== 'All'} marker={chipMarker('colour')} onPress={() => setOpenSheet('colour')} />
+      </ScrollView>
+
+      <View style={styles.searchRow}>
+        <TextInput
+          style={styles.searchInput}
+          value={filters.search}
+          onChangeText={filters.setSearch}
+          placeholder="Search producer, wine, region, vintage…"
+          placeholderTextColor={colors.textMuted}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+        {filters.search.length > 0 && (
+          <TouchableOpacity onPress={() => filters.setSearch('')} style={styles.searchClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.searchClearText}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {filters.rows.length === 0 ? (
+        <View style={styles.empty}>
+          {listError ? (
+            // Distinct from the empty state on purpose: the list is [] on a
+            // failed fetch too, and an "empty" cellar reads as data loss.
+            <>
+              <Text style={styles.emptyTitle}>Couldn&apos;t load {isArchiveView ? 'Your Cellar Archive' : 'your cellar'}</Text>
+              <Text style={styles.emptyBody}>Check your connection and try again. Your wines are safe.</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={() => qc.invalidateQueries({ queryKey: [isArchiveView ? 'cellar-archive' : 'cellar', userId] })} activeOpacity={0.85}>
+                <Text style={styles.retryBtnText}>Try again</Text>
               </TouchableOpacity>
-            ) : null}
-          </View>
-
-          <Text style={styles.filterHint}>Listed by {sortLabel} · Swipe to see all filters →</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
-            {/* A Region chip leads when the list was opened from Most Collected —
-                tap it to clear the region. Location and Maturity are live-list only. */}
-            {filters.onlyWineId ? (
-              <FilterChip label="Showing" value="This wine" active marker="✕" onPress={() => filters.setOnlyWineId(null)} accessibilityLabel="Show all wines" />
-            ) : null}
-            {filters.region ? (
-              <FilterChip label="Region" value={filters.region} active marker="✕" onPress={() => filters.setRegion(null)} accessibilityLabel={`Clear the ${filters.region} filter`} />
-            ) : null}
-            {!isArchiveView && (
-              <FilterChip label="Location" value={locationLabel} active={filters.location !== 'All'} marker={chipMarker('location')} onPress={() => setOpenSheet('location')} />
-            )}
-            {!isArchiveView && (
-              <FilterChip label="Maturity" value={maturityLabel} active={filters.maturity !== 'All'} marker={chipMarker('maturity')} onPress={() => setOpenSheet('maturity')} />
-            )}
-            <FilterChip label="Score" value={scoreActive ? sortLabel : 'Any'} active={scoreActive} marker={chipMarker('score')} onPress={() => setOpenSheet('score')} />
-            <FilterChip label="Value" value={priceActive ? sortLabel : 'Any'} active={priceActive} marker={chipMarker('price')} onPress={() => setOpenSheet('price')} />
-            <FilterChip label="Country" value={filters.country} active={filters.country !== 'All'} marker={chipMarker('country')} onPress={() => setOpenSheet('country')} />
-            <FilterChip label="Colour" value={filters.colour} active={filters.colour !== 'All'} marker={chipMarker('colour')} onPress={() => setOpenSheet('colour')} />
-          </ScrollView>
-
-          <View style={styles.searchRow}>
-            <TextInput
-              style={styles.searchInput}
-              value={filters.search}
-              onChangeText={filters.setSearch}
-              placeholder="Search producer, wine, region, vintage…"
-              placeholderTextColor={colors.textMuted}
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-            />
-            {filters.search.length > 0 && (
-              <TouchableOpacity onPress={() => filters.setSearch('')} style={styles.searchClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.searchClearText}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {filters.rows.length === 0 ? (
-            <View style={styles.empty}>
-              {listError ? (
-                // Distinct from the empty state on purpose: the list is [] on a
-                // failed fetch too, and an "empty" cellar reads as data loss.
-                <>
-                  <Text style={styles.emptyTitle}>Couldn&apos;t load {isArchiveView ? 'Your Cellar Archive' : 'your cellar'}</Text>
-                  <Text style={styles.emptyBody}>Check your connection and try again. Your wines are safe.</Text>
-                  <TouchableOpacity style={styles.retryBtn} onPress={() => qc.invalidateQueries({ queryKey: [isArchiveView ? 'cellar-archive' : 'cellar', userId] })} activeOpacity={0.85}>
-                    <Text style={styles.retryBtnText}>Try again</Text>
-                  </TouchableOpacity>
-                </>
-              ) : sourceEmpty ? (
-                isArchiveView ? (
-                  <>
-                    <Text style={styles.emptyTitle}>Your Cellar Archive is empty</Text>
-                    <Text style={styles.emptyBody}>Wines you archive from Your Cellar List land here.</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.emptyTitle}>Your cellar is empty</Text>
-                    <Text style={styles.emptyBody}>Add wines to your cellar to generate your list.</Text>
-                  </>
-                )
-              ) : (
-                <>
-                  <Text style={styles.emptyTitle}>No wines match</Text>
-                  <Text style={styles.emptyBody}>Try clearing some filters to see more of your cellar.</Text>
-                </>
-              )}
-            </View>
+            </>
+          ) : sourceEmpty ? (
+            isArchiveView ? (
+              <>
+                <Text style={styles.emptyTitle}>Your Cellar Archive is empty</Text>
+                <Text style={styles.emptyBody}>Wines you archive from Your Cellar List land here.</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyTitle}>Your cellar is empty</Text>
+                <Text style={styles.emptyBody}>Add wines to your cellar to generate your list.</Text>
+              </>
+            )
           ) : (
-            <FlatList
-              style={styles.list}
-              data={filters.rows}
-              keyExtractor={(r) => r.wine.id}
-              renderItem={renderRow}
-              contentContainerStyle={{ paddingTop: spacing.xs, paddingBottom: selectMode ? 150 : 60 }}
-              initialNumToRender={12}
-              windowSize={7}
-              keyboardShouldPersistTaps="handled"
-            />
+            <>
+              <Text style={styles.emptyTitle}>No wines match</Text>
+              <Text style={styles.emptyBody}>Try clearing some filters to see more of your cellar.</Text>
+            </>
           )}
-        </>
-      )}
-
-      {selectMode && (
-        <View style={styles.selectBar}>
-          <View style={styles.selectBarTop}>
-            <Text style={styles.selectBarCount}>{busy ? 'Working…' : `${selectedIds.size} selected`}</Text>
-            <TouchableOpacity onPress={exitSelect} disabled={busy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.selectBarCancel}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.selectBarActions}>
-            {[
-              { label: 'Archive', onPress: confirmArchiveSelected },
-              { label: 'Move', onPress: () => setMoveHome({ kind: 'selected' }) },
-            ].map((a) => {
-              const disabled = selectedIds.size === 0 || busy;
-              return (
-                <TouchableOpacity key={a.label} style={[styles.selectAction, disabled && styles.selectActionDisabled]} disabled={disabled} onPress={a.onPress}>
-                  <Text style={styles.selectActionText}>{a.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
         </View>
+      ) : (
+        <FlatList
+          style={styles.list}
+          data={filters.rows}
+          keyExtractor={(r) => r.wine.id}
+          renderItem={renderRow}
+          contentContainerStyle={{ paddingTop: spacing.xs, paddingBottom: 60 }}
+          initialNumToRender={12}
+          windowSize={7}
+          keyboardShouldPersistTaps="handled"
+        />
       )}
 
       <BulkIntelProgress progress={bulkIntel.progress} title="Updating wine intel…" onStop={bulkIntel.stop} />
@@ -919,15 +801,26 @@ export default function CellarListScreen() {
 
       <MoveHomeModal
         visible={!!moveHome}
-        subtitle={moveHome?.kind === 'one'
-          ? wineHeaderLine(moveHome.wine.producer, moveHome.wine.wine_name, moveHome.wine.vintage) || moveHome.wine.wine_name
-          : `Every bottle of ${winesLabel(selectedIds.size)}`}
-        maxBottles={moveHome?.kind === 'one' ? moveHome.max : undefined}
+        subtitle={moveHome ? wineHeaderLine(moveHome.wine.producer, moveHome.wine.wine_name, moveHome.wine.vintage) || moveHome.wine.wine_name : ''}
+        maxBottles={moveHome?.max}
         racks={racks}
         bins={bins}
         storageLocations={storageLocations}
         onPick={onMoveHomePick}
         onClose={() => setMoveHome(null)}
+      />
+
+      {/* "How is this wine packaged?" — after filing it into an alt cellar. */}
+      <PackagingPrompt
+        visible={place.packaging !== null}
+        wineId={place.packaging?.wineId ?? null}
+        locationId={place.packaging?.locationId ?? null}
+        userId={userId ?? ''}
+        onClose={place.closePackaging}
+        onDone={() => {
+          void qc.invalidateQueries({ queryKey: ['storage-location-cases', place.packaging?.locationId] });
+          void qc.invalidateQueries({ queryKey: ['cellar'] });
+        }}
       />
 
       <ArchiveNoteModal
@@ -997,16 +890,6 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
   retryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-
-  // Select mode's bar, floating at the bottom.
-  selectBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.lg, gap: spacing.sm },
-  selectBarTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
-  selectBarCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
-  selectBarCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold },
-  selectBarActions: { flexDirection: 'row', gap: spacing.sm },
-  selectAction: { flex: 1, borderWidth: 1, borderColor: 'rgba(244,235,224,0.30)', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
-  selectActionDisabled: { opacity: 0.4 },
-  selectActionText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.cream, textAlign: 'center', letterSpacing: 0.3 },
 
   deleteProgressWrap: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.md },
   deleteProgressTitle: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.4 },

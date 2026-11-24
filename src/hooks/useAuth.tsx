@@ -7,6 +7,7 @@ import { supabase } from '../api/supabase';
 import { clearAllStores } from '../stores/clearAllStores';
 import { getCellarContext, loadCellarContext, subscribeCellarContext } from '../api/cellarContext';
 import { clearPersistedQueries, savePersistedQueries, setPersistedQueryUser } from '../api/queryPersistence';
+import { recordAccountActivity } from '../api/accountActivity';
 
 interface AuthContextValue {
   session: Session | null;
@@ -60,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPersistedQueryUser(nextUserId);
       }
       prevUserId.current = nextUserId;
+      if (nextUserId) void recordAccountActivity(nextUserId);
       setSession(next);
     }
 
@@ -117,9 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Back in the foreground: re-read shared-cellar memberships, so an invite
     // accepted, a member removed or a role changed elsewhere shows up without
-    // restarting the app.
+    // restarting the app; and note the user as active.
     const appState = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && prevUserId.current) void loadCellarContext(prevUserId.current);
+      if (state !== 'active' || !prevUserId.current) return;
+      void loadCellarContext(prevUserId.current);
+      void recordAccountActivity(prevUserId.current);
     });
 
     return () => { clearTimeout(safety); unsubCellar(); listener.subscription.unsubscribe(); appState.remove(); };

@@ -246,7 +246,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   }, [visible]);
 
   async function handleSave() {
-    if (!session) { showAlert({ title: 'Sign in required', body: 'Sign in to save a review.' }); return; }
+    if (!session) return;
     if (!wineName.trim() && !producer.trim()) { showAlert({ title: 'Wine details needed', body: 'Add at least a producer or a wine name before saving.' }); return; }
     Keyboard.dismiss();
     // Hard requirements FIRST — a review can't be saved without a date, a

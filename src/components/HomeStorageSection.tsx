@@ -123,7 +123,7 @@ function contentsKeptNotice() {
 // "Your Wines At Home" — the home-storage section embedded in the Cellar tab
 // (replaces the standalone Home Wine Storage page). One unified carousel across
 // racks, fridges, bins and Alt Cellars; when empty it shows setup templates.
-export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () => void) => void }) {
+export function HomeStorageSection() {
   const { session } = useAuth();
   const { racks, isLoading, isError, remove: removeRack } = useRacks();
   const qc = useQueryClient();
@@ -132,9 +132,9 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
   // View-only members of a shared cellar can browse its storage but not add,
   // rename or delete any of it.
   const canEdit = useCellarContext().role !== 'view';
-  const requireEditor = (action: () => void) => requireAuth(() => (
+  const requireEditor = (action: () => void) => (
     canEdit ? action() : showAlert({ title: 'View only', body: VIEW_ONLY_MESSAGE })
-  ));
+  );
 
   // Rename an Alt Cellar from its carousel long-press (showAlert has no input,
   // so the rename lives in its own small modal).
@@ -390,7 +390,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
 
       {isLoading ? (
         <View style={styles.loading}><ActivityIndicator color={colors.gold} /></View>
-      ) : session && isError ? (
+      ) : isError ? (
         <Text style={styles.error}>Couldn't load your storage — pull to refresh. Your wines are safe.</Text>
       ) : (
         hasStorage ? (

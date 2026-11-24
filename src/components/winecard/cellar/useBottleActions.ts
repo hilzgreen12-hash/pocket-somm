@@ -6,8 +6,8 @@ import { invalidateCellarViews } from '../../../hooks/useCellar';
 import { useRackStore } from '../../../stores/rackStore';
 import { getCellarWineById, updateCellarWine, deleteCellarWine } from '../../../api/cellar';
 import { clearSlotOfWine } from '../../../api/racks';
-import { fetchPlacementsForWine, placedCount, addLocationPlacement, moveBottlesToLocation } from '../../../api/placements';
-import { addWinesToFilter, removeWineFromFilter } from '../../../api/customFilters';
+import { addLocationPlacement, moveBottlesToLocation } from '../../../api/placements';
+import { removeWineFromFilter } from '../../../api/customFilters';
 import { evictCachedLabel } from '../../../api/labelImageCache';
 import { archiveBottles, archiveDateIso } from '../../../services/archiveNight';
 import { releaseHomeBottles, releaseLeavingBottles, loosenBottlesFor } from '../../../services/moveBottles';
@@ -16,6 +16,7 @@ import { formatWineTitle } from '../../../utils/wineTitle';
 import { showAlert } from '../../AppAlert';
 import type { CellarWine } from '../../../types/wine';
 import type { ArchiveSource, MoveDestination, WineCardData } from './useWineCardData';
+import { usePlaceInLocation } from './usePlaceInLocation';
 
 // The rack slot the card was opened from (tapping a bottle in a rack).
 export type TappedSlot = { rackId: string; row: number; col: number };
@@ -31,8 +32,7 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
   const userId = session?.user.id;
   const [working, setWorking] = useState(false);
   const [moving, setMoving] = useState(false);
-  // An Other Home Storage location the wine was just filed into → "How is this wine packaged?"
-  const [packagingLocationId, setPackagingLocationId] = useState<string | null>(null);
+  const place = usePlaceInLocation(data);
   // The Location filter an archive was scoped to: the wine leaves that filter.
   const archiveFilterRef = useRef<string | null>(null);
   const tappedSlotUsedRef = useRef(false);
@@ -222,72 +222,6 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
     }
   }
 
-  // Loose bottles, from a fresh read — a stale count would let a rack offer more
-  // slots than there are bottles to place.
-  async function looseNow(): Promise<number> {
-    const pls = await fetchPlacementsForWine(wine.id).catch(() => data.placements);
-    return Math.max(0, (wine.quantity ?? 0) - placedCount(pls));
-  }
-
-  // Place loose bottles in a rack or fridge: its grid opens in select-slots
-  // mode, capped at the loose count.
-  async function placeInRack(rackId: string) {
-    const loose = await looseNow();
-    if (loose <= 0) {
-      showAlert({ title: 'All placed', body: 'Every bottle of this wine is already placed in your cellar.' });
-      return;
-    }
-    router.push(`/cellar/rack/${rackId}?placeWine=${wine.id}&placeLimit=${loose}`);
-  }
-
-  // File the loose bottles in an Other Home Storage location; bottles already in
-  // racks, bins or other cellars stay where they are.
-  async function fileInLocation(locationId: string) {
-    try {
-      const loose = await looseNow();
-      if (loose <= 0) {
-        showAlert({ title: 'Already placed', body: 'Every bottle of this wine is already filed in your storage.' });
-        return;
-      }
-      await addLocationPlacement(wine.id, locationId, null, loose);
-      if (wine.awaiting_placement) await updateCellarWine(wine.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
-      refresh();
-      setPackagingLocationId(locationId);
-    } catch (err) {
-      showAlert({ title: 'Could not add to location', body: errorText(err) });
-    }
-  }
-
-  // Tag the wine under a Cellar List Location filter — no physical placement.
-  async function tagWithFilter(filterId: string) {
-    try {
-      await addWinesToFilter(filterId, [wine.id]);
-      void qc.invalidateQueries({ queryKey: ['cellar-locations', userId] });
-      showAlert({ title: 'Added to location', body: `Filed under ${data.locations.find((l) => l.id === filterId)?.name ?? 'the location'}.` });
-    } catch (err) {
-      showAlert({ title: 'Could not add to location', body: errorText(err) });
-    }
-  }
-
-  // "Add to Location": place the loose bottles in a rack or fridge, file them in
-  // a home alt cellar (never an external one), or tag a Location filter.
-  function openPlaceMenu() {
-    const buttons = [
-      ...data.racks.map((r) => ({ text: r.name, onPress: () => void placeInRack(r.id) })),
-      ...data.homeLocations.map((l) => ({ text: l.name, onPress: () => void fileInLocation(l.id) })),
-      ...data.locations.map((l) => ({ text: l.name, onPress: () => void tagWithFilter(l.id) })),
-    ];
-    if (buttons.length === 0) {
-      showAlert({ title: 'No locations yet', body: 'Create a rack, fridge or home storage location first, then you can add wines to it.' });
-      return;
-    }
-    showAlert({
-      title: 'Add to Location',
-      body: 'Place in a Home Storage Location.',
-      buttons: [...buttons, { text: 'Cancel', style: 'cancel' as const }],
-    });
-  }
-
   // Add Bottles → "Add New Location": set the storage up first. A new rack or
   // fridge carries the wine, so its grid asks where to place the new bottles.
   function addToNewLocation() {
@@ -318,11 +252,11 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
     deleteBottles,
     addBottles,
     move,
-    openPlaceMenu,
+    openPlaceMenu: () => place.openPlaceMenu(wine, data.placements),
     addToNewLocation,
     chooseArchiveFilter,
-    packagingLocationId,
-    closePackaging: () => setPackagingLocationId(null),
+    packagingLocationId: place.packaging?.locationId ?? null,
+    closePackaging: place.closePackaging,
   };
 }
 

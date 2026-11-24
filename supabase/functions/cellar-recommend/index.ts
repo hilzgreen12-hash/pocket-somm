@@ -1,7 +1,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { HOUSE_RULES } from '../_shared/houseRules.ts';
-import { signedInUserId } from '../_shared/auth.ts';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { getTasteProfile, tasteProfileSection } from '../_shared/tasteProfile.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
@@ -57,9 +57,10 @@ Return ONLY raw JSON, no markdown:
 Deno.serve(async (req) => {
   try {
     // Picks come from the caller's own cellar, so this needs an account.
-    if (!(await signedInUserId(req))) return json({ error: 'Unauthorized', message: 'Sign in to choose from your cellar.' }, 401);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
 
-    const limited = await checkRateLimit(req, 'cellar-recommend', HOURLY_LIMIT, DAILY_LIMIT);
+    const limited = await checkRateLimit(auth.userId, 'cellar-recommend', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     const { transcript, wines } = await req.json();

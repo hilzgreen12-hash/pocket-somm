@@ -2,10 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
-import { useAuth } from '../../src/hooks/useAuth';
 import { useObservations } from '../../src/hooks/useObservations';
 import { showAlert } from '../../src/components/AppAlert';
-import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import type { Observation, ObservationsState, TellOutcome } from '../../src/api/observations';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -45,7 +43,6 @@ function errorText(err: unknown): string {
 }
 
 export default function ObservationsScreen() {
-  const { session } = useAuth();
   const { state, isLoading, isFetching, loadError, reload, refresh, tell, remove } = useObservations();
   const [draft, setDraft] = useState('');
   const [tellNote, setTellNote] = useState<string | null>(null);
@@ -93,19 +90,6 @@ export default function ObservationsScreen() {
     });
   }
 
-  if (!session) {
-    return (
-      <View style={styles.wrapper}>
-        <View style={styles.container}>
-          <Header />
-          <ArchiveSignInPrompt
-            title="Sign in to see Vinster's Observations"
-            body="Sign in or create an account and Vinster will learn your taste from your reviews, cellar and choices."
-          />
-        </View>
-      </View>
-    );
-  }
 
   const generatedOn = state?.generatedAt
     ? new Date(state.generatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })

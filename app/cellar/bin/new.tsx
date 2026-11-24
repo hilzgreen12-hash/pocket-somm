@@ -76,7 +76,7 @@ export default function NewBinScreen() {
 
   async function handleSave() {
     if (saving) return;
-    if (!userId) { showAlert({ title: 'Sign in needed', body: 'Sign in to create a bin.' }); return; }
+    if (!userId) return;
     if (!name.trim()) { showAlert({ title: 'Name needed', body: 'Give this bin a name.' }); return; }
     setSaving(true);
     try {

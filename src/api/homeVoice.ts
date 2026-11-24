@@ -41,7 +41,7 @@ export async function chooseFromCellar(input: {
       region: w.region,
       style: w.style,
       grape: w.grape_variety,
-      // Worth of one of these bottles at its own size (estimated_value is per 75cl).
+      // Worth of one of these bottles, at its own size.
       value: bottleValue(w),
       currency: w.estimated_value_currency,
       windowFrom: w.drinking_window_from,

@@ -9,7 +9,7 @@ import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
-import { PER_75CL, bottleValue } from '../utils/bottleValue';
+import { perBottle } from '../utils/bottleValue';
 
 function symbolFor(code: string): string {
   return CURRENCIES.find((c) => c.code === code.toUpperCase())?.symbol ?? code;
@@ -71,12 +71,12 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
   useEffect(() => {
     if (!visible) return;
     const from = seedFieldRef.current ?? fieldRef.current;
-    // A value seeding a purchase price is sized to the bottle (values are per 75cl).
-    const scaled = from === 'estimated_value' && fieldRef.current === 'purchase_price';
+    // A value seeding a purchase price is rounded to whole units.
+    const rounded = from === 'estimated_value' && fieldRef.current === 'purchase_price';
     const init: Record<string, string> = {};
     for (const w of winesRef.current) {
-      const cur = scaled ? bottleValue(w) : from === 'purchase_price' ? w.purchase_price : w.estimated_value;
-      if (cur != null) init[w.id] = String(scaled ? Math.round(cur) : cur);
+      const cur = from === 'purchase_price' ? w.purchase_price : w.estimated_value;
+      if (cur != null) init[w.id] = String(rounded ? Math.round(Number(cur)) : cur);
     }
     seededRef.current = init;
     setValues(init);
@@ -145,7 +145,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
   const renderRow = ({ item: w }: { item: CellarWine }) => (
     <View style={styles.row}>
       <View style={styles.rowMain}>
-        <Text style={styles.rowName} numberOfLines={1}>{[w.producer, w.wine_name].filter(Boolean).join(' ') || w.wine_name}</Text>
+        <Text style={styles.rowName} numberOfLines={2}>{[w.producer, w.wine_name].filter(Boolean).join(' ') || w.wine_name}</Text>
         <Text style={styles.rowMeta} numberOfLines={1}>
           {[w.vintage, w.region].filter(Boolean).join(' · ')}  ·  {bottleSizeCl(w.bottle_size_ml ?? 750)}cl
         </Text>
@@ -160,7 +160,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
           placeholderTextColor={colors.textMuted}
           keyboardType="decimal-pad"
         />
-        {field === 'estimated_value' ? <Text style={styles.sym}>{PER_75CL}</Text> : null}
+        {field === 'estimated_value' ? <Text style={styles.sym}>{perBottle(w.bottle_size_ml)}</Text> : null}
       </View>
     </View>
   );
@@ -205,12 +205,13 @@ const styles = StyleSheet.create({
   altLink: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   list: { flexGrow: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  rowMain: { flex: 1 },
+  rowMain: { flex: 1, minWidth: 0 },
   rowName: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text },
   rowMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.sm, backgroundColor: colors.surface, minWidth: 96 },
+  // A fixed width: a growing input pushed the wine's name out of the row.
+  inputWrap: { width: 140, flexShrink: 0, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.sm, backgroundColor: colors.surface },
   sym: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginRight: 2 },
-  input: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm, minWidth: 56 },
+  input: { flex: 1, minWidth: 0, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm },
   saveBtn: { borderWidth: 1, borderColor: colors.gold, backgroundColor: 'transparent', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   cancelBtn: { alignItems: 'center', paddingVertical: spacing.md },

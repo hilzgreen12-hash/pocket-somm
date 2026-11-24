@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 // On-demand "inside line" for a single wine in a producer's range. The producer
 // range (see producer-range fn) lists where the scanned wine sits among its
@@ -28,28 +29,16 @@ Return ONLY valid JSON (no markdown, no prose outside the JSON) with exactly the
 RECOGNITION GATE — if you don't genuinely recognise this exact wine from this producer (e.g. the name may be misheard, misread or not a real cuvée), return exactly {"grape": null, "region": null, "style": null, "note": null}. Never describe a wine as if you know it when you don't, and never substitute a different wine you do know. Otherwise, use null only for a field you genuinely cannot determine.`;
 
 Deno.serve(async (req) => {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-  }
+  const auth = await requireSignedIn(req);
+  if (auth instanceof Response) return auth;
 
   try {
-    const userClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-    }
-
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
     const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
-      p_user_id: user.id,
+      p_user_id: auth.userId,
       p_function_name: 'range-wine-note',
       p_hourly_limit: HOURLY_LIMIT,
       p_daily_limit: DAILY_LIMIT,

@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 // Compare Wines or Vintages (Home → Search & Discover). Two to four wines the
@@ -84,9 +85,10 @@ Be specific to these producers, wines and vintages. Raw JSON only.`;
 }
 
 Deno.serve(async (req) => {
-  if (!req.headers.get('Authorization')) return json({ error: 'Unauthorized' }, 401);
   try {
-    const limited = await checkRateLimit(req, 'compare-wines', HOURLY_LIMIT, DAILY_LIMIT);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const limited = await checkRateLimit(auth.userId, 'compare-wines', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     const body = await req.json().catch(() => ({}));

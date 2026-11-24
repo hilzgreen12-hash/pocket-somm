@@ -10,7 +10,7 @@
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
-import { signedInUserId } from '../_shared/auth.ts';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -78,10 +78,11 @@ Return ONLY a JSON object: {"wines": [ ... ]}, written compactly on a single lin
 Deno.serve(async (req) => {
   try {
     // Imported wines go into the caller's own cellar, so this needs an account.
-    if (!(await signedInUserId(req))) return json({ error: 'Unauthorized', message: 'Sign in to import a cellar.' }, 401);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
     if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return jsonError(TOO_LARGE, 413);
 
-    const limited = await checkRateLimit(req, 'parse-cellar-import', HOURLY_LIMIT, DAILY_LIMIT);
+    const limited = await checkRateLimit(auth.userId, 'parse-cellar-import', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     const { text, pdfBase64, source, stream } = await req.json().catch(() => ({}));

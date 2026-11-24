@@ -1,7 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
-import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
-import { guestAllowanceLeft, guestLimitResponse, guestPhone, recordGuestUse } from '../_shared/guest.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -71,24 +70,17 @@ Return ONLY a valid JSON object with exactly these ten keys. Set producer / regi
 
 Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "grape": "Syrah", "bottleSizeMl": 750, "confidence": "high", "imageType": "label", "completed": false}`;
 
-// Usage limits per account (or per guest device): generous for real scanning,
-// a stop on loops.
+// Usage limits per account: generous for real scanning, a stop on loops.
 const HOURLY_LIMIT = 30;
 const DAILY_LIMIT = 120;
-// A guest's phone: room for their two scans a day plus a few retakes.
-const GUEST_LIMITS = { hourly: 6, daily: 6 };
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'scan-label', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const limited = await checkRateLimit(auth.userId, 'scan-label', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
-    const { base64Image, purpose } = await req.json();
-    // A guest's two scans a day (wine lists and labels together). A label read
-    // for Pair ("I've got a wine, find me a recipe") isn't a scan — the pairing
-    // counts against the guest's one pairing a day instead.
-    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-    const guestDevice = purpose === 'pair' ? null : await guestPhone(req);
-    if (guestDevice && (await guestAllowanceLeft(admin, guestDevice, 'scan')) <= 0) return guestLimitResponse('scan');
+    const { base64Image } = await req.json();
 
     // Sonnet (not Haiku) for the vision read: OCR fidelity on the producer name
     // is critical — a confident misread that swaps in a different real producer
@@ -141,12 +133,7 @@ Deno.serve(async (req) => {
     const rawVintage = typeof parsed.vintage === 'string' ? parsed.vintage.trim() : parsed.vintage;
     const vintage = rawVintage ? String(rawVintage) : null;
 
-    // A guest's scan counts once a label was actually read. A screenshot of a
-    // wine LIST goes on to the list scan, which counts itself.
     const imageType = parsed.imageType === 'list' || parsed.imageType === 'other' ? parsed.imageType : 'label';
-    if (guestDevice && imageType === 'label' && (parsed.producer || parsed.wineName)) {
-      await recordGuestUse(admin, guestDevice, 'scan');
-    }
 
     return new Response(JSON.stringify({
       producer: parsed.producer ?? null,

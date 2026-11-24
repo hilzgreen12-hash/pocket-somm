@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -71,54 +72,32 @@ const promptFor = (fallbackCurrency: string) =>
   `${IMAGE_SYSTEM_PROMPT}\n\nFallback currency (only if the list gives no clue): ${fallbackCurrency}`;
 
 Deno.serve(async (req) => {
-  const authHeader = req.headers.get('Authorization');
-  // scan-start calls this server-to-server for GUEST wine-list scans (no user
-  // account). It proves itself with the service key in x-vinster-internal and
-  // has already applied the guest limits, so the user check is skipped.
-  const internal = !!req.headers.get('x-vinster-internal')
-    && req.headers.get('x-vinster-internal') === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!authHeader && !internal) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-  }
+  const auth = await requireSignedIn(req);
+  if (auth instanceof Response) return auth;
 
   try {
-    // Resolve the user from the JWT — we need user_id to rate-limit per
-    // user, and we want to reject expired/invalid tokens before paying
-    // for a Claude call.
-    if (!internal) {
-      const userClient = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_ANON_KEY')!,
-        { global: { headers: { Authorization: authHeader! } } }
+    // Rate-limit check via service-role RPC. Fail open on infrastructure
+    // errors (logged) so a Supabase blip doesn't lock out legitimate users.
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+    const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
+      p_user_id: auth.userId,
+      p_function_name: 'ocr',
+      p_hourly_limit: OCR_HOURLY_LIMIT,
+      p_daily_limit: OCR_DAILY_LIMIT,
+    });
+    if (rlError) {
+      console.error('[ocr] rate-limit RPC failed (failing open):', rlError);
+    } else if (allowed === false) {
+      return new Response(
+        JSON.stringify({
+          error: 'rate_limit_exceeded',
+          message: "You've made a lot of scans recently — please try again in a few minutes.",
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } }
       );
-      const { data: { user }, error: userError } = await userClient.auth.getUser();
-      if (userError || !user) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-      }
-
-      // Rate-limit check via service-role RPC. Fail open on infrastructure
-      // errors (logged) so a Supabase blip doesn't lock out legitimate users.
-      const adminClient = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      );
-      const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
-        p_user_id: user.id,
-        p_function_name: 'ocr',
-        p_hourly_limit: OCR_HOURLY_LIMIT,
-        p_daily_limit: OCR_DAILY_LIMIT,
-      });
-      if (rlError) {
-        console.error('[ocr] rate-limit RPC failed (failing open):', rlError);
-      } else if (allowed === false) {
-        return new Response(
-          JSON.stringify({
-            error: 'rate_limit_exceeded',
-            message: "You've made a lot of scans recently — please try again in a few minutes.",
-          }),
-          { status: 429, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
     }
 
     const body = await req.json();

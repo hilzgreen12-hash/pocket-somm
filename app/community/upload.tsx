@@ -160,12 +160,7 @@ export default function CommunityUploadScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {!session ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Sign in to post</Text>
-          <Text style={styles.emptyBody}>Community uploads are saved to your account.</Text>
-        </View>
-      ) : isLoading ? (
+      {isLoading ? (
         <View style={styles.empty}>
           <ActivityIndicator color={colors.gold} />
         </View>

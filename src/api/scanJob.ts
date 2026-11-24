@@ -29,16 +29,13 @@ interface ScanJobResult {
   photosFailed?: number | null;
 }
 
-// A started job. pollToken is set for GUEST scans (no account, or an expired
-// login): their job can't be read from the table, so it's polled through
-// scan-start with this token instead.
-export interface StartedScanJob { jobId: string; pollToken: string | null }
+// A started job, read back from the scan_jobs table with the user's session.
+export interface StartedScanJob { jobId: string }
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 180000; // 3 min hard ceiling — well past a normal scan
 // A running job whose row hasn't moved for this long has lost its worker.
-// Kept under the photo ceiling above so it can fire before the timeout does
-// (scan-start allows guest jobs a little longer).
+// Kept under the photo ceiling above so it can fire before the timeout does.
 const STALLED_AFTER_MS = 150000;
 const STALLED_MESSAGE = 'This scan took too long to finish — it usually works on a second try.';
 
@@ -57,14 +54,12 @@ export async function startScanJob(input: ScanInput, params: ScanJobParams, clie
   // Give big uploads time: 30s plus ~10s per 300 KB, up to 90s.
   const bytes = 'images' in input ? input.images.reduce((n, b) => n + b.length, 0) : 'pdfBase64' in input ? input.pdfBase64.length : 0;
   const timeoutMs = Math.min(90_000, 30_000 + Math.round(bytes / 300_000) * 10_000);
-  // guestOk: this version can poll a guest job (see readJob).
-  const data = await invokeResilient('scan-start', { ...input, params, guestOk: true, clientRef }, { timeoutMs, retries: 2 }) as { jobId?: string; pollToken?: string | null };
+  const data = await invokeResilient('scan-start', { ...input, params, clientRef }, { timeoutMs, retries: 2 }) as { jobId?: string };
   if (!data?.jobId) throw new Error('Could not start the scan. Please try again.');
-  return { jobId: data.jobId, pollToken: data.pollToken ?? null };
+  return { jobId: data.jobId };
 }
 
-// Read one job's state: from the table for account holders, through scan-start
-// (with the poll token) for guests.
+// Read one job's state from the table.
 type JobState = {
   status: string; extracted_wines: any; result: any; error: string | null;
   failure?: string | null; photosSent?: number | null; photosFailed?: number | null;
@@ -72,11 +67,6 @@ type JobState = {
 };
 
 async function readJob(job: StartedScanJob): Promise<JobState | null> {
-  if (job.pollToken) {
-    try {
-      return await invokeResilient('scan-start', { action: 'poll', jobId: job.jobId, pollToken: job.pollToken }, { timeoutMs: 15000, retries: 1 }) as any;
-    } catch { return null; }
-  }
   const { data, error } = await supabase
     .from('scan_jobs')
     .select('status, extracted_wines, result, error, params, updated_at')
@@ -89,7 +79,7 @@ async function readJob(job: StartedScanJob): Promise<JobState | null> {
 
 // Report a failure that happened on the phone (before or while sending), with
 // its reference code, so it shows in the server logs. Best-effort.
-export function logScanClientError(input: { ref: string; stage: string; message: string; source: string; guest: boolean }): void {
+export function logScanClientError(input: { ref: string; stage: string; message: string; source: string }): void {
   void invokeResilient('scan-start', { action: 'client_error', ...input }, { timeoutMs: 8000, retries: 0 }).catch(() => {});
 }
 
@@ -104,8 +94,7 @@ export async function pollScanJob(
   const started = Date.now();
   let lastStatus = '';
   // Reads that keep coming back empty (the job can't be seen — e.g. a lost
-  // login mid-scan, or a rejected guest code) end the wait early instead of
-  // running the full ceiling.
+  // login mid-scan) end the wait early instead of running the full ceiling.
   let misses = 0;
   // When the row last changed, timed by the phone's own clock (comparing the
   // server's updated_at with the phone's time would trip on a phone whose
@@ -124,8 +113,7 @@ export async function pollScanJob(
       if (data.status !== lastStatus) { lastStatus = data.status; opts?.onStatus?.(data.status); }
       const stamp = `${data.status}|${data.updated_at ?? ''}`;
       if (stamp !== lastChange.stamp) lastChange = { stamp, at: Date.now() };
-      // Guest polls are checked by scan-start; an account's job is checked here.
-      if (!job.pollToken && data.status !== 'done' && data.status !== 'error' && Date.now() - lastChange.at > STALLED_AFTER_MS) {
+      if (data.status !== 'done' && data.status !== 'error' && Date.now() - lastChange.at > STALLED_AFTER_MS) {
         return { status: 'error', wines: null, recommendation: null, error: STALLED_MESSAGE, failure: 'stalled' };
       }
       if (data.status === 'done') {

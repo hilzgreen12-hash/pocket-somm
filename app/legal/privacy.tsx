@@ -8,7 +8,7 @@ import { fonts } from '../../src/constants/fonts';
 // for the App Store / Play Store submission. Edit both together so they
 // don't drift.
 
-const POLICY_VERSION = 'Version 1.0 · Last updated May 2026';
+const POLICY_VERSION = 'Version 1.2 · Last updated November 2026';
 const CONTACT_EMAIL = 'tellme@vinsterapp.com';
 
 interface Section { title: string; body: string }
@@ -20,7 +20,7 @@ const SECTIONS: Section[] = [
   },
   {
     title: 'What we collect',
-    body: 'Account details: your email address, password (hashed — we never see it in plain text), and any display name you choose.\n\nProfile preferences: wine preferences, recipe requirements, dietary needs, and any optional fields you fill in.\n\nContent you create: wines you add to your cellar and archive; tasting notes, restaurant reviews, scores, and photos you upload of wine lists or labels.\n\nAI-generated content: wine recommendations, recipes, drinking-window assessments, and personality sketches Vinster generates from your activity. These are stored on your account so you can revisit them.\n\nDevice and usage info: anonymous app version, OS version, and crash diagnostics provided by Expo / React Native.\n\nOptional location: when you write a wine review on Vinster, we may briefly use your device location (with your permission) to suggest a nearby city. We do not track or log your location otherwise.',
+    body: 'Account details: your email address, password (hashed — we never see it in plain text), and any display name you choose.\n\nProfile preferences: wine preferences, recipe requirements, dietary needs, and any optional fields you fill in.\n\nContent you create: wines you add to your cellar and archive; tasting notes, restaurant reviews, scores, and photos you upload of wine lists or labels.\n\nAI-generated content: wine recommendations, recipes, drinking-window assessments, and personality sketches Vinster generates from your activity. These are stored on your account so you can revisit them.\n\nDevice and usage info: your app version, phone platform (Android or iOS), the country and time zone set in your phone\'s settings, and when you last opened Vinster, saved with your account. This tells us where Vinster is used and which versions are still in use; it does not use GPS. Anonymous crash diagnostics are provided by Expo / React Native.\n\nWhere to Buy taps: when you tap Where to Buy on a wine, we record the wine, the time and your phone\'s country with your account. This shows us which wines people want to buy, and may be shared with wine merchants only as totals that never identify you.\n\nOptional location: when you write a wine review on Vinster, we may briefly use your device location (with your permission) to suggest a nearby city. We do not track or log your location otherwise.',
   },
   {
     title: 'How we use your data',
@@ -28,7 +28,7 @@ const SECTIONS: Section[] = [
   },
   {
     title: 'Third parties',
-    body: 'We use a small number of carefully chosen third-party services to run Vinster.\n\nSupabase (database, authentication, file storage, edge function compute): your account and content are stored on Supabase\'s managed infrastructure. Supabase is GDPR-compliant; data is hosted in EU regions where available.\n\nAnthropic (Claude API): we send wine list photos, label photos, and short summaries of your profile and activity to Anthropic\'s Claude API to generate recommendations, recipes, and personality sketches. Anthropic does not retain this data for training under their API terms.\n\nExpo (build and update infrastructure): Vinster is built on the Expo platform. Expo collects anonymous crash and performance data.\n\nWe do not sell your data, ever.',
+    body: 'We use a small number of carefully chosen third-party services to run Vinster.\n\nSupabase (database, authentication, file storage, edge function compute): your account and content are stored on Supabase\'s managed infrastructure. Supabase is GDPR-compliant; data is hosted in EU regions where available.\n\nAnthropic (Claude API): we send wine list photos, label photos, and short summaries of your profile and activity to Anthropic\'s Claude API to generate recommendations, recipes, and personality sketches. Anthropic does not retain this data for training under their API terms.\n\nExpo (build and update infrastructure): Vinster is built on the Expo platform. Expo collects anonymous crash and performance data.\n\nWine-Searcher: Where to Buy opens Wine-Searcher\'s website. We send it only the wine\'s name and vintage, never your account details; once there, Wine-Searcher\'s own privacy policy applies.\n\nWe do not sell your data, ever.',
   },
   {
     title: 'AI and your data',

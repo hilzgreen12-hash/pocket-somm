@@ -12,6 +12,7 @@
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import JSZip from 'npm:jszip';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -54,6 +55,9 @@ function docxXmlToText(xml: string): string {
 
 Deno.serve(async (req) => {
   try {
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+
     const { base64, kind } = await req.json().catch(() => ({}));
     if (typeof base64 !== 'string' || !base64) {
       return json({ error: 'base64 required' }, 400);

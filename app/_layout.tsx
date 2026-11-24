@@ -10,6 +10,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AppBottomBar } from '../src/components/AppBottomBar';
 import { FoundBannerHost } from '../src/components/FoundBanner';
 import { ScanCloudBackfillRunner } from '../src/components/ScanCloudBackfillRunner';
+import { SignedInGuard } from '../src/components/SignedInGuard';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '../src/hooks/useAuth';
 import * as Font from 'expo-font';
@@ -225,6 +226,7 @@ export default function RootLayout() {
             <Stack.Screen name="profile/observations" />
             <Stack.Screen name="profile/personality-archive" />
             <Stack.Screen name="wines/chosen" />
+            <Stack.Screen name="wines/where-to-buy" />
             <Stack.Screen name="recipes/chosen" />
             <Stack.Screen name="restaurants/reviews" />
             <Stack.Screen name="community/[category]" />
@@ -241,6 +243,7 @@ export default function RootLayout() {
           </View>
           <AppBottomBar />
           <ScanCloudBackfillRunner />
+          <SignedInGuard />
           </View>
           <StatusBar style="light" />
           <AppAlertHost />

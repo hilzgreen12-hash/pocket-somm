@@ -11,6 +11,7 @@
 // catalogue directly), so it now only ever returns catalogue rows — or nothing.
 
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -24,6 +25,9 @@ interface Result {
 
 Deno.serve(async (req) => {
   try {
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+
     const { query } = await req.json().catch(() => ({}));
     const q = typeof query === 'string' ? query.trim() : '';
     if (q.length < 3) return json({ results: [] }, 200);

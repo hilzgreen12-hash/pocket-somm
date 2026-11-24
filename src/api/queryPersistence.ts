@@ -35,6 +35,7 @@ const PERSISTED_KEYS = [
   'chosen-wines', 'scan-archive', 'labels', 'lineup-archives',
   'insights-archived-month', 'insights-restos-month', 'latest-alter-ego-sketch', 'alter-ego-sketches',
   'cellar-locations-ext', 'home-insights-placements',
+  'where-to-buy-recent',
   // Pair tab cookbook carousel
   'chef-archive-collections', 'cookbook-favourites-cover', 'chef-label-sessions',
   // Image look-ups: cached file:// uris and web-found labels (saves a paid search per tile per open)

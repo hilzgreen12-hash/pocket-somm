@@ -1,14 +1,12 @@
-import { useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { showAlert } from '../../src/components/AppAlert';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { LineupsCarousel } from '../../src/components/LineupsCarousel';
 import { WineReviewsCarousel, RestaurantReviewsCarousel } from '../../src/components/ReviewCarousels';
-import { useAuth } from '../../src/hooks/useAuth';
+import { useAwaitingReviewPrompt } from '../../src/hooks/useAwaitingReviewPrompt';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -19,18 +17,7 @@ And Your Lineups — archive a night of wines with a photo, a note and the bottl
 export default function ScanTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(55, height * 0.095);
-  const { session } = useAuth();
-
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
-  const pendingActionRef = useRef<(() => void) | null>(null);
-
-  // Everything on this tab is account-only (your reviews, library, sketches),
-  // so a guest gets the create-account prompt with no "continue" escape.
-  function requireAccount(action: () => void) {
-    if (!session) { pendingActionRef.current = null; setSignInPromptVisible(true); return; }
-    action();
-  }
-  function dismissSignInPrompt() { setSignInPromptVisible(false); pendingActionRef.current = null; }
+  useAwaitingReviewPrompt();
 
   // Add a Lineup → photograph one now, or upload a photo from the library.
   function chooseLineupSource() {
@@ -46,7 +33,7 @@ export default function ScanTab() {
 
   // Top-right "+ Add" — choose which kind of review, then jump to that flow.
   function openAddReviewChooser() {
-    requireAccount(() => showAlert({
+    showAlert({
       title: 'Add a Review',
       body: 'What would you like to review?',
       buttons: [
@@ -55,7 +42,7 @@ export default function ScanTab() {
         { text: 'Add a Lineup', onPress: () => setTimeout(chooseLineupSource, 350) },
         { text: 'Cancel', style: 'cancel' },
       ],
-    }));
+    });
   }
 
   return (
@@ -84,14 +71,14 @@ export default function ScanTab() {
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Your Wine Reviews</Text>
       </View>
-      <WineReviewsCarousel onViewAll={() => requireAccount(() => router.push('/wines/chosen'))} />
+      <WineReviewsCarousel onViewAll={() => router.push('/wines/chosen')} />
 
       <View style={styles.carouselDivider} />
 
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Your Restaurant Reviews</Text>
       </View>
-      <RestaurantReviewsCarousel onViewAll={() => requireAccount(() => router.push('/restaurants/reviews'))} />
+      <RestaurantReviewsCarousel onViewAll={() => router.push('/restaurants/reviews')} />
 
       <View style={styles.carouselDivider} />
 
@@ -101,16 +88,7 @@ export default function ScanTab() {
           A record of your most epic wine exploits.
         </Text>
       </View>
-      <LineupsCarousel max={8} onViewAll={() => requireAccount(() => router.push('/cellar/lineups'))} />
-
-      <SignInPromptModal
-        visible={signInPromptVisible}
-        allowContinue={false}
-        onDismiss={dismissSignInPrompt}
-        onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
-        onContinue={dismissSignInPrompt}
-      />
+      <LineupsCarousel max={8} onViewAll={() => router.push('/cellar/lineups')} />
     </ScrollView>
     </TabSwipeView>
   );

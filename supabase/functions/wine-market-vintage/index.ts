@@ -1,8 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
-
-// Per guest phone, per hour and per day: room for the market and rarity notes on their two scans.
-const GUEST_LIMITS = { hourly: 6, daily: 6 };
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -119,6 +117,35 @@ Be specific to this wine and vintage. Never invent scores or prices not in the t
 Return ONLY JSON: {"verdict": "...", "drinkNow": {"vintages": [2010], "reason": "..."}, "layDown": {"vintages": [2019], "reason": "..."}}`;
 }
 
+// Format value: what ONE bottle of this wine is worth in a size other than 75cl.
+// Formats aren't priced by volume — a magnum of a sought-after wine often costs
+// more than two bottles, large formats are rare — so the 75cl price is a
+// reference only, never multiplied.
+const FORMAT_NAMES: Record<number, string> = {
+  187: 'quarter bottle (18.7cl)', 375: 'half bottle (37.5cl)', 500: '50cl bottle', 1500: 'magnum (1.5L)',
+  3000: 'double magnum / Jeroboam (3L)', 4500: 'Rehoboam (4.5L)', 5000: '5L bottle', 6000: 'Imperial / Methuselah (6L)',
+  9000: 'Salmanazar (9L)', 12000: 'Balthazar (12L)', 15000: 'Nebuchadnezzar (15L)',
+};
+const formatName = (ml: number) => FORMAT_NAMES[ml] ?? `${ml / 10}cl bottle`;
+
+function buildFormatPrompt(b: any, ml: number): string {
+  const identity = [b.producer, b.wineName, b.vintage].filter(Boolean).join(' ') + (b.region ? `, ${b.region}` : '');
+  const ref = b.reference && Number(b.reference.value) > 0
+    ? `Market price of a standard 75cl bottle of this wine and vintage: ${Math.round(Number(b.reference.value))} ${b.currency}${b.reference.low && b.reference.high ? ` (range ${Math.round(Number(b.reference.low))}–${Math.round(Number(b.reference.high))})` : ''}, from ${b.reference.source === 'wine-searcher' ? "Wine-Searcher's market data" : "Vinster's own estimate"}.`
+    : 'No 75cl market price is available.';
+  return `You are a fine-wine merchant pricing large and small formats.
+
+Wine: ${identity}
+Format: ${formatName(ml)}
+${ref}
+
+RECOGNITION GATE — set "identified" true ONLY if you genuinely know this producer and this specific wine. If not, return exactly {"identified": false, "estimatedValue": null, "low": null, "high": null, "confidence": null}. Never price a wine you don't know.
+
+Estimate the current retail value in ${b.currency} of ONE ${formatName(ml)} of this wine and vintage. Formats are NOT priced by volume: magnums and larger formats of sought-after wines are made in small numbers, age more slowly and are prized by collectors, so they often sell for more than their volume in 75cl bottles; large formats can trade far higher still. Half bottles usually cost more than half a bottle. Everyday wines in big formats may carry little or no premium. Use the 75cl price as your reference point and apply the premium or discount this format genuinely commands for THIS wine — never simply multiply by volume.
+
+Return ONLY JSON: {"identified": true, "estimatedValue": <integer>, "low": <integer>, "high": <integer>, "confidence": "high" | "medium" | "low"}`;
+}
+
 // When the wine name is blank or just repeats the producer ("Il Marroneto" /
 // "Il Marroneto"), it's the producer's appellation wine — borrow the
 // appellation from an "Appellation, Region, Country" region so the model
@@ -136,7 +163,9 @@ function lookupWineName(producer: unknown, wineName: unknown, region: unknown): 
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'wine-market-vintage', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const limited = await checkRateLimit(auth.userId, 'wine-market-vintage', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     const body = await req.json();
@@ -164,6 +193,32 @@ Deno.serve(async (req) => {
         return vintages.length ? { vintages, reason: String(p?.reason ?? '').trim() } : null;
       };
       return new Response(JSON.stringify({ verdict: verdict || null, drinkNow: pickOf(parsed?.drinkNow), layDown: pickOf(parsed?.layDown) }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (mode === 'format-value') {
+      const ml = Number(body.bottleSizeMl);
+      const none = { identified: false, estimatedValue: null, low: null, high: null, confidence: null };
+      if (!Number.isFinite(ml) || ml <= 0 || ml === 750) return new Response(JSON.stringify(none), { headers: { 'Content-Type': 'application/json' } });
+      const r = await client.messages.create({
+        model: 'claude-sonnet-5-5',
+        max_tokens: 4000,
+        messages: [{ role: 'user', content: buildFormatPrompt({ ...body, producer, wineName, region, vintage, currency: currency ?? 'GBP' }, ml) }],
+      });
+      const t = r.content.find((x) => x.type === 'text')?.text ?? '';
+      const m = t.match(/\{[\s\S]*\}/);
+      const parsed = m ? JSON.parse(m[0]) : null;
+      const value = Math.round(Number(parsed?.estimatedValue));
+      if (parsed?.identified !== true || !Number.isFinite(value) || value <= 0) {
+        return new Response(JSON.stringify(none), { headers: { 'Content-Type': 'application/json' } });
+      }
+      // A range that doesn't hold the value is dropped rather than shown.
+      const low = Math.round(Number(parsed.low));
+      const high = Math.round(Number(parsed.high));
+      const rangeOk = Number.isFinite(low) && Number.isFinite(high) && low > 0 && low <= value && value <= high;
+      const confidence = ['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'low';
+      return new Response(JSON.stringify({
+        identified: true, estimatedValue: value, low: rangeOk ? low : null, high: rangeOk ? high : null, confidence,
+      }), { headers: { 'Content-Type': 'application/json' } });
     }
 
     if (mode === 'rarity') {

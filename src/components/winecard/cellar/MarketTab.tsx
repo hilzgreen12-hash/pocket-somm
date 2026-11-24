@@ -5,10 +5,11 @@ import { s } from './styles';
 import { fmtDay } from './format';
 import { showAlert } from '../../AppAlert';
 import { useCellar } from '../../../hooks/useCellar';
+import { WhereToBuyCard } from '../WhereToBuyCard';
 import { usePreferences } from '../../../hooks/usePreferences';
 import { stampPurchasePriceDate } from '../../../api/cellar';
 import { normalisePriceText } from '../../../utils/priceInput';
-import { PER_75CL, bottleValue } from '../../../utils/bottleValue';
+import { perBottle, isStandardBottle } from '../../../utils/bottleValue';
 import { vintageVerdict, tooFewVintagesNote, ordinal } from '../../../utils/wineCardInsights';
 import { formatCurrency, currencySymbol } from '../../../constants/currency';
 import { colors } from '../../../constants/theme';
@@ -125,6 +126,8 @@ function VintageComparison({ wine, market, canEdit, currency }: { wine: CellarWi
     const ai = market.verdict;
     return (
       <>
+        {/* The table compares vintages at 75cl, whatever size this bottle is. */}
+        {!isStandardBottle(wine.bottle_size_ml) ? <Text style={wc.Small}>Wine-Searcher prices below are for standard 75cl bottles.</Text> : null}
         <View style={[wc.TRow, wc.THead]}>
           <Text style={[wc.TCell, wc.TYear, wc.Label]}>Vintage</Text>
           <Text style={[wc.TCell, wc.Label]}>Score</Text>
@@ -223,10 +226,9 @@ export function MarketTab({ wine, market, intel, canEdit, currency }: {
   const isArchived = !!wine.archived_at;
   const ev = wine.estimated_value != null ? Number(wine.estimated_value) : null;
   const pp = wine.purchase_price != null ? Number(wine.purchase_price) : null;
-  // The purchase price is for this bottle at its size; the value is per 75cl.
-  const evBottle = bottleValue(wine);
+  // Both are for this bottle at its own size.
   const sameCurrency = (wine.purchase_price_currency ?? currency) === (wine.estimated_value_currency ?? currency);
-  const vsMarket = pp && evBottle != null && sameCurrency ? { pct: Math.round(((evBottle - pp) / pp) * 100), diff: evBottle - pp } : null;
+  const vsMarket = pp && ev != null && sameCurrency ? { pct: Math.round(((ev - pp) / pp) * 100), diff: ev - pp } : null;
   const rarity = wine.market_vintage_note?.rarity;
 
   return (
@@ -239,7 +241,7 @@ export function MarketTab({ wine, market, intel, canEdit, currency }: {
             <Text style={[wc.Value, s.statValueMuted]}>Estimating…</Text>
           ) : ev != null ? (
             <>
-              <Text style={wc.Value}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={s.per75}>{PER_75CL}</Text>{canEdit ? <Text style={s.estimateUpdateLink}> (update)</Text> : null}</Text>
+              <Text style={wc.Value}>{formatCurrency(ev, wine.estimated_value_currency, { decimals: 0 })}<Text style={s.per75}>{perBottle(wine.bottle_size_ml)}</Text>{canEdit ? <Text style={s.estimateUpdateLink}> (update)</Text> : null}</Text>
               {wine.estimated_value_low != null && wine.estimated_value_high != null ? (
                 <Text style={wc.Small}>Range {formatCurrency(Number(wine.estimated_value_low), wine.estimated_value_currency, { decimals: 0 })}–{formatCurrency(Number(wine.estimated_value_high), wine.estimated_value_currency, { decimals: 0 })}</Text>
               ) : null}
@@ -266,6 +268,8 @@ export function MarketTab({ wine, market, intel, canEdit, currency }: {
           <Text style={wc.VsValue}>{vsMarket.pct > 0 ? '+' : ''}{vsMarket.pct}% <Text style={wc.VsDiff}>({vsMarket.diff >= 0 ? '+' : '−'}{formatCurrency(Math.abs(vsMarket.diff), wine.estimated_value_currency, { decimals: 0 })})</Text></Text>
         </View>
       ) : null}
+
+      <WhereToBuyCard wine={wine} source="wine-card" />
 
       {!isArchived && (canEdit || market.rows) ? (
         <View style={wc.Card}>

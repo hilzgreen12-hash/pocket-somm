@@ -9,7 +9,6 @@ import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { buildRecipeHtml } from '../../src/utils/recipeHtml';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { PairMasthead } from '../../src/components/PairMasthead';
 import { MessageScreen } from '../../src/components/MessageScreen';
@@ -19,7 +18,6 @@ import { fonts } from '../../src/constants/fonts';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import type { Pairing } from '../../src/types/wine';
-import { handleGuestLimit } from '../../src/services/guestLimit';
 
 function PairingCard({
   pairing,
@@ -312,7 +310,6 @@ export default function ChefResultsScreen() {
     return 'idle';
   }
   const [renderedAt] = useState(() => new Date().toISOString());
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
   // Regen modal — opens when the user taps "Not quite — generate
@@ -381,7 +378,6 @@ export default function ChefResultsScreen() {
         return Array.from(merged);
       });
     } catch (err) {
-      if (handleGuestLimit(err)) return;
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
       showAlert({ title: 'Could not regenerate', body: 'Please try again in a moment.' });
     } finally {
@@ -403,10 +399,6 @@ export default function ChefResultsScreen() {
     // this a user who re-opened the result via View Last Result could
     // tap Quick Save and create a duplicate row.
     if (getSaveState(index) !== 'idle') return;
-    if (!session) {
-      setSignInPromptVisible(true);
-      return;
-    }
     setPairingSaveStates((s) => ({ ...s, [index]: 'saving' }));
     try {
       await saveLabelSession.mutateAsync({
@@ -584,14 +576,6 @@ export default function ChefResultsScreen() {
         </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
-
-      <SignInPromptModal
-        visible={signInPromptVisible}
-        onDismiss={() => setSignInPromptVisible(false)}
-        onSignIn={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
-        onContinue={() => setSignInPromptVisible(false)}
-      />
 
       {/* Recipe-notes popup — opened from the "View/Edit Your Recipe Notes"
           link on the saved-recipe card. Replaces the old inline notes

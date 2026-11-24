@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { HOUSE_RULES } from '../_shared/houseRules.ts';
 
@@ -60,7 +61,9 @@ Respond with ONLY one of these JSON shapes:
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'discover-voice', HOURLY_LIMIT, DAILY_LIMIT);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const limited = await checkRateLimit(auth.userId, 'discover-voice', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     const { transcript, wines } = await req.json();

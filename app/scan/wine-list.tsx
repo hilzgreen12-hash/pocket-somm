@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { HelpButton } from '../../src/components/HelpButton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -20,7 +19,6 @@ import { StylePicker } from '../../src/components/preferences/StylePicker';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
 import { PreferredCountryInput } from '../../src/components/preferences/PreferredCountryInput';
-import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -31,7 +29,6 @@ It weighs each one against your preferences — wine type, style, what you're ea
 Record and/or review the bottle you ordered, as well as the restaurant you enjoyed it in, which all quietly helps Vinster know you better. Share results with friends and the community.`;
 
 export default function WineListScreen() {
-  const { session } = useAuth();
   // upload=1 / online=1 / shared=1 say how the list will arrive (see `mode`).
   const { upload: uploadParam, online: onlineParam, shared: sharedParam } = useLocalSearchParams<{ upload?: string; online?: string; shared?: string }>();
   const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset } = useScanStore();
@@ -85,10 +82,7 @@ export default function WineListScreen() {
     : 'Any';
 
   const [isUploading, setIsUploading] = useState(false);
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
-  const [signInPromptShown, setSignInPromptShown] = useState(false);
   const [introVisible, setIntroVisible] = useState(false);
-  const pendingActionRef = useRef<(() => void) | null>(null);
   const lastSyncedBudgetRef = useRef<number | null | undefined>(undefined);
 
   // Arriving straight through to Upload / Find Online: skip the intro on that
@@ -159,45 +153,6 @@ export default function WineListScreen() {
     };
   }
 
-  function maybeShowSignInPrompt(proceed: () => void): boolean {
-    if (!session && !signInPromptShown) {
-      setSignInPromptShown(true);
-      pendingActionRef.current = proceed;
-      setSignInPromptVisible(true);
-      return true;
-    }
-    return false;
-  }
-
-  // Dismissing the prompt (tap X or outside) is treated as "ignore the
-  // message and carry on" — the action the user originally tapped still
-  // runs. Sign In / Create Account are the only paths that interrupt.
-  function dismissSignInPrompt() {
-    setSignInPromptVisible(false);
-    const action = pendingActionRef.current;
-    pendingActionRef.current = null;
-    // Defer until the sign-in modal has finished fading out. Launching the image
-    // picker while a modal is still dismissing silently fails to present on iOS —
-    // this was the guest "Upload Wine List" bug. (Same 350ms defer the label
-    // upload uses in app/(tabs)/scan.tsx.)
-    if (action) setTimeout(action, 350);
-  }
-
-  // Sign In / Create Account drop the tapped action — running it would open
-  // the camera or picker over the sign-in screen.
-  function goToAuth(path: '/(auth)/sign-in' | '/(auth)/sign-up') {
-    pendingActionRef.current = null;
-    setSignInPromptVisible(false);
-    router.push(path);
-  }
-
-  function continueWithoutAccount() {
-    setSignInPromptVisible(false);
-    const action = pendingActionRef.current;
-    pendingActionRef.current = null;
-    if (action) setTimeout(action, 350);
-  }
-
   // Read Wine List ignores a second tap for a moment, so a double tap can't
   // open the camera twice or start two (paid) scans.
   const lastStartRef = useRef(0);
@@ -209,43 +164,39 @@ export default function WineListScreen() {
   }
 
   function handleScan() {
-    const go = () => { setPreferences(buildPreferences()); useScanStore.getState().clearCameraPages(); router.push('/scan/camera'); };
-    if (maybeShowSignInPrompt(go)) return;
-    go();
+    setPreferences(buildPreferences());
+    useScanStore.getState().clearCameraPages();
+    router.push('/scan/camera');
   }
 
   async function handleScreenshot() {
     if (isUploading) return;
-    const go = async () => {
-      if (!(await ensureMediaPermission('library'))) return;
-      setIsUploading(true);
-      try {
-        const result = await launchImageLibrary({
-          mediaTypes: ['images'],
-          allowsMultipleSelection: true,
-          // Up to 4 pages (each may be sent as a few tiles; see prepareScanTiles).
-          selectionLimit: 4,
-          quality: 1,
-        });
-        if (!result.canceled && result.assets.length > 0) {
-          setPreferences(buildPreferences());
-          if (result.assets.length === 1) {
-            setImage(result.assets[0].uri, 'upload');
-            router.push('/scan/preview');
-          } else {
-            setImageUris(result.assets.map((a) => a.uri), 'upload');
-            router.push('/scan/extracting');
-          }
+    if (!(await ensureMediaPermission('library'))) return;
+    setIsUploading(true);
+    try {
+      const result = await launchImageLibrary({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        // Up to 4 pages (each may be sent as a few tiles; see prepareScanTiles).
+        selectionLimit: 4,
+        quality: 1,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        setPreferences(buildPreferences());
+        if (result.assets.length === 1) {
+          setImage(result.assets[0].uri, 'upload');
+          router.push('/scan/preview');
+        } else {
+          setImageUris(result.assets.map((a) => a.uri), 'upload');
+          router.push('/scan/extracting');
         }
-      } catch (err) {
-        console.error('[Scan] Image picker failed:', err);
-        showAlert({ title: 'Upload failed', body: 'Could not open the photo library. Please try again.' });
-      } finally {
-        setIsUploading(false);
       }
-    };
-    if (maybeShowSignInPrompt(go)) return;
-    await go();
+    } catch (err) {
+      console.error('[Scan] Image picker failed:', err);
+      showAlert({ title: 'Upload failed', body: 'Could not open the photo library. Please try again.' });
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   // Find Online: the user has picked a restaurant's list (find-online) and lands
@@ -402,14 +353,6 @@ export default function WineListScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <SignInPromptModal
-        visible={signInPromptVisible}
-        onDismiss={dismissSignInPrompt}
-        onSignIn={() => { goToAuth('/(auth)/sign-in'); }}
-        onCreateAccount={() => { goToAuth('/(auth)/sign-up'); }}
-        onContinue={continueWithoutAccount}
-      />
-
     </KeyboardAwareScrollView>
     </View>
   );
@@ -477,10 +420,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: 4,
   },
-  accordionRowActive: {
-    borderColor: colors.gold,
-    backgroundColor: 'rgba(212,176,96,0.08)',
-  },
   accordionLeft: {
     flex: 1,
     alignItems: 'center',
@@ -495,9 +434,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#FFFFFF',
     textAlign: 'center',
-  },
-  questionActive: {
-    color: colors.gold,
   },
   selectionSummary: {
     fontFamily: fonts.bodyMedium,
@@ -520,11 +456,6 @@ const styles = StyleSheet.create({
   pickerWrap: {
     marginTop: spacing.sm,
   },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-  },
   // Find Online: the chosen list, shown above "Read Wine List".
   onlineCard: { borderWidth: 1, borderColor: 'rgba(224,184,74,0.45)', borderRadius: 14, padding: spacing.md, marginBottom: spacing.md, alignItems: 'center' },
   onlineLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
@@ -539,15 +470,6 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
     textAlign: 'center',
     marginTop: spacing.sm,
-  },
-  buttonHalf: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    alignItems: 'center',
   },
   buttonHalfText: {
     fontFamily: fonts.headingSemibold,

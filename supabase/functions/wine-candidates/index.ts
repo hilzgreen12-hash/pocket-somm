@@ -10,10 +10,8 @@
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
-
-// Per guest phone, per hour and per day: room for the occasional "which wine is this?" list on their two scans.
-const GUEST_LIMITS = { hourly: 4, daily: 4 };
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -55,6 +53,9 @@ function cuveeOnly(producer: string, wineName: string): string {
 
 Deno.serve(async (req) => {
   try {
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+
     const { producer, region, wineName, vintage } = await req.json().catch(() => ({}));
     if (!producer || !String(producer).trim()) return json({ candidates: [] }, 200);
 
@@ -79,7 +80,7 @@ Deno.serve(async (req) => {
 
     // 2) FALLBACK: LLM, only when the catalog knows nothing of this producer.
     // Only this paid step counts towards the usage limit.
-    const limited = await checkRateLimit(req, 'wine-candidates', 30, 100, GUEST_LIMITS);
+    const limited = await checkRateLimit(auth.userId, 'wine-candidates', 30, 100);
     if (limited) return limited;
     const prompt = `A wine label was scanned and identified as:
 - Producer: "${producer ?? ''}"

@@ -82,7 +82,7 @@ export default function ChefCameraScreen() {
       if (!(await ensureConnectionForUpload())) { setPreviewUri(null); return; }
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
-      const details = await scanLabel(base64, 'pair');
+      const details = await scanLabel(base64);
       setWineDetails(details);
       router.replace('/chef/confirm');
     } catch (err) {

@@ -65,10 +65,6 @@ export default function RecipeFullScreen() {
 
   async function handleAddToCookbook() {
     if (!wine || !pairing || saveState !== 'idle' || isSaved) return;
-    if (!session) {
-      showAlert({ title: 'Sign in to save', body: 'Create a free account or sign in to save recipes to Your Cookbook.' });
-      return;
-    }
     setSaveState('saving');
     try {
       // Save just this one recipe as its own cookbook entry (mirrors the Quick

@@ -1,9 +1,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
-
-// Per guest phone, per hour and per day: room for the occasional name fix on their two scans.
-const GUEST_LIMITS = { hourly: 4, daily: 4 };
 
 // Live "which real wine did they mean?" lookup — the last resort before Vinster
 // says it couldn't find a wine. Called only when Wine Intel's identity gate
@@ -14,6 +12,10 @@ const GUEST_LIMITS = { hourly: 4, daily: 4 };
 // model cites a page that the web search actually returned — so it can't answer
 // from memory or invent a wine. Accepted wines are added to wines_catalog so the
 // next lookup is instant (catalogue + sound-alike match, no web search).
+//
+// It also reports the retail prices and critic scores those pages show, each
+// tied to a page the search returned, so Wine Intel can ground a wine nobody
+// else lists (no Wine-Searcher record) in Vinster's own research.
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -41,7 +43,9 @@ const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'resolve-wine', HOURLY_LIMIT, DAILY_LIMIT, GUEST_LIMITS);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const limited = await checkRateLimit(auth.userId, 'resolve-wine', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     const { producer, wineName, region, vintage } = await req.json().catch(() => ({}));
@@ -66,15 +70,19 @@ Accept a wine ONLY if BOTH are true:
 2. It genuinely sounds/looks like what the user gave — not merely a famous wine from the same region.
 If no real wine meets both, it is NOT found. Never guess, never answer from memory.
 
+When found, also note what the pages you found show for this wine: retail prices per 75cl bottle (prefer this vintage) and published critic scores out of 100. Include ONLY figures you saw on a page you found, each with that page's URL. Use [] when there are none — never estimate here.
+
 Return ONLY JSON (no prose):
-{"found": true, "producer": "<correct producer name>", "wineName": "<cuvée, or null if the wine is the producer's eponymous wine>", "region": "<region / appellation>", "grape": "<grape or blend, or null>", "style": "Red"|"White"|"Rosé"|"Sparkling"|"Fortified"|null, "sourceUrl": "<URL of the page that confirms it>"}
+{"found": true, "producer": "<correct producer name>", "wineName": "<cuvée, or null if the wine is the producer's eponymous wine>", "region": "<region / appellation>", "grape": "<grape or blend, or null>", "style": "Red"|"White"|"Rosé"|"Sparkling"|"Fortified"|null, "sourceUrl": "<URL of the page that confirms it>",
+ "prices": [{"amount": <number>, "currency": "<ISO code, e.g. EUR>", "vintage": "<vintage it's for, or null>", "url": "<page URL>"}],
+ "scores": [{"critic": "<critic or publication>", "score": <number out of 100>, "vintage": "<vintage it's for, or null>", "url": "<page URL>"}]}
 or {"found": false}`;
 
     const resp: any = await client.messages.create({
       model: 'claude-sonnet-5-5',
       max_tokens: 6000,
       thinking: { type: 'between_tools' } as any,
-      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 4 }] as any,
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }] as any,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -106,6 +114,17 @@ or {"found": false}`;
       style: str(out.style),
     };
 
+    // Only figures from pages the search really returned, within sane bounds.
+    const cited = (u: unknown) => typeof u === 'string' && seen.has(urlKey(u));
+    const prices = (Array.isArray(out.prices) ? out.prices : [])
+      .filter((p: any) => cited(p?.url) && Number(p?.amount) > 0 && /^[A-Z]{3}$/.test(String(p?.currency ?? '')))
+      .slice(0, 6)
+      .map((p: any) => ({ amount: Number(p.amount), currency: String(p.currency), vintage: str(p.vintage), url: p.url as string }));
+    const scores = (Array.isArray(out.scores) ? out.scores : [])
+      .filter((x: any) => cited(x?.url) && Number(x?.score) >= 50 && Number(x?.score) <= 100 && str(x?.critic))
+      .slice(0, 6)
+      .map((x: any) => ({ critic: str(x.critic)!, score: Number(x.score), vintage: str(x.vintage), url: x.url as string }));
+
     // Add to the catalogue so the next lookup is instant. Best-effort.
     try {
       const key = wine.wineName ? `${norm(wine.producer)}|${norm(wine.wineName)}` : norm(wine.producer);
@@ -128,7 +147,7 @@ or {"found": false}`;
       console.error('resolve-wine: catalogue insert failed', e instanceof Error ? e.message : e);
     }
 
-    return json({ found: true, ...wine, sourceUrl: url });
+    return json({ found: true, ...wine, sourceUrl: url, prices, scores });
   } catch (err) {
     console.error('resolve-wine error:', err instanceof Error ? err.message : String(err));
     return json({ found: false });

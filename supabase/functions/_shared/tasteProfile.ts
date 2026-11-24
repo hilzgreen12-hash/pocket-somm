@@ -39,14 +39,14 @@ export function composeProfileSummary(told: ToldStatement[], observations: Obser
   return sections.join('\n');
 }
 
-// The caller's profile_summary, or '' for a guest, a user with no profile yet,
-// or any failure. Never throws and never holds a request up for long: this is a
+// The caller's profile_summary, or '' when there's no profile yet or on any
+// failure. Never throws and never holds a request up for long: this is a
 // nice-to-have on top of every recommendation, not a requirement.
 export async function getTasteProfile(req: Request): Promise<string> {
   try {
     const auth = req.headers.get('Authorization');
     const userId = auth ? jwtSubject(auth) : null;
-    if (!userId) return ''; // a guest (the app's public key) has no profile
+    if (!userId) return '';
     const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: auth! } },
     });

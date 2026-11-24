@@ -1,7 +1,9 @@
 import { fetchWinePrice } from '../api/wine-searcher';
-import { getWineIntelligence, resolveWine } from '../api/label';
+import { getWineIntelligence, resolveWine, type ResolvedWine, type WebResearch } from '../api/label';
 import { fetchWineFacts } from '../api/wineFacts';
-import { wineQueryName, wineQueryAltName } from '../utils/wineIdentity';
+import { estimateFormatValue } from '../api/wineExtras';
+import { isStandardBottle } from '../utils/bottleValue';
+import { wineQueryName, wineQueryAltName, looseWineMatch } from '../utils/wineIdentity';
 import { withBordeauxInfo } from '../constants/bordeauxClassification';
 import type { GrapeVariant, PricingData, WineDetailsComplete, WineIntelligence } from '../types/wine';
 
@@ -30,6 +32,28 @@ class WineNotFoundError extends Error {
 }
 export function isWineNotFound(e: unknown): boolean {
   return e instanceof Error && e.name === 'WineNotFoundError';
+}
+
+// Whether the wine the web lookup found is the one asked about, written another
+// way ("Les Filles d'Amàlia Les Prunes" under its estate, Celler del Roure) —
+// not a different wine the name was mistaken for.
+export function isSameWine(asked: WineDetailsComplete, found: { producer: string; wineName: string | null }): boolean {
+  return looseWineMatch(
+    { producer: asked.producer, wineName: asked.wineName, vintage: asked.vintage },
+    { producer: found.producer, wineName: found.wineName, vintage: asked.vintage },
+  );
+}
+
+// The asked-for details under the found wine's correct names.
+function asResolved(wine: WineDetailsComplete, found: ResolvedWine): WineDetailsComplete {
+  return {
+    ...wine,
+    producer: found.producer,
+    wineName: found.wineName,
+    region: found.region ?? wine.region,
+    grape: wine.grape ?? found.grape,
+    style: wine.style ?? found.style,
+  };
 }
 
 // When Vinster recognised a garbled name (dictation / OCR), return the details
@@ -137,15 +161,16 @@ export interface VintageComparisonRow {
 //
 // Which years: for a wine with a vintage, the CLOSEST vintages Wine-Searcher
 // lists — 1999, 2001, 1998, 2002… around a 2000 — until COMPARISON_NEIGHBOURS
-// are found. A wine with no vintage compares the most recent years. Each new
-// (wine, vintage) is a paid lookup, so the walk is capped at COMPARISON_LOOKUPS.
-const COMPARISON_NEIGHBOURS = 4;
-const COMPARISON_LOOKUPS = 12;
+// are found, so the table shows eight vintages with the user's own. A wine
+// with no vintage compares the most recent years. Each new (wine, vintage) is
+// a paid lookup, so the walk is capped at COMPARISON_LOOKUPS.
+const COMPARISON_NEIGHBOURS = 7;
+const COMPARISON_LOOKUPS = 16;
 const COMPARISON_REACH = 15; // years either side of the vintage
 
 function comparisonYears(scannedVintage: number | null, lastVintage: number): number[] {
   if (scannedVintage == null) {
-    return Array.from({ length: 8 }, (_, i) => lastVintage - i);
+    return Array.from({ length: COMPARISON_LOOKUPS }, (_, i) => lastVintage - i);
   }
   const years = [scannedVintage];
   for (let d = 1; d <= COMPARISON_REACH; d++) {
@@ -162,13 +187,13 @@ export async function fetchVintageComparison(
   // Appellation fallback (wineQueryAltName): tried only if the plain name finds
   // no vintages at all.
   altName?: string | null,
-): Promise<VintageComparisonRow[]> {
+): Promise<VintageComparison> {
   const scanned = scannedVintage != null && Number.isFinite(scannedVintage) ? scannedVintage : null;
   const candidates = comparisonYears(scanned, new Date().getFullYear() - 1);
   const rows: VintageComparisonRow[] = [];
   let lookups = 0;
   let unavailable = 0;
-  const enough = () => rows.filter((r) => r.vintage !== scanned).length >= COMPARISON_NEIGHBOURS;
+  const enough = () => rows.filter((r) => r.vintage !== scanned).length >= (scanned == null ? COMPARISON_NEIGHBOURS + 1 : COMPARISON_NEIGHBOURS);
   // Small batches keep the Wine-Searcher request rate modest and let the walk
   // stop as soon as enough nearby vintages are found.
   const BATCH = 3;
@@ -189,8 +214,14 @@ export async function fetchVintageComparison(
   // callers say "try again later" and never save an empty table.
   if (rows.length === 0 && unavailable >= Math.ceil(lookups / 2)) throw new WineSearcherUnavailableError();
   if (rows.length === 0 && altName && altName.toLowerCase() !== queryName.toLowerCase()) return fetchVintageComparison(altName, currency, scannedVintage, null);
-  return rows;
+  // Some years went unasked (Wine-Searcher down or its daily limit reached), so
+  // a short table may just be missing them — callers say so and don't save it.
+  return { rows, incomplete: unavailable > 0 && !enough() };
 }
+
+export type VintageComparison = { rows: VintageComparisonRow[]; incomplete: boolean };
+
+export const VINTAGES_INCOMPLETE_NOTE = "Wine-Searcher's daily limit was reached, so not every vintage could be checked. Tap Refresh later to complete the table.";
 
 class WineSearcherUnavailableError extends Error {
   constructor() { super("Wine-Searcher isn't responding right now."); this.name = 'WineSearcherUnavailableError'; }
@@ -237,6 +268,8 @@ interface WineValuation {
 export async function valueWine(
   wine: WineDetailsComplete,
   currency: string = 'GBP',
+  // Set on the retry after a web lookup (so it can't loop): what it found.
+  research: WebResearch | null = null,
 ): Promise<WineValuation> {
   // Build the Wine-Searcher query from producer + wine name for the best match.
   const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
@@ -248,14 +281,20 @@ export async function valueWine(
 
   // Claude fills drinking window, tasting notes, grape, (anchored) score, and a
   // canonical Wine-Searcher search name we fall back to when the raw query misses.
-  const intel = await getWineIntelligence(wine, currency, ...scoreAnchor(first, firstMatched));
+  const intel = await getWineIntelligence(wine, currency, ...scoreAnchor(first, firstMatched), research);
 
   // Retry Wine-Searcher with Claude's canonical name on a miss (cult-producer gap).
   const pricing = await resolveWsPricing(first, queryName, intel.wsSearchName, vintageArg, currency);
   const wsMatched = pricing.source === 'wine-searcher' && pricing.matched !== false;
   const wsScore = wsMatched ? pricing.criticScore : null;
-  // Unrecognised by Vinster and no Wine-Searcher listing: no estimates at all.
-  if (intel.identified === false && !wsMatched) throw new WineNotFoundError();
+  // Unrecognised by Vinster and no Wine-Searcher listing: Vinster's own web
+  // research is the last resort. Only the same wine, confirmed by a page the
+  // search returned, is valued — from what those pages show.
+  if (intel.identified === false && !wsMatched) {
+    const found = research ? null : await resolveWine(wine);
+    if (found && isSameWine(wine, found)) return valueWine(asResolved(wine, found), currency, found.research);
+    throw new WineNotFoundError();
+  }
 
   // Headline value: real WS market average when matched, else Claude estimate.
   const useWs = wsMatched && pricing.averageMarketPrice != null;
@@ -298,8 +337,8 @@ export async function valueWine(
 export async function generateWineIntel(
   wineIn: WineDetailsComplete,
   currency: string = 'GBP',
-  // Internal: false on the retry after a web lookup, so it can't loop.
-  allowResolve: boolean = true,
+  // Internal: set on the retry after a web lookup (so it can't loop) — what it found.
+  research: WebResearch | null = null,
 ): Promise<WineIntelligence> {
   // Classified Bordeaux: fill classification (wine name) + appellation (region)
   // when blank, so intel is complete on EVERY path (scan, lineup, search…).
@@ -323,7 +362,7 @@ export async function generateWineIntel(
     // (volatile) price and generate intel IN PARALLEL rather than waiting for WS.
     [first, intel] = await Promise.all([
       fetchPricingWithAlt(queryName, wineQueryAltName(wine.producer, wine.wineName, wine.region), vintageArg, currency).then((r) => r.pricing),
-      getWineIntelligence(wine, currency, facts.criticScore, 'vintage'),
+      getWineIntelligence(wine, currency, facts.criticScore, 'vintage', research),
     ]);
     anchorScope = 'vintage';
   } else {
@@ -335,7 +374,7 @@ export async function generateWineIntel(
     // returns wsSearchName — the canonical WS query we retry with on a miss.
     const anchor = scoreAnchor(first, firstMatched);
     anchorScope = anchor[1];
-    intel = await getWineIntelligence(wine, currency, ...anchor);
+    intel = await getWineIntelligence(wine, currency, ...anchor, research);
   }
 
   // Retry Wine-Searcher with Claude's canonical name on a miss (cult-producer gap).
@@ -346,20 +385,13 @@ export async function generateWineIntel(
   // (A prior permanent WS facts record counts as a real listing.)
   if (intel.identified === false && !wsMatched && facts?.criticScore == null) {
     // Last resort before "couldn't find": a live web lookup for the real wine
-    // this garbled name most plausibly is. Only a web-confirmed wine is tried,
-    // and its intel still has to pass the same identity gate.
-    if (allowResolve) {
+    // this (possibly garbled) name is. Only a web-confirmed wine is tried, its
+    // intel grounded in what the pages show, and it still has to pass the same
+    // identity gate.
+    if (!research) {
       const found = await resolveWine(wine);
       if (found) {
-        const resolved: WineDetailsComplete = {
-          ...wineIn,
-          producer: found.producer,
-          wineName: found.wineName,
-          region: found.region ?? wineIn.region,
-          grape: wineIn.grape ?? found.grape,
-          style: wineIn.style ?? found.style,
-        };
-        const again = await generateWineIntel(resolved, currency, false);
+        const again = await generateWineIntel(asResolved(wineIn, found), currency, found.research);
         return { ...again, resolvedIdentity: { producer: found.producer, wineName: found.wineName, region: found.region } };
       }
     }
@@ -411,5 +443,43 @@ export async function generateWineIntel(
     // (exact vintage had no WS listing); 'vintage' for an exact match; null
     // when the value is a Vinster estimate. Labels the intel card honestly.
     priceScope: useWs ? (pricing.priceScope ?? 'vintage') : null,
+  };
+}
+
+// The value fields a lookup carries, as valueWine and generateWineIntel return them.
+type ValueFields = {
+  estimatedValue: number | null;
+  estimatedValueLow?: number | null;
+  estimatedValueHigh?: number | null;
+  currency?: string;
+  valueSource?: 'wine-searcher' | 'vinster' | null;
+  valueConfidence?: 'high' | 'medium' | 'low' | null;
+  priceScope?: 'vintage' | 'all-vintage' | null;
+};
+
+// A cellar wine's value is for ONE of its bottles at its own size. Lookups price
+// a 75cl bottle, so for any other size that price becomes the reference for
+// Vinster's estimate of the format — never multiplied, since rarity sets what
+// magnums and large formats sell for. No estimate → no value, never a scaled one.
+export async function forBottleSize<T extends ValueFields>(
+  lookup: T,
+  wine: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | null; grape?: string | null },
+  bottleSizeMl: number | null | undefined,
+  currency: string,
+): Promise<T> {
+  if (isStandardBottle(bottleSizeMl)) return lookup;
+  const reference = lookup.estimatedValue != null
+    ? { value: lookup.estimatedValue, low: lookup.estimatedValueLow ?? null, high: lookup.estimatedValueHigh ?? null, source: lookup.valueSource ?? 'vinster' }
+    : null;
+  const sized = await estimateFormatValue(wine, bottleSizeMl as number, reference, lookup.currency ?? currency).catch(() => null);
+  return {
+    ...lookup,
+    estimatedValue: sized?.value ?? null,
+    estimatedValueLow: sized?.low ?? null,
+    estimatedValueHigh: sized?.high ?? null,
+    currency: lookup.currency ?? currency,
+    valueSource: sized ? 'vinster' : null,
+    valueConfidence: sized?.confidence ?? null,
+    priceScope: null,
   };
 }

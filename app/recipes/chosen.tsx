@@ -5,8 +5,6 @@ import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useChosenRecipes } from '../../src/hooks/useChosenRecipes';
 import { useRecipeCollections } from '../../src/hooks/useRecipeCollections';
-import { useAuth } from '../../src/hooks/useAuth';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ChosenRecipe } from '../../src/api/chosenRecipes';
@@ -20,7 +18,6 @@ function formatDate(iso: string) {
 }
 
 export default function ChosenRecipesScreen() {
-  const { session } = useAuth();
   const { chosenRecipes, isLoading } = useChosenRecipes();
   const { collections, membershipMap, create, rename, remove, addItem, removeItem } = useRecipeCollections();
 
@@ -30,7 +27,6 @@ export default function ChosenRecipesScreen() {
   const [manageFolder, setManageFolder] = useState<RecipeCollection | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [assigningRecipe, setAssigningRecipe] = useState<ChosenRecipe | null>(null);
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
 
   const filteredRecipes = useMemo(() => {
     if (filter === FILTER_ALL) return chosenRecipes;
@@ -39,14 +35,6 @@ export default function ChosenRecipesScreen() {
     }
     return chosenRecipes.filter((r) => membershipMap.get(r.id)?.has(filter));
   }, [filter, chosenRecipes, membershipMap]);
-
-  function gatedAction(action: () => void) {
-    if (!session) {
-      setSignInPromptVisible(true);
-      return;
-    }
-    action();
-  }
 
   function handleCreateFolder() {
     const name = newFolderName.trim();
@@ -107,7 +95,7 @@ export default function ChosenRecipesScreen() {
       {/* Folder strip — hidden until the user has at least one review,
           so a brand-new user isn't shown empty filter chips on a screen
           they've never used yet. */}
-      {session && chosenRecipes.length > 0 && (
+      {chosenRecipes.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.folderStrip}>
           <FolderChip
             label="All"
@@ -131,21 +119,13 @@ export default function ChosenRecipesScreen() {
               onLongPress={() => { setManageFolder(c); setRenameDraft(c.name); }}
             />
           ))}
-          <TouchableOpacity style={styles.newFolderChip} onPress={() => gatedAction(() => setNewFolderOpen(true))}>
+          <TouchableOpacity style={styles.newFolderChip} onPress={() => setNewFolderOpen(true)}>
             <Text style={styles.newFolderChipText}>+ New folder</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
 
-      {!session ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Sign in to view your reviews</Text>
-          <Text style={styles.emptyBody}>Your recipe reviews and folders are saved to your account.</Text>
-          <TouchableOpacity style={styles.signInBtn} onPress={() => router.push('/(auth)/sign-in')}>
-            <Text style={styles.signInBtnText}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      ) : isLoading ? (
+      {isLoading ? (
         <View style={styles.empty}><ActivityIndicator size="large" color={colors.gold} /></View>
       ) : filteredRecipes.length === 0 ? (
         <View style={styles.empty}>
@@ -199,7 +179,7 @@ export default function ChosenRecipesScreen() {
                       </View>
                     ))}
                   </View>
-                  <TouchableOpacity onPress={() => gatedAction(() => setAssigningRecipe(r))}>
+                  <TouchableOpacity onPress={() => setAssigningRecipe(r)}>
                     <Text style={styles.assignLink}>{memberFolderNames.length ? 'Edit folders' : 'Add to folder'}</Text>
                   </TouchableOpacity>
                 </View>
@@ -303,14 +283,6 @@ export default function ChosenRecipesScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-
-      <SignInPromptModal
-        visible={signInPromptVisible}
-        onDismiss={() => setSignInPromptVisible(false)}
-        onSignIn={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
-        onContinue={() => setSignInPromptVisible(false)}
-      />
     </View>
   );
 }
@@ -346,8 +318,6 @@ const styles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xxl, paddingBottom: spacing.xxl * 2, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
-  signInBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
-  signInBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg, gap: spacing.xs },
   cardDate: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center' },
   cardDish: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.text },

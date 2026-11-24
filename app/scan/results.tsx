@@ -52,9 +52,60 @@ const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
 interface WsEnrich {
   criticScore: number | null;
   avgPrice: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
   currency: string;
   region: string | null;
   grape: string | null;
+}
+
+// Wine-Searcher's data for one pick, in its menu currency — null when it has
+// no match. Wine-Searcher matches loosely; for an obscure pick it can return a
+// different wine, so its data is used only when it's recognisably this wine.
+async function lookupWs(w: WineRecommendation, cur: string): Promise<WsEnrich | null> {
+  const queryName = [w.producer, w.name].filter(Boolean).join(' ').trim();
+  if (!queryName) return null;
+  const p = await fetchPricing(queryName, w.vintage ?? null, cur);
+  if (p.source !== 'wine-searcher' || p.matched === false) return null;
+  if (!sameWineByName(w.producer, w.name, p.wsWineName)) return null;
+  return {
+    criticScore: p.criticScore, avgPrice: p.averageMarketPrice, minPrice: p.minPrice, maxPrice: p.maxPrice,
+    currency: cur, region: p.region ?? null, grape: p.grape ?? null,
+  };
+}
+
+// Vinster's own reading of the published critics for this wine (null when it
+// doesn't genuinely know the wine) — the score shown when Wine-Searcher has none.
+function vinsterCriticScore(w: WineRecommendation): number | null {
+  return w.criticScore != null && w.criticScore > 0 ? w.criticScore : null;
+}
+
+// The pop-up behind the score beside the price: Wine-Searcher's score and
+// retail range, saying plainly what it doesn't have and when a Vinster Score
+// stands in for the Wine-Searcher one.
+function wsInfoBody(e: WsEnrich | null, vinsterScore: number | null): string {
+  const sym = currencySymbol(e?.currency);
+  const money = (n: number) => `${sym}${Math.round(n)}`;
+  const score = e?.criticScore != null ? `Wine-Searcher score: ${e.criticScore} points.` : null;
+  const range = e?.minPrice != null && e.maxPrice != null && Math.round(e.minPrice) !== Math.round(e.maxPrice)
+    ? `Retail price range: ${money(e.minPrice)} – ${money(e.maxPrice)} a bottle.`
+    : e?.avgPrice != null ? `Average retail price: ${money(e.avgPrice)} a bottle.` : null;
+  const noScore = vinsterScore != null
+    ? `No Wine-Searcher score is available for this wine, so a Vinster Score of ${vinsterScore} points is applied — Vinster's own reading of the published critic reviews (Wine Spectator, Wine Advocate, Decanter, Jancis Robinson, Vinous) for this wine.`
+    : 'Wine-Searcher has no score for this wine.';
+  if (!score && !range && vinsterScore == null) return 'Wine-Searcher has no score or retail prices for this wine.';
+  return [score ?? noScore, range ?? 'Wine-Searcher has no retail prices for this wine.'].join('\n\n');
+}
+
+// Vinster's view of the critics against the Wine-Searcher average, added to
+// the Critic Score line. vinster is Vinster's own reading of critic consensus.
+function criticComparison(vinster: number, ws: number): string {
+  const diff = vinster - ws;
+  if (Math.abs(diff) <= 1) return 'Vinster agrees with the Wine-Searcher average.';
+  const degree = Math.abs(diff) <= 3 ? 'slightly ' : '';
+  return diff > 0
+    ? `Vinster notes current critical acclaim for this wine is higher than the Wine-Searcher average, so would score it ${degree}up.`
+    : `Vinster notes current critical acclaim for this wine is lower than the Wine-Searcher average, so would score it ${degree}down.`;
 }
 
 // Value-for-money line built from the real market average vs the list price.
@@ -184,6 +235,8 @@ export default function ResultsScreen() {
   // index → real Wine-Searcher data for that pick (populated a beat after the
   // cards render, so results never wait on the API).
   const [wsByIndex, setWsByIndex] = useState<Record<number, WsEnrich>>({});
+  // True once the Wine-Searcher lookups for these picks have all come back.
+  const [wsChecked, setWsChecked] = useState(false);
   const { save: saveChosen, chosenWines, remove: removeChosen } = useChosenWines();
   // "Add a restaurant first" prompt — the List-Bottle button can't save without
   // a restaurant name, so we collect it (+ location) inline before proceeding.
@@ -388,28 +441,20 @@ export default function ResultsScreen() {
   // AFTER the cards render — in parallel, in each wine's own menu currency so
   // the value ratio is apples-to-apples. Cached server-side, so repeats are
   // instant; a no-match just leaves Claude's values untouched. Skipped for
-  // history re-opens to avoid spending API calls on an old scan.
+  // history re-opens to avoid spending API calls on an old scan (the score
+  // pop-up looks a pick up on tap instead).
   useEffect(() => {
     const wines = recommendation?.wines;
+    setWsChecked(false);
     if (!wines?.length || isFromHistory) return;
     let active = true;
     (async () => {
-      const results = await Promise.all(wines.map(async (w) => {
-        const queryName = [w.producer, w.name].filter(Boolean).join(' ').trim();
-        if (!queryName) return null;
-        const cur = w.currency || userPrefs?.defaultCurrency || 'GBP';
-        const p = await fetchPricing(queryName, w.vintage ?? null, cur);
-        if (p.source !== 'wine-searcher' || p.matched === false) return null;
-        // Wine-Searcher matches loosely; for an obscure pick it can return a
-        // different wine, whose score would then replace Vinster's honest
-        // "no critic consensus". Use it only when it's recognisably this wine.
-        if (!sameWineByName(w.producer, w.name, p.wsWineName)) return null;
-        return { criticScore: p.criticScore, avgPrice: p.averageMarketPrice, currency: cur, region: p.region ?? null, grape: p.grape ?? null } as WsEnrich;
-      }));
+      const results = await Promise.all(wines.map((w) => lookupWs(w, w.currency || userPrefs?.defaultCurrency || 'GBP')));
       if (!active) return;
       const map: Record<number, WsEnrich> = {};
       results.forEach((r, idx) => { if (r) map[idx] = r; });
       setWsByIndex(map);
+      setWsChecked(true);
     })();
     return () => { active = false; };
   }, [recommendation, isFromHistory, userPrefs?.defaultCurrency]);
@@ -718,11 +763,6 @@ export default function ResultsScreen() {
 
   async function handleAlternativeList() {
     if (!extractedWines || !recommendation) return;
-    // Alternatives call recommend directly, which needs an account.
-    if (!session) {
-      showAlert({ title: 'Create a free account', body: 'Sign in or create a free account to get an alternative set of picks from this list.' });
-      return;
-    }
     setIsGenerating(true);
     try {
       // Exclude by full identity (producer + name + vintage), not just the
@@ -779,6 +819,23 @@ export default function ResultsScreen() {
     }
   }, [recommendation]);
 
+  // Tap on a pick's price/score: Wine-Searcher's score and retail range. A
+  // history re-open hasn't looked the picks up, so it looks this one up now.
+  async function showWsInfo(i: number) {
+    const wine = recommendation?.wines[i];
+    if (!wine) return;
+    let e: WsEnrich | null = wsByIndex[i] ?? null;
+    if (!e && !isFromHistory && !wsChecked) {
+      showAlert({ title: 'Wine-Searcher', body: 'Still checking Wine-Searcher for this wine — try again in a moment.' });
+      return;
+    }
+    if (!e && isFromHistory) {
+      e = await lookupWs(wine, wine.currency || userPrefs?.defaultCurrency || 'GBP').catch(() => null);
+      if (e) setWsByIndex((m) => ({ ...m, [i]: e! }));
+    }
+    showAlert({ title: e?.criticScore != null ? 'Wine-Searcher' : 'Score', body: wsInfoBody(e, e?.criticScore != null ? null : vinsterCriticScore(wine)) });
+  }
+
   if (!recommendation) return null;
 
   if (isGenerating) {
@@ -796,10 +853,6 @@ export default function ResultsScreen() {
   // non-vintage Champagnes don't mean the list has no years).
   const listWines = extractedWines?.length ? extractedWines : recommendation.wines;
   const noVintages = listWines.every((w) => !w.vintage);
-  // Highest critic score across the picks — used to compute the fallback
-  // Critic Score note ("Highest of the picks…") before the recommend
-  // function is redeployed with an AI-written criticScoreNote.
-  const maxCriticScore = Math.max(0, ...recommendation.wines.map((w) => w.criticScore ?? 0));
 
   // Build a date + location stamp shown at the top of the page. For fresh
   // scans the date defaults to the moment results rendered; once saved it's
@@ -831,8 +884,6 @@ export default function ResultsScreen() {
     // thing to land and the results present quicker. History reuses the saved one.
     const alreadyHave = (isFromHistory && wine.rationale) || (reviewByIndex[i] && reviewByIndex[i].length > 0);
     if (alreadyHave || reviewUnknown.has(i) || reviewLoading.has(i)) return;
-    // The review service needs an account; guests see an invitation instead.
-    if (!session) return;
     setReviewLoading((prev) => new Set(prev).add(i));
     setReviewFailed((prev) => { const n = new Set(prev); n.delete(i); return n; });
     try {
@@ -891,7 +942,9 @@ export default function ResultsScreen() {
       const lines = recommendation.wines.slice(0, 3).map((w, i) => {
         const rank = RANK_LABELS[i] ?? `#${i + 1}`;
         const vintage = w.vintage ? `${w.vintage} ` : '';
-        const score = w.criticScore > 0 ? ` (${w.criticScore} pts)` : '';
+        // The same score shown beside the price on the card.
+        const shown = wsByIndex[i]?.criticScore ?? vinsterCriticScore(w);
+        const score = shown != null ? ` (${shown} pts)` : '';
         // Flavour profile on its own line, indented, so it reads as a
         // pull-quote about taste rather than an extension of the
         // header. Omitted when missing (older saved scans).
@@ -996,11 +1049,7 @@ export default function ResultsScreen() {
           <View style={styles.restaurantLine}>
             <Text style={styles.restaurantPin}>📍</Text>
             <TouchableOpacity
-              onPress={() => (session
-                ? setEditingRestaurant(true)
-                // Saving a restaurant needs an account — say so up front rather
-                // than failing with "Sign in to save" after they've typed it.
-                : showAlert({ title: 'Create a free account', body: 'Sign in or create a free account to save this restaurant and review your visit.' }))}
+              onPress={() => setEditingRestaurant(true)}
               activeOpacity={0.7}
               style={styles.restaurantLineNameTap}
             >
@@ -1039,14 +1088,12 @@ export default function ResultsScreen() {
           // reuse the assessment notes.
           // Real Wine-Searcher data for this pick, once it has loaded in.
           const wsE = wsByIndex[i];
-          const effCritic = wsE && wsE.criticScore != null ? wsE.criticScore : wine.criticScore;
-          // Headline number is Vinster's holistic score (why it's ranked here),
-          // not the raw critic score — the critic score stays as the top labelled
-          // note below. Older saved sessions have no vinsterScore, so fall back to
-          // the critic score (shown untagged) rather than an empty headline.
-          const vs = wine.vinsterScore ?? null;
-          const headlineScore = vs ?? (effCritic > 0 ? effCritic : null);
-          const headlineIsVinster = vs != null;
+          // The score beside the price is Wine-Searcher's. Once the lookup has
+          // found none, Vinster's own critic reading stands in, tagged (VS);
+          // tapping either explains where it comes from.
+          const vinsterFallback = wsE?.criticScore == null && (wsChecked || isFromHistory)
+            ? vinsterCriticScore(wine) : null;
+          const headlineScore = wsE?.criticScore ?? vinsterFallback;
           const effRegion = wine.region || wsE?.region || null;
           const effGrape = wine.grape || wsE?.grape || null;
           // Price shown on the pick: the menu price when the list gave one, else
@@ -1058,14 +1105,11 @@ export default function ResultsScreen() {
           const priceCurrency = wine.currency || wsE?.currency || userPrefs?.defaultCurrency;
           // The list price is for a magnum, half bottle etc. — say which.
           const priceSize = wine.menuPrice != null ? bottleFormatLabel(wine.format) : null;
-          const criticScoreText = wsE && wsE.criticScore != null
-            ? `${wsE.criticScore} points · Wine-Searcher`
-            : (wine.criticScoreNote
-              ?? (wine.criticScore != null && wine.criticScore > 0
-                ? (wine.criticScore === maxCriticScore && recommendation.wines.length > 1
-                    ? `Highest of the picks at ${wine.criticScore} points`
-                    : `${wine.criticScore} points`)
-                : null));
+          // Vinster's own words on the critics, plus how its reading compares
+          // with the Wine-Searcher score shown beside the price.
+          const criticComparisonText = wsE?.criticScore != null && wine.criticScore > 0
+            ? criticComparison(wine.criticScore, wsE.criticScore) : null;
+          const criticScoreText = [wine.criticScoreNote, criticComparisonText].filter(Boolean).join(' ') || null;
           // Value verdict: prefer REAL live Wine-Searcher market data (average vs
           // the menu price). Only when Wine-Searcher has no match for this wine
           // do we fall back to Vinster's own market estimate (framed as an
@@ -1095,7 +1139,7 @@ export default function ResultsScreen() {
                     (prompting for a restaurant name first if none is set);
                     tap again to remove. Hidden when revisiting a saved scan
                     (read-only) — you view it, but can't re-select from it. */}
-                {session && !isFromHistory && (
+                {!isFromHistory && (
                   <TouchableOpacity
                     style={[styles.selectBar, isSelectedNow(i) && styles.selectBarDone]}
                     onPress={() => {
@@ -1134,12 +1178,12 @@ export default function ResultsScreen() {
                   size="md"
                 />
 
-                {/* Price + score share one line beneath the name. Either
-                    field can be missing (some lists omit the price, some
-                    wines lack a critic score) — the row stays balanced
-                    by rendering only the present halves. */}
+                {/* Price + Wine-Searcher score share one line beneath the
+                    name (tap for the details). Either can be missing (some
+                    lists omit the price, Wine-Searcher may have no score) —
+                    the row renders only the present halves. */}
                 {(priceValue != null || headlineScore != null) && (
-                  <View style={styles.priceScoreRow}>
+                  <TouchableOpacity style={styles.priceScoreRow} onPress={() => void showWsInfo(i)} activeOpacity={0.7}>
                     {priceValue != null && (
                       <Text style={styles.priceScoreText}>
                         {currencySymbol(priceCurrency)}{priceValue}
@@ -1154,12 +1198,10 @@ export default function ResultsScreen() {
                     {headlineScore != null && (
                       <Text style={styles.priceScoreText}>
                         {headlineScore} pts
-                        {headlineIsVinster ? (
-                          <Text style={styles.vinsterScoreTag}>{i === 0 ? ' (Vinster Score)' : ' (VS)'}</Text>
-                        ) : null}
+                        {vinsterFallback != null ? <Text style={styles.vinsterScoreTag}> (VS)</Text> : null}
                       </Text>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 )}
 
                 {/* One-line flavour profile — pure tasting note. Sits
@@ -1259,7 +1301,6 @@ export default function ResultsScreen() {
                   // ready — never pre-baked. History scans reuse the saved rationale.
                   const reviewText = isFromHistory ? (wine.rationale || reviewByIndex[i]) : reviewByIndex[i];
                   if (reviewText) return <Text style={styles.sommNoteText}>{reviewText}</Text>;
-                  if (!session) return <Text style={styles.sommLoadingText}>Create a free account to read Vinster's Review of each pick.</Text>;
                   if (reviewUnknown.has(i)) return <Text style={styles.sommLoadingText}>Vinster doesn't know this bottle well enough to describe it.</Text>;
                   // Failed (and not currently retrying) → offer a tap-to-retry
                   // rather than an endless spinner (the 429 / rate-limit case).
@@ -1439,7 +1480,7 @@ export default function ResultsScreen() {
       <View style={styles.shareCardWrap} pointerEvents="none">
         <WineListShareCard
           ref={shareCardRef}
-          wines={recommendation.wines}
+          wines={recommendation.wines.map((w, i) => ({ ...w, criticScore: wsByIndex[i]?.criticScore ?? vinsterCriticScore(w) ?? 0 }))}
           date={stampDate}
           restaurant={stampRestaurant}
           city={stampCity}
@@ -1612,8 +1653,7 @@ const styles = StyleSheet.create({
     fontSize: 19,
     color: colors.textMuted,
   },
-  // "Vinster Score" / "(VS)" tag after the headline number — smaller and gold so
-  // it reads as Vinster's own metric, not a critic score.
+  // "(VS)" after a Vinster Score standing in for a missing Wine-Searcher one.
   vinsterScoreTag: {
     fontFamily: fonts.bodySemibold,
     fontSize: 13,

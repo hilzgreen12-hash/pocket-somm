@@ -1,7 +1,4 @@
-import { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Linking } from 'react-native';
-import { router } from 'expo-router';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
@@ -18,31 +15,6 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 export default function CommunityTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(55, height * 0.095);
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
-  const pendingActionRef = useRef<(() => void) | null>(null);
-
-  // Dismissing the prompt (tap X / tap outside) carries on with the
-  // pending action — same as scan/cellar/profile. Otherwise the user
-  // taps a gated button, dismisses the prompt and nothing happens.
-  function dismissSignInPrompt() {
-    setSignInPromptVisible(false);
-    const action = pendingActionRef.current;
-    pendingActionRef.current = null;
-    action?.();
-  }
-
-  // Sign In / Create Account leave the tab — pending action is discarded.
-  function abortSignInPrompt() {
-    setSignInPromptVisible(false);
-    pendingActionRef.current = null;
-  }
-
-  function continueWithoutAccount() {
-    setSignInPromptVisible(false);
-    const action = pendingActionRef.current;
-    pendingActionRef.current = null;
-    action?.();
-  }
 
   return (
     <TabSwipeView style={styles.container}>
@@ -88,14 +60,6 @@ export default function CommunityTab() {
       </View>
       <View style={{ height: spacing.md }} />
       <JournalCarousel />
-
-      <SignInPromptModal
-        visible={signInPromptVisible}
-        onDismiss={dismissSignInPrompt}
-        onSignIn={() => { abortSignInPrompt(); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { abortSignInPrompt(); router.push('/(auth)/sign-up'); }}
-        onContinue={continueWithoutAccount}
-      />
     </ScrollView>
     </TabSwipeView>
   );

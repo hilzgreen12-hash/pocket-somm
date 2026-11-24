@@ -14,7 +14,6 @@ import { showAlert } from '../../src/components/AppAlert';
 import { CompareWinesModal } from '../../src/components/CompareWinesModal';
 import { useCompareStore } from '../../src/stores/compareStore';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
@@ -135,9 +134,6 @@ export default function ScanLandingScreen() {
   // Compare Wines or Vintages pop-up.
   const [compareOpen, setCompareOpen] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
-  const [hardGate, setHardGate] = useState(false);
-  const pendingActionRef = useRef<(() => void) | null>(null);
   // The "Search a Wine" tile opens the predictive typeahead in a prompt.
   const [searchModalOpen, setSearchModalOpen] = useState(false);
 
@@ -155,25 +151,6 @@ export default function ScanLandingScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
-
-  // Soft gate: guest sees the prompt but may Continue (scanning is guest-open).
-  function requireAuth(action: () => void) {
-    if (!session) { setHardGate(false); pendingActionRef.current = action; setSignInPromptVisible(true); return; }
-    action();
-  }
-  // Hard gate: account-only (revisiting saved history) — no "continue" escape.
-  function requireAccount(action: () => void) {
-    if (!session) { setHardGate(true); pendingActionRef.current = null; setSignInPromptVisible(true); return; }
-    action();
-  }
-  function dismissSignInPrompt() { setSignInPromptVisible(false); setHardGate(false); pendingActionRef.current = null; }
-  // The action waits for the prompt to close: a picker opened while it is still
-  // fading out never appears on iOS.
-  function continueWithoutAccount() {
-    setSignInPromptVisible(false);
-    const action = pendingActionRef.current; pendingActionRef.current = null;
-    if (action) afterAlertCloses(action)();
-  }
 
   // Revisit the last restaurant-list recommendation (long-press Scan a Wine List).
   async function handleViewLastListResult() {
@@ -233,19 +210,17 @@ export default function ScanLandingScreen() {
   // (e.g. "Forts de Latour 2009"), apply it and go straight to the intel card —
   // don't re-ask. Otherwise open the vintage prompt so the user can specify one.
   function selectWine(wine: WineSearchResult) {
-    requireAuth(() => {
-      skipSearchRef.current = true;
-      setSearchOpen(false);
-      setSearchModalOpen(false);
-      setSearchResults([]);
-      setWineSearch('');
-      if (wine.vintage) {
-        void generateSelectedIntel(wine.vintage, wine);
-      } else {
-        setVintageDraft('');
-        setVintageWine(wine);
-      }
-    });
+    skipSearchRef.current = true;
+    setSearchOpen(false);
+    setSearchModalOpen(false);
+    setSearchResults([]);
+    setWineSearch('');
+    if (wine.vintage) {
+      void generateSelectedIntel(wine.vintage, wine);
+    } else {
+      setVintageDraft('');
+      setVintageWine(wine);
+    }
   }
 
   // Escape hatch: a wine the catalog doesn't know → the manual Confirm flow,
@@ -253,14 +228,12 @@ export default function ScanLandingScreen() {
   function useTypedWine() {
     const q = wineSearch.trim();
     if (!q) return;
-    requireAuth(() => {
-      skipSearchRef.current = true;
-      setSearchOpen(false);
-      setSearchModalOpen(false);
-      resetLabelStore();
-      setWineSearch('');
-      router.push(`/label/confirm?manual=1&context=intel&seed=${encodeURIComponent(q)}&backTo=${encodeURIComponent('/(tabs)')}`);
-    });
+    skipSearchRef.current = true;
+    setSearchOpen(false);
+    setSearchModalOpen(false);
+    resetLabelStore();
+    setWineSearch('');
+    router.push(`/label/confirm?manual=1&context=intel&seed=${encodeURIComponent(q)}&backTo=${encodeURIComponent('/(tabs)')}`);
   }
 
   // Best-effort label thumbnail for the intel card (mirrors confirm's ensureAutoLabel).
@@ -351,8 +324,8 @@ export default function ScanLandingScreen() {
     }
   }
 
-  // Read a label photo and open its Wine Intel — shared by "upload instead" and
-  // images shared into Vinster from Photos / a screenshot (share sheet).
+  // Read a label photo and open its Wine Intel — shared by Upload a Label and a
+  // photo shared into Vinster as "A Wine Label". The user has said it's a label.
   async function scanLabelFromUri(uri: string) {
     const backTo = encodeURIComponent('/(tabs)');
     if (!(await ensureConnectionForUpload())) return;
@@ -362,17 +335,12 @@ export default function ScanLandingScreen() {
       setImage(uri, base64);
       const details = await scanLabel(base64);
       const kind = classifyLabelRead(details);
-      // A wine LIST (a shared screenshot of a menu, say), not a label: send it to
-      // the list scan — Wine List Preferences, then Read Wine List.
-      if (kind === 'list') {
-        setScanningLabel(false);
-        openSharedWineList({ imageUri: uri });
-        return;
-      }
       // Not a label, or nothing readable: say so (don't build a card from it).
-      if (kind === 'not-wine' || kind === 'unreadable') {
+      // A wine list picked by mistake can still be read as one.
+      if (kind !== 'label') {
         setScanningLabel(false);
-        alertBadLabelPhoto(kind);
+        alertBadLabelPhoto(kind === 'unreadable' ? 'unreadable' : 'not-wine',
+          kind === 'list' ? { text: 'Read as a Wine List', onPress: () => openSharedWineList({ imageUri: uri }) } : undefined);
         return;
       }
       setWineDetails(details);
@@ -424,8 +392,9 @@ export default function ScanLandingScreen() {
   const navReady = !!useRootNavigationState()?.key;
   useEffect(() => {
     // Opening from a share can also beat the login restoring — wait for that
-    // too, or a signed-in user would be asked to sign in.
-    if (!hasShareIntent || authLoading || !navReady) return;
+    // too. Signed out, the share is kept (not reset) until the user has signed
+    // in and is back here.
+    if (!hasShareIntent || authLoading || !session || !navReady) return;
     const intent = shareIntent;
     resetShareIntent();
     const files = intent?.files ?? [];
@@ -460,7 +429,7 @@ export default function ScanLandingScreen() {
       showAlert({ title: "Vinster can't read that", body: 'Share a photo or screenshot of a wine list or label, a PDF wine list, or the web link to a wine list.' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasShareIntent, shareIntent, authLoading, navReady]);
+  }, [hasShareIntent, shareIntent, authLoading, session, navReady]);
 
   // A photo shared into Vinster could be a label, a list or a lineup — guessing
   // turned lineups into "that doesn't look like a wine label", so ask.
@@ -470,9 +439,9 @@ export default function ScanLandingScreen() {
       title: "What's in this photo?",
       showCloseX: true,
       buttons: [
-        { text: 'A Wine Label', onPress: after(() => requireAuth(() => { void scanLabelFromUri(uri); })) },
+        { text: 'A Wine Label', onPress: after(() => { void scanLabelFromUri(uri); }) },
         { text: 'A Wine List', onPress: after(() => openSharedWineList({ imageUri: uri })) },
-        { text: 'A Lineup', onPress: after(() => requireAccount(() => router.push(`/cellar/archive-night?photo=${encodeURIComponent(uri)}` as any))) },
+        { text: 'A Lineup', onPress: after(() => router.push(`/cellar/archive-night?photo=${encodeURIComponent(uri)}` as any)) },
       ],
     });
   }
@@ -480,18 +449,16 @@ export default function ScanLandingScreen() {
   // A wine list that arrived from outside (a shared link, PDF or screenshot):
   // open Wine List Preferences with it ready; Read Wine List then reads it.
   function openSharedWineList(src: { url?: string; fileUri?: string; title?: string; imageUri?: string }) {
-    requireAuth(() => {
-      const st = useScanStore.getState();
-      if (src.imageUri) {
-        st.setImage(src.imageUri, 'upload');
-        router.push('/scan/wine-list?shared=1' as any);
-        return;
-      }
-      let domain: string | undefined;
-      try { domain = src.url ? new URL(src.url).hostname.replace(/^www\./, '') : undefined; } catch { domain = undefined; }
-      st.setOnlineSource({ url: src.url ?? '', restaurant: '', city: null, title: src.title ?? domain ?? 'Wine list', domain, fileUri: src.fileUri });
-      router.push('/scan/wine-list?online=1' as any);
-    });
+    const st = useScanStore.getState();
+    if (src.imageUri) {
+      st.setImage(src.imageUri, 'upload');
+      router.push('/scan/wine-list?shared=1' as any);
+      return;
+    }
+    let domain: string | undefined;
+    try { domain = src.url ? new URL(src.url).hostname.replace(/^www\./, '') : undefined; } catch { domain = undefined; }
+    st.setOnlineSource({ url: src.url ?? '', restaurant: '', city: null, title: src.title ?? domain ?? 'Wine list', domain, fileUri: src.fileUri });
+    router.push('/scan/wine-list?online=1' as any);
   }
 
   // Generate Wine Intel tile → choose how to find the wine. On iOS each action
@@ -505,8 +472,8 @@ export default function ScanLandingScreen() {
       showCloseX: true,
       buttons: [
         { text: 'Manual Input', onPress: after(() => setSearchModalOpen(true)) },
-        { text: 'Scan a Label', onPress: after(() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))) },
-        { text: 'Upload a Label', onPress: after(() => requireAuth(handleUploadLabel)) },
+        { text: 'Scan a Label', onPress: after(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`)) },
+        { text: 'Upload a Label', onPress: after(handleUploadLabel) },
       ],
     });
   }
@@ -519,10 +486,10 @@ export default function ScanLandingScreen() {
       title: 'How should Vinster read the list?',
       showCloseX: true,
       buttons: [
-        { text: 'Find Online', onPress: after(() => requireAuth(() => router.push('/scan/find-online'))) },
+        { text: 'Find Online', onPress: after(() => router.push('/scan/find-online')) },
         { text: 'Scan a List', onPress: after(() => router.push('/scan/wine-list')) },
         { text: 'Upload a List', onPress: after(() => router.push('/scan/wine-list?upload=1')) },
-        { text: 'View Last Result', style: 'link', onPress: after(() => requireAccount(handleViewLastListResult)) },
+        { text: 'View Last Result', style: 'link', onPress: after(handleViewLastListResult) },
       ],
     });
   }
@@ -584,7 +551,7 @@ export default function ScanLandingScreen() {
                       <TouchableOpacity
                         style={styles.sdThumb}
                         onPress={openWineIntelChoice}
-                        onLongPress={() => requireAccount(handleViewLastIntel)}
+                        onLongPress={handleViewLastIntel}
                         activeOpacity={0.85}
                       >
                         <Image source={SD_INTEL_IMAGE} style={styles.sdImage} resizeMode="cover" />
@@ -596,7 +563,7 @@ export default function ScanLandingScreen() {
                     {/* Compare Wines or Vintages → pick 2 to 4 wines, then Vinster's
                         side-by-side comparison. */}
                     <View style={styles.sdCard}>
-                      <TouchableOpacity style={styles.sdThumb} onPress={() => requireAccount(() => setCompareOpen(true))} activeOpacity={0.85}>
+                      <TouchableOpacity style={styles.sdThumb} onPress={() => setCompareOpen(true)} activeOpacity={0.85}>
                         <View style={styles.sdCollage}>
                           {SD_COMPARE_IMAGES.map((img, i) => (
                             <Image key={i} source={img} style={styles.sdCompareCell} resizeMode="cover" />
@@ -613,7 +580,7 @@ export default function ScanLandingScreen() {
                       <TouchableOpacity
                         style={styles.sdThumb}
                         onPress={openWineListChoice}
-                        onLongPress={() => requireAccount(handleViewLastListResult)}
+                        onLongPress={handleViewLastListResult}
                         activeOpacity={0.85}
                       >
                         <Image source={RESTAURANT_IMG} style={styles.sdImage} resizeMode="cover" />
@@ -644,8 +611,7 @@ export default function ScanLandingScreen() {
         <View style={styles.scanningOverlay}>
           <View style={styles.scanningSheet}>
             <ActivityIndicator color={colors.gold} size="large" />
-            <Text style={styles.scanningTitle}>Reading your photo…</Text>
-            <Text style={styles.scanningBody}>Vinster is checking whether it's a wine label or a wine list, then reading it.</Text>
+            <Text style={styles.scanningTitle}>Reading your label…</Text>
           </View>
         </View>
       </Modal>
@@ -791,15 +757,6 @@ export default function ScanLandingScreen() {
         </View>
       </Modal>
 
-      <SignInPromptModal
-        visible={signInPromptVisible}
-        allowContinue={!hardGate}
-        onDismiss={dismissSignInPrompt}
-        onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
-        onContinue={continueWithoutAccount}
-      />
-
     </GHScrollView>
     </TabSwipeView>
   );
@@ -899,5 +856,4 @@ const styles = StyleSheet.create({
   scanningOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   scanningSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, alignItems: 'center', gap: spacing.md, width: '100%' },
   scanningTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
-  scanningBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21 },
 });

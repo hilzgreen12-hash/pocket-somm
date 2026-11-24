@@ -468,21 +468,12 @@ export default function RestaurantReviewsScreen() {
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Restaurant Reviews</Text>
-        {session ? (
-          <TouchableOpacity onPress={handleAddRestaurant} disabled={addingRestaurant} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.addLink}>{addingRestaurant ? '…' : 'Add +'}</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 40 }} />
-        )}
+        <TouchableOpacity onPress={handleAddRestaurant} disabled={addingRestaurant} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.addLink}>{addingRestaurant ? '…' : 'Add +'}</Text>
+        </TouchableOpacity>
       </View>
 
-      {!session ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Sign in to view your restaurants</Text>
-          <Text style={styles.emptyBody}>Your restaurant visits are saved with your account.</Text>
-        </View>
-      ) : archiveLoading ? (
+      {archiveLoading ? (
         <View style={styles.empty}>
           <ActivityIndicator color={colors.gold} />
         </View>

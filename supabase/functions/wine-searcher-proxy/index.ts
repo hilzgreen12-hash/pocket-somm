@@ -18,11 +18,9 @@
 //   <grape>Merlot</grape>
 
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { getUsdRate } from '../_shared/fx.ts';
-
-// Per guest phone, per hour and per day: room for two scans' price checks, including the vintage comparison.
-const GUEST_LIMITS = { hourly: 45, daily: 45 };
 
 const WINE_SEARCHER_API_KEY = Deno.env.get('WINE_SEARCHER_API_KEY')!;
 // Full request URL template, overridable via secret so the exact endpoint can
@@ -100,8 +98,9 @@ function buildWsUrl(name: string, vintageValue: string | null, cur: string): str
 // (return-code 0), or null on any miss/suspension so the caller can broaden the
 // query or fall back to the Claude estimate. Logs the return code so misses are
 // diagnosable (vintage miss vs name miss) from the function logs.
-async function lookupWineSearcher(name: string, vintageValue: string | null, cur: string) {
+async function lookupWineSearcher(name: string, vintageValue: string | null, cur: string, userId: string) {
   const url = buildWsUrl(name, vintageValue, cur);
+  await logApiCall(userId);
   // Retry TRANSIENT failures — timeout, network drop, upstream 5xx, or
   // return-code 7 ("API Access Suspended", a rate-limit/outage). These must NOT
   // be mistaken for "this wine has no price": a false miss here skips the
@@ -175,11 +174,43 @@ function sameWine(query: string, wsName: string | null | undefined): boolean {
   return own.length === 0 || own.some((w) => ws.has(w));
 }
 
+// The Wine-Searcher plan allows 500 API calls a day for the whole app. Each
+// real call is logged (one request can make two: exact vintage, then all
+// vintages), and new lookups stop a little short of the cap so a request that
+// has started can always finish.
+const APP_DAILY_CALLS = 480;
+const API_LOG_NAME = 'wine-searcher-api';
+
+async function logApiCall(userId: string): Promise<void> {
+  const { error } = await supabase.from('function_call_log').insert({ user_id: userId, function_name: API_LOG_NAME });
+  if (error) console.error('[wine-searcher-proxy] API call not logged:', error.message);
+}
+
+// Fails open, like the per-user limit: a count that can't be read never blocks.
+async function appBudgetLeft(): Promise<boolean> {
+  const since = new Date(Date.now() - 86_400_000).toISOString();
+  const { count, error } = await supabase.from('function_call_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('function_name', API_LOG_NAME).gte('called_at', since);
+  if (error) {
+    console.error('[wine-searcher-proxy] app-wide count failed (failing open):', error.message);
+    return true;
+  }
+  if ((count ?? 0) >= APP_DAILY_CALLS) {
+    console.warn(`[wine-searcher-proxy] app-wide daily budget reached (${count})`);
+    return false;
+  }
+  return true;
+}
+
 // How long "no listing for this wine" is remembered (a hit keeps CACHE_TTL_DAYS).
 const MISS_TTL_DAYS = 7;
 
 Deno.serve(async (req) => {
   try {
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+
     // exactOnly: just this vintage — no all-vintage broadening (the per-vintage
     // comparison table only uses exact rows, so the broaden was wasted credits).
     const { wineName: rawWineName, vintage, currency, exactOnly } = await req.json();
@@ -259,12 +290,12 @@ Deno.serve(async (req) => {
     const hasRealVintage = vintageParam !== 'NV';
 
     // Saved answers above are free; a real lookup counts towards the usage limit,
-    // which stops one account (or guest) using up the app's 100 daily lookups.
-    // Over the limit, the app sees the usual "Wine-Searcher unavailable" answer.
-    // The vintage comparison table (exactOnly, up to 9 lookups a wine) stops
-    // earlier, so the last of the allowance is always kept for a wine's own price.
-    const [hourly, daily] = exactOnly ? [30, 45] : [40, 60];
-    if (await checkRateLimit(req, 'wine-searcher-proxy', hourly, daily, GUEST_LIMITS)) {
+    // which stops one account using up the app's daily lookups. Over the limit,
+    // the app sees the usual "Wine-Searcher unavailable" answer. The vintage
+    // comparison table (exactOnly, up to 16 lookups a wine) stops earlier, so the
+    // last of the allowance is always kept for a wine's own price.
+    const [hourly, daily] = exactOnly ? [80, 150] : [100, 200];
+    if (await checkRateLimit(auth.userId, 'wine-searcher-proxy', hourly, daily) || !(await appBudgetLeft())) {
       return new Response(JSON.stringify({ ...UNAVAILABLE, down: true }), { headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -276,7 +307,7 @@ Deno.serve(async (req) => {
     // Exact vintage first. A transient throw here must NOT stop us broadening to
     // the all-vintage average — catch it and fall through to that query.
     try {
-      result = await lookupWineSearcher(wineName, String(vintageParam), cur);
+      result = await lookupWineSearcher(wineName, String(vintageParam), cur, auth.userId);
     } catch (e) {
       console.error('[wine-searcher-proxy] exact-vintage lookup failed transiently:', e instanceof Error ? e.message : 'error');
       down = true;
@@ -288,7 +319,7 @@ Deno.serve(async (req) => {
     let allVintageScore: number | null = null;
     if (hasRealVintage && !exactOnly && (!result || result.averageMarketPrice == null)) {
       try {
-        const allV = await lookupWineSearcher(wineName, null, cur);
+        const allV = await lookupWineSearcher(wineName, null, cur, auth.userId);
         if (allV && (allV.averageMarketPrice != null || !result)) {
           allVintageScore = allV.criticScore;
           result = result

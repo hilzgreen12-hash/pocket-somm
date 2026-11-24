@@ -1,16 +1,16 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js';
 import { conversionRate } from '../_shared/fx.ts';
-import { guestAllowanceLeft, guestDeviceKey, guestLimitResponse, guestNetworkKey, recordGuestUse } from '../_shared/guest.ts';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 // scan-start — the wine-list scan, from photos (or a web link) to three picks.
 //
 // The app calls this once to START a scan and gets a jobId back in under a
 // second; the work then runs in the background (EdgeRuntime.waitUntil) and is
-// written step by step to a scan_jobs row, which the app polls. A dropped
-// connection or a backgrounded app never loses the work.
+// written step by step to a scan_jobs row, which the app reads with the
+// user's session (RLS). A dropped connection or a backgrounded app never loses
+// the work.
 //
-//   start   { images[] | sourceUrl | pdfBase64, params, clientRef, guestOk } → { jobId, pollToken }
-//   poll    { action: 'poll', jobId, pollToken }   (guests only — accounts read the row)
+//   start   { images[] | sourceUrl | pdfBase64, params, clientRef } → { jobId }
 //   report  { action: 'client_error', ref, stage, message }   (a failure on the phone)
 //
 // The job (runScanJob):
@@ -23,9 +23,8 @@ import { guestAllowanceLeft, guestDeviceKey, guestLimitResponse, guestNetworkKey
 //                soft preferences if it returns nothing for wines that qualify.
 //   4. Tidy    — picks put into the shape every app version accepts.
 //
-// Guests (no account, or an expired login) are supported for app versions that
-// say so (guestOk): limited per device address, polled with a one-off token, and
-// ocr / recommend / find-wine-list trust these calls via x-vinster-internal.
+// A scan needs an account: each step calls ocr / recommend / find-wine-list
+// with the user's own token, so their per-account usage limits apply.
 // Every step logs one line with counts and timings, keyed by jobId; a failure
 // keeps its real cause in params.failure, shown in the app beside the Ref code.
 
@@ -33,21 +32,11 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Guest (no account) wine-list scans per NETWORK address — an abuse backstop,
-// counted from scan_jobs rows. Generous, as restaurant Wi-Fi puts many guests
-// behind one address; each guest's own two scans a day are counted per phone
-// (_shared/guest.ts).
-const GUEST_HOURLY_LIMIT = 10;
-const GUEST_DAILY_LIMIT = 25;
-
 // Photos per scan, and the size of each (base64 characters ≈ 0.75 bytes each).
 // The app sends a page as up to 3 overlapping tiles, so 12 covers ~4 pages.
 const MAX_IMAGES = 12;
 const MAX_IMAGE_CHARS = 4_000_000;
 const MAX_PDF_CHARS = 14_000_000;   // ≈10 MB PDF
-
-// A running job not updated for this long is treated as stalled.
-const STALLED_AFTER_MS = 240_000;
 
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
@@ -187,16 +176,12 @@ class FnError extends Error {
   constructor(public fn: string, public status: number, message: string, public detail: string) { super(message); this.name = 'FnError'; }
 }
 
-async function callFn(name: string, body: unknown, authHeader: string, internal = false, timeoutMs = 70_000): Promise<any> {
+async function callFn(name: string, body: unknown, authHeader: string, timeoutMs = 70_000): Promise<any> {
   let res: Response;
   try {
     res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json', Authorization: authHeader, apikey: ANON_KEY,
-        // Guest scans: ocr / recommend / find-wine-list trust this instead of a user.
-        ...(internal ? { 'x-vinster-internal': SERVICE_KEY } : {}),
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader, apikey: ANON_KEY },
       body: JSON.stringify(body),
       // Never wait forever on one step — a stalled call used to leave the job
       // stuck at "reading" for good.
@@ -281,27 +266,7 @@ function mergePages(perPhoto: ExtractedWine[][]): ExtractedWine[] {
   return out;
 }
 
-// ---- Request handlers: poll (guests) and phone-side failures ------------------
-
-// Guests can't read scan_jobs, so they poll here; the pollToken handed out at
-// start proves the job is theirs. A job whose worker died never finishes on its
-// own, so one stuck for 4 minutes is closed with an error.
-async function handlePoll(admin: SupabaseClient, body: any): Promise<Response> {
-  const jobId = String(body.jobId ?? '');
-  const { data: j } = await admin.from('scan_jobs')
-    .select('status, extracted_wines, result, error, params, user_id, updated_at').eq('id', jobId).maybeSingle();
-  if (!j || j.user_id || !j.params?.pollToken || j.params.pollToken !== body.pollToken) return json({ error: 'not_found' }, 404);
-  const running = ['pending', 'reading', 'recommending'].includes(j.status);
-  if (running && j.updated_at && Date.now() - new Date(j.updated_at).getTime() > STALLED_AFTER_MS) {
-    const msg = 'This scan took too long to finish — it usually works on a second try.';
-    await admin.from('scan_jobs').update({ status: 'error', error: msg, params: { ...j.params, failure: 'stalled' }, updated_at: new Date().toISOString() }).eq('id', jobId);
-    return json({ status: 'error', extracted_wines: j.extracted_wines, result: null, error: msg, failure: 'stalled' });
-  }
-  return json({
-    status: j.status, extracted_wines: j.extracted_wines, result: j.result, error: j.error,
-    failure: j.params?.failure ?? null, photosSent: j.params?.photosSent ?? null, photosFailed: j.params?.photosFailed ?? null,
-  });
-}
+// ---- Phone-side failures ----------------------------------------------------------
 
 // A failure on the phone (before or while sending): logged with its reference
 // code so it can be found later even though no job ran.
@@ -309,7 +274,7 @@ function logClientError(req: Request, body: any): Response {
   console.error('[scan-client-error]', JSON.stringify({
     ref: String(body.ref ?? '').slice(0, 12), stage: String(body.stage ?? '').slice(0, 40),
     message: String(body.message ?? '').slice(0, 300), source: String(body.source ?? '').slice(0, 20),
-    guest: !!body.guest, country: req.headers.get('cf-ipcountry') ?? null,
+    country: req.headers.get('cf-ipcountry') ?? null,
   }));
   return json({ ok: true });
 }
@@ -327,11 +292,10 @@ interface ScanJob {
   scanPreferences: ScanPrefs;
   profile: ProfileFilters;
   authHeader: string;
-  guest: boolean;
 }
 
 async function runScanJob(job: ScanJob): Promise<void> {
-  const { admin, jobId, params, images, sourceUrl, pdfBase64, currency, scanPreferences, profile, authHeader, guest } = job;
+  const { admin, jobId, params, images, sourceUrl, pdfBase64, currency, scanPreferences, profile, authHeader } = job;
   const fromWeb = !!(sourceUrl || pdfBase64);   // read by find-wine-list, not ocr
   const patch = (fields: Record<string, unknown>) =>
     admin.from('scan_jobs').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', jobId);
@@ -342,16 +306,16 @@ async function runScanJob(job: ScanJob): Promise<void> {
   let stage: 'reading' | 'picking' = 'reading';
   // One line per step (counts + timings), findable by jobId in the logs.
   const log = (event: string, extra: Record<string, unknown> = {}) =>
-    console.log('[scan-start]', JSON.stringify({ jobId, event, ms: elapsed(), guest, ...extra }));
+    console.log('[scan-start]', JSON.stringify({ jobId, event, ms: elapsed(), ...extra }));
   try {
     await patch({ status: 'reading' });
     // Read every photo in parallel (one bad shot doesn't sink the batch), or
     // the online list (one call, chunked inside find-wine-list).
     const results = sourceUrl
-      ? await Promise.allSettled([callFn('find-wine-list', { action: 'read', url: sourceUrl, currency }, authHeader, guest, 120_000)])
+      ? await Promise.allSettled([callFn('find-wine-list', { action: 'read', url: sourceUrl, currency }, authHeader, 120_000)])
       : pdfBase64
-      ? await Promise.allSettled([callFn('find-wine-list', { action: 'readPdf', pdfBase64, currency }, authHeader, guest, 120_000)])
-      : await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader, guest, 75_000)));
+      ? await Promise.allSettled([callFn('find-wine-list', { action: 'readPdf', pdfBase64, currency }, authHeader, 120_000)])
+      : await Promise.allSettled(images.map((b64) => callFn('ocr', { imageBase64: b64, currency }, authHeader, 75_000)));
 
     const perPhoto: ExtractedWine[][] = [];
     const failures: FnError[] = [];
@@ -440,12 +404,12 @@ async function runScanJob(job: ScanJob): Promise<void> {
     // used to end the scan. Try once more while there's time.
     let rec: any;
     try {
-      rec = await callFn('recommend', recBody, authHeader, guest, 80_000);
+      rec = await callFn('recommend', recBody, authHeader, 80_000);
     } catch (e) {
       const fe = e instanceof FnError ? e : new FnError('recommend', 0, String(e), 'other');
       log('recommend_failed', { detail: fe.detail, status: fe.status });
       if (fe.status === 429 || elapsed() > 100_000) throw fe;
-      rec = await callFn('recommend', recBody, authHeader, guest, 80_000);
+      rec = await callFn('recommend', recBody, authHeader, 80_000);
       log('recommend_retry_ok');
     }
 
@@ -459,7 +423,7 @@ async function runScanJob(job: ScanJob): Promise<void> {
       try {
         const retry = await callFn('recommend', {
           ...recBody, styleProfiles: [], foodPairing: '', preferredCountry: '', profileWineTypes: [], profileStyleProfiles: [], useTasteProfile: false,
-        }, authHeader, guest, 80_000);
+        }, authHeader, 80_000);
         const again = Array.isArray(retry?.wines) ? retry.wines : [];
         if (again.length) { rec = retry; recWines = again; }
       } catch (e) {
@@ -481,8 +445,6 @@ async function runScanJob(job: ScanJob): Promise<void> {
       ? { photosSent: webParts.read + webParts.unread, photosFailed: webParts.unread }
       : { photosSent: images.length, photosFailed: failures.length };
     await patch({ status: 'done', extracted_wines: wines, result: rec, params: { ...params, ...photos } });
-    // A guest's scan counts against their two a day only once it has succeeded.
-    if (guest && params.guestDeviceKey) await recordGuestUse(admin, params.guestDeviceKey, 'scan');
     log('done', { picks: rec.wines.length });
   } catch (err) {
     const fe = err instanceof FnError ? err : null;
@@ -553,22 +515,18 @@ function tidyPick(w: any): Record<string, unknown> {
 // ---- Entry point -------------------------------------------------------------------
 
 Deno.serve(async (req) => {
-  const authHeader = req.headers.get('Authorization') ?? `Bearer ${ANON_KEY}`;
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
   try {
     const body = await req.json().catch(() => ({}));
 
-    if (body.action === 'poll') return await handlePoll(admin, body);
+    // Only a log line — taken without a sign-in check, as the failure being
+    // reported can be the sign-in itself.
     if (body.action === 'client_error') return logClientError(req, body);
 
-    const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
-    const { data: { user } } = await userClient.auth.getUser().catch(() => ({ data: { user: null } }) as any);
-    // No account (or an expired login): run as a GUEST scan instead of failing —
-    // but only for app versions that can collect a guest result (guestOk);
-    // older versions poll the table and would wait for nothing.
-    const guest = !user;
-    if (guest && body.guestOk !== true) return json({ error: 'Unauthorized' }, 401);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const authHeader = req.headers.get('Authorization')!;
 
     // Accept `images` (array, multi-screenshot) or a single `imageBase64`.
     const images: string[] = Array.isArray(body.images) ? body.images
@@ -590,58 +548,30 @@ Deno.serve(async (req) => {
       return json({ error: 'too_many_images', message: 'That is more of the list than Vinster can read at once — send up to 4 pages, one photo each.' }, 400);
     }
 
-    const guestKey = guest ? await guestNetworkKey(req) : null;
-
     // A retried upload (the phone timed out but the first request got through)
-    // must not start a second, paid scan: the same clientRef returns the same
-    // job. Checked before the guest limits, so a retry is never refused.
+    // must not start a second, paid scan: the same clientRef returns the same job.
     const clientRef = typeof body.clientRef === 'string' ? body.clientRef.slice(0, 64) : '';
     if (clientRef) {
-      let q = admin.from('scan_jobs').select('id, params').eq('params->>clientRef', clientRef)
-        .gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString()).limit(1);
-      q = guest ? q.is('user_id', null).eq('params->>guestKey', guestKey) : q.eq('user_id', user!.id);
-      const { data: existing } = await q;
-      if (existing?.length) return json({ jobId: existing[0].id, pollToken: existing[0].params?.pollToken ?? null });
+      const { data: existing } = await admin.from('scan_jobs').select('id').eq('params->>clientRef', clientRef)
+        .eq('user_id', auth.userId).gte('created_at', new Date(Date.now() - 15 * 60_000).toISOString()).limit(1);
+      if (existing?.length) return json({ jobId: existing[0].id });
       params.clientRef = clientRef;
-    }
-
-    let pollToken: string | null = null;
-    if (guest) {
-      // A guest's two scans a day are counted per phone (app versions that send
-      // its id); a scan only counts once it succeeds (see runScanJob).
-      const deviceKey = await guestDeviceKey(req);
-      if (deviceKey && (await guestAllowanceLeft(admin, deviceKey, 'scan')) <= 0) return guestLimitResponse('scan');
-      // Per-network backstop against abuse — generous, as restaurant Wi-Fi puts
-      // many guests behind one address.
-      const since = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
-      const count = async (h: number) => {
-        const { count: c } = await admin.from('scan_jobs').select('id', { count: 'exact', head: true })
-          .is('user_id', null).eq('params->>guestKey', guestKey).gte('created_at', since(h));
-        return c ?? 0;
-      };
-      if ((await count(1)) >= GUEST_HOURLY_LIMIT || (await count(24)) >= GUEST_DAILY_LIMIT) {
-        return json({ error: 'rate_limit_exceeded', message: "You've scanned a lot of lists recently — please try again in a little while, or create a free account." }, 429);
-      }
-      pollToken = crypto.randomUUID();
-      params.guestKey = guestKey;
-      if (deviceKey) params.guestDeviceKey = deviceKey;
-      params.pollToken = pollToken;
     }
 
     const { data: job, error: insertError } = await admin
       .from('scan_jobs')
-      .insert({ user_id: guest ? null : user!.id, status: 'pending', params })
+      .insert({ user_id: auth.userId, status: 'pending', params })
       .select('id')
       .single();
     if (insertError || !job?.id) throw new Error(`could not create scan job: ${insertError?.message ?? 'no id'}`);
     const jobId = job.id as string;
 
-    const work = runScanJob({ admin, jobId, params, images, sourceUrl, pdfBase64, currency, scanPreferences, profile, authHeader, guest });
+    const work = runScanJob({ admin, jobId, params, images, sourceUrl, pdfBase64, currency, scanPreferences, profile, authHeader });
 
     try { (globalThis as any).EdgeRuntime?.waitUntil?.(work); }
     catch { /* if unavailable, the promise still runs while the worker lives */ }
 
-    return json({ jobId, pollToken });
+    return json({ jobId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('scan-start error:', message);

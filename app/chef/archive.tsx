@@ -5,7 +5,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { useChefArchiveCollections } from '../../src/hooks/useChefArchiveCollections';
 import { useAuth } from '../../src/hooks/useAuth';
-import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { showAlert } from '../../src/components/AppAlert';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
@@ -324,75 +323,66 @@ export default function ChefArchiveScreen() {
 
       {/* Filter/stats bar — mirrors the Full Cellar List: instruction hint,
           stats, then the folder carousel (All, your folders, + Add folder). */}
-      {session && (
-        <>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryText}>
-              {allItems.length} {allItems.length === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
-            </Text>
-          </View>
-          <Text style={styles.filterHint}>Listed by Recently Added · Swipe to see all folders →</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filterScroll}
-            contentContainerStyle={styles.folderCarousel}
-          >
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryText}>
+          {allItems.length} {allItems.length === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
+        </Text>
+      </View>
+      <Text style={styles.filterHint}>Listed by Recently Added · Swipe to see all folders →</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
+        contentContainerStyle={styles.folderCarousel}
+      >
+        <TouchableOpacity
+          style={[styles.folderChip, filter === FILTER_ALL && styles.folderChipActive]}
+          onPress={() => setFilter(FILTER_ALL)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.folderChipText, filter === FILTER_ALL && styles.folderChipTextActive]} numberOfLines={1}>All ({allItems.length})</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.folderChip, filter === FILTER_FAVOURITES && styles.folderChipActive]}
+          onPress={() => setFilter(FILTER_FAVOURITES)}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.folderChipText, filter === FILTER_FAVOURITES && styles.folderChipTextActive]} numberOfLines={1}>★ Favourites ({favouritesCount})</Text>
+        </TouchableOpacity>
+        {collections.map((c) => {
+          const active = filter === c.id;
+          return (
             <TouchableOpacity
-              style={[styles.folderChip, filter === FILTER_ALL && styles.folderChipActive]}
-              onPress={() => setFilter(FILTER_ALL)}
+              key={c.id}
+              style={[styles.folderChip, active && styles.folderChipActive]}
+              onPress={() => setFilter(c.id)}
+              onLongPress={() => { setManageFolder(c); setRenameDraft(c.name); }}
+              delayLongPress={400}
               activeOpacity={0.7}
             >
-              <Text style={[styles.folderChipText, filter === FILTER_ALL && styles.folderChipTextActive]} numberOfLines={1}>All ({allItems.length})</Text>
+              <Text style={[styles.folderChipText, active && styles.folderChipTextActive]} numberOfLines={1}>
+                {c.name} ({c.item_count})
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.folderChip, filter === FILTER_FAVOURITES && styles.folderChipActive]}
-              onPress={() => setFilter(FILTER_FAVOURITES)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.folderChipText, filter === FILTER_FAVOURITES && styles.folderChipTextActive]} numberOfLines={1}>★ Favourites ({favouritesCount})</Text>
-            </TouchableOpacity>
-            {collections.map((c) => {
-              const active = filter === c.id;
-              return (
-                <TouchableOpacity
-                  key={c.id}
-                  style={[styles.folderChip, active && styles.folderChipActive]}
-                  onPress={() => setFilter(c.id)}
-                  onLongPress={() => { setManageFolder(c); setRenameDraft(c.name); }}
-                  delayLongPress={400}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.folderChipText, active && styles.folderChipTextActive]} numberOfLines={1}>
-                    {c.name} ({c.item_count})
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-            <TouchableOpacity style={styles.folderChipAdd} onPress={() => setNewFolderOpen(true)} activeOpacity={0.7}>
-              <Text style={styles.folderChipAddText}>+ Add folder</Text>
-            </TouchableOpacity>
-          </ScrollView>
-          <TextInput
-            style={styles.recipeSearch}
-            value={recipeSearch}
-            onChangeText={setRecipeSearch}
-            placeholder="Search recipes by ingredient or wine"
-            placeholderTextColor={colors.textMuted}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </>
-      )}
+          );
+        })}
+        <TouchableOpacity style={styles.folderChipAdd} onPress={() => setNewFolderOpen(true)} activeOpacity={0.7}>
+          <Text style={styles.folderChipAddText}>+ Add folder</Text>
+        </TouchableOpacity>
+      </ScrollView>
+      <TextInput
+        style={styles.recipeSearch}
+        value={recipeSearch}
+        onChangeText={setRecipeSearch}
+        placeholder="Search recipes by ingredient or wine"
+        placeholderTextColor={colors.textMuted}
+        returnKeyType="search"
+        clearButtonMode="while-editing"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
 
-      {!session ? (
-        <ArchiveSignInPrompt
-          title="Sign in to view your archive"
-          body="Save your recipes and wine pairings to your account — sign in to keep them."
-        />
-      ) : isLoading ? (
+      {isLoading ? (
         <View style={styles.empty}><ActivityIndicator size="large" color={colors.gold} /></View>
       ) : searchedItems.length === 0 ? (
         <View style={styles.empty}>

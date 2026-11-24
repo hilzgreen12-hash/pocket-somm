@@ -8,6 +8,7 @@
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -17,6 +18,9 @@ function json(payload: unknown, status = 200): Response {
 
 Deno.serve(async (req) => {
   try {
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+
     const { question, history, cellarOwnerId } = await req.json().catch(() => ({}));
     // Earlier turns of the same chat (follow-up questions refer back to them).
     const turns: { q: string; a: string }[] = Array.isArray(history)

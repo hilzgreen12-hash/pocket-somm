@@ -1,6 +1,5 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
-import { MessageScreen } from '../../src/components/MessageScreen';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -51,12 +50,6 @@ export default function CommunityProfileScreen() {
     } catch {
       showAlert({ title: 'Could not update', body: 'Please try again.' });
     }
-  }
-
-  if (!session) {
-    return (
-      <MessageScreen title="Sign in required" />
-    );
   }
 
   const loading = pubLoading;

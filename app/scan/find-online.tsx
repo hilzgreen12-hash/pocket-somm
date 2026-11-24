@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Keyboard, Linking, Platform } from 'react-native';
-import { useAuth } from '../../src/hooks/useAuth';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as IntentLauncher from 'expo-intent-launcher';
@@ -28,7 +27,6 @@ function startsWithPdfMarker(file: File): boolean {
 // picking a list opens the Scan a List form to set preferences before reading.
 export default function FindOnlineScreen() {
   const setOnlineSource = useScanStore((s) => s.setOnlineSource);
-  const { session } = useAuth();
 
   // Show the list before choosing it. Android's in-app browser downloads a PDF
   // rather than showing it, so there the PDF is downloaded and opened in the
@@ -82,12 +80,6 @@ export default function FindOnlineScreen() {
     Keyboard.dismiss();
     // A pasted link skips the search and reads that page directly.
     if (isLink) { read(name, ''); return; }
-    // Each search is a paid web search, so it needs an account (sharing a link
-    // or screenshot into Vinster still works without one).
-    if (!session) {
-      setMessage("Create a free account to search for wine lists online — or open the list in your browser and share it to Vinster.");
-      return;
-    }
     setSearching(true);
     setMessage(null);
     setResults(null);

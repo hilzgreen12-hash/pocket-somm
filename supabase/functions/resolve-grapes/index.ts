@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -9,6 +10,9 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 // per call keeps a whole-cellar backfill to a modest number of requests.
 Deno.serve(async (req) => {
   try {
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+
     const { wines } = await req.json();
     if (!Array.isArray(wines) || wines.length === 0) {
       return new Response(JSON.stringify({ grapes: [] }), { headers: { 'Content-Type': 'application/json' } });

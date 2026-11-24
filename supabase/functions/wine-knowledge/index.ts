@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
@@ -11,7 +12,9 @@ const DAILY_LIMIT = 100;
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'wine-knowledge', HOURLY_LIMIT, DAILY_LIMIT);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const limited = await checkRateLimit(auth.userId, 'wine-knowledge', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
     const { producer, region, wineName, vintage, grape } = await req.json();
 

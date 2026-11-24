@@ -27,7 +27,8 @@ import { canEditCellar, VIEW_ONLY_MESSAGE } from '../../src/api/cellarContext';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
 import { MessageScreen } from '../../src/components/MessageScreen';
 import { wc } from '../../src/components/winecard/wcStyles';
-import { PER_75CL, priceForSize } from '../../src/utils/bottleValue';
+import { WhereToBuyCard } from '../../src/components/winecard/WhereToBuyCard';
+import { PER_75CL, isStandardBottle } from '../../src/utils/bottleValue';
 import { vintageVerdict, tooFewVintagesNote, pickFromCellar, ordinal, type CellarPick } from '../../src/utils/wineCardInsights';
 import { visibleEntries } from '../../src/utils/cellarReview';
 import { wineQueryName, wineQueryAltName, wineNameKey, normaliseVintage } from '../../src/utils/wineIdentity';
@@ -45,7 +46,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { getBinCell } from '../../src/api/bins';
 import { getRackSlots, getSlotAssignments } from '../../src/api/racks';
-import { generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, type VintageComparisonRow } from '../../src/services/pricing';
+import { generateWineIntel, fetchVintageComparison, isWineNotFound, isWineSearcherUnavailable, withCanonicalName, VINTAGES_INCOMPLETE_NOTE, type VintageComparisonRow } from '../../src/services/pricing';
 import { generateServingSuggestion, generateRarity, generateVintageVerdict, generateMarketVintage, generatePairingIngredients, type VintageVerdictAI, type PairingIngredient } from '../../src/api/wineExtras';
 import { PairingIngredientsCard } from '../../src/components/winecard/PairingIngredientsCard';
 import { GenerateRecipesCard, ServingGlance, ComplementaryPairings, CellarPickRow } from '../../src/components/winecard/ServeSections';
@@ -64,7 +65,6 @@ import { launchCamera, launchImageLibrary } from '../../src/utils/imagePicker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import type { WineDetailsComplete } from '../../src/types/wine';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { AddingToCellarLine } from '../../src/components/AddingToCellarLine';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, COMMON_BOTTLE_SIZES, bottleSizeLabel, bottleSizeCl } from '../../src/components/BottleSizePicker';
@@ -262,9 +262,6 @@ export default function LabelResultsScreen() {
   const [selectedConfirm, setSelectedConfirm] = useState(0);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmGenerating, setConfirmGenerating] = useState(false);
-  // Guests can view the card but saving needs an account: the save buttons open
-  // the sign-in prompt instead of silently doing nothing.
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   // The last build from the confirm step failed: show the confirm list (its
   // Confirm button retries) rather than the "Generating" screen forever.
   const [confirmFailed, setConfirmFailed] = useState(false);
@@ -295,6 +292,8 @@ export default function LabelResultsScreen() {
   const [intelMarketNote, setIntelMarketNote] = useState<{ vintage?: string; market?: string } | null>(null);
   const [intelMarketUnknown, setIntelMarketUnknown] = useState(false);
   const [vintagesDown, setVintagesDown] = useState(false);
+  // Some vintages couldn't be asked (Wine-Searcher's daily limit), so the table may be short.
+  const [vintagesIncomplete, setVintagesIncomplete] = useState(false);
   const vintagesTriedRef = useRef(false);
   // Vinster's Verdict prose for the Market tab's vintage table.
   const [intelVerdict, setIntelVerdict] = useState<VintageVerdictAI | null>(null);
@@ -936,12 +935,13 @@ export default function LabelResultsScreen() {
   }, [isAddFlow, wineDetailsConfirmed, userCurrency]);
 
   // The Add form's price starts at Vinster's estimate so the user adjusts it
-  // rather than starting from scratch. The estimate is a 75cl price, so it's
-  // scaled to the bottle size chosen on the form (a magnum starts at two
-  // bottles' worth), and follows the size until the user types their own.
+  // rather than starting from scratch. The estimate is a 75cl price, so it only
+  // fills the form for a 75cl bottle — another size is worth its own price,
+  // which the wine card estimates once the wine is saved.
   const per75Estimate = intelligence?.estimatedValue ?? prefetchedValue?.value ?? null;
   useEffect(() => {
-    if (per75Estimate != null && !purchasePriceUserEdited) setPurchasePrice(String(priceForSize(per75Estimate, bottleSizeMl)));
+    if (purchasePriceUserEdited) return;
+    setPurchasePrice(per75Estimate != null && isStandardBottle(bottleSizeMl) ? String(Math.round(per75Estimate)) : '');
   }, [per75Estimate, bottleSizeMl, purchasePriceUserEdited]);
 
   // Add flow has no intel card — drop the user straight onto the Add form.
@@ -1179,7 +1179,8 @@ export default function LabelResultsScreen() {
   // The cellar row for this add: the wine as confirmed, the form's size, count
   // and price, plus whatever the intel card already knows.
   function buildWinePayload(userId: string) {
-    const marketValue = !cellarValueInHomeCurrency ? null
+    // The card's 75cl price is only this bottle's value when it IS a 75cl bottle.
+    const marketValue = !cellarValueInHomeCurrency || !isStandardBottle(bottleSizeMl) ? null
       : intel.estimatedValue != null ? { per75: intel.estimatedValue, currency: homeCurrency, source: intel.valueSource ?? 'vinster' }
       : prefetchedValue ? { per75: prefetchedValue.value, currency: homeCurrency, source: prefetchedValue.source }
       : null;
@@ -1397,7 +1398,7 @@ export default function LabelResultsScreen() {
 
   function handleAddToCellar() {
     const userId = session?.user.id;
-    if (!userId) { setSignInPromptVisible(true); return; }
+    if (!userId) return;
     if (!canEditCellar()) {
       showAlert({ title: 'View-only cellar', body: VIEW_ONLY_MESSAGE });
       return;
@@ -1539,6 +1540,7 @@ export default function LabelResultsScreen() {
     if (!wine) return;
     setVintagesLoading(true);
     setVintagesDown(false);
+    setVintagesIncomplete(false);
     setIntelMarketNote(null);
     setIntelMarketUnknown(false);
     intelVerdictKeyRef.current = null;
@@ -1546,8 +1548,9 @@ export default function LabelResultsScreen() {
     try {
       const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
       const scanned = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : NaN;
-      const rows = await fetchVintageComparison(queryName, userCurrency, Number.isFinite(scanned) ? scanned : null, wineQueryAltName(wine.producer, wine.wineName, wine.region));
+      const { rows, incomplete } = await fetchVintageComparison(queryName, userCurrency, Number.isFinite(scanned) ? scanned : null, wineQueryAltName(wine.producer, wine.wineName, wine.region));
       setVintageRows(rows);
+      setVintagesIncomplete(incomplete);
       // Too few vintages to compare (fewer than two with a price and a score):
       // add Vinster's own written vintage & market assessment.
       if (vintageVerdict(rows, wine.vintage, String).total < 2) {
@@ -1572,7 +1575,6 @@ export default function LabelResultsScreen() {
   // (opens the +Add review pre-filled) or later (files it as an awaiting pick).
   function handleSaveToReviews() {
     if (!wine) return;
-    if (!session?.user.id) { setSignInPromptVisible(true); return; }
     // A review already exists for this wine → go straight to its review card
     // (Add/View), skipping the "review now / later" prompt.
     const existingReview = findExistingReview(chosenWines, {
@@ -1991,6 +1993,8 @@ export default function LabelResultsScreen() {
               ) : null}
             </View>
 
+            <WhereToBuyCard wine={{ producer: wine.producer, wine_name: wine.wineName || wine.producer, vintage: wine.vintage }} source="intel-card" />
+
             <View style={wc.Card}>
               <Text style={wc.H2}>Vinster's Market & Vintage Comparison</Text>
               {vintagesLoading ? (
@@ -2051,6 +2055,7 @@ export default function LabelResultsScreen() {
                       ) : null}
                     </View>
                   ) : null}
+                  {vintagesIncomplete ? <Text style={wc.Small}>{VINTAGES_INCOMPLETE_NOTE}</Text> : null}
                   <TouchableOpacity onPress={() => void loadVintages()} activeOpacity={0.7}><Text style={styles.diveDeeperLink}>Refresh →</Text></TouchableOpacity>
                   {verdict.total < 2 ? (
                     <>
@@ -2123,14 +2128,6 @@ export default function LabelResultsScreen() {
 
   return (
     <>
-    <SignInPromptModal
-      visible={signInPromptVisible}
-      allowContinue={false}
-      onDismiss={() => setSignInPromptVisible(false)}
-      onSignIn={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
-      onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
-      onContinue={() => setSignInPromptVisible(false)}
-    />
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       {isIntelOnlyFlow ? (
         <WineCardHero
@@ -2908,7 +2905,6 @@ const styles = StyleSheet.create({
   // Off-screen host for the share card — positioned far off-canvas so it renders
   // for the captureRef snapshot but never appears on screen.
   shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm, alignSelf: 'flex-start' },
   backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
 

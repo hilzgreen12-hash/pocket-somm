@@ -1,6 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
-import { signedInUserId } from '../_shared/auth.ts';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
@@ -103,9 +103,10 @@ Return JSON:
 Deno.serve(async (req) => {
   try {
     // Quick Command changes a cellar, so it needs an account.
-    if (!(await signedInUserId(req))) return json({ error: 'Unauthorized', message: 'Sign in to use Quick Command.' }, 401);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
 
-    const limited = await checkRateLimit(req, 'cellar-command', HOURLY_LIMIT, DAILY_LIMIT);
+    const limited = await checkRateLimit(auth.userId, 'cellar-command', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
     const { action, transcript, wines, locations, units } = await req.json();

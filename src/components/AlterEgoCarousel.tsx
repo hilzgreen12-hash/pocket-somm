@@ -17,7 +17,7 @@ function fmtDate(iso: string | null | undefined) {
 // Carousel of the user's alter-ego sketches (title + date), newest first — each
 // card opens that sketch. A user with none yet sees the brown "coming" card and
 // two dashed "future" placeholders. Styled like the Cellar / Cookbook carousels.
-export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: () => void) => void }) {
+export function AlterEgoCarousel() {
   const { session } = useAuth();
   const userId = session?.user.id;
   const qc = useQueryClient();
@@ -82,8 +82,8 @@ export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: 
             <TouchableOpacity
               key={s.id}
               style={styles.card}
-              onPress={() => requireAccount(() => router.push(`/profile/personality?category=alter-ego&sketchId=${s.id}` as any))}
-              onLongPress={() => requireAccount(() => confirmDelete(s))}
+              onPress={() => router.push(`/profile/personality?category=alter-ego&sketchId=${s.id}` as any)}
+              onLongPress={() => confirmDelete(s)}
               delayLongPress={400}
               activeOpacity={0.85}
             >
@@ -97,7 +97,7 @@ export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: 
         // the first sketch once there's enough to read.
         <TouchableOpacity
           style={styles.mysteryCard}
-          onPress={() => requireAccount(() => router.push('/profile/personality?category=alter-ego' as any))}
+          onPress={() => router.push('/profile/personality?category=alter-ego' as any)}
           activeOpacity={0.85}
         >
           <Text style={styles.mysteryTitle}>You Are, As Yet, A Mystery</Text>

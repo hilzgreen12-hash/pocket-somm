@@ -8,7 +8,6 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { prepareScanTiles } from '../../src/services/ocr';
 import { finalizeRecommendation } from '../../src/services/recommender';
 import { startScanJob, pollScanJob, logScanClientError, MAX_SHARED_PDF_BYTES, type StartedScanJob } from '../../src/api/scanJob';
-import { useAuth } from '../../src/hooks/useAuth';
 import { showAlert } from '../../src/components/AppAlert';
 import { isNetworkError } from '../../src/api/invokeResilient';
 import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
@@ -17,7 +16,6 @@ import { fonts } from '../../src/constants/fonts';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { noteHappyMoment } from '../../src/services/ratingPrompt';
 import { File } from 'expo-file-system';
-import { handleGuestLimit } from '../../src/services/guestLimit';
 
 // The "reading your wine list" screen. It prepares the photos (or the chosen
 // online list), starts the scan on the server (scan-start), polls until the
@@ -41,7 +39,6 @@ export default function ExtractingScreen() {
   const [errorRef, setErrorRef] = useState<{ ref: string; reason: string } | null>(null);
   // The failed scan can be picked up again in place (see run's catch).
   const [canResume, setCanResume] = useState(false);
-  const { session } = useAuth();
   const navigation = useNavigation();
   const stepRef = useRef('checking the connection');
   const jobRef = useRef<StartedScanJob | null>(null);
@@ -54,7 +51,7 @@ export default function ExtractingScreen() {
     const ref = jobRef.current ? jobRef.current.jobId.slice(0, 8).toUpperCase() : Math.random().toString(36).slice(2, 8).toUpperCase();
     const full = `${reason} (while ${stepRef.current})`;
     setErrorRef({ ref, reason: full });
-    logScanClientError({ ref, stage: stepRef.current, message: reason, source, guest: !session });
+    logScanClientError({ ref, stage: stepRef.current, message: reason, source });
   }
 
   // Start once, after the saved preferences have loaded — otherwise dislikes and
@@ -226,11 +223,6 @@ export default function ExtractingScreen() {
       const resumable = isNetworkError(err) || (err instanceof Error && err.name === 'ScanTimeout');
       if (!resumable) useScanStore.getState().setScanAttempt(null);
       setCanResume(resumable);
-      // A guest who has used their two scans: offer sign-in, back on the form.
-      if (handleGuestLimit(err)) {
-        router.back();
-        return;
-      }
       const message = err instanceof Error ? err.message : String(err);
       const isRateLimit = /minute|too many|rate limit/i.test(message);
       const friendly = isNetworkError(err)

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { generateWineIntel, isWineNotFound } from './pricing';
+import { generateWineIntel, forBottleSize, isWineNotFound, isSameWine } from './pricing';
 import { searchLabelImages } from '../api/label';
 import { uploadLabelImageFromUrl } from '../api/labelPhotos';
 import { updateCellarWine } from '../api/cellar';
@@ -12,8 +12,9 @@ import type { CellarWine, WineIntelligence } from '../types/wine';
 // rules are enforced here as well as in their screens:
 //   • view-only members never run it (the owner's rows would refuse the write
 //     after the lookup was paid for);
-//   • imported wines are never in a bulk run — an import stays on demand, valued
-//     when the wine is opened;
+//   • imported wines are never in a run: a big import can be thousands of rows,
+//     more Wine-Searcher lookups than an account's daily allowance. Each gets
+//     its intel when its wine card is opened;
 //   • wines a run couldn't value are remembered and left out of later runs for
 //     a while, so "Update all" doesn't pay for the same wines on every press.
 
@@ -48,7 +49,8 @@ export function isValueStale(w: CellarWine, now: number = Date.now()): boolean {
 
 // ---- Wines a run couldn't value, remembered per user on this device ----
 
-const triedKey = (userId: string) => `bulk-intel-tried-v1:${userId}`;
+// v2: wines tried before Vinster's web research fallback get another go.
+const triedKey = (userId: string) => `bulk-intel-tried-v2:${userId}`;
 
 // wine id → when a run last failed to value it, for the wines still sitting out.
 export async function loadTriedWines(userId: string): Promise<Map<string, number>> {
@@ -159,44 +161,50 @@ async function findLabelPhoto(w: CellarWine): Promise<Partial<CellarWine>> {
   }
 }
 
-type Outcome = 'updated' | 'not-valued' | 'failed';
+// `filled`: the wine has a critic score or a value after the lookup.
+type Outcome = { result: 'updated' | 'not-valued' | 'failed'; filled: boolean };
 
 async function updateOne(w: CellarWine, currency: string, findLabels: boolean): Promise<Outcome> {
+  const hadIntel = w.critic_score != null || w.estimated_value != null;
+  const asked = {
+    producer: w.producer ?? '',
+    region: w.region ?? '',
+    wineName: w.wine_name || null,
+    vintage: w.vintage || 'NV',
+    style: w.style ?? null,
+    grape: w.grape_variety ?? null,
+  };
   let intel: WineIntelligence | null;
   try {
-    intel = await generateWineIntel({
-      producer: w.producer ?? '',
-      region: w.region ?? '',
-      wineName: w.wine_name || null,
-      vintage: w.vintage || 'NV',
-      style: w.style ?? null,
-      grape: w.grape_variety ?? null,
-    }, currency);
+    // A magnum, half or large format is valued as that format.
+    intel = await forBottleSize(await generateWineIntel(asked, currency), asked, w.bottle_size_ml, currency);
   } catch (e) {
-    if (!isWineNotFound(e)) return 'failed';
+    if (!isWineNotFound(e)) return { result: 'failed', filled: hadIntel };
     intel = null;
   }
-  // Not found, or found only as a different wine than the one in the cellar
-  // (resolvedIdentity): nothing is saved from it — Vinster never puts another
-  // wine's intel on the user's bottle. A wine with no value is stamped as tried.
-  if (!intel || intel.resolvedIdentity) {
+  // Not found, or the web lookup found a different wine than the one in the
+  // cellar: nothing is saved from it — Vinster never puts another wine's intel
+  // on the user's bottle. A wine with no value is stamped as tried.
+  if (!intel || (intel.resolvedIdentity && !isSameWine(asked, intel.resolvedIdentity))) {
     if (w.estimated_value == null) await updateCellarWine(w.id, { estimated_value_at: new Date().toISOString() });
-    return 'not-valued';
+    return { result: 'not-valued', filled: hadIntel };
   }
   const patch = { ...intelPatch(w, intel, currency), ...(findLabels ? await findLabelPhoto(w) : {}) };
   await updateCellarWine(w.id, patch);
+  const score = patch.critic_score ?? w.critic_score;
+  const filled = score != null || (patch.estimated_value ?? w.estimated_value) != null;
   // A Wine-Searcher outage isn't the wine's fault — it can be tried again soon.
-  if (intel.wsUnavailable) return 'updated';
+  if (intel.wsUnavailable) return { result: 'updated', filled };
   // No new value (none found, or the stored one was kept) or still no score:
   // another run soon would pay for the same answer.
-  const newValue = patch.estimated_value != null;
-  return !newValue || (patch.critic_score ?? w.critic_score) == null ? 'not-valued' : 'updated';
+  return { result: patch.estimated_value == null || score == null ? 'not-valued' : 'updated', filled };
 }
 
 // Look up and save critic score + market value for `wines` (callers pass one
 // bunch of at most BULK_BATCH_SIZE). Concurrency-bounded; a failure on one wine
 // is skipped so the rest still save. Aborting stops further wines starting —
 // each finished wine is already saved. onProgress(done, total) fires per wine.
+// Resolves to the wines looked at that still have no critic score or value.
 export async function updateCellarIntelBatch(
   wines: CellarWine[],
   opts: {
@@ -207,10 +215,11 @@ export async function updateCellarIntelBatch(
     onProgress?: (done: number, total: number) => void;
     signal?: AbortSignal;
   },
-): Promise<void> {
-  if (!canEditCellar()) return;
+): Promise<CellarWine[]> {
+  if (!canEditCellar()) return [];
   const todo = wines.filter((w) => !isImported(w));
   const notValued: string[] = [];
+  const unfilled: CellarWine[] = [];
   let done = 0;
   let cursor = 0;
   opts.onProgress?.(0, todo.length);
@@ -218,9 +227,12 @@ export async function updateCellarIntelBatch(
     while (cursor < todo.length && !opts.signal?.aborted) {
       const w = todo[cursor++];
       try {
-        if (await updateOne(w, opts.currency, !!opts.findLabels) === 'not-valued') notValued.push(w.id);
+        const { result, filled } = await updateOne(w, opts.currency, !!opts.findLabels);
+        if (result === 'not-valued') notValued.push(w.id);
+        if (!filled) unfilled.push(w);
       } catch {
         // The write failed — skip; partial progress beats failing the lot.
+        unfilled.push(w);
       } finally {
         done += 1;
         opts.onProgress?.(done, todo.length);
@@ -232,4 +244,5 @@ export async function updateCellarIntelBatch(
   } finally {
     await rememberTried(opts.userId, notValued);
   }
+  return unfilled;
 }

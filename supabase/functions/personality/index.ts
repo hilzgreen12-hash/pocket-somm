@@ -1,4 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
@@ -205,7 +206,9 @@ Return only the prose — the title line then the sketch, ready to display.`;
 
 Deno.serve(async (req) => {
   try {
-    const limited = await checkRateLimit(req, 'personality', PERSONALITY_HOURLY_LIMIT, PERSONALITY_DAILY_LIMIT);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const limited = await checkRateLimit(auth.userId, 'personality', PERSONALITY_HOURLY_LIMIT, PERSONALITY_DAILY_LIMIT);
     if (limited) return limited;
 
     const body = await req.json();

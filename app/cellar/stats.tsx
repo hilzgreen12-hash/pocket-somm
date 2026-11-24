@@ -16,7 +16,6 @@ import { inferWineStyle } from '../../src/utils/wineStyle';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { mostRepresentedRegions, classifiedRegionBottles } from '../../src/utils/wineRegionGroup';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
-import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { WineValueEditorModal } from '../../src/components/WineValueEditorModal';
 import { BulkIntelProgress } from '../../src/components/BulkIntelProgress';
 import { holdingValue } from '../../src/utils/bottleValue';
@@ -103,7 +102,7 @@ const EDITORS: Record<EditorMode, EditorSpec> = {
   },
   addCurrentValues: {
     field: 'estimated_value', wines: 'unvaluable', title: 'Update Estimated Values',
-    subtitle: "Enter your own estimated value per 75cl for the wines Vinster couldn't price — larger and smaller bottles are scaled to their size.",
+    subtitle: "Vinster couldn't find a value for these wines. Enter your own estimate for one bottle at its size — a magnum's value for a magnum, a half bottle's for a half.",
     alt: { label: 'Input Purchase Values', mode: 'addPurchaseForUnvalued' },
   },
   addPurchaseForUnvalued: {
@@ -520,22 +519,15 @@ export default function CellarStatsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {!session ? (
-        <ArchiveSignInPrompt
-          title="Sign in to view your stats"
-          body="Cellar statistics live with your account — sign in to see them."
-        />
-      ) : (
-        <FlatList
-          data={windowRows}
-          keyExtractor={(r) => r.key}
-          renderItem={renderWindowRow}
-          ListHeaderComponent={header}
-          ListFooterComponent={footer}
-          contentContainerStyle={{ paddingBottom: 80 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold} />}
-        />
-      )}
+      <FlatList
+        data={windowRows}
+        keyExtractor={(r) => r.key}
+        renderItem={renderWindowRow}
+        ListHeaderComponent={header}
+        ListFooterComponent={footer}
+        contentContainerStyle={{ paddingBottom: 80 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold} />}
+      />
 
       {canEdit ? (
         <WineValueEditorModal

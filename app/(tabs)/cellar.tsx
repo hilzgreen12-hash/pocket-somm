@@ -1,5 +1,5 @@
 import { View, Text, TouchableOpacity, Pressable, Modal, ActivityIndicator, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -9,7 +9,6 @@ import { useStorageLocationNav, type StorageNavEntry } from '../../src/hooks/use
 import { fetchPlacementsForWines } from '../../src/api/placements';
 import { getBinCells } from '../../src/api/bins';
 import { shareCellarListPdf } from '../../src/utils/exportCellarList';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { showAlert } from '../../src/components/AppAlert';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpTitle } from '../../src/components/HelpTitle';
@@ -36,44 +35,14 @@ export default function CellarTab() {
   // A view-only member of a shared cellar can browse it but not add to it.
   const canEdit = cellarCtx.role !== 'view';
   const { locations: storageLocs } = useStorageLocationNav();
-  // The sign-in prompt: 'soft' offers "Continue without an account" (the
-  // pending action then runs as a guest); 'account' is for account-only
-  // features, where signing in is the only way forward.
-  const [signInPrompt, setSignInPrompt] = useState<'soft' | 'account' | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const pendingActionRef = useRef<(() => void) | null>(null);
 
   // Re-read shared-cellar memberships whenever the tab comes into view, so a
   // new invite, a removal or a role change shows without restarting the app.
   const userId = session?.user.id ?? null;
   useFocusEffect(useCallback(() => { if (userId) void loadCellarContext(userId); }, [userId]));
-
-  function requireAuth(action: () => void) {
-    if (!session) {
-      pendingActionRef.current = action;
-      setSignInPrompt('soft');
-      return;
-    }
-    action();
-  }
-
-  // Quick Command, Add Wines, Import, Export and Share Cellar work on the
-  // user's own cellar, so a guest must sign in first.
-  function requireAccount(action: () => void) {
-    if (!session) {
-      pendingActionRef.current = null;
-      setSignInPrompt('account');
-      return;
-    }
-    action();
-  }
-
-  function dismissSignInPrompt() {
-    setSignInPrompt(null);
-    pendingActionRef.current = null;
-  }
 
   // "Import Cellar" → choose the source: a photo or screenshot (OCR), or a
   // spreadsheet file (CSV/TSV). Reviews (Vivino etc.) are imported from Your
@@ -151,13 +120,6 @@ export default function CellarTab() {
     }
   }
 
-  function continueWithoutAccount() {
-    setSignInPrompt(null);
-    const action = pendingActionRef.current;
-    pendingActionRef.current = null;
-    action?.();
-  }
-
   return (
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
@@ -176,11 +138,11 @@ export default function CellarTab() {
           Quick Command (gold outline) side by side. */}
       <View style={styles.actionRow}>
         {canEdit ? (
-          <TouchableOpacity onPress={() => requireAccount(() => router.push('/cellar/list?add=1' as any))} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1 }]}>
+          <TouchableOpacity onPress={() => router.push('/cellar/list?add=1' as any)} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1 }]}>
             <Text style={styles.buttonText}>Add Wines</Text>
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity onPress={() => requireAccount(() => setVoiceOpen(true))} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1, borderColor: colors.gold }]}>
+        <TouchableOpacity onPress={() => setVoiceOpen(true)} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1, borderColor: colors.gold }]}>
           <Text style={[styles.buttonText, { color: colors.gold }]}>Quick Command</Text>
         </TouchableOpacity>
       </View>
@@ -189,20 +151,20 @@ export default function CellarTab() {
       <View style={styles.divider} />
 
       {/* Your Wines At Home — the home-storage carousel. */}
-      <HomeStorageSection requireAuth={requireAuth} />
+      <HomeStorageSection />
 
       {/* Rule between the home-storage carousel and the buttons below it. */}
       <View style={styles.divider} />
 
       {/* Your Cellar List, Statistics and Archive — below the home-storage carousel. */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/cellar/list')}>
           <Text style={styles.buttonText}>Your Cellar List</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => router.push('/cellar/stats')}>
           <Text style={styles.buttonText}>Your Cellar Statistics</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/list?archived=1' as any))}>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => router.push('/cellar/list?archived=1' as any)}>
           <Text style={styles.buttonText}>Your Cellar Archive</Text>
         </TouchableOpacity>
       </View>
@@ -211,14 +173,14 @@ export default function CellarTab() {
       <View style={styles.divider} />
       <View style={styles.section}>
         {canEdit ? (
-          <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAccount(openImportChooser)} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.buttonVivino} onPress={openImportChooser} activeOpacity={0.85}>
             <Text style={styles.buttonVivinoText}>Import Cellar</Text>
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity style={[styles.buttonVivino, canEdit && { marginTop: spacing.xs }]} onPress={() => requireAccount(openExportMenu)} activeOpacity={0.85}>
+        <TouchableOpacity style={[styles.buttonVivino, canEdit && { marginTop: spacing.xs }]} onPress={openExportMenu} activeOpacity={0.85}>
           <Text style={styles.buttonVivinoText}>Export Cellar</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.buttonVivino, { marginTop: spacing.xs }]} onPress={() => requireAccount(() => router.push('/profile/share-cellar' as any))} activeOpacity={0.85}>
+        <TouchableOpacity style={[styles.buttonVivino, { marginTop: spacing.xs }]} onPress={() => router.push('/profile/share-cellar' as any)} activeOpacity={0.85}>
           <Text style={styles.buttonVivinoText}>Share Cellar</Text>
         </TouchableOpacity>
       </View>
@@ -258,15 +220,6 @@ export default function CellarTab() {
       <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
       {/* Nudge to review recently archived bottles (like Your Wine Reviews'). */}
       <ArchivedReviewPrompt />
-
-      <SignInPromptModal
-        visible={signInPrompt !== null}
-        allowContinue={signInPrompt === 'soft'}
-        onDismiss={dismissSignInPrompt}
-        onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
-        onContinue={continueWithoutAccount}
-      />
     </ScrollView>
     </TabSwipeView>
   );

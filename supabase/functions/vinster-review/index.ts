@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 
 // Small, fast, single-wine companion to `recommend`. The recommendation call no
 // longer generates the long per-wine "Vinster's Review" (rationale) up front —
@@ -22,29 +23,17 @@ RECOGNITION GATE — if you don't genuinely recognise this wine from this produc
 Return ONLY the note as plain text — no JSON, no markdown, no label, no preamble.`;
 
 Deno.serve(async (req) => {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-  }
+  const auth = await requireSignedIn(req);
+  if (auth instanceof Response) return auth;
 
   try {
-    const userClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-    }
-
     // Reuse the shared per-user rate limiter. Fail open on infra errors.
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
     const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
-      p_user_id: user.id,
+      p_user_id: auth.userId,
       p_function_name: 'vinster-review',
       p_hourly_limit: HOURLY_LIMIT,
       p_daily_limit: DAILY_LIMIT,

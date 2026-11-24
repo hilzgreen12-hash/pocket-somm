@@ -5,9 +5,20 @@ import { usePreferences } from './usePreferences';
 import { useCellarContext } from './useCellarContext';
 import { showAlert } from '../components/AppAlert';
 import { BULK_BATCH_SIZE, isBulkEligible, loadTriedWines, updateCellarIntelBatch } from '../services/bulkIntel';
+import { wineHeaderLine } from '../utils/wineHeader';
 import type { CellarWine } from '../types/wine';
 
 const NO_TRIED = new Map<string, number>();
+
+const NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+
+// "Vinster couldn't fill intelligence on two of your wines: A & B."
+function unfilledText(wines: CellarWine[]): string {
+  const names = wines.map((w) => wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}` : names[0];
+  const count = NUMBER_WORDS[names.length - 1] ?? String(names.length);
+  return `Vinster couldn't fill intelligence on ${count} of your wines: ${list}.`;
+}
 
 // A screen's bulk critic-score + value run (see services/bulkIntel): which wines
 // may be in one, the confirm-then-run of the next bunch of 25, its progress and
@@ -46,8 +57,9 @@ export function useBulkIntel(onFinished: () => void, opts?: { findLabels?: boole
     abortRef.current = controller;
     inFlightRef.current = true;
     setProgress({ done: 0, total: batch.length });
+    let unfilled: CellarWine[] = [];
     try {
-      await updateCellarIntelBatch(batch, {
+      unfilled = await updateCellarIntelBatch(batch, {
         userId,
         currency: preferences?.defaultCurrency ?? 'GBP',
         findLabels: opts?.findLabels,
@@ -63,6 +75,7 @@ export function useBulkIntel(onFinished: () => void, opts?: { findLabels?: boole
       void qc.invalidateQueries({ queryKey: ['bulk-intel-tried', userId] });
       onFinished();
     }
+    if (unfilled.length > 0) showAlert({ title: unfilledText(unfilled) });
   }
 
   // Confirm, then update the next bunch of `targets`. `action` names the

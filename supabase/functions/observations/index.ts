@@ -1,6 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js';
-import { signedInUserId } from '../_shared/auth.ts';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { composeProfileSummary, type Observation, type ToldStatement } from '../_shared/tasteProfile.ts';
 import { dataSignature, gatherTasteData, MIN_SIGNAL, summariseTasteData } from './aggregate.ts';
@@ -50,8 +50,9 @@ const json = (body: unknown, status = 200) =>
 
 Deno.serve(async (req) => {
   try {
-    const uid = await signedInUserId(req);
-    if (!uid) return json({ error: 'Unauthorized', message: 'Sign in to see what Vinster has learned about you.' }, 401);
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+    const uid = auth.userId;
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: req.headers.get('Authorization')! } },
     });
@@ -61,13 +62,13 @@ Deno.serve(async (req) => {
       case 'get':
         return json(await handleGet(db, uid));
       case 'refresh': {
-        const limited = await checkRateLimit(req, 'observations', REFRESH_HOURLY_LIMIT, REFRESH_DAILY_LIMIT);
+        const limited = await checkRateLimit(uid, 'observations', REFRESH_HOURLY_LIMIT, REFRESH_DAILY_LIMIT);
         return limited ?? json(await handleRefresh(db, uid));
       }
       case 'tell': {
         const text = typeof body.text === 'string' ? body.text.trim().slice(0, MAX_TOLD_CHARS) : '';
         if (!text) return json({ error: 'text required' }, 400);
-        const limited = await checkRateLimit(req, 'observations-tell', TELL_HOURLY_LIMIT, TELL_DAILY_LIMIT);
+        const limited = await checkRateLimit(uid, 'observations-tell', TELL_HOURLY_LIMIT, TELL_DAILY_LIMIT);
         return limited ?? (await handleTell(db, uid, text));
       }
       case 'remove':

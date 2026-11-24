@@ -5,25 +5,21 @@ import { showAlert } from '../../src/components/AppAlert';
 import { MicButton } from '../../src/components/MicButton';
 import { PairVoiceModal } from '../../src/components/PairVoiceModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { ChipPicker } from '../../src/components/preferences/ChipPicker';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useHomeCellarWines } from '../../src/hooks/useHomeCellarWines';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { useAuth } from '../../src/hooks/useAuth';
 import { findFoodWinePairing } from '../../src/api/label';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation } from '../../src/stores/foodPairingStore';
 import { useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { WINE_REGIONS } from '../../src/constants/wineRegions';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
-import { handleGuestLimit } from '../../src/services/guestLimit';
 
 export default function FindPairingScreen() {
   useKeepAwake();
-  const { session } = useAuth();
   // Pairings only ever recommend bottles kept at home, never external storage.
   const { wines, allWines, ready: homeReady } = useHomeCellarWines();
   const { preferences: savedPreferences } = usePreferences();
@@ -67,9 +63,6 @@ export default function FindPairingScreen() {
   }
 
   const STYLE_CHOICES = ['White', 'Red', 'Rosé', 'Sparkling', 'Fortified'];
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
-  const [signInPromptShown, setSignInPromptShown] = useState(false);
-  const pendingFindRef = useRef(false);
 
   // Seed the budget from the user's saved default once preferences load
   // (they arrive async, so the initial useState above often sees null).
@@ -81,7 +74,7 @@ export default function FindPairingScreen() {
     }
   }, [savedPreferences?.defaultBudget]);
 
-  async function handleFind(skipPrompt = false) {
+  async function handleFind() {
     if (!dish.trim()) {
       showAlert({ title: 'What are you cooking?', body: 'Please describe your dish first.' });
       return;
@@ -94,13 +87,6 @@ export default function FindPairingScreen() {
       showAlert(allWines.length > 0
         ? { title: 'Nothing at home', body: 'All your bottles are in external storage. Switch to "Suggest a Style" to get a general recommendation.' }
         : { title: 'Empty cellar', body: 'Your cellar is empty. Switch to "Suggest a Style" to get a general recommendation.' });
-      return;
-    }
-
-    if (!session && !signInPromptShown && !skipPrompt) {
-      setSignInPromptShown(true);
-      pendingFindRef.current = true;
-      setSignInPromptVisible(true);
       return;
     }
 
@@ -153,19 +139,16 @@ export default function FindPairingScreen() {
       // Silently record this pairing to the user's OWN private history (RLS-scoped,
       // never shared) so it can power Cellar Insights (e.g. most-paired dishes) —
       // no archive UI. Fire-and-forget: never block or error the pairing itself.
-      if (session) {
-        savePairing.mutate({
-          dish: cleanDish,
-          mode,
-          cellarResult: mode === 'cellar' ? (result.recommendations as CellarRecommendation[]) : null,
-          generalResult: mode === 'general' ? (result.recommendations as GeneralRecommendation[]) : null,
-          generalSummary: mode === 'general' ? (result.summary ?? null) : null,
-        });
-      }
+      savePairing.mutate({
+        dish: cleanDish,
+        mode,
+        cellarResult: mode === 'cellar' ? (result.recommendations as CellarRecommendation[]) : null,
+        generalResult: mode === 'general' ? (result.recommendations as GeneralRecommendation[]) : null,
+        generalSummary: mode === 'general' ? (result.summary ?? null) : null,
+      });
 
       router.push('/chef/pairing-results');
     } catch (err) {
-      if (handleGuestLimit(err)) return;
       showAlert({ title: 'Error', body: 'Could not find a pairing. Please try again.' });
     } finally {
       setLoading(false);
@@ -287,21 +270,13 @@ export default function FindPairingScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={() => handleFind()}>
+      <TouchableOpacity style={styles.button} onPress={handleFind}>
         <Text style={styles.buttonText}>Find Pairing</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.lastResultBtn} onPress={handleViewLastResult}>
         <Text style={styles.lastResultBtnText}>View Last Result</Text>
       </TouchableOpacity>
-
-      <SignInPromptModal
-        visible={signInPromptVisible}
-        onDismiss={() => { setSignInPromptVisible(false); pendingFindRef.current = false; }}
-        onSignIn={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
-        onContinue={() => { setSignInPromptVisible(false); handleFind(true); }}
-      />
     </KeyboardAwareScrollView>
   );
 }

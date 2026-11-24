@@ -15,6 +15,7 @@ import { LabelThumb } from './LabelThumb';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard, RESTAURANT_IMG, RESTAURANT_WARM_IMG, KITCHEN_IMG, placeholderLabelImages, NAMED_LABELS } from './ExamplePlaceholder';
 import { splitPersonality } from '../utils/personalityText';
+import { fetchRecentWhereToBuy, WHERE_TO_BUY_RECENT_KEY } from '../api/merchantLinks';
 import { HOME_TILE, colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
@@ -23,11 +24,12 @@ import type { CellarWine } from '../types/wine';
 // user has been DOING in the app — kept tight at six tiles. Only tiles with real
 // data for this user appear; the rest are skipped.
 const MAX_TILES = 6;
+const MIN_TILES = 3;
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 const INSIGHT_OVERLAY = "Vinster's Insights appear here as you use Vinster";
-// Exactly three examples (one per kind of picture — label collage, restaurant,
-// cookbook), shown only while there are no real tiles at all.
+// Example tiles (one per kind of picture — label collage, restaurant,
+// cookbook) that top the strip up to three.
 const INSIGHT_EXAMPLES: PlaceholderCard[] = [
   { kind: 'labelCollage', images: placeholderLabelImages(0, 4), title: 'Your Personality Sketch', stamp: 'The Quiet Collector', overlay: INSIGHT_OVERLAY },
   { kind: 'image', image: RESTAURANT_WARM_IMG, title: 'Dined Out Last Month', stamp: '3 restaurants', overlay: INSIGHT_OVERLAY },
@@ -96,6 +98,14 @@ export function CellarInsightsCarousel() {
         .order('archived_at', { ascending: false });
       return (data ?? []) as Pick<CellarWine, 'label_image_path' | 'quantity'>[];
     },
+  });
+
+  // Where to Buy Search List — the last wines the user tapped through to
+  // Wine-Searcher's merchants.
+  const { data: whereToBuy = [] } = useQuery({
+    queryKey: [WHERE_TO_BUY_RECENT_KEY, userId],
+    enabled: !!userId,
+    queryFn: () => fetchRecentWhereToBuy(userId!),
   });
 
   // Restaurants dined at in the last month — distinct venues + their photos.
@@ -228,6 +238,18 @@ export function CellarInsightsCarousel() {
     });
   }
 
+  // 4b) Where to Buy Search List — pictured with those wines' labels. Only
+  // shown once the user has looked for merchants for a wine.
+  if (whereToBuy.length > 0) {
+    tiles.push({
+      key: 'where-to-buy',
+      title: 'Where to Buy Search List',
+      meta: `${whereToBuy.length} Wine${whereToBuy.length === 1 ? '' : 's'}`,
+      collage: whereToBuy.slice(0, 4).map((w) => ({ producer: w.producer, wineName: w.wine_name })),
+      onTap: () => router.push('/wines/where-to-buy' as any),
+    });
+  }
+
   // 5) Labels scanned last month — a collage of those label thumbnails. Only
   // shown when we have at least one label image.
   {
@@ -245,8 +267,11 @@ export function CellarInsightsCarousel() {
 
   // Only tiles with a real image (collage) ever render — no brown/icon tiles.
   const shown = tiles.filter((t) => t.collage.length > 0 || t.image != null).slice(0, MAX_TILES);
-  // Examples only before there's anything real to show — never beside real tiles.
-  const fill = shown.length === 0 ? INSIGHT_EXAMPLES : [];
+  // The strip always shows at least three tiles, so a new user sees what's
+  // coming: examples top it up, skipping any the user already has for real.
+  const fill = INSIGHT_EXAMPLES
+    .filter((c) => !shown.some((t) => t.title === c.title))
+    .slice(0, Math.max(0, MIN_TILES - shown.length));
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>

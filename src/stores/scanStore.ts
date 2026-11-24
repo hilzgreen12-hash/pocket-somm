@@ -25,7 +25,7 @@ interface ScanPreferences {
 // A scan that has been started but hasn't finished. Leaving the reading
 // screen (Back) doesn't stop the paid job on the server, so coming back to the
 // same list with the same preferences picks this job up again instead of
-// starting (and paying for, or using a guest's allowance on) a second one.
+// starting (and paying for) a second one.
 // key: the list + preferences it was started for; job: null until scan-start
 // answers (a retry with the same clientRef still gets the same job back).
 export interface ScanAttempt { key: string; clientRef: string; job: StartedScanJob | null; currency: string | null }

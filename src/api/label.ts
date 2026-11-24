@@ -48,10 +48,8 @@ export async function prepareImageBase64(uri: string): Promise<string> {
   return manipulated.base64;
 }
 
-// `purpose: 'pair'` marks a read for Pair ("I've got a wine, find me a recipe"),
-// which a guest's scan allowance doesn't count — the pairing itself does.
-export async function scanLabel(base64Image: string, purpose?: 'pair'): Promise<WineDetails> {
-  const data = await invokeFunction('scan-label', purpose ? { base64Image, purpose } : { base64Image }) as WineDetails;
+export async function scanLabel(base64Image: string): Promise<WineDetails> {
+  const data = await invokeFunction('scan-label', { base64Image }) as WineDetails;
   return reconcileScannedIdentity(data);
 }
 
@@ -502,7 +500,14 @@ export async function searchFolderImages(folderName: string): Promise<LabelImage
 // Live web lookup for a name Vinster didn't recognise (misheard / misread):
 // returns the real wine it most plausibly is, backed by a cited web page, or
 // null. Server-side it also adds the wine to the catalogue for next time.
-interface ResolvedWine { producer: string; wineName: string | null; region: string | null; grape: string | null; style: string | null }
+// The prices and critic scores the found pages show (each from a page the search
+// returned) — what Wine Intel grounds a wine nobody else lists in.
+export interface WebResearch {
+  sourceUrl: string;
+  prices: { amount: number; currency: string; vintage: string | null; url: string }[];
+  scores: { critic: string; score: number; vintage: string | null; url: string }[];
+}
+export interface ResolvedWine { producer: string; wineName: string | null; region: string | null; grape: string | null; style: string | null; research: WebResearch }
 export async function resolveWine(input: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | null }): Promise<ResolvedWine | null> {
   try {
     const data = await invokeFunction('resolve-wine', {
@@ -510,9 +515,15 @@ export async function resolveWine(input: { producer?: string | null; wineName?: 
       wineName: input.wineName ?? '',
       region: input.region ?? '',
       vintage: input.vintage ?? '',
-    }) as { found?: boolean; producer?: string; wineName?: string | null; region?: string | null; grape?: string | null; style?: string | null };
-    if (!data?.found || !data.producer) return null;
-    return { producer: data.producer, wineName: data.wineName ?? null, region: data.region ?? null, grape: data.grape ?? null, style: data.style ?? null };
+    }) as {
+      found?: boolean; producer?: string; wineName?: string | null; region?: string | null; grape?: string | null; style?: string | null;
+      sourceUrl?: string; prices?: WebResearch['prices']; scores?: WebResearch['scores'];
+    };
+    if (!data?.found || !data.producer || !data.sourceUrl) return null;
+    return {
+      producer: data.producer, wineName: data.wineName ?? null, region: data.region ?? null, grape: data.grape ?? null, style: data.style ?? null,
+      research: { sourceUrl: data.sourceUrl, prices: data.prices ?? [], scores: data.scores ?? [] },
+    };
   } catch {
     return null;
   }
@@ -526,6 +537,8 @@ export async function getWineIntelligence(
   wsScore?: number | null,
   // 'all-vintage' when wsScore is the wine's average across vintages.
   wsScoreScope?: 'vintage' | 'all-vintage',
+  // Vinster's web research for a wine nobody else lists (see resolveWine).
+  webResearch?: WebResearch | null,
 ): Promise<WineIntelligence> {
   const data = await invokeFunction('wine-intelligence', {
     producer: wine.producer,
@@ -537,6 +550,7 @@ export async function getWineIntelligence(
     currency,
     wsScore: wsScore ?? null,
     wsScoreScope: wsScoreScope ?? null,
+    webResearch: webResearch ?? null,
   }) as WineIntelligence;
   return data;
 }

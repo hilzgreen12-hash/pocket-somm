@@ -54,7 +54,7 @@ export default function NewStorageLocationScreen() {
 
   async function handleSave() {
     if (saving) return;
-    if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to create a storage location.' }); return; }
+    if (!session?.user.id) return;
     if (!name.trim()) { showAlert({ title: 'Name needed', body: 'Give this location a name — e.g. "The shed".' }); return; }
     if (!photoUri) { showAlert({ title: 'Photo needed', body: 'Add a photo of the space first.' }); return; }
     setSaving(true);

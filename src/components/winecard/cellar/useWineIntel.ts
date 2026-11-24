@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCellar } from '../../../hooks/useCellar';
 import { usePreferences } from '../../../hooks/usePreferences';
-import { valueWine, isWineNotFound } from '../../../services/pricing';
+import { valueWine, forBottleSize, isWineNotFound } from '../../../services/pricing';
 import { hasRealInsiderNote } from '../../../constants/insiderNote';
-import { priceForSize } from '../../../utils/bottleValue';
 import { showAlert } from '../../AppAlert';
 import { valueAndScorePatch } from '../../../services/bulkIntel';
 import type { CellarWine, GrapeVariant } from '../../../types/wine';
@@ -121,22 +120,26 @@ export function useWineIntel(wine: CellarWine | undefined, canEdit: boolean) {
     try {
       // Wine-Searcher first (market price, and its score anchors Vinster's),
       // falling back to Vinster's own estimate when there's no match.
-      const v = await valueWine({
+      const currency = preferences?.defaultCurrency ?? 'GBP';
+      const asked = {
         producer: wine.producer ?? '',
         region: wine.region ?? '',
         wineName: opts.wineNameForQuery ?? (wine.wine_name || null),
         vintage: wine.vintage || 'NV',
         style: opts.style ?? wine.style ?? null,
         grape: pinnedGrape,
-      }, preferences?.defaultCurrency ?? 'GBP');
+      };
+      const priced75 = await valueWine(asked, currency);
 
       // The same name is made as more than one wine and nothing says which:
       // ask rather than commit a guessed card.
-      if (!opts.force && v.grapeAmbiguous && !pinnedGrape && v.grapeOptions.length >= 2) {
-        setGrapeVariants(v.grapeOptions);
+      if (!opts.force && priced75.grapeAmbiguous && !pinnedGrape && priced75.grapeOptions.length >= 2) {
+        setGrapeVariants(priced75.grapeOptions);
         setSelectedVariant(null);
         return 'ambiguous';
       }
+      // A magnum, half or large format is valued as that format.
+      const v = await forBottleSize(priced75, asked, wine.bottle_size_ml, currency);
 
       // The shared keep rule (bulkIntel): a stored value survives a lookup with
       // none, a Wine-Searcher outage, or — when it's a Wine-Searcher, user or
@@ -162,7 +165,7 @@ export function useWineIntel(wine: CellarWine | undefined, canEdit: boolean) {
           ...(opts.style ? { style: opts.style } : {}),
           // A seeded price is Vinster's estimate, dated the day the wine was cellared.
           ...(wine.purchase_price == null && shownValue != null ? {
-            purchase_price: priceForSize(shownValue, wine.bottle_size_ml),
+            purchase_price: shownValue,
             purchase_price_currency: keepValue ? wine.estimated_value_currency : v.currency,
             purchase_price_estimated: true,
             purchase_price_at: wine.date_received ?? wine.created_at,

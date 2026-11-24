@@ -1,6 +1,5 @@
 import { fetch as streamingFetch } from 'expo/fetch';
 import { supabase } from './supabase';
-import { deviceHeader, guestLimitErrorName } from './invokeResilient';
 
 // Generic streaming client for long edge functions.
 //
@@ -70,7 +69,6 @@ async function streamOnce(functionName: string, body: Record<string, unknown>): 
         Authorization: `Bearer ${token}`,
         apikey: SUPABASE_ANON_KEY,
         Accept: 'text/event-stream',
-        ...(await deviceHeader()),
       },
       body: JSON.stringify({ ...body, stream: true }),
       signal: controller.signal,
@@ -86,12 +84,10 @@ async function streamOnce(functionName: string, body: Record<string, unknown>): 
     try { detail = await res.text(); } catch { /* ignore */ }
     // Non-2xx from the platform/gateway (incl. a 429 rate-limit) — a real
     // error, not a retryable drop. Surface the server's own message when it
-    // sent one, tagged as a guest-limit error where it is one.
+    // sent one.
     let parsed: { error?: string; message?: string } | null = null;
     try { parsed = JSON.parse(detail); } catch { /* not JSON */ }
-    const err = new Error(parsed?.message ?? `${functionName} ${res.status}: ${detail.slice(0, 200)}`);
-    err.name = guestLimitErrorName(parsed?.error ?? null) ?? err.name;
-    throw err;
+    throw new Error(parsed?.message ?? `${functionName} ${res.status}: ${detail.slice(0, 200)}`);
   }
 
   const reader = res.body?.getReader();

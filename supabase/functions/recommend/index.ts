@@ -1,5 +1,6 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
+import { requireSignedIn } from '../_shared/auth.ts';
 import { HOUSE_RULES } from '../_shared/houseRules.ts';
 import { getTasteProfile, tasteProfileSection } from '../_shared/tasteProfile.ts';
 
@@ -127,7 +128,7 @@ For each recommended wine return:
 - flavourProfile: ONE brief sentence (max ~18 words) describing what the wine actually tastes like — fruit, acidity, tannin, body, finish, aromatics. This is a tasting note, NOT a sales pitch. Strict exclusions: no producer name, no vintage information, no critic scores, no rarity / availability comments, no price / value language, no recommendation language ("worth trying", "ideal with", "perfect for"). Pure sensory: think how a sommelier would describe the glass in front of them to a guest who asked "what's this like?". Examples of the right register: "Bright black cherry and graphite, firm fine tannins, savoury herb finish." / "Lifted lemon zest and wet stone, taut acidity, lean and saline." / "Crushed strawberry, gentle spice, soft tannins, easy and fragrant." (string)
 - criticScore: average critic score 0–100 for THIS wine as you genuinely know its critic reception (number), or null when you don't genuinely recognise this exact wine — never invent a plausible number (number | null)
 - vinsterScore: integer 0–100 — Vinster's OWN holistic score for this wine as a PICK FROM THIS LIST FOR THIS DINER, blending critic score, value for money, drinkability / vintage readiness, rarity / exceptionality and preference fit. This is the score that JUSTIFIES the ranking, and it is deliberately DISTINCT from criticScore: a wine can have a LOWER critic score yet a HIGHER vinsterScore because it drinks better now, offers better value, or fits the diner better. HARD RULE: the #1 (top-ranked) wine MUST have the highest vinsterScore of the three, and vinsterScore MUST be non-increasing with rank (#1 ≥ #2 ≥ #3). Keep scores in a believable, well-spread band (recommended wines typically 88–97). (number)
-- criticScoreNote: ONE concise sentence (max ~18 words) on this wine's critic standing, stating its TRUE critic rank AMONG THE THREE PICKS. CRITICAL: the #1 pick is chosen holistically (the Vinster Score) and is NOT necessarily the highest critic score — only say "highest" if this wine genuinely has the top criticScore of the three; otherwise state its real position honestly. Examples: "94 points — the highest critic score of the three." / "91 points — a strong consensus, second-highest of the picks." (string)
+- criticScoreNote: ONE concise sentence (max ~18 words) on this wine's critic standing IN WORDS, stating its TRUE critic rank AMONG THE THREE PICKS. NO NUMBERS: never write a points score, and never mention Wine-Searcher or the Vinster Score — the app shows the Wine-Searcher score beside the price and adds its own comparison to this line, so a number here would contradict it. CRITICAL: the #1 pick is chosen holistically and is NOT necessarily the most acclaimed — only say "most acclaimed"/"highest" if this wine genuinely has the top criticScore of the three; otherwise state its real position honestly. Name critics only when you genuinely know their verdict. Examples: "The most critically acclaimed of the three, consistently praised by Jancis Robinson and Decanter." / "Strong critical consensus — second of the three on acclaim." (string)
 - valueNote: ONE concise sentence (max ~22 words) — a FALLBACK value estimate, shown to the diner ONLY when live Wine-Searcher market data isn't available for the wine. Compare the wine's REAL menu price (from the list) against your best ESTIMATE of its market retail, and frame it clearly as an estimate. If good value say so; if poor value, say so honestly and justify why it still earns its place (rarity, preference fit, quality). Examples: "Estimated around 1.4× retail — likely strong value." / "Roughly 2.5× estimated retail — dear, but its rarity and fit to your taste earn a place." (string)
 - vintageAssessment: object with:
     - label: one of "Exceptional" | "Excellent" | "Good" | "Average" | "Challenging" | "Poor" (string)
@@ -149,7 +150,7 @@ For each recommended wine return:
 - repeatNote: string | null. Set this ONLY when this wine's producer AND name EXACTLY match an entry in the ALREADY-SEEN set (see the rule below) and you are DELIBERATELY recommending that same wine AGAIN because it is genuinely outstanding. NEVER set it on a new or different wine — not even one from the same region or grape as a seen wine (two different Trebbiano d'Abruzzo, or two different Barolos, are NOT the same wine; do not confuse them). It MUST open with EXACTLY "Vinster is recommending this wine again because of its outstanding " and finish with the specific reason. For EVERY other wine — including all wines on a first recommendation, and any fresh alternative — set repeatNote to null.
 
 CRITICAL — CARD NOTE OPENINGS: Four notes are shown on the results card on their own labelled line, and the reader scans only the first few words of each. Every one MUST OPEN with the specific fact named by its label — do not bury it mid-sentence behind a grape variety, region, or other context:
-- criticScoreNote (label "Critic Score") → open with the score, then its TRUE rank among the picks. E.g. "91 points — second-highest of the three…", or "94 points — the highest critic score here…" ONLY when genuinely true; never "This Nebbiolo scores 94…".
+- criticScoreNote (label "Critic Score") → open with the wine's critical standing in words, then its TRUE rank among the picks. E.g. "Strong critical consensus — second of the three…", or "The most acclaimed of the three…" ONLY when genuinely true; never a points number.
 - valueNote (label "Value") → open with the value verdict or price-to-retail ratio, framed as an estimate. E.g. "Estimated around 1.4× retail — likely strong value…".
 - vintageAssessment.notes + drinkingWindow.notes (label "Vintage/Readiness") → vintageAssessment.notes opens with the vintage's quality for this appellation ("A superb 2016 in Barolo…"); drinkingWindow.notes opens with the readiness status ("Drinking at peak now…").
 - rarityAssessment.notes (label "Producer Note") → open with the producer's standing or the wine's rarity/availability. Never open with a grape variety, region, or vintage.
@@ -161,9 +162,9 @@ CRITICAL — NEVER INVENT (overrides everything above): list text is often OCR'd
 CRITICAL — VINSTER SCORE vs CRITIC SCORE (two distinct, separately-nameable metrics):
 - "Critic Score" (criticScore) = the independent published-critic consensus (Wine Spectator, Wine Advocate, Decanter, Jancis Robinson, Vinous). It measures the wine's quality in the glass, in the abstract. It may be HIGHEST on a lower-ranked pick.
 - "Vinster Score" (vinsterScore) = Vinster's OWN holistic verdict on this wine as a pick from THIS list for THIS diner — critic quality PLUS value, drinkability/readiness, rarity and preference fit. It MUST be highest for the #1 pick and non-increasing with rank.
-You MAY reference BOTH by name and contrast them explicitly where it clarifies a pick — most naturally in criticScoreNote, which already opens with the score and its true rank (e.g. "91 points — trails the group on critic score, but its value and peak-2019 readiness give it the list's top Vinster Score"). Do NOT put this score analysis in standoutNote — that note is for pairing and how the wine compares as a choice on the list. Keep the two measures clearly separate: a Vinster Score is never "the critic score", and never claim the #1 pick holds the "top critic score" unless its criticScore is genuinely the highest of the three. Speak of them as two different measures the diner can compare.
+The diner never sees the vinsterScore — it only sets the ranking — so never mention "Vinster Score" in any note. Do NOT put score analysis in standoutNote — that note is for pairing and how the wine compares as a choice on the list. Never claim the #1 pick is the most acclaimed unless its criticScore is genuinely the highest of the three.
 
-CRITICAL — SCORES ARE PER WINE: A critic score (and criticScoreNote) always describes the specific wine and vintage, never the producer as a whole. Do not phrase a score as if it belongs to the producer — e.g. say "this 2019 bottling scores 93" not "Raúl Pérez scores 93".
+CRITICAL — SCORES ARE PER WINE: A critic score (and criticScoreNote) always describes the specific wine and vintage, never the producer as a whole — e.g. "this 2019 bottling is widely acclaimed", not "Raúl Pérez is widely acclaimed".
 
 CRITICAL — EXACT NAMES: Copy each wine's producer and name EXACTLY as they appear in the provided list. NEVER re-spell, autocorrect, translate, or "tidy" a name, and never substitute a more familiar-looking one — e.g. if the list says "Emidio Pepe", write "Emidio Pepe", never "Emilio Pepe". A misspelt producer is a serious error: it points the diner (and Wine-Searcher) at the wrong wine.
 
@@ -175,53 +176,32 @@ Return ONLY valid JSON in this exact format:
 Do not include markdown, explanation, or any text outside the JSON.`;
 
 Deno.serve(async (req) => {
-  const authHeader = req.headers.get('Authorization');
-  // scan-start calls this server-to-server for GUEST wine-list scans (no user
-  // account). It proves itself with the service key in x-vinster-internal and
-  // has already applied the guest limits, so the user check is skipped.
-  const internal = !!req.headers.get('x-vinster-internal')
-    && req.headers.get('x-vinster-internal') === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!authHeader && !internal) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-  }
+  const auth = await requireSignedIn(req);
+  if (auth instanceof Response) return auth;
 
   try {
-    // Resolve the user from the JWT — needed for per-user rate limiting,
-    // and to reject expired/invalid tokens before paying for a Claude call.
-    if (!internal) {
-      const userClient = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_ANON_KEY')!,
-        { global: { headers: { Authorization: authHeader! } } }
+    // Rate-limit check via service-role RPC. Fail open on infrastructure
+    // errors so a Supabase blip doesn't lock out legitimate users.
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+    const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
+      p_user_id: auth.userId,
+      p_function_name: 'recommend',
+      p_hourly_limit: RECOMMEND_HOURLY_LIMIT,
+      p_daily_limit: RECOMMEND_DAILY_LIMIT,
+    });
+    if (rlError) {
+      console.error('[recommend] rate-limit RPC failed (failing open):', rlError);
+    } else if (allowed === false) {
+      return new Response(
+        JSON.stringify({
+          error: 'rate_limit_exceeded',
+          message: "You've requested a lot of recommendations recently — please try again in a few minutes.",
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } }
       );
-      const { data: { user }, error: userError } = await userClient.auth.getUser();
-      if (userError || !user) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
-      }
-
-      // Rate-limit check via service-role RPC. Fail open on infrastructure
-      // errors so a Supabase blip doesn't lock out legitimate users.
-      const adminClient = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      );
-      const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
-        p_user_id: user.id,
-        p_function_name: 'recommend',
-        p_hourly_limit: RECOMMEND_HOURLY_LIMIT,
-        p_daily_limit: RECOMMEND_DAILY_LIMIT,
-      });
-      if (rlError) {
-        console.error('[recommend] rate-limit RPC failed (failing open):', rlError);
-      } else if (allowed === false) {
-        return new Response(
-          JSON.stringify({
-            error: 'rate_limit_exceeded',
-            message: "You've requested a lot of recommendations recently — please try again in a few minutes.",
-          }),
-          { status: 429, headers: { 'Content-Type': 'application/json' } }
-        );
-      }
     }
 
     const {
@@ -302,9 +282,9 @@ The top-level "summary" MUST open by explicitly acknowledging that the diner ask
 ` : '';
 
     // What Vinster has learned about this diner (Vinster's Observations) — left
-    // out for guests, in top-scoring mode, and when scan-start retries without
-    // the soft preferences.
-    const tasteSection = internal || topScoringMode || useTasteProfile === false
+    // out in top-scoring mode, and when scan-start retries without the soft
+    // preferences.
+    const tasteSection = topScoringMode || useTasteProfile === false
       ? ''
       : tasteProfileSection(await getTasteProfile(req));
 

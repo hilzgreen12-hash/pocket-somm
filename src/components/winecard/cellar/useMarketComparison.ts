@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCellar } from '../../../hooks/useCellar';
-import { fetchVintageComparison, isWineSearcherUnavailable, type VintageComparisonRow } from '../../../services/pricing';
+import { fetchVintageComparison, isWineSearcherUnavailable, VINTAGES_INCOMPLETE_NOTE, type VintageComparisonRow } from '../../../services/pricing';
 import { generateMarketVintage, generateRarity, generateVintageVerdict, type VintageVerdictAI } from '../../../api/wineExtras';
 import { wineQueryName, wineQueryAltName } from '../../../utils/wineIdentity';
 import { vintageVerdict } from '../../../utils/wineCardInsights';
@@ -49,7 +49,7 @@ export function useMarketComparison(wine: CellarWine, opts: { open: boolean; can
       const scanned = parseInt(wine.vintage ?? '', 10);
       // Rarity runs alongside the vintage table; both are saved together.
       const rarityP = generateRarity(wine).then((r) => r ?? NO_RARITY).catch(() => undefined);
-      const fetched = await fetchVintageComparison(
+      const { rows: fetched, incomplete } = await fetchVintageComparison(
         wineQueryName(wine.producer, wine.wine_name),
         currency,
         Number.isFinite(scanned) ? scanned : null,
@@ -67,6 +67,12 @@ export function useMarketComparison(wine: CellarWine, opts: { open: boolean; can
           setNote(written);
           setUnknown(notKnown);
         } catch { /* the table alone still shows */ }
+      }
+      // A short table that's only short because Wine-Searcher refused some
+      // years isn't saved, so the next open of Market tries again.
+      if (incomplete) {
+        showAlert({ title: 'Not every vintage could be checked', body: VINTAGES_INCOMPLETE_NOTE });
+        return;
       }
       try {
         const rarity = await rarityP;

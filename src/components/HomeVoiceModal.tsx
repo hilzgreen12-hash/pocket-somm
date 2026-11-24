@@ -17,7 +17,7 @@ import { resolveIntelCurrency } from '../utils/localCurrency';
 import type { CellarWine, WineDetailsComplete } from '../types/wine';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
-import { PER_75CL } from '../utils/bottleValue';
+import { perBottle } from '../utils/bottleValue';
 import {
   useChat, ChatSheet, ChatCancelled, Greeting, Starters, Starter, Card, CardLabel, CardBody, Tag,
   ResultRow, GoldLink, DoneButton, ServingSuggestions, chatErrorText, ALT_ANSWER,
@@ -44,7 +44,7 @@ function cellarPrice(w: CellarWine): string | null {
   const range = w.estimated_value_low != null && w.estimated_value_high != null
     ? ` · Range ${sym}${Math.round(w.estimated_value_low)}–${sym}${Math.round(w.estimated_value_high)}` : '';
   const src = (w.estimated_value_source ?? '').toLowerCase().includes('searcher') ? 'Wine-Searcher' : 'Vinster estimate';
-  return `${sym}${Math.round(w.estimated_value)}${PER_75CL}${range} · ${src}`;
+  return `${sym}${Math.round(w.estimated_value)}${perBottle(w.bottle_size_ml)}${range} · ${src}`;
 }
 function marketPrice(m: MarketPoint | null): string | null {
   if (!m || m.avg == null) return null;

@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Modal, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, useWindowDimensions } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import * as Application from 'expo-application';
@@ -27,10 +26,8 @@ export default function YouScreen() {
   const currentUsername = session?.user.user_metadata?.display_name ?? '';
   const currentEmail = session?.user.email ?? '';
 
-  // Account controls (currency, email, username, email preferences) now live on
-  // the dedicated Your Settings screen. The alter-ego carousel takes a gate; on
-  // this account-gated screen the session always exists, so it just runs.
-  const requireAccount = (action: () => void) => action();
+  // Account controls (currency, email, username, email preferences) live on
+  // the dedicated Your Settings screen.
 
   const [signingOut, setSigningOut] = useState(false);
 
@@ -55,25 +52,6 @@ export default function YouScreen() {
 
   function handleDeleteAccount() {
     setDeleteConfirmOpen(true);
-  }
-
-  if (!session) {
-    return (
-      <TabSwipeView style={styles.container}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingTop }]}>
-          <VinsterHeader />
-          <View style={styles.body}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title}>About You</Text>
-            </View>
-            <ArchiveSignInPrompt
-              title="Sign in to manage your account"
-              body="Sign in or create an account to see your profile, currency, notification preferences and account controls."
-            />
-          </View>
-        </ScrollView>
-      </TabSwipeView>
-    );
   }
 
   async function confirmDelete() {
@@ -151,7 +129,7 @@ export default function YouScreen() {
         As you scan, cellar, rate and cook, Vinster sketches your alter-ego — a witty character profile drawn from your tastes that evolves as you use the app. Share it with friends or the community.
       </Text>
       <View style={styles.carouselBleed}>
-        <AlterEgoCarousel requireAccount={requireAccount} />
+        <AlterEgoCarousel />
       </View>
 
       <View style={styles.divider} />

@@ -10,6 +10,8 @@
 // Secret required (Supabase dashboard → Edge Functions → Secrets):
 //   SERPER_API_KEY — your serper.dev API key
 
+import { requireSignedIn } from '../_shared/auth.ts';
+
 const SERPER_API_KEY = Deno.env.get('SERPER_API_KEY') ?? '';
 
 interface Candidate {
@@ -22,6 +24,9 @@ interface Candidate {
 
 Deno.serve(async (req) => {
   try {
+    const auth = await requireSignedIn(req);
+    if (auth instanceof Response) return auth;
+
     if (!SERPER_API_KEY) {
       return json({ images: [], error: 'Image search is not configured.' }, 200);
     }

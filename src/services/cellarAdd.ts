@@ -2,6 +2,7 @@ import { findCellarWineByIdentity, getCellarWineById, updateCellarWine, type New
 import { uploadLabelImage } from '../api/labelPhotos';
 import { findSameCellarWine } from '../utils/wineMatch';
 import { normaliseVintage } from '../utils/wineIdentity';
+import { isStandardBottle } from '../utils/bottleValue';
 import type { CellarWine, WineDetailsComplete } from '../types/wine';
 
 // Shared steps for adding a wine to the cellar from the label flows (the Add
@@ -16,7 +17,8 @@ export interface PurchaseInput {
   estimated: boolean;
 }
 
-// A 75cl market price already looked up for the form, kept as the card's value.
+// A 75cl market price already looked up for the form, kept as the card's value
+// when the bottle is a 75cl one (another size is valued as its own format).
 export interface MarketValueInput {
   per75: number;
   currency: string;
@@ -31,7 +33,8 @@ export function newCellarWinePayload(args: {
   purchase?: PurchaseInput | null;
   marketValue?: MarketValueInput | null;
 }): NewCellarWine {
-  const { wine, purchase, marketValue } = args;
+  const { wine, purchase } = args;
+  const marketValue = isStandardBottle(args.bottleSizeMl) ? args.marketValue : null;
   const producer = wine.producer.trim();
   const vintage = (wine.vintage ?? '').trim();
   const paid = purchase?.price != null ? purchase : null;

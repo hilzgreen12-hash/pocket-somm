@@ -26,7 +26,6 @@ import { formatCurrency } from '../../src/constants/currency';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
-import { per75From } from '../../src/utils/bottleValue';
 import { launchCamera, launchImageLibrary } from '../../src/utils/imagePicker';
 
 type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'location' | 'adding' | 'done' | 'reviews-done';
@@ -93,8 +92,8 @@ function caseSummary(w: CellarImportWine): string {
 }
 
 // The cellar line a new holding becomes. Imported values are for the bottle as
-// listed; Vinster keeps values per 75cl. added_via 'import' means no Wine Intel
-// is generated for it in the background.
+// listed, at its own size — as Vinster keeps them. added_via 'import' means no
+// Wine Intel is generated for it in the background.
 function newCellarRow(userId: string, id: string, w: CellarImportWine, defaultCurrency: string): NewCellarWine & { id: string } {
   const year = (s: string | null) => { const n = s ? parseInt(s, 10) : NaN; return Number.isFinite(n) ? n : null; };
   const market = w.marketPricePerBottle;
@@ -113,7 +112,7 @@ function newCellarRow(userId: string, id: string, w: CellarImportWine, defaultCu
     drinking_window_status: 'unknown',
     // A market/current value column becomes the wine's estimated value, so
     // Cellar Stats reflect it without a lookup.
-    estimated_value: market != null ? per75From(market, w.bottleSizeMl) : null,
+    estimated_value: market ?? null,
     estimated_value_currency: market != null ? (w.currency ?? defaultCurrency) : null,
     estimated_value_at: market != null ? new Date().toISOString() : null,
     estimated_value_source: market != null ? 'imported' : null,

@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator
 import { router } from 'expo-router';
 import { useChosenWines, useWineReviewCards } from '../hooks/useChosenWines';
 import { useScanHistory } from '../hooks/useScanHistory';
-import { UNNAMED_RESTAURANT, formatVisitDate, isRestaurantVisit, sessionsWithWines, visitStats } from '../utils/restaurantReview';
+import { UNNAMED_RESTAURANT, formatVisitDate, hasRestaurantReview, isRestaurantVisit, sessionsWithWines, visitStats } from '../utils/restaurantReview';
 import { LabelThumb } from './LabelThumb';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard, NAMED_LABELS, RESTAURANT_IMG, RESTAURANT_WARM_IMG, RESTAURANT_LANTERNS_IMG } from './ExamplePlaceholder';
@@ -13,7 +13,8 @@ import { fonts } from '../constants/fonts';
 
 // Review tab carousels: the latest Wine Reviews and Restaurant Reviews (up to 8
 // each), newest first. Read-only views of the same records the full pages list;
-// tapping a card opens it there, and "View All" opens the full page.
+// tapping a card opens it there, and "View All" opens the full page. Only
+// reviewed items get a tile — anything awaiting review is on View All only.
 const MAX = 8;
 
 const fmtDay = (date: string | null | undefined) => {
@@ -101,7 +102,9 @@ export function RestaurantReviewsCarousel({ onViewAll }: { onViewAll: () => void
   const all = archive
     .filter((a) => isRestaurantVisit(a, withWines))
     .sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime());
-  const items = all.slice(0, MAX);
+  // Only reviewed visits get a tile: one awaiting review has no photo yet, so it's
+  // listed (marked Awaiting Review) on the View All page instead — as wines are.
+  const items = all.filter(hasRestaurantReview).slice(0, MAX);
   const stats = visitStats(all);
   return (
     <>

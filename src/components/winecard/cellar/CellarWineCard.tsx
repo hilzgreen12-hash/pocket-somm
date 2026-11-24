@@ -27,7 +27,7 @@ import { getCachedLabelUri } from '../../../api/labelImageCache';
 import { publishCommunityReview } from '../../../api/community';
 import { launchCamera, launchImageLibrary } from '../../../utils/imagePicker';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../../utils/shareCard';
-import { PER_75CL } from '../../../utils/bottleValue';
+import { perBottle } from '../../../utils/bottleValue';
 import { todayYmd } from '../../../utils/reviewDate';
 import { confirmWineDelete, reviewsOn } from '../../../utils/confirmWineDelete';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../../constants/share';
@@ -266,7 +266,7 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
     setSharing(true);
     const drinkingWindow = wine.drinking_window_from && wine.drinking_window_to ? `${wine.drinking_window_from}–${wine.drinking_window_to}` : null;
     const estimatedValue = wine.estimated_value != null
-      ? `${formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}${PER_75CL}`
+      ? `${formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}${perBottle(wine.bottle_size_ml)}`
       : null;
     // The label goes into the captured image, so resolve it to a local file first.
     let imageUri: string | null = null;
@@ -315,10 +315,7 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
   function postToCommunity() {
     const user = session?.user;
     if (postingReview || reviewPosted) return;
-    if (!user) {
-      showAlert({ title: 'Sign in required', body: 'You need an account to post a review to the community.' });
-      return;
-    }
+    if (!user) return;
     const title = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' · ').trim() || wine.wine_name || 'Wine review';
     showAlert({
       title: 'Share with the community?',
