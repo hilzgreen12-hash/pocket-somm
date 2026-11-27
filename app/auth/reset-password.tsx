@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
+import { clearRecoveryPending, isRecoveryPending, recoveryLinkState } from '../../src/services/recoveryLink';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -25,6 +26,35 @@ export default function ResetPasswordScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Only show the form for a recovery link that _layout has actually
+      // redeemed and whose new password isn't set yet. expo-router can open
+      // this screen from the link itself (Android re-delivers it on restart),
+      // so a link already used — password already set — goes home instead.
+      // Wait while the link is being redeemed; allow a moment for _layout to
+      // pick the launch link up at all.
+      let pending = false;
+      for (let waited = 0; waited < 30000; waited += 250) {
+        if (cancelled) return;
+        const state = recoveryLinkState();
+        if (state === 'failed') break;
+        if (state !== 'redeeming') {
+          pending = await isRecoveryPending();
+          if (cancelled) return;
+          if (pending || waited >= 2000) break;
+        }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      if (cancelled) return;
+      if (!pending) {
+        if (recoveryLinkState() === 'failed') {
+          // Redemption failed (_layout has said why) — offer a fresh link.
+          setHasSession(false);
+          setChecking(false);
+        } else {
+          router.replace('/');
+        }
+        return;
+      }
       // _layout's handler may still be installing the session — poll
       // briefly rather than failing on the first empty read.
       for (let i = 0; i < 5; i++) {
@@ -79,6 +109,8 @@ export default function ResetPasswordScreen() {
     if (updateError) {
       setError(updateError.message);
     } else {
+      // The reset is finished: this screen must not come back for this link.
+      await clearRecoveryPending();
       setDone(true);
     }
   }

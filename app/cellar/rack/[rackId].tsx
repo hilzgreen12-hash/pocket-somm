@@ -420,7 +420,7 @@ export default function RackGridScreen() {
     if (n < bottlesHere(wineId)) { void run(); return; }
     showAlert({
       title: `Unplace ${n === 1 ? 'this bottle' : `all ${n} bottles`}?`,
-      body: `${wineName} will leave this ${noun} and stay in Your Cellar List, not yet placed.`,
+      body: `${wineName} will leave this ${noun} and stay in Your Full Cellar List, not yet placed.`,
       buttons: [
         { text: 'Unplace', style: 'destructive', onPress: () => void run() },
         { text: 'Cancel', style: 'cancel' },

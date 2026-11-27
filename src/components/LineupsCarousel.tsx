@@ -13,7 +13,7 @@ import { fonts } from '../constants/fonts';
 // Placeholder tiles shown until the user saves their first lineup — a faded row
 // of bundled wine labels (a bottle lineup) under a scrim, mirroring the empty
 // "Your Recent Scans" carousel.
-const LINEUP_OVERLAY = 'Your first lineup appears here as you use Vinster';
+const LINEUP_OVERLAY = 'Your lineup appears here as you add them';
 const LINEUP_EXAMPLES: PlaceholderCard[] = [
   { kind: 'labelLineup', images: placeholderLabelImages(0, 4), title: 'Your Lineup', stamp: '20 Dec 2029 · La Steakhouse', overlay: LINEUP_OVERLAY },
   { kind: 'labelLineup', images: placeholderLabelImages(4, 4), title: 'Your Lineup', stamp: '18 Dec 2029 · At Home', overlay: LINEUP_OVERLAY },

@@ -8,7 +8,7 @@ import type { CellarWine, WineIntelligence } from '../types/wine';
 
 // The one bulk "critic score + market value" update, used by Cellar Statistics
 // (Calculate / Recalculate / Auto Update All / Refresh in another currency) and
-// by Your Cellar List's "Update all". Every lookup is paid, so the callers'
+// by Your Full Cellar List's "Update all". Every lookup is paid, so the callers'
 // rules are enforced here as well as in their screens:
 //   • view-only members never run it (the owner's rows would refuse the write
 //     after the lookup was paid for);
@@ -210,7 +210,7 @@ export async function updateCellarIntelBatch(
   opts: {
     userId: string;
     currency: string;
-    // Also find a label photo for photo-less wines (Your Cellar List's run).
+    // Also find a label photo for photo-less wines (Your Full Cellar List's run).
     findLabels?: boolean;
     onProgress?: (done: number, total: number) => void;
     signal?: AbortSignal;

@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { router } from 'expo-router';
 import { useCellar, useArchive } from '../hooks/useCellar';
 import { wineNameKey } from '../utils/wineIdentity';
-import { effectiveMaturity } from '../utils/maturity';
+import { wineDrinkingStage } from '../utils/maturity';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard, NAMED_LABELS } from './ExamplePlaceholder';
 import { wineHeaderLine } from '../utils/wineHeader';
@@ -37,8 +37,11 @@ function isLastCall(w: CellarWine, nowYear: number = new Date().getFullYear()): 
   const to = w.drinking_window_to;
   if (to == null) return false;
   if (to > nowYear + LAST_CALL_HORIZON) return false;
-  const status = effectiveMaturity(w);
-  return status === 'peak' || status === 'declining';
+  const stage = wineDrinkingStage(w);
+  if (stage === 'too_young' || stage === 'spirit') return false;
+  // Only the closing year known: it's open (or closed) — not too young.
+  if (stage === 'unknown') return w.drinking_window_from == null;
+  return true; // any in-window stage, or Declining
 }
 
 type InsightTile = { wine: CellarWine; badge: string; meta: string };

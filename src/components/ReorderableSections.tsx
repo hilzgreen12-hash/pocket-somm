@@ -9,7 +9,8 @@ import { colors, spacing } from '../constants/theme';
 // beside a title and dragging. JS-thread Animated (like CoteDorMap) — there are
 // only a handful of sections, so no worklets needed.
 
-type ReorderableSection = { key: string; title: string; content: ReactNode };
+// headerRight: optional link at the right of the title (e.g. "View All ›").
+type ReorderableSection = { key: string; title: string; content: ReactNode; headerRight?: ReactNode };
 
 // The page ScrollView, so a drag near the screen's top/bottom edge can scroll it.
 // Spread `scrollProps` onto that ScrollView and pass `host` to ReorderableSections.
@@ -242,6 +243,7 @@ export function ReorderableSections({ sections, order, onReorder, onDragActive, 
                 </View>
               </GestureDetector>
               <Text style={[headerStyle, styles.headerText]}>{s.title}</Text>
+              {s.headerRight ? <View style={styles.headerRight}>{s.headerRight}</View> : null}
             </View>
             {s.content}
           </Animated.View>
@@ -265,4 +267,6 @@ const styles = StyleSheet.create({
   headerText: { paddingHorizontal: 32 },
   // bottom matches the title's marginBottom so the grip centres on the text.
   grip: { position: 'absolute', left: 0, top: 0, bottom: spacing.md, width: 28, justifyContent: 'center', zIndex: 2 },
+  // Same vertical centring as the grip, at the right indent.
+  headerRight: { position: 'absolute', right: 0, top: 0, bottom: spacing.md, justifyContent: 'center', zIndex: 2 },
 });

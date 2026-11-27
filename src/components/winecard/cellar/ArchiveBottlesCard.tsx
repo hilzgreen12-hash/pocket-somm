@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Modal } from 'react-native';
-import { wc } from '../wcStyles';
+import { useWc } from '../wcStyles';
 import { s } from './styles';
 import { fmtDay, bottlesLabel } from './format';
 import { showAlert } from '../../AppAlert';
@@ -76,6 +76,7 @@ export function ArchiveBottlesCard({ data, canEdit, returning = false, onReturn 
   returning?: boolean;
   onReturn?: () => void;
 }) {
+  const wc = useWc();
   const [noteEntry, setNoteEntry] = useState<NoteEntry | null>(null);
 
   return (

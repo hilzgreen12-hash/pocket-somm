@@ -9,7 +9,6 @@ import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
-import { perBottle } from '../utils/bottleValue';
 
 function symbolFor(code: string): string {
   return CURRENCIES.find((c) => c.code === code.toUpperCase())?.symbol ?? code;
@@ -160,7 +159,6 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
           placeholderTextColor={colors.textMuted}
           keyboardType="decimal-pad"
         />
-        {field === 'estimated_value' ? <Text style={styles.sym}>{perBottle(w.bottle_size_ml)}</Text> : null}
       </View>
     </View>
   );

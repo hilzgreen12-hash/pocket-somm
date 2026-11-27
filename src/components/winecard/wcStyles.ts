@@ -1,10 +1,11 @@
 import { StyleSheet } from 'react-native';
 import { colors, spacing } from '../../constants/theme';
 import { fonts } from '../../constants/fonts';
+import { ARCHIVED, useArchivedCard } from './cardTheme';
 
 // The wine card's visual language (tabs, facts bar, cards, history, verdict,
 // cellar picks) — shared so the Wine Intel screen reads the same.
-export const wc = StyleSheet.create({
+const base = StyleSheet.create({
   // The tab buttons sit straight on the page's terracotta (no dark band), so
   // the card carries less brown; the history and review boxes keep theirs.
   TabBar: { flexDirection: 'row', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
@@ -90,3 +91,40 @@ export const wc = StyleSheet.create({
   outlineBtnText: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.gold },
   addReview: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderStyle: 'dashed', borderColor: 'rgba(224,184,74,0.7)' },
 });
+
+export const wc = base;
+
+// Archived wine cards (option D): cream page, terracotta panels that keep the
+// white text and gold figures, espresso tabs and buttons, dark text for the
+// few things that sit straight on the cream.
+export const wcArchived = StyleSheet.create({
+  ...base,
+  Tab: { ...base.Tab, borderColor: ARCHIVED.espresso },
+  TabOn: { backgroundColor: ARCHIVED.espresso, borderColor: ARCHIVED.espresso },
+  TabText: { ...base.TabText, color: ARCHIVED.espresso },
+  TabTextOn: { color: ARCHIVED.gold },
+  Facts: { ...base.Facts, backgroundColor: ARCHIVED.panel, borderColor: ARCHIVED.panel },
+  History: { ...base.History, backgroundColor: ARCHIVED.panel, borderColor: ARCHIVED.panel },
+  Cellared: { ...base.Cellared, color: ARCHIVED.espresso },
+  CellarNoteLabel: { ...base.CellarNoteLabel, color: ARCHIVED.accent },
+  CellarNoteInput: { ...base.CellarNoteInput, color: ARCHIVED.ink },
+  Card: { ...base.Card, backgroundColor: ARCHIVED.panel },
+  Inside: { ...base.Inside, backgroundColor: ARCHIVED.panel, borderColor: ARCHIVED.gold },
+  // Sit on the cream otherwise — given a panel so their white text reads.
+  Note: { ...base.Note, backgroundColor: ARCHIVED.panel, borderRadius: 14, padding: spacing.md },
+  VsBar: { ...base.VsBar, backgroundColor: ARCHIVED.panel, borderColor: ARCHIVED.panel },
+  Verdict: { ...base.Verdict, backgroundColor: ARCHIVED.panel, borderColor: ARCHIVED.gold },
+  Pairings: { ...base.Pairings, backgroundColor: ARCHIVED.panel, borderColor: ARCHIVED.panel },
+  Pick: { ...base.Pick, backgroundColor: ARCHIVED.panel },
+  Regen: { ...base.Regen, color: ARCHIVED.espresso },
+  footnote: { ...base.footnote, color: ARCHIVED.inkMuted },
+  outlineBtn: { ...base.outlineBtn, borderColor: ARCHIVED.espresso },
+  outlineBtnText: { ...base.outlineBtnText, color: ARCHIVED.espresso },
+  addReview: { ...base.addReview, backgroundColor: ARCHIVED.panel },
+});
+
+// The card's styles: archived colours inside an archived card, else the usual.
+export function useWc() {
+  return useArchivedCard() ? wcArchived : wc;
+}
+

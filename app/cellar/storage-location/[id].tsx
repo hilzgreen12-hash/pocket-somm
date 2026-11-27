@@ -108,7 +108,7 @@ export default function StorageLocationScreen() {
   // ---- Bringing an existing cellar wine here ("Select from Cellar List") ----
 
   // Where a wine's bottles are outside this cellar, from its placements, plus
-  // Your Cellar List for its unplaced ones.
+  // Your Full Cellar List for its unplaced ones.
   function describeElsewhere(placements: CellarPlacement[], loose: number): string[] {
     const names: string[] = [];
     for (const p of placements) {
@@ -117,7 +117,7 @@ export default function StorageLocationScreen() {
         : allLocations.find((l) => l.id === p.storage_location_id)?.name ?? 'another location';
       if (!names.includes(name)) names.push(name);
     }
-    if (loose > 0) names.push('Your Cellar List');
+    if (loose > 0) names.push('Your Full Cellar List');
     return names;
   }
 

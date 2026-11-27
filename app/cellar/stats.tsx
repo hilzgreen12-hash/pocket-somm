@@ -7,13 +7,14 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useCellarContext } from '../../src/hooks/useCellarContext';
 import { useBulkIntel } from '../../src/hooks/useBulkIntel';
+import { DrinkingWindowEditorModal } from '../../src/components/DrinkingWindowEditorModal';
 import { repairRackedWines } from '../../src/api/cellar';
 import { isValueStale } from '../../src/services/bulkIntel';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
 import { inferWineStyle } from '../../src/utils/wineStyle';
-import { effectiveMaturity } from '../../src/utils/maturity';
+import { wineDrinkingStage, DRINKING_STAGES, STAGE_LABEL } from '../../src/utils/maturity';
 import { mostRepresentedRegions, classifiedRegionBottles } from '../../src/utils/wineRegionGroup';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { WineValueEditorModal } from '../../src/components/WineValueEditorModal';
@@ -52,14 +53,10 @@ function regionShareLine(top: [string, number][], total: number): string {
   return parts.join('  ·  ');
 }
 
-// The four drinking-window buckets, matching the rack colour statuses.
-type WindowStatus = 'too_young' | 'approaching' | 'peak' | 'declining';
-const WINDOW_BUCKETS: { status: WindowStatus; label: string }[] = [
-  { status: 'too_young', label: 'Too Young' },
-  { status: 'approaching', label: 'Early but Approachable' },
-  { status: 'peak', label: 'Sweet Spot' },
-  { status: 'declining', label: 'In Decline' },
-];
+// The drinking-window stages (utils/maturity), youngest first.
+type WindowStatus = typeof DRINKING_STAGES[number];
+const WINDOW_BUCKETS: { status: WindowStatus; label: string }[] =
+  DRINKING_STAGES.map((st) => ({ status: st, label: STAGE_LABEL[st] }));
 const isWindowStatus = (s: string): s is WindowStatus => WINDOW_BUCKETS.some((b) => b.status === s);
 
 const STYLE_BUCKETS = ['Red', 'White', 'Rosé', 'Sparkling', 'Fortified', 'Other'] as const;
@@ -101,8 +98,8 @@ const EDITORS: Record<EditorMode, EditorSpec> = {
     subtitle: 'These purchase prices are Vinster estimates. Check them and enter what you actually paid per bottle where you know it.',
   },
   addCurrentValues: {
-    field: 'estimated_value', wines: 'unvaluable', title: 'Update Estimated Values',
-    subtitle: "Vinster couldn't find a value for these wines. Enter your own estimate for one bottle at its size — a magnum's value for a magnum, a half bottle's for a half.",
+    field: 'estimated_value', wines: 'unvaluable', title: 'Add Current Values',
+    subtitle: "Enter your estimate per bottle, at its size — this adds to your Total Current Value.",
     alt: { label: 'Input Purchase Values', mode: 'addPurchaseForUnvalued' },
   },
   addPurchaseForUnvalued: {
@@ -151,7 +148,7 @@ function cellarStats(wines: CellarWine[]) {
     styleBottles[style ?? 'Other'] += qty(w);
 
     // Counted per wine, not bottle. Spirits have no drinking window to await.
-    const maturity = effectiveMaturity(w);
+    const maturity = wineDrinkingStage(w);
     if (isWindowStatus(maturity)) byWindow[maturity].push(w);
     else if (!w.is_spirit) awaitingWindow.push(w);
   }
@@ -256,9 +253,17 @@ export default function CellarStatsScreen() {
   const qc = useQueryClient();
   const refreshCellar = () => invalidateCellarViews(qc);
   const bulk = useBulkIntel(refreshCellar);
+  // What the last bulk run started from here updates, for its progress screen:
+  // values ("Valuing your cellar…") or drinking windows.
+  const [bulkWhat, setBulkWhat] = useState<'values' | 'intel'>('values');
+  const startBulk = (targets: CellarWine[], what: 'values' | 'intel', action: string) => {
+    setBulkWhat(what);
+    bulk.start(targets, what, action);
+  };
 
   const [editor, setEditor] = useState<EditorMode | null>(null);
   const [expanded, setExpanded] = useState<WindowStatus | 'awaiting' | null>(null);
+  const [windowEditorOpen, setWindowEditorOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -411,7 +416,7 @@ export default function CellarStatsScreen() {
               <MetaLine
                 text={`${editorWines.unvaluable.length} Missing Value${editorWines.unvaluable.length === 1 ? '' : 's'}`}
                 links={canEdit ? [
-                  ...(targets.unvaluable.length > 0 ? [{ label: 'Auto Update All', onPress: () => bulk.start(targets.unvaluable, 'values', 'Auto Update All') }] : []),
+                  ...(targets.unvaluable.length > 0 ? [{ label: 'Auto Update All', onPress: () => startBulk(targets.unvaluable, 'values', 'Auto Update All') }] : []),
                   { label: 'View Wines to Update', onPress: openEditor('addCurrentValues') },
                 ] : []}
               />
@@ -421,7 +426,7 @@ export default function CellarStatsScreen() {
             {targets.staleCurrency.length > 0 ? (
               <MetaLine
                 text={`${targets.staleCurrency.length} valued in ${targets.staleCurrencyCodes.length === 1 ? targets.staleCurrencyCodes[0] : 'another currency'}`}
-                links={[{ label: `Refresh in ${defaultCurrency}`, onPress: () => bulk.start(targets.staleCurrency, 'values', `Refresh in ${defaultCurrency}`) }]}
+                links={[{ label: `Refresh in ${defaultCurrency}`, onPress: () => startBulk(targets.staleCurrency, 'values', `Refresh in ${defaultCurrency}`) }]}
               />
             ) : null}
             {lastEstimateDate || targets.recalculate.length > 0 ? (
@@ -429,7 +434,7 @@ export default function CellarStatsScreen() {
                 text={lastEstimateDate ? `Last valuation: ${lastEstimateDate}` : undefined}
                 links={targets.recalculate.length > 0 ? [{
                   label: lastEstimateDate ? 'Recalculate' : 'Calculate cellar value',
-                  onPress: () => bulk.start(targets.recalculate, 'values', lastEstimateDate ? 'Recalculate' : 'Calculate cellar value'),
+                  onPress: () => startBulk(targets.recalculate, 'values', lastEstimateDate ? 'Recalculate' : 'Calculate cellar value'),
                 }] : []}
               />
             ) : null}
@@ -486,7 +491,9 @@ export default function CellarStatsScreen() {
           <MetaLine
             style={styles.awaitingRow}
             text={`${winesLabel(item.count)} awaiting a drinking window`}
-            links={[{ label: canEdit ? 'View Wines to Update' : 'View Wines', onPress: () => setExpanded((e) => (e === 'awaiting' ? null : 'awaiting')) }]}
+            // Editors get the same "View Wines to Update" sheet as the values
+            // above; view-only members still see the list here.
+            links={[{ label: canEdit ? 'View Wines to Update' : 'View Wines', onPress: canEdit ? () => setWindowEditorOpen(true) : () => setExpanded((e) => (e === 'awaiting' ? null : 'awaiting')) }]}
           />
         </View>
       );
@@ -545,7 +552,24 @@ export default function CellarStatsScreen() {
         />
       ) : null}
 
-      <BulkIntelProgress progress={bulk.progress} title="Valuing your cellar…" onStop={bulk.stop} />
+      {canEdit ? (
+        <DrinkingWindowEditorModal
+          visible={windowEditorOpen}
+          wines={stats.awaitingWindow}
+          altAction={bulk.eligible(stats.awaitingWindow).length > 0
+            ? { label: 'Auto Update All', onPress: () => { setWindowEditorOpen(false); startBulk(bulk.eligible(stats.awaitingWindow), 'intel', 'Auto Update All'); } }
+            : undefined}
+          onClose={() => setWindowEditorOpen(false)}
+          onSaved={() => { setWindowEditorOpen(false); onEditorSaved(); }}
+        />
+      ) : null}
+
+      <BulkIntelProgress
+        progress={bulk.progress}
+        title={bulkWhat === 'intel' ? 'Updating drinking windows…' : 'Valuing your cellar…'}
+        body={bulkWhat === 'intel' ? 'Vinster is fetching drinking windows, critic scores and market values for your wines.' : undefined}
+        onStop={bulk.stop}
+      />
     </View>
   );
 }

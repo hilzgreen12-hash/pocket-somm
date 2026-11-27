@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -41,12 +41,16 @@ import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { isoToYmd } from '../../src/utils/reviewDate';
 import { normaliseCity } from '../../src/utils/city';
-import { foldAccents, matchesWineSearch } from '../../src/utils/wineIdentity';
+import { foldAccents } from '../../src/utils/wineIdentity';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
+import { GATHER_LOCKED } from '../../src/constants/features';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ChosenWine, CellarWine } from '../../src/types/wine';
 import { findCellarHoldings } from '../../src/services/archiveNight';
+import { useCommunityMember } from '../../src/hooks/useCommunityMember';
+import { isMember } from '../../src/api/community';
+import { cellarShare, chosenShare, confirmAndUnshare, confirmShare, resyncShare, withMembership } from '../../src/services/communityShare';
 import { launchCamera, launchImageLibrary } from '../../src/utils/imagePicker';
 
 function formatDate(date: string | null | undefined): string {
@@ -142,13 +146,61 @@ export default function ChosenWinesScreen() {
   // ---- Arriving for one wine -------------------------------------------------
   // A deep link to a specific wine (a wine card, Wine Intel, a lineup, the
   // Review tab carousel) returns there when its review closes.
+  // Arrived from the Review tab's "+ Add" → "Add a wine review": cancelling at
+  // any step (the chooser, the cellar picker, the review input) goes back
+  // there rather than leaving the user on this list. Saving still lands here —
+  // and ends that first add flow, so later cancels stay on this list.
+  // (A ref, not the param: the param never clears.)
+  const addFlowRef = useRef(params.addManual === '1');
+  const endAddFlow = () => { addFlowRef.current = false; };
   const arrivedForOneWine = !!(params.openReview || params.openCellarReview || params.openCellarReviewInput || params.openCellarReviewEdit || params.seedAdd === '1');
+  // From a Wine Intel card: saving or backing out returns straight there, and
+  // the list isn't drawn behind the review so it never flashes up on the way.
+  const fromIntel = params.fromIntel === '1';
   // Pop back to the explicit backTo screen (pushing it again would stack a
   // duplicate that takes several Backs to escape), else simply go back.
   const returnToCaller = () => {
     if (params.backTo) router.dismissTo(decodeURIComponent(params.backTo) as any);
     else router.back();
   };
+
+  // ---- Vinster Community --------------------------------------------------------
+  // Each tasting can be shared on its own. A cellar bottle is shared once, so
+  // only the tasting that was shared shows as shared.
+  const community = useCommunityMember();
+  function shareTarget(e: UnifiedEntry) {
+    if (e.ref.kind === 'chosen') {
+      return { key: `chosen_wines:${e.ref.row.id}`, input: chosenShare(e.ref.row), entryId: null as string | null };
+    }
+    const { wine, entryId } = e.ref;
+    const entry = entriesOf(wine).find((x) => x.id === entryId);
+    return { key: `cellar_wines:${wine.id}`, input: entry ? cellarShare(wine, entry) : null, entryId };
+  }
+  function communityStatus(e: UnifiedEntry) {
+    const t = shareTarget(e);
+    const share = community.shares.get(t.key);
+    if (share && (t.entryId == null || share.entryId === t.entryId)) return share.status;
+    return t.input ? 'none' as const : null;
+  }
+  function onCommunity(e: UnifiedEntry) {
+    const t = shareTarget(e);
+    const share = community.shares.get(t.key);
+    if (share && (t.entryId == null || share.entryId === t.entryId)) {
+      confirmAndUnshare(share.id, t.input?.title ?? 'This review', community.refreshShares);
+      return;
+    }
+    if (!t.input) return;
+    const input = t.input;
+    if (isMember(community.member)) { confirmShare(input, community.refreshShares); return; }
+    // Not a member yet: the joining screen can't show over this card, so close
+    // it, and reopen it to finish sharing once they've joined.
+    const key = detailKey;
+    setDetailKey(null);
+    withMembership(community.member, () => {
+      if (key) setDetailKey(key);
+      confirmShare(input, community.refreshShares);
+    });
+  }
 
   // ---- Open review card + editors ---------------------------------------------
   const [detailKey, setDetailKey] = useState<string | null>(null);
@@ -330,7 +382,9 @@ export default function ChosenWinesScreen() {
     };
     if (params.openReview) {
       const row = chosenWines.find((w) => w.id === params.openReview);
-      if (!row || !once(`open:${row.id}`)) return;
+      // Gone (deleted elsewhere): from Wine Intel there's no list to show, so go back.
+      if (!row) { if (fromIntel && once(`gone:${params.openReview}`)) returnToCaller(); return; }
+      if (!once(`open:${row.id}`)) return;
       const card = cards.find((c) => c.chosenRows.some((r) => r.id === row.id));
       if (card) setDetailKey(card.key);
       else setEditingWine(row); // an unreviewed pick opens straight onto its input
@@ -423,38 +477,63 @@ export default function ChosenWinesScreen() {
     return it.kind === 'review' ? it.card.source : it.pick.source;
   }
 
+  // What the filters, search and sorts read for each item, worked out once per
+  // list change rather than on every tap or keystroke — a big imported history
+  // runs to thousands of cards.
+  const itemMeta = useMemo(() => items.map((it) => {
+    const w = itemIdentity(it);
+    const date = itemDate(it);
+    return {
+      it,
+      time: drinkingDateTime(date),
+      month: monthKey(date),
+      collection: collectionOf(it),
+      score: itemScore(it),
+      memberIds: itemMemberIds(it),
+      hay: foldAccents([w.producer, w.wine_name, w.region, w.grape, w.vintage].filter((f) => f != null && f !== '').join(' ')),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [items, ownedIdentities]);
+
   const availableMonths = useMemo(() => {
-    const months = new Set(items.map((it) => monthKey(itemDate(it))).filter(Boolean));
+    const months = new Set(itemMeta.map((m) => m.month).filter(Boolean));
     return ['all', ...Array.from(months).sort((a, b) => b.localeCompare(a))];
-  }, [items]);
+  }, [itemMeta]);
 
   const activeFolder = activeCustomId ? customFilters.find((f) => f.id === activeCustomId) : undefined;
-  const q = foldAccents(search.trim());
-  const filtered = items.filter((it) => {
-    if (awaitingOnly && it.kind !== 'awaiting') return false;
-    if (typeFilter !== 'all' && collectionOf(it) !== typeFilter) return false;
-    if (monthFilter !== 'all' && monthKey(itemDate(it)) !== monthFilter) return false;
-    if (activeFolder && !itemMemberIds(it).some((id) => activeFolder.itemIds.includes(id))) return false;
-    if (q) {
-      const w = itemIdentity(it);
-      if (!matchesWineSearch([w.producer, w.wine_name, w.region, w.grape, w.vintage], q)) return false;
-    }
-    return true;
-  });
+  const folderIds = useMemo(() => (activeFolder ? new Set(activeFolder.itemIds) : null), [activeFolder]);
+  // Typing stays smooth: the list catches up with the search a beat later.
+  const deferredSearch = useDeferredValue(search);
+  const q = foldAccents(deferredSearch.trim());
 
-  // Score sorts push score-less items to the bottom; ties fall back to recency.
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortMode !== 'recent') {
-      const as = itemScore(a);
-      const bs = itemScore(b);
-      if ((as == null) !== (bs == null)) return as == null ? 1 : -1;
-      if (as != null && bs != null && as !== bs) return sortMode === 'score-desc' ? bs - as : as - bs;
-    }
-    return drinkingDateTime(itemDate(b)) - drinkingDateTime(itemDate(a));
-  });
-
-  const totals = reviewTotals(filtered.flatMap((it) => (it.kind === 'review' ? [it.card] : [])));
-  const awaitingCount = new Set(filtered.flatMap((it) => (it.kind === 'awaiting' ? [reviewIdentityKey(it.pick)] : []))).size;
+  const { sorted, totals, awaitingCount } = useMemo(() => {
+    const words = q.split(/\s+/).filter(Boolean);
+    const filteredMeta = itemMeta.filter((m) => {
+      const it = m.it;
+      if (awaitingOnly && it.kind !== 'awaiting') return false;
+      if (typeFilter !== 'all' && m.collection !== typeFilter) return false;
+      if (monthFilter !== 'all' && m.month !== monthFilter) return false;
+      if (folderIds && !m.memberIds.some((id) => folderIds.has(id))) return false;
+      if (words.length && !words.every((wd) => m.hay.includes(wd))) return false;
+      return true;
+    });
+    // Score sorts push score-less items to the bottom; ties fall back to recency.
+    filteredMeta.sort((a, b) => {
+      if (sortMode !== 'recent') {
+        const as = a.score;
+        const bs = b.score;
+        if ((as == null) !== (bs == null)) return as == null ? 1 : -1;
+        if (as != null && bs != null && as !== bs) return sortMode === 'score-desc' ? bs - as : as - bs;
+      }
+      return b.time - a.time;
+    });
+    const list = filteredMeta.map((m) => m.it);
+    return {
+      sorted: list,
+      totals: reviewTotals(list.flatMap((it) => (it.kind === 'review' ? [it.card] : []))),
+      awaitingCount: new Set(list.flatMap((it) => (it.kind === 'awaiting' ? [reviewIdentityKey(it.pick)] : []))).size,
+    };
+  }, [itemMeta, awaitingOnly, typeFilter, monthFilter, folderIds, q, sortMode]);
 
   // A bottle's label photo stands in when a review has none of its own.
   const cellarPhotoByIdentity = useMemo(() => {
@@ -581,19 +660,41 @@ export default function ChosenWinesScreen() {
     }
   }
   // Every wine on the list, offered in the create/edit folder sheet.
-  const filterItems = useMemo(() => items.map((it) => {
+  // Searchable by name, region, grape, and where / at which venue each tasting
+  // was recorded — so "Champagne" or "Pinot Noir" or "Le Gavroche" finds them.
+  const filterItems = useMemo(() => (!filterModalOpen ? [] : items.map((it) => {
     const w = itemIdentity(it);
     const date = itemDate(it);
+    const places = it.kind === 'review'
+      ? it.card.entries.map((e) => e.location)
+      : [it.pick.restaurant_name, it.pick.city];
+    const where = Array.from(new Set(places.map((p) => (p ?? '').trim()).filter(Boolean)));
+    const when = date ? new Date(drinkingDateTime(date)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
     return {
       id: itemFolderId(it),
       label: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name || w.producer || 'Wine',
-      sublabel: date ? new Date(drinkingDateTime(date)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined,
+      // The region and where it was drunk show under the name, so a search
+      // result is easy to check before Select all.
+      sublabel: [w.region, where[0], when].filter(Boolean).join(' · ') || undefined,
+      searchText: [w.region, w.grape, ...where].filter(Boolean).join(' '),
     };
-  }), [items]);
+  })), [items, filterModalOpen]);
+  // How many wines are in each folder (older folders hold row ids, so count
+  // the wines on the list that match any of the folder's ids).
+  const folderCounts = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const f of customFilters) {
+      const ids = new Set(f.itemIds);
+      out.set(f.id, itemMeta.filter((m) => m.memberIds.some((id) => ids.has(id))).length);
+    }
+    return out;
+  }, [customFilters, itemMeta]);
   // A folder's current members as folder ids (older folders hold row ids).
-  const editingFilterSelection = useMemo(() => (editingFilter
-    ? items.filter((it) => itemMemberIds(it).some((id) => editingFilter.itemIds.includes(id))).map(itemFolderId)
-    : undefined), [editingFilter, items]);
+  const editingFilterSelection = useMemo(() => {
+    if (!editingFilter) return undefined;
+    const ids = new Set(editingFilter.itemIds);
+    return itemMeta.filter((m) => m.memberIds.some((id) => ids.has(id))).map((m) => itemFolderId(m.it));
+  }, [editingFilter, itemMeta]);
 
   // ---- Filter chips ----------------------------------------------------------------------
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'All';
@@ -717,6 +818,15 @@ export default function ChosenWinesScreen() {
     setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null);
     setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null);
   }
+  // Cancel / tap outside / Android back on the "Add a wine review" chooser.
+  function cancelChooser() {
+    setChooserOpen(false);
+    if (addFlowRef.current) returnToCaller();
+  }
+  function cancelCellarPicker() {
+    setCellarPickerOpen(false);
+    if (addFlowRef.current) returnToCaller();
+  }
   function handleChooseManual() {
     setChooserOpen(false);
     resetAdd();
@@ -741,17 +851,21 @@ export default function ChosenWinesScreen() {
   // pre-filled; the photo is uploaded with the review.
   async function ocrThenReview(source: 'camera' | 'library') {
     setChooserOpen(false);
+    // From the chooser (not "Scan again" inside an open Add modal), a cancelled
+    // pick leaves nothing open: in the first add flow, go back to the caller.
+    const fromChooser = !addOpen;
     try {
-      if (!(await ensureMediaPermission(source))) return;
+      if (!(await ensureMediaPermission(source))) { if (fromChooser && addFlowRef.current) returnToCaller(); return; }
       const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
       const picked = source === 'camera'
         ? await launchCamera(opts)
         : await launchImageLibrary(opts);
-      if (picked.canceled || !picked.assets?.[0]) return;
+      if (picked.canceled || !picked.assets?.[0]) { if (fromChooser && addFlowRef.current) returnToCaller(); return; }
       const uri = picked.assets[0].uri;
       // Close any open Add modal so it re-seeds cleanly when reopened.
       setAddOpen(false);
-      if (!(await ensureConnectionForUpload())) return;
+      // Offline: the Add modal is closed now, so nothing is left open.
+      if (!(await ensureConnectionForUpload())) { if (addFlowRef.current) returnToCaller(); return; }
       let ocr: AddSeed | null = null;
       setUploading(true);
       try {
@@ -799,11 +913,16 @@ export default function ChosenWinesScreen() {
         // The LIVE row, so a photo attached from inside the modal shows at once.
         wine={editingWine ? (chosenWines.find((w) => w.id === editingWine.id) ?? editingWine) : null}
         visible={!!editingWine}
-        onSaved={collapsePendingCopies}
+        onSaved={() => {
+          collapsePendingCopies();
+          // A shared review shows its edit in the Community too.
+          if (!GATHER_LOCKED && community.enabled && editingWine) void resyncShare('chosen_wines', editingWine.id).then(community.refreshShares);
+        }}
         onClose={() => {
           const row = editingWine;
           setEditingWine(null);
           pendingCopiesRef.current = [];
+          if (fromIntel && !returnToDetailRef.current) { returnToCaller(); return; }
           // Arrived to review this one pick → show its card once saved.
           afterEditorClosed(arrivedForOneWine && row ? () => {
             const fresh = qc.getQueryData<ChosenWine[]>(['chosen-wines', userId])?.find((w) => w.id === row.id);
@@ -822,9 +941,11 @@ export default function ChosenWinesScreen() {
           setEditingCellar(null);
           router.push(`/cellar/edit-wine/${w.id}` as any);
         }}
-        onClose={() => { setEditingCellar(null); pendingCopiesRef.current = []; afterEditorClosed(); }}
+        onClose={() => { setEditingCellar(null); pendingCopiesRef.current = []; if (addFlowRef.current && !returnToDetailRef.current) { returnToCaller(); return; } afterEditorClosed(); }}
         onSaved={() => {
+          endAddFlow();
           collapsePendingCopies();
+          if (!GATHER_LOCKED && community.enabled && editingCellar) void resyncShare('cellar_wines', editingCellar.wine.id).then(community.refreshShares);
           setEditingCellar(null);
           // Saved from an archived wine card: confirm where it went, then back.
           if (params.savedToast && !returnToDetailRef.current) {
@@ -849,12 +970,13 @@ export default function ChosenWinesScreen() {
         labelImagePath={addLabelPath}
         addToGroupId={addToGroupId}
         source={addSource}
-        onClose={() => { resetAdd(); afterEditorClosed(); }}
+        onClose={() => { resetAdd(); if (addFlowRef.current && !returnToDetailRef.current) { returnToCaller(); return; } afterEditorClosed(); }}
         onSaved={() => {
+          endAddFlow();
           const seed = addInitial;
           resetAdd();
           // From a Wine Intel card → straight back to that card.
-          if (params.fromIntel === '1' && !returnToDetailRef.current) { returnToCaller(); return; }
+          if (fromIntel && !returnToDetailRef.current) { returnToCaller(); return; }
           afterEditorClosed(arrivedForOneWine && seed ? () => {
             const want = reviewIdentityKey({ producer: seed.producer, wine_name: seed.wineName, vintage: seed.vintage });
             const fresh = qc.getQueryData<ChosenWine[]>(['chosen-wines', userId]) ?? [];
@@ -899,6 +1021,8 @@ export default function ChosenWinesScreen() {
           openEntryEditor(entry.ref, entry.twins);
         }}
         onDeleteEntry={(entry: UnifiedEntry) => removeEntries(refsOf(entry))}
+        communityStatus={community.enabled ? communityStatus : undefined}
+        onCommunity={onCommunity}
         onSavePersonalNote={async (entry, note) => {
           if (entry.ref.kind !== 'chosen') return;
           await patchChosenWine(entry.ref.row.id, { other_observations: note.trim() || null });
@@ -921,6 +1045,7 @@ export default function ChosenWinesScreen() {
         itemNoun="wines"
         nounLabel="folder"
         items={filterItems}
+        searchPlaceholder="Search by name, region, grape, place or venue"
         initialName={editingFilter?.name}
         initialSelected={editingFilterSelection}
         saving={savingFilter}
@@ -929,8 +1054,8 @@ export default function ChosenWinesScreen() {
       />
 
       {/* "+ Add" → Select from Cellar: a review written onto one of your bottles. */}
-      <Modal visible={cellarPickerOpen} transparent animationType="fade" onRequestClose={() => setCellarPickerOpen(false)}>
-        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setCellarPickerOpen(false)}>
+      <Modal visible={cellarPickerOpen} transparent animationType="fade" onRequestClose={cancelCellarPicker}>
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={cancelCellarPicker}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
             <Text style={styles.dropdownTitle}>Choose a cellar wine</Text>
             <TextInput
@@ -964,7 +1089,7 @@ export default function ChosenWinesScreen() {
                 </ScrollView>
               );
             })()}
-            <TouchableOpacity style={styles.dropdownCancel} onPress={() => setCellarPickerOpen(false)}>
+            <TouchableOpacity style={styles.dropdownCancel} onPress={cancelCellarPicker}>
               <Text style={styles.dropdownCancelText}>Close</Text>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -973,8 +1098,8 @@ export default function ChosenWinesScreen() {
 
       {/* "+ Add Review" — Scan / Upload read a label into the review input;
           Search/Manual opens it blank; Select from Cellar reviews a bottle. */}
-      <Modal visible={chooserOpen} transparent animationType="fade" onRequestClose={() => setChooserOpen(false)}>
-        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
+      <Modal visible={chooserOpen} transparent animationType="fade" onRequestClose={cancelChooser}>
+        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={cancelChooser}>
           <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
             <Text style={styles.chooserTitle}>Add a wine review</Text>
             <Text style={styles.chooserBody}>Scan or upload a label and Vinster identifies the bottle, search for it, or pick a wine from your cellar — then straight to your review.</Text>
@@ -993,7 +1118,7 @@ export default function ChosenWinesScreen() {
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={() => { setChooserOpen(false); openReviewImportMenu(); }} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Import Review Files</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setChooserOpen(false)} style={styles.chooserCancel}>
+            <TouchableOpacity onPress={cancelChooser} style={styles.chooserCancel}>
               <Text style={styles.chooserCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -1103,6 +1228,17 @@ export default function ChosenWinesScreen() {
         </View>
       )}
 
+      {/* From Wine Intel the list isn't drawn — but if nothing is open (a step
+          closed without returning, e.g. offline), keep a way back. */}
+      {fromIntel && !detailCard && !editingWine && !editingCellar && !addOpen && !chooserOpen && !cellarPickerOpen && !uploading ? (
+        <View style={styles.header}>
+          <TouchableOpacity onPress={returnToCaller}>
+            <Text accessibilityLabel="Back" style={styles.back}>←</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {!fromIntel && (<>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
@@ -1137,9 +1273,9 @@ export default function ChosenWinesScreen() {
             </Text>
           </View>
 
-          {/* Filter chips — Month / Your Score / Collection, then Your Folders
+          {/* Filter chips — Month / Your Score, then Your Folders
               and "+ Add" to create one. Same pattern as Full Cellar List. */}
-          <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
+          <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'Recency' : sortLabel} · Swipe to view and create filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('month')}>
               <View style={styles.filterChipHeadingRow}>
@@ -1155,14 +1291,8 @@ export default function ChosenWinesScreen() {
               </View>
               <Text style={[styles.filterChipValue, yourScoreLabel !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{yourScoreLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Collection</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={[styles.filterChipValue, typeFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{collectionChipLabel}</Text>
-            </TouchableOpacity>
-            {customFilters.map((f) => {
+            {/* Newest folder first, next to Your Score (folders load oldest first). */}
+            {[...customFilters].reverse().map((f) => {
               const active = activeCustomId === f.id;
               // Import folders ("Import — <date>") show the date under an
               // "Import" heading; the user's own folders their name.
@@ -1170,19 +1300,35 @@ export default function ChosenWinesScreen() {
               return (
                 <TouchableOpacity
                   key={f.id}
-                  style={[styles.filterChip, active && styles.filterChipActive]}
+                  style={[styles.filterChip, !isImport && styles.folderChip, active && (isImport ? styles.filterChipActive : styles.folderChipActive)]}
                   onPress={() => setActiveCustomId((prev) => (prev === f.id ? null : f.id))}
                   onLongPress={() => openFilterOptions(f)}
                   delayLongPress={400}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.filterChipHeadingRow}>
-                    <Text style={styles.filterChipLabel}>{isImport ? 'Import' : 'Your Folder'}</Text>
-                    <Text style={styles.filterChipChevron}>▾</Text>
-                  </View>
-                  <Text style={[styles.filterChipValue, active && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">
-                    {isImport ? f.name.replace(/^import\s*[—-]\s*/i, '').trim() : f.name}
-                  </Text>
+                  {isImport ? (
+                    <>
+                      <View style={styles.filterChipHeadingRow}>
+                        <Text style={styles.filterChipLabel}>Import</Text>
+                        <Text style={styles.filterChipChevron}>▾</Text>
+                      </View>
+                      <Text style={[styles.filterChipValue, active && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">
+                        {f.name.replace(/^import\s*[—-]\s*/i, '').trim()}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      {/* The user's own folder: its name as the heading and how
+                          many wines it holds beneath, all in gold. */}
+                      <View style={styles.filterChipHeadingRow}>
+                        <Text style={[styles.filterChipLabel, styles.folderChipLabel]} numberOfLines={1} ellipsizeMode="tail">{f.name}</Text>
+                        <Text style={[styles.filterChipChevron, styles.folderChipLabel]}>▾</Text>
+                      </View>
+                      <Text style={[styles.filterChipValue, styles.folderChipLabel]} numberOfLines={1}>
+                        {(() => { const n = folderCounts.get(f.id) ?? 0; return `${n} ${n === 1 ? 'Wine' : 'Wines'}`; })()}
+                      </Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -1265,6 +1411,7 @@ export default function ChosenWinesScreen() {
           />
         </>
       )}
+      </>)}
 
       {/* The dropdown for whichever filter chip was tapped. */}
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
@@ -1370,6 +1517,11 @@ const styles = StyleSheet.create({
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   // A selected folder chip.
   filterChipActive: { borderColor: colors.gold },
+  // The user's own folders: gold outline and gold type, so they stand apart
+  // from Vinster's filters; a selected one gets a thicker outline and a tint.
+  folderChip: { borderColor: colors.gold },
+  folderChipActive: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.12)' },
+  folderChipLabel: { color: colors.gold, flexShrink: 1 },
 
   customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm },
   customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },

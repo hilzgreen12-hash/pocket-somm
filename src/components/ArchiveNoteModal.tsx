@@ -20,7 +20,7 @@ interface Props {
   onClose: () => void;
 }
 
-// Archive confirmation for Your Cellar List and the rack screen (the wine card,
+// Archive confirmation for Your Full Cellar List and the rack screen (the wine card,
 // bins and alt cellars use the card's ArchiveBottlesSheet). When the user owns more than one bottle it asks how
 // many to archive (manual input), plus an optional short note (where / with whom
 // you drank it), and Save / Cancel.

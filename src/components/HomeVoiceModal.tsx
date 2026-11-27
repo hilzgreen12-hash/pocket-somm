@@ -60,10 +60,12 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
   // "Ask about my reviews": snap misheard names to wines the user has reviewed
   // or cellared, by sound ("chateau rear sack" → Château Rieussec).
   const { chosenWines } = useChosenWines();
-  const soundIndex = useMemo(() => buildSoundNameIndex([
+  // Built only while the voice sheet is open: a big review history is
+  // thousands of names.
+  const soundIndex = useMemo(() => (!visible ? [] : buildSoundNameIndex([
     ...wines.flatMap((w) => [w.producer, w.wine_name]),
     ...chosenWines.flatMap((c: any) => [c.producer, c.wine_name]),
-  ].filter(Boolean) as string[]), [wines, chosenWines]);
+  ].filter(Boolean) as string[])), [visible, wines, chosenWines]);
   const soundFix = (q: string) => correctWineNamesBySound(q, soundIndex);
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
@@ -205,26 +207,16 @@ export function HomeVoiceModal({ visible, onClose, startWith }: { visible: boole
       bottleSizeMl: null, quantity: 1,
     };
   }
-  // Open the Wine Intel page. Verified against Wine-Searcher first, exactly like
-  // a label scan; anything unverified goes through "Which wine is this?" and the
-  // identity gate, so a card is never built for a wine that doesn't exist.
+  // Open the Wine Intel page — straight to the card, exactly as a scanned or
+  // typed wine does. The card's own checks (catalogue, Wine-Searcher, Vinster's
+  // knowledge, a web check) recognise the wine; one nothing recognises gets a
+  // card with only the details given, never invented facts.
   async function openIntel(identity: WineDetailsComplete, t: number) {
     if (!chat.alive(t)) return; // the chat was closed meanwhile — do nothing
     const ls = useLabelStore.getState();
     ls.reset(); ls.setWineDetailsConfirmed(identity); ls.setIntelligence(null); ls.setImageUri(null);
-    let verified = false;
-    try {
-      const cur = await resolveIntelCurrency(preferences?.defaultCurrency);
-      const q = [identity.producer, identity.wineName].filter(Boolean).join(' ').trim();
-      const v = identity.vintage && identity.vintage !== 'NV' ? Number(identity.vintage) : null;
-      const pricing = await fetchPricing(q, Number.isFinite(v) ? v : null, cur);
-      verified = pricing.source === 'wine-searcher' && pricing.matched !== false;
-    } catch { verified = false; }
-    if (!chat.alive(t)) return;
     onClose();
-    router.push((verified
-      ? '/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1'
-      : '/label/results?context=intel&fresh=1&confirm=1&noRecent=1') as any);
+    router.push('/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1' as any);
   }
 
   const runIntel = () => start(async () => {

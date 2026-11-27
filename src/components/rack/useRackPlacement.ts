@@ -236,11 +236,11 @@ export function useRackPlacement({ rack, rackId, slotMap, wines, racks, location
   }
 
   // "Leave the rest unplaced": stop waiting for slots here. The bottles stay in
-  // Your Cellar List, unplaced.
+  // Your Full Cellar List, unplaced.
   async function leaveRestUnplaced() {
     try {
       for (const w of awaitingWines) await updateCellarWine(w.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
-      notify('The rest stay in Your Cellar List, unplaced');
+      notify('The rest stay in Your Full Cellar List, unplaced');
     } catch (err) {
       showAlert({ title: 'Could not update', body: errorBody(err) });
     } finally {

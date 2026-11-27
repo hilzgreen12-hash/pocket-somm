@@ -34,7 +34,8 @@ export function useCellar() {
   // user who actually has bottles — indistinguishable from data loss.
   const { data: wines = [], isLoading, isError } = useQuery({
     queryKey: ['cellar', userId],
-    queryFn: () => getCellarWines(userId),
+    // Syncs the copy already held, so only changed bottles are downloaded.
+    queryFn: () => getCellarWines(userId, qc.getQueryData<CellarWine[]>(['cellar', userId])),
     enabled: !!userId,
   });
   // Have the first rows' thumbnails ready before the list is opened.
@@ -43,7 +44,7 @@ export function useCellar() {
   // Adding a wine is kept deliberately FAST — no wine-intel generation here.
   // Intel (critic score, value, tasting note) is generated lazily when the user
   // opens the wine card, and maturity/drinking-window is backfilled in the
-  // background from Your Cellar List (see services/maturityBackfill) so the
+  // background from Your Full Cellar List (see services/maturityBackfill) so the
   // maturity filter still works without slowing down the add.
   const addWine = useMutation({
     // `priceEstimate`: how to fill a missing purchase price with the market
@@ -110,10 +111,11 @@ export function useCellar() {
 export function useArchive(opts?: { enabled?: boolean }) {
   const { session } = useAuth();
   const userId = session?.user.id ?? '';
+  const qc = useQueryClient();
 
   const { data: wines = [], isLoading, isError } = useQuery({
     queryKey: ['cellar-archive', userId],
-    queryFn: () => getArchivedWines(userId),
+    queryFn: () => getArchivedWines(userId, qc.getQueryData<CellarWine[]>(['cellar-archive', userId])),
     enabled: !!userId && (opts?.enabled ?? true),
     // Always refetch on mount so a just-archived wine appears immediately
     // — invalidation alone can be skipped if the cache is still fresh.

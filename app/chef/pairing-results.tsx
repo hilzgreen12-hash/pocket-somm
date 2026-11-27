@@ -197,7 +197,7 @@ function GeneralResults({ results, summary, currency }: { results: GeneralRecomm
 
 export default function PairingResultsScreen() {
   const { savedAt, city } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string }>();
-  const { dish, mode, cellarResult, generalResult, generalSummary, stylePreference, budget, setCellarResult, setMode } = useFoodPairingStore();
+  const { dish, mode, cellarResult, generalResult, generalSummary, stylePreference, budget, minBudget, setCellarResult, setMode } = useFoodPairingStore();
   // Only bottles kept at home are recommended (never external storage).
   const { wines } = useHomeCellarWines();
   const { session } = useAuth();
@@ -232,7 +232,7 @@ export default function PairingResultsScreen() {
 
   // "Show me all of the wines from my cellar that could work" — re-runs the
   // same brief against the user's cellar without sending them back to the
-  // form. Reuses the stored style preference + budget.
+  // form. Reuses the stored style preference + budget range.
   async function handleShowCellarOptions() {
     if (wines.length === 0) return;
     setRequerying(true);
@@ -256,6 +256,7 @@ export default function PairingResultsScreen() {
         preferences ? (preferences as unknown as Record<string, unknown>) : null,
         stylePreference,
         budget,
+        minBudget,
       ) as any;
       setCellarResult(result.recommendations as CellarRecommendation[]);
       setMode('cellar');

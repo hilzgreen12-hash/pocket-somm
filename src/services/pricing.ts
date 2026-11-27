@@ -1,4 +1,5 @@
 import { fetchWinePrice } from '../api/wine-searcher';
+import { recordLookupMiss } from '../api/lookupMisses';
 import { getWineIntelligence, resolveWine, type ResolvedWine, type WebResearch } from '../api/label';
 import { fetchWineFacts } from '../api/wineFacts';
 import { estimateFormatValue } from '../api/wineExtras';
@@ -357,6 +358,8 @@ export async function generateWineIntel(
   let intel: WineIntelligence;
   // What Vinster's score was anchored to (see scoreAnchor) — told to the user.
   let anchorScope: 'vintage' | 'all-vintage' | undefined;
+  // Set when nothing recognised the wine: the card shows only the details given.
+  let labelOnly = false;
   if (facts?.criticScore != null) {
     // Fast path: we already hold a real WS score to anchor Claude, so fetch the
     // (volatile) price and generate intel IN PARALLEL rather than waiting for WS.
@@ -389,13 +392,20 @@ export async function generateWineIntel(
     // intel grounded in what the pages show, and it still has to pass the same
     // identity gate.
     if (!research) {
+      // Started only now it's needed (a paid web search): when Claude doesn't
+      // recognise the wine AND both Wine-Searcher name attempts missed.
       const found = await resolveWine(wine);
       if (found) {
         const again = await generateWineIntel(asResolved(wineIn, found), currency, found.research);
         return { ...again, resolvedIdentity: { producer: found.producer, wineName: found.wineName, region: found.region } };
       }
     }
-    throw new WineNotFoundError();
+    // Scanned, typed or spoken, every wine gets its card — never "couldn't
+    // find". Nothing above recognised this one, so the card carries the
+    // details given and nothing invented: the server has already left every
+    // estimate (score, value, window, notes) empty for an unrecognised wine.
+    labelOnly = true;
+    recordLookupMiss(wine, isDown(pricing));
   }
   // Prefer this session's live WS score; else fall back to the permanent facts
   // score so a re-open stays accurate even after the 30-day price cache expired.
@@ -443,6 +453,7 @@ export async function generateWineIntel(
     // (exact vintage had no WS listing); 'vintage' for an exact match; null
     // when the value is a Vinster estimate. Labels the intel card honestly.
     priceScope: useWs ? (pricing.priceScope ?? 'vintage') : null,
+    labelOnly,
   };
 }
 

@@ -146,6 +146,10 @@ export interface GrapeVariant {
 }
 
 export interface WineIntelligence {
+  // Neither the catalogue, Wine-Searcher, Vinster's own knowledge nor a web
+  // check recognised the wine (scanned, typed or spoken alike): the card shows
+  // the details given, with no invented score, value or window.
+  labelOnly?: boolean;
   // Where criticScore comes from: 'vintage' = critics' scores for this vintage
   // (Wine-Searcher); 'all-vintage' = Vinster's score guided by the average of
   // critics' scores across the wine's vintages; 'vinster' = Vinster's own
@@ -441,6 +445,8 @@ export interface CellarWine {
   bottle_size_ml: number;
   created_at: string;
   updated_at: string;
+  // Stamped by the database on every write (migration 150); the app syncs on it.
+  changed_at?: string;
 }
 
 // One dated entry in a cellar bottle's append-only review history (migration
@@ -468,6 +474,8 @@ export interface StorageLocation {
   // Migration 097 — an Alt Cellar marked as external (offsite / bonded /
   // merchant) rather than at home. Racks, fridges and bins are always home.
   is_external: boolean;
+  // Migration 158 — where an external cellar is ("Octavian, Corsham").
+  stored_at?: string | null;
 }
 
 // A case of bottles boxed together inside a storage location (migration 069).
@@ -532,33 +540,6 @@ export interface RackSlot {
   wine?: CellarWine | null;
 }
 
-// Community types
-export interface CommunityPost {
-  id: string;
-  user_id: string;
-  display_name: string;
-  avatar: string | null;
-  content: string;
-  wine_name: string | null;
-  wine_producer: string | null;
-  wine_vintage: string | null;
-  cellar_wine_id: string | null;
-  created_at: string;
-  like_count?: number;
-  comment_count?: number;
-  user_has_liked?: boolean;
-}
-
-export interface CommunityComment {
-  id: string;
-  post_id: string;
-  user_id: string;
-  display_name: string;
-  avatar: string | null;
-  content: string;
-  created_at: string;
-}
-
 export interface ChosenWine {
   id: string;
   user_id: string;
@@ -594,6 +575,8 @@ export interface ChosenWine {
   // Your Restaurants; this just hides it from the awaiting-review nag. Optional
   // so cached rows written before the column existed read as undefined (falsy).
   review_dismissed?: boolean;
+  // Set by the database on every change (migration 149); the app syncs on it.
+  updated_at?: string;
   // Purchase price + AI estimated value (migration 044) — mirror the
   // equivalent cellar_wines columns so the review card can show them.
   purchase_price: number | null;

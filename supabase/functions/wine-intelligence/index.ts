@@ -1,5 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
-import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine, verifiedProducerWines } from '../_shared/vintageFacts.ts';
+import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine, verifiedProducerWines, webLookupConfirmed } from '../_shared/vintageFacts.ts';
 import { intelCacheKey, readIntelCache, saveIntelCache } from '../_shared/intelCache.ts';
 import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
@@ -142,7 +142,12 @@ Return only the raw JSON — no markdown, no explanation.`;
       ? `\n\nVinster's verified catalogue lists these wines from ${producer}: ${knownWines.join('; ')}. If the wine asked about is one of these — exactly, or differing ONLY by one of these qualifier words: "Single Vineyard", "Viñedo Singular", "Vieilles Vignes", "Old Vines", "Estate" — it is real: treat it as identified and name it as the catalogue does. Any other extra or different word (a vineyard, cuvée or place name, a colour, a reserve tier) makes it a different wine: it gets the normal identity check, and is never identified just because it resembles a listed wine. A wine NOT on this list may still be real; judge it as usual.`
       : '';
 
-    const researchStr = webResearchGuidance(webResearch, cur);
+    // webResearch comes from the client, so it's only honoured when resolve-wine
+    // really added this wine to the catalogue from a web lookup; otherwise it's
+    // ignored and the normal identity gate applies.
+    const researchConfirmed = !!producer && !!webResearch && typeof webResearch === 'object'
+      && await webLookupConfirmed(String(producer).trim(), wineName ? String(wineName).trim() : null);
+    const researchStr = researchConfirmed ? webResearchGuidance(webResearch, cur) : '';
 
     const userContent = `Provide intelligence on this wine:
 - Producer: ${producer}
@@ -257,7 +262,7 @@ Return only the raw JSON — no markdown, no explanation.`;
     // Runs after the response is sent, so it never slows the card.
     if (parsed.isSpirit !== true && producer) {
       const canonProducer = parsed.canonicalProducer ?? String(producer).trim();
-      const canonWine = parsed.canonicalProducer ? parsed.canonicalWineName : (wineName ? String(wineName).trim() : null);
+      const canonWine = parsed.canonicalWineName ?? (wineName ? String(wineName).trim() : null);
       const wsVintageScore = wsScoreNum != null && !anchorAllVintage;
       const wsAverage = wsScoreNum != null && anchorAllVintage ? wsScoreNum : null;
       const save = (async () => {

@@ -15,16 +15,21 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '../src/hooks/useAuth';
 import * as Font from 'expo-font';
 import * as Linking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../src/api/supabase';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { OfflineBanner } from '../src/components/OfflineBanner';
 import { UpdatePromptModal } from '../src/components/UpdatePromptModal';
-import { AppAlertHost } from '../src/components/AppAlert';
+import { AppAlertHost, showAlert } from '../src/components/AppAlert';
 import { PersistedQueryProvider } from '../src/components/PersistedQueryProvider';
 import { configurePersistedQueries } from '../src/api/queryPersistence';
+import { markRecoveryPending, recoveryLinkState, setRecoveryState } from '../src/services/recoveryLink';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Links being redeemed right now (by fingerprint).
+const redeemingNow = new Set<string>();
 
 // React Query defaults tuned for a mobile app where most data (cellar
 // inventory, racks, profile prefs, scan history) doesn't change without the
@@ -89,6 +94,33 @@ export default function RootLayout() {
   }, [fontsLoaded]);
 
   useEffect(() => {
+    // The auth links already acted on (short fingerprints, newest last).
+    const HANDLED_KEY = 'vinster_handled_auth_links';
+    const fingerprint = (u: string) => {
+      let h = 0;
+      for (let i = 0; i < u.length; i++) h = (Math.imul(31, h) + u.charCodeAt(i)) | 0;
+      return `${u.length}:${h}`;
+    };
+    // In memory too: the same link can arrive twice at once, before storage is written.
+    const handledNow = new Set<string>();
+    async function linkAlreadyHandled(fp: string): Promise<boolean> {
+      if (handledNow.has(fp)) return true;
+      handledNow.add(fp);
+      try {
+        const seen: string[] = JSON.parse((await AsyncStorage.getItem(HANDLED_KEY)) ?? '[]');
+        if (seen.includes(fp)) return true;
+      } catch { /* storage unavailable: handle the link as before */ }
+      return false;
+    }
+    // Remembered across restarts only once the link has actually been
+    // redeemed — a failed attempt (offline) leaves the link usable again.
+    async function rememberHandled(fp: string) {
+      try {
+        const seen: string[] = JSON.parse((await AsyncStorage.getItem(HANDLED_KEY)) ?? '[]');
+        if (!seen.includes(fp)) await AsyncStorage.setItem(HANDLED_KEY, JSON.stringify([...seen, fp].slice(-20)));
+      } catch { /* storage unavailable */ }
+    }
+
     // Supabase email-confirm redirects can land here in one of two shapes:
     //   1. Server-verified flow: vinster://auth/callback#access_token=…&refresh_token=…
     //      (or the same params as a query string). Supabase has already
@@ -99,6 +131,23 @@ export default function RootLayout() {
     // Earlier code only handled (2), which is why fresh signups were landing
     // back in the app without a session. This handler now covers both.
     async function handleUrl(url: string) {
+      // Act on each sign-in / reset link only once. Android hands the link
+      // that opened the app back again (getInitialURL, the url event, a
+      // restart), and a reset link's tokens stay valid for a while — handling
+      // it again put the user back on "Set a new password" after they had
+      // already set one. Remembered across restarts.
+      if (!/(access_token|token_hash)=/.test(url)) return;
+      const looksLikeRecovery = /[?#&]type=recovery\b/.test(url);
+      // Tell the reset screen a recovery link is being worked on, so it waits
+      // for the outcome rather than sending the user home.
+      if (looksLikeRecovery && recoveryLinkState() !== 'pending') setRecoveryState('redeeming');
+      const fp = fingerprint(url);
+      if (await linkAlreadyHandled(fp)) {
+        if (recoveryLinkState() === 'redeeming' && looksLikeRecovery && redeemingNow.size === 0) setRecoveryState('idle');
+        return;
+      }
+      redeemingNow.add(fp);
+      let isRecovery = looksLikeRecovery;
       // Wrapped in try/catch because Linking.parse, setSession, and verifyOtp
       // can all throw (malformed URL, expired/already-redeemed token, network).
       // An unhandled rejection inside the addEventListener('url', …) callback
@@ -125,27 +174,54 @@ export default function RootLayout() {
         // user on the reset-password screen to set a new password —
         // every other type just re-evaluates the session at index.
         const type = (queryParams?.type as string | undefined) ?? fragmentParams.type;
-        const dest = type === 'recovery' ? '/auth/reset-password' : '/';
+        isRecovery = type === 'recovery';
+        if (isRecovery && recoveryLinkState() !== 'pending') setRecoveryState('redeeming');
+        const dest = isRecovery ? '/auth/reset-password' : '/';
+
+        // Once a link is redeemed: remember it, and for a recovery link flag
+        // that a password reset is genuinely pending (the reset screen only
+        // shows while this is set).
+        const onRedeemed = async () => {
+          await rememberHandled(fp);
+          if (isRecovery) await markRecoveryPending();
+          router.replace(dest);
+        };
 
         const access_token = (queryParams?.access_token as string | undefined) ?? fragmentParams.access_token;
         const refresh_token = (queryParams?.refresh_token as string | undefined) ?? fragmentParams.refresh_token;
         if (access_token && refresh_token) {
-          await supabase.auth.setSession({ access_token, refresh_token });
+          const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (error) throw error;
           // Bounce back through the index router so it re-evaluates with the
           // fresh session — otherwise the user can land on the public welcome
           // screen (because index already decided "no session" before we
           // installed it) and miss the onboarding tour entirely.
-          router.replace(dest);
+          await onRedeemed();
           return;
         }
 
         const token_hash = (queryParams?.token_hash as string | undefined) ?? fragmentParams.token_hash;
         if (token_hash && type) {
-          await supabase.auth.verifyOtp({ token_hash, type: type as any });
-          router.replace(dest);
+          const { error } = await supabase.auth.verifyOtp({ token_hash, type: type as any });
+          if (error) throw error;
+          await onRedeemed();
+          return;
         }
+        // Nothing redeemable in the link.
+        if (isRecovery && recoveryLinkState() === 'redeeming') setRecoveryState('failed');
       } catch (err) {
         console.warn('[deep-link] handleUrl failed:', url, err);
+        // Let the same link be tried again (e.g. once back online).
+        handledNow.delete(fp);
+        if (isRecovery && recoveryLinkState() === 'redeeming') setRecoveryState('failed');
+        showAlert({
+          title: isRecovery ? 'Could Not Open Reset Link' : 'Could Not Open Link',
+          body: isRecovery
+            ? 'Please check your connection and tap the link in your email again, or request a new one.'
+            : 'Please check your connection and tap the link in your email again.',
+        });
+      } finally {
+        redeemingNow.delete(fp);
       }
     }
 
@@ -229,11 +305,10 @@ export default function RootLayout() {
             <Stack.Screen name="wines/where-to-buy" />
             <Stack.Screen name="recipes/chosen" />
             <Stack.Screen name="restaurants/reviews" />
-            <Stack.Screen name="community/[category]" />
-            <Stack.Screen name="community/upload" />
-            <Stack.Screen name="community/view" />
+            <Stack.Screen name="community/join" />
+            <Stack.Screen name="community/feed" />
+            <Stack.Screen name="community/post/[id]" />
             <Stack.Screen name="community/search" />
-            <Stack.Screen name="community/profile" />
             <Stack.Screen name="about" />
             <Stack.Screen name="age-gate" />
             <Stack.Screen name="legal/privacy" />

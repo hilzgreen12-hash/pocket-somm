@@ -6,10 +6,12 @@ import { useCompareStore } from '../src/stores/compareStore';
 import { runComparison, compareMode, type Comparison, type CompareWineInput } from '../src/api/compareWines';
 import { usePreferences } from '../src/hooks/usePreferences';
 import { useChosenWines } from '../src/hooks/useChosenWines';
+import { chosenByWineKey } from '../src/utils/reviewIndex';
 import { SearchProgress } from '../src/components/SearchProgress';
 import { MessageScreen } from '../src/components/MessageScreen';
 import { isNetworkError } from '../src/api/invokeResilient';
 import { wineHeaderLine } from '../src/utils/wineHeader';
+import { stageFrom, STAGE_LABEL } from '../src/utils/maturity';
 import { wineNameKey } from '../src/utils/wineIdentity';
 import { tidyWineRegion } from '../src/utils/regionFormat';
 import { formatCurrency, currencySymbol } from '../src/constants/currency';
@@ -44,7 +46,11 @@ function vintageHeading(wines: CompareWineInput[]): string {
   return `${title} ${yearText}`.trim();
 }
 
-const STATUS: Record<string, string> = { too_young: 'Too Young', approaching: 'Approaching', peak: 'Peak Now', declining: 'Declining' };
+// The window's stage, from its years (utils/maturity), as on every card.
+const stageText = (from: number | null | undefined, to: number | null | undefined, status: string | null | undefined): string => {
+  const st = stageFrom(from ?? null, to ?? null, status);
+  return st === 'unknown' ? '' : STAGE_LABEL[st];
+};
 
 export default function CompareScreen() {
   useKeepAwake();
@@ -79,8 +85,7 @@ export default function CompareScreen() {
   // The user's own most recent review of each wine + vintage, if any.
   const myReviews = useMemo(() => wines.map((w) => {
     const key = wineNameKey(w.producer, w.wineName);
-    const mine = chosenWines.filter((c) => wineNameKey(c.producer, c.wine_name) === key
-      && String(c.vintage ?? 'NV').trim().toUpperCase() === w.vintage.toUpperCase()
+    const mine = (chosenByWineKey(chosenWines).get(key) ?? []).filter((c) => String(c.vintage ?? 'NV').trim().toUpperCase() === w.vintage.toUpperCase()
       && (!!(c.tasting_note && c.tasting_note.trim()) || c.user_score != null));
     if (!mine.length) return null;
     return [...mine].sort((a, b) => new Date(b.reviewed_at ?? b.chosen_at).getTime() - new Date(a.reviewed_at ?? a.chosen_at).getTime())[0];
@@ -119,6 +124,8 @@ export default function CompareScreen() {
   const bestPpt = pptVals.length > 1 ? Math.min(...pptVals) : null;
   const anyEstimate = wines.some((_, i) => data.market[i]?.price == null && data.wines[i]?.estimatedValue != null);
   const label = (n: number | undefined) => (n ? shortName(wines[n - 1]) : '');
+  // Different wines are numbered in a key above the table; vintages aren't.
+  const numbered = mode !== 'vintages';
   // Market Price (wine card) → where the value comes from, as on the intel card.
   function openValueInfo(i: number) {
     const m = data!.market[i];
@@ -175,9 +182,25 @@ export default function CompareScreen() {
         <View style={styles.body}>
           {/* Vintage & Market Comparison */}
           <Text style={styles.section}>Vintage & Market Comparison</Text>
+          {/* Whole wine names don't fit a table column, so each wine gets a
+              number here and the table lists the numbers. (Vintages are short
+              enough to sit in the table themselves.) */}
+          {numbered ? (
+            <View style={styles.key}>
+              {wines.map((w, i) => (
+                <View key={i} style={styles.keyRow}>
+                  <Num n={i + 1} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.keyName}>{wineHeaderLine(w.producer, w.wineName, w.vintage)}</Text>
+                    {tidyWineRegion(w.region) || w.grape ? <Text style={styles.keyMeta} numberOfLines={1}>{[tidyWineRegion(w.region), w.grape].filter(Boolean).join(' · ')}</Text> : null}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
           <View style={styles.table}>
             <View style={[styles.tr, styles.trHead]}>
-              <Text style={[styles.td, styles.tdWine, styles.th]}>{mode === 'vintages' ? 'Vintage' : 'Wine'}</Text>
+              <Text style={[styles.td, numbered ? styles.tdNum : styles.tdWine, styles.th]}>{numbered ? '#' : 'Vintage'}</Text>
               <Text style={[styles.td, styles.th]}>Score</Text>
               <Text style={[styles.td, styles.th]}>Price</Text>
               <Text style={[styles.td, styles.th]}>{sym} / pt</Text>
@@ -190,14 +213,16 @@ export default function CompareScreen() {
               const v = ppt(i);
               return (
                 <View key={i} style={styles.tr}>
-                  <Text style={[styles.td, styles.tdWine]} numberOfLines={3}>{shortName(w)}</Text>
+                  {numbered
+                    ? <View style={styles.tdNum}><Num n={i + 1} /></View>
+                    : <Text style={[styles.td, styles.tdWine]} numberOfLines={3}>{shortName(w)}</Text>}
                   <Text style={[styles.td, s != null && s === topScore && styles.gold]}>{s ?? '—'}</Text>
                   {/* Tap the price for the Wine-Searcher range. */}
                   <TouchableOpacity style={{ flex: 1 }} onPress={() => showPriceRange(i)} disabled={p == null} activeOpacity={0.6} hitSlop={{ top: 8, bottom: 8 }}>
                     <Text style={[styles.td, p != null && styles.priceLink]}>{p != null ? `${formatCurrency(p, data.currency, { decimals: 0 })}${data.market[i]?.price == null ? '*' : ''}` : '—'}</Text>
                   </TouchableOpacity>
                   <Text style={[styles.td, v != null && v === bestPpt && styles.gold]}>{v != null ? `${sym}${v.toFixed(2)}` : '—'}</Text>
-                  <Text style={[styles.td, styles.tdWindow]}>{r?.drinkingWindowFrom && r?.drinkingWindowTo ? `${r.drinkingWindowFrom}–${r.drinkingWindowTo}` : '—'}{r?.drinkingWindowStatus ? `\n${STATUS[r.drinkingWindowStatus] ?? ''}` : ''}</Text>
+                  <Text style={[styles.td, styles.tdWindow]}>{r?.drinkingWindowFrom && r?.drinkingWindowTo ? `${r.drinkingWindowFrom}–${r.drinkingWindowTo}` : '—'}{(() => { const t = stageText(r?.drinkingWindowFrom, r?.drinkingWindowTo, r?.drinkingWindowStatus); return t ? `\n${t}` : ''; })()}</Text>
                 </View>
               );
             })}
@@ -237,7 +262,10 @@ export default function CompareScreen() {
             const mine = myReviews[i];
             return (
               <View key={i} style={styles.card}>
-                <Text style={styles.cardTitle}>{wineHeaderLine(w.producer, w.wineName, w.vintage)}</Text>
+                <View style={styles.cardTitleRow}>
+                  {numbered ? <Num n={i + 1} /> : null}
+                  <Text style={[styles.cardTitle, { flex: 1 }]}>{wineHeaderLine(w.producer, w.wineName, w.vintage)}</Text>
+                </View>
                 {tidyWineRegion(w.region) || w.grape ? <Text style={styles.cardMeta}>{[tidyWineRegion(w.region), w.grape].filter(Boolean).join(' · ')}</Text> : null}
                 {!r?.identified ? (
                   <Text style={[styles.text, { marginTop: spacing.sm }]}>Vinster couldn't confidently identify this wine, so it has left it out of the comparison rather than guess.</Text>
@@ -247,7 +275,7 @@ export default function CompareScreen() {
                         Price explain themselves, Drinking Window opens the slider. */}
                     <View style={styles.stats}>
                       <Stat label="Critic Score" value={score(i) != null ? String(score(i)) : '—'} onPress={score(i) != null ? openScoreInfo : undefined} />
-                      <Stat label="Drinking Window" value={r.drinkingWindowFrom && r.drinkingWindowTo ? `${r.drinkingWindowFrom}–${r.drinkingWindowTo}` : '—'} sub={r.drinkingWindowStatus ? STATUS[r.drinkingWindowStatus] : undefined}
+                      <Stat label="Drinking Window" value={r.drinkingWindowFrom && r.drinkingWindowTo ? `${r.drinkingWindowFrom}–${r.drinkingWindowTo}` : '—'} sub={stageText(r.drinkingWindowFrom, r.drinkingWindowTo, r.drinkingWindowStatus) || undefined}
                         onPress={r.drinkingWindowFrom || r.drinkingWindowStatus ? () => setWindowFor(i) : undefined} />
                       <Stat label="Market Price" value={price(i) != null ? formatCurrency(price(i)!, data.currency, { decimals: 0 }) : '—'} sub={data.market[i]?.price == null && price(i) != null ? 'Vinster estimate' : undefined}
                         onPress={() => openValueInfo(i)} />
@@ -342,6 +370,15 @@ function openFullIntel(w: CompareWineInput) {
   router.push('/label/results?context=intel&confirmed=1&gen=1&noRecent=1' as any);
 }
 
+// A wine's number in the comparison: the key, the table and its card.
+function Num({ n }: { n: number }) {
+  return (
+    <View style={styles.num}>
+      <Text style={styles.numText}>{n}</Text>
+    </View>
+  );
+}
+
 function Para({ title, text }: { title: string; text: string }) {
   return (
     <View style={{ marginTop: spacing.md }}>
@@ -366,6 +403,15 @@ const styles = StyleSheet.create({
   trHead: { minHeight: 30, borderBottomColor: 'rgba(255,255,255,0.15)' },
   td: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 13.5, color: colors.text },
   tdWine: { flex: 1.4, fontFamily: fonts.bodySemibold },
+  // Just the wine's number, so the other columns get the room.
+  tdNum: { flex: 0.55, alignItems: 'flex-start' },
+  key: { marginBottom: spacing.md, gap: spacing.sm },
+  keyRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  keyName: { fontFamily: fonts.bodySemibold, fontSize: 15, lineHeight: 20, color: colors.text },
+  keyMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 1 },
+  num: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  numText: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.background },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // Widest column, slightly smaller text, so "2023–2042" and "Approaching" each
   // fit on one line.
   tdWindow: { flex: 2, fontSize: 12.5 },

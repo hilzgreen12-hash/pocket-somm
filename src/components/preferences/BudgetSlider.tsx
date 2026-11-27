@@ -33,6 +33,12 @@ function valueToIndex(value: number | null): number {
   return closest;
 }
 
+// Snap a raw amount (e.g. a saved default budget) to the nearest slider stop,
+// so the value a screen sends is the one the thumb shows. null = Baller.
+export function snapBudget(value: number | null): number | null {
+  return value == null ? null : VALUES[valueToIndex(value)];
+}
+
 // Minimum runs on the SAME scale as the maximum. Index 0 (the far-left stop)
 // means "no minimum"; anything above raises the floor. Baller (null) is never a
 // minimum, so the min thumb tops out one stop below the max thumb.
@@ -56,6 +62,13 @@ interface Props {
   // Tighter type + track for screens that need a smaller footprint
   // (e.g. Find a Wine Pairing). Default keeps the full-size layout.
   compact?: boolean;
+  // The screen draws its own heading and value (e.g. Find a Wine Pairing's
+  // "Budget" row, styled like its other preferences): leave this one out.
+  hideHeader?: boolean;
+  // Called continuously while a handle is dragged (before it's let go), so a
+  // screen drawing its own value can follow along. Values as for onChange /
+  // onMinChange (null max = Baller, null min = no minimum).
+  onPreview?: (min: number | null, max: number | null) => void;
 }
 
 const THUMB = 16;
@@ -74,6 +87,10 @@ function RangeTrack({ minIndex, maxIndex, setMinIndex, setMaxIndex, commitMin, c
   const minRef = useRef(minIndex); minRef.current = minIndex;
   const maxRef = useRef(maxIndex); maxRef.current = maxIndex;
   const startRef = useRef(0);
+  // The handlers below are made once, so they call the latest callbacks
+  // through refs (the parent's change the value they report each render).
+  const cb = useRef({ setMinIndex, setMaxIndex, commitMin, commitMax });
+  cb.current = { setMinIndex, setMaxIndex, commitMin, commitMax };
 
   const usable = Math.max(1, width - THUMB);
   const xFor = (i: number) => (i / MAX_INDEX) * usable;
@@ -89,10 +106,10 @@ function RangeTrack({ minIndex, maxIndex, setMinIndex, setMaxIndex, commitMin, c
     onPanResponderMove: (_e, g) => {
       // Min can't pass the max thumb, and never reaches Baller (MAX_INDEX).
       const idx = Math.max(0, Math.min(maxRef.current, MAX_INDEX - 1, idxFromDx(startRef.current, g.dx)));
-      setMinIndex(idx);
+      cb.current.setMinIndex(idx);
     },
-    onPanResponderRelease: () => commitMin(minRef.current),
-    onPanResponderTerminate: () => commitMin(minRef.current),
+    onPanResponderRelease: () => cb.current.commitMin(minRef.current),
+    onPanResponderTerminate: () => cb.current.commitMin(minRef.current),
   })).current;
 
   const maxPan = useRef(PanResponder.create({
@@ -101,10 +118,10 @@ function RangeTrack({ minIndex, maxIndex, setMinIndex, setMaxIndex, commitMin, c
     onPanResponderGrant: () => { startRef.current = maxRef.current; },
     onPanResponderMove: (_e, g) => {
       const idx = Math.max(minRef.current, Math.min(MAX_INDEX, idxFromDx(startRef.current, g.dx)));
-      setMaxIndex(idx);
+      cb.current.setMaxIndex(idx);
     },
-    onPanResponderRelease: () => commitMax(maxRef.current),
-    onPanResponderTerminate: () => commitMax(maxRef.current),
+    onPanResponderRelease: () => cb.current.commitMax(maxRef.current),
+    onPanResponderTerminate: () => cb.current.commitMax(maxRef.current),
   })).current;
 
   const H = compact ? 26 : 30;
@@ -129,7 +146,7 @@ function RangeTrack({ minIndex, maxIndex, setMinIndex, setMaxIndex, commitMin, c
   );
 }
 
-export function BudgetSlider({ value, onChange, minValue, onMinChange, currency, label, compact }: Props) {
+export function BudgetSlider({ value, onChange, minValue, onMinChange, currency, label, compact, hideHeader, onPreview }: Props) {
   // Track index locally during drag so the slider doesn't fight the
   // controlled `value` prop (each parent update would otherwise force the
   // thumb back and break the gesture). Commit upstream on release.
@@ -147,6 +164,7 @@ export function BudgetSlider({ value, onChange, minValue, onMinChange, currency,
   const rangeMode = !!onMinChange;
 
   const maxText = atMax ? 'Baller' : `${sym}${current}`;
+  const minOf = (i: number) => (i === 0 ? null : VALUES[i]);
   // Header: no minimum → just the ceiling ("£200." / "Baller."); with a minimum
   // → a range ("£50 – £200."). No "Up to" prefix.
   const headerValue = minCurrent == null
@@ -155,19 +173,19 @@ export function BudgetSlider({ value, onChange, minValue, onMinChange, currency,
 
   return (
     <View style={{ width: '100%' }}>
-      <Text style={[styles.value, compact && styles.valueCompact]}>
+      {hideHeader ? null : <Text style={[styles.value, compact && styles.valueCompact]}>
         {label ? `${label}  ` : ''}
         {/* The budget value is always an active selection (Baller is the
             default), so it reads gold from the start. */}
         <Text style={styles.valueConfirmed}>{headerValue}</Text>
-      </Text>
+      </Text>}
 
       {rangeMode ? (
         <RangeTrack
           minIndex={localMinIndex}
           maxIndex={localIndex}
-          setMinIndex={setLocalMinIndex}
-          setMaxIndex={setLocalIndex}
+          setMinIndex={(i) => { setLocalMinIndex(i); onPreview?.(minOf(i), VALUES[localIndex]); }}
+          setMaxIndex={(i) => { setLocalIndex(i); onPreview?.(minOf(localMinIndex), VALUES[i]); }}
           commitMin={(i) => onMinChange?.(i === 0 ? null : VALUES[i])}
           commitMax={(i) => onChange(VALUES[i])}
           compact={compact}
@@ -179,7 +197,7 @@ export function BudgetSlider({ value, onChange, minValue, onMinChange, currency,
           maximumValue={MAX_INDEX}
           step={1}
           value={localIndex}
-          onValueChange={(i) => setLocalIndex(Math.round(i))}
+          onValueChange={(i) => { setLocalIndex(Math.round(i)); onPreview?.(null, VALUES[Math.round(i)]); }}
           onSlidingComplete={(i) => onChange(VALUES[Math.round(i)])}
           minimumTrackTintColor="rgba(255,255,255,0.80)"
           maximumTrackTintColor="rgba(255,255,255,0.20)"

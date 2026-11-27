@@ -8,6 +8,9 @@ import * as Application from 'expo-application';
 import { router } from 'expo-router';
 import { AlterEgoCarousel } from '../../src/components/AlterEgoCarousel';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useCommunityMember } from '../../src/hooks/useCommunityMember';
+import { isMember } from '../../src/api/community';
+import { GATHER_LOCKED, GATHER_LOCKED_OPACITY } from '../../src/constants/features';
 import { supabase } from '../../src/api/supabase';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -23,6 +26,9 @@ export default function YouScreen() {
   // Match the other tabs' header placement exactly (same dynamic top inset).
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
+  // Members edit their Community profile here (not from the Gather tab).
+  const community = useCommunityMember();
+  const communityMember = community.enabled && isMember(community.member);
   const currentUsername = session?.user.user_metadata?.display_name ?? '';
   const currentEmail = session?.user.email ?? '';
 
@@ -112,15 +118,26 @@ export default function YouScreen() {
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/settings')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Settings</Text>
         </TouchableOpacity>
+        {communityMember ? (
+          <TouchableOpacity style={[styles.prefButton, GATHER_LOCKED && { opacity: GATHER_LOCKED_OPACITY }]} onPress={() => router.push('/community/join')} disabled={GATHER_LOCKED} activeOpacity={0.7}>
+            <Text style={styles.prefButtonText}>Your Community Profile</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.divider} />
 
       {/* What Vinster has learned from the user's reviews, cellar and choices —
           and the place to correct it. */}
-      <TouchableOpacity style={[styles.prefButton, styles.observationsButton]} onPress={() => router.push('/profile/observations')} activeOpacity={0.7}>
-        <Text style={styles.prefButtonText}>Vinster's Observations</Text>
-      </TouchableOpacity>
+      <Text style={styles.sectionHeader}>Vinster's Observations of You</Text>
+      <Text style={styles.sketchBlurb}>
+        As you scan, cellar, rate and cook, Vinster gains insight into your preferences and vinous personality. As it gets to know you over time it uses these observations to tailor its recommendations.
+      </Text>
+      <Text style={styles.sketchBlurb}>
+        See (and challenge) what Vinster has learned about you{' '}
+        <Text style={styles.hereLink} onPress={() => router.push('/profile/observations')} accessibilityRole="link">HERE</Text>
+        , and view its witty alter-ego sketch of you below
+      </Text>
 
       {/* Vinster's Review of You — the alter-ego sketch carousel, moved here from
           the Review tab; sits below the Settings button. */}
@@ -225,7 +242,7 @@ const styles = StyleSheet.create({
 
   prefButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
   prefButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
-  observationsButton: { marginBottom: spacing.lg },
+  hereLink: { color: colors.gold, textDecorationLine: 'underline' },
   // "Vinster's Review of You" carousel section (moved from the Review tab).
   sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 23, marginBottom: spacing.lg, paddingHorizontal: spacing.sm },

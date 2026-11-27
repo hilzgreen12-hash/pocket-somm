@@ -2,6 +2,7 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
 import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
+import { catalogKey } from '../_shared/vintageFacts.ts';
 
 // Live "which real wine did they mean?" lookup — the last resort before Vinster
 // says it couldn't find a wine. Called only when Wine Intel's identity gate
@@ -22,15 +23,6 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 
 const HOURLY_LIMIT = 30;
 const DAILY_LIMIT = 120;
-
-function norm(s: string): string {
-  return (s ?? '')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
@@ -66,9 +58,10 @@ ${hints.length ? `\nWines in our catalogue that sound similar (may or may not be
 USE WEB SEARCH to find the REAL wine they most plausibly meant. A name may be the winemaker rather than the estate (e.g. "Eben Sadie" = Sadie Family Wines).
 
 Accept a wine ONLY if BOTH are true:
-1. A web page you found shows this exact producer makes this wine (cuvée).
+1. A web page you found lists this wine (cuvée). The maker may appear on that page under its producer name, its estate or brand name (as printed on many labels, e.g. "La Grange St. Martin"), or its parent house — any of these counts. A retailer, auction, review or wine-app listing counts.
 2. It genuinely sounds/looks like what the user gave — not merely a famous wine from the same region.
 If no real wine meets both, it is NOT found. Never guess, never answer from memory.
+Be quick: one or two searches are usually enough (try the name as given, then with the appellation).
 
 When found, also note what the pages you found show for this wine: retail prices per 75cl bottle (prefer this vintage) and published critic scores out of 100. Include ONLY figures you saw on a page you found, each with that page's URL. Use [] when there are none — never estimate here.
 
@@ -78,13 +71,15 @@ Return ONLY JSON (no prose):
  "scores": [{"critic": "<critic or publication>", "score": <number out of 100>, "vintage": "<vintage it's for, or null>", "url": "<page URL>"}]}
 or {"found": false}`;
 
+    // No extended thinking keeps it quick. The owner's rule: no time caps whose
+    // failure mode is "not found" — so the cap is as high as the platform allows
+    // (edge functions get ~150s wall clock) and up to five searches are allowed.
     const resp: any = await client.messages.create({
       model: 'claude-sonnet-5-5',
-      max_tokens: 6000,
-      thinking: { type: 'between_tools' } as any,
+      max_tokens: 2500,
       tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }] as any,
       messages: [{ role: 'user', content: prompt }],
-    });
+    }, { timeout: 140_000, maxRetries: 0 });
 
     // URLs the web search really returned — the only acceptable evidence.
     const seen = new Set<string>();
@@ -127,7 +122,7 @@ or {"found": false}`;
 
     // Add to the catalogue so the next lookup is instant. Best-effort.
     try {
-      const key = wine.wineName ? `${norm(wine.producer)}|${norm(wine.wineName)}` : norm(wine.producer);
+      const key = catalogKey(wine.producer, wine.wineName);
       const now = new Date().toISOString();
       await admin.from('wines_catalog').upsert({
         producer: wine.producer,

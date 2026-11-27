@@ -60,6 +60,8 @@ interface FoodPairingStore {
   // sending the user back to the form.
   stylePreference: string | null;
   budget: number | null;
+  // Lowest price per bottle, when the person set one (null = none).
+  minBudget: number | null;
   cellarResult: CellarRecommendation[] | null;
   generalResult: GeneralRecommendation[] | null;
   generalSummary: string | null;
@@ -67,6 +69,7 @@ interface FoodPairingStore {
   setMode: (mode: 'cellar' | 'general') => void;
   setStylePreference: (s: string | null) => void;
   setBudget: (b: number | null) => void;
+  setMinBudget: (b: number | null) => void;
   setCellarResult: (r: CellarRecommendation[]) => void;
   setGeneralResult: (r: GeneralRecommendation[], summary?: string) => void;
   reset: () => void;
@@ -77,6 +80,7 @@ export const useFoodPairingStore = create<FoodPairingStore>((set) => ({
   mode: 'cellar',
   stylePreference: null,
   budget: null,
+  minBudget: null,
   cellarResult: null,
   generalResult: null,
   generalSummary: null,
@@ -84,7 +88,8 @@ export const useFoodPairingStore = create<FoodPairingStore>((set) => ({
   setMode: (mode) => set({ mode }),
   setStylePreference: (stylePreference) => set({ stylePreference }),
   setBudget: (budget) => set({ budget }),
+  setMinBudget: (minBudget) => set({ minBudget }),
   setCellarResult: (r) => set({ cellarResult: r }),
   setGeneralResult: (r, summary) => set({ generalResult: r, generalSummary: summary ?? null }),
-  reset: () => set({ dish: '', mode: 'cellar', stylePreference: null, budget: null, cellarResult: null, generalResult: null, generalSummary: null }),
+  reset: () => set({ dish: '', mode: 'cellar', stylePreference: null, budget: null, minBudget: null, cellarResult: null, generalResult: null, generalSummary: null }),
 }));

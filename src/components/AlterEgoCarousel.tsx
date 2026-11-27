@@ -5,13 +5,31 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../api/supabase';
 import { showAlert } from './AppAlert';
 import { splitPersonality } from '../utils/personalityText';
+import { launchCamera, launchImageLibrary } from '../utils/imagePicker';
+import { ensureMediaPermission } from '../utils/mediaPermissions';
+import { uploadAlterEgoPhoto } from '../api/labelPhotos';
+import { useLabelThumbUri } from '../hooks/useLabelImageUrl';
+import { LabelImage } from './LabelImage';
 import { colors, spacing } from '../constants/theme';
 import { fontsSpectral as fonts } from '../constants/fonts';
+
+// Best-effort removal of an alter-ego photo from storage (same bucket
+// uploadAlterEgoPhoto writes to). A failure only leaves an orphaned file.
+function removeAlterEgoPhoto(path: string) {
+  supabase.storage.from('wine-labels').remove([path]).then(() => {}, () => {});
+}
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '';
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// A tile's own photo, behind its title.
+function TileImage({ path }: { path?: string | null }) {
+  const uri = useLabelThumbUri(path);
+  if (!uri) return null;
+  return <LabelImage uri={uri} style={StyleSheet.absoluteFill} />;
 }
 
 // Carousel of the user's alter-ego sketches (title + date), newest first — each
@@ -34,7 +52,7 @@ export function AlterEgoCarousel() {
     queryFn: async () => {
       const { data } = await supabase
         .from('personality_sketches')
-        .select('id, text, created_at')
+        .select('id, text, created_at, image_path')
         .eq('user_id', userId!)
         .eq('category', 'alter-ego')
         .order('created_at', { ascending: false });
@@ -44,8 +62,59 @@ export function AlterEgoCarousel() {
 
   const hasSketches = sketches.length > 0;
 
-  // Long-press an alter-ego card to remove it from the carousel.
-  function confirmDelete(s: { id: string; text?: string | null }) {
+  // Long-press an alter-ego card: Update Image, Delete or Cancel.
+  function openTileMenu(s: { id: string; text?: string | null; image_path?: string | null }) {
+    const { title } = splitPersonality(s.text ?? '');
+    showAlert({
+      title: title || 'Your Vinster Alter-Ego',
+      buttons: [
+        { text: 'Update Image', onPress: () => setTimeout(() => openImageMenu(s), 350) },
+        { text: 'Delete', style: 'destructive', onPress: () => setTimeout(() => confirmDelete(s), 350) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  function openImageMenu(s: { id: string; image_path?: string | null }) {
+    showAlert({
+      title: 'Update Image',
+      buttons: [
+        { text: 'Open Camera', onPress: () => setTimeout(() => void pickImage(s.id, 'camera', s.image_path), 350) },
+        { text: 'Upload Image', onPress: () => setTimeout(() => void pickImage(s.id, 'library', s.image_path), 350) },
+        ...(s.image_path ? [{ text: 'Remove Image', style: 'destructive' as const, onPress: () => void saveImage(s.id, null, s.image_path) }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
+  async function pickImage(id: string, source: 'camera' | 'library', oldPath?: string | null) {
+    try {
+      if (!userId || !(await ensureMediaPermission(source))) return;
+      const res = source === 'camera'
+        ? await launchCamera({ mediaTypes: ['images'], quality: 1 })
+        : await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
+      if (res.canceled || !res.assets[0]) return;
+      const path = await uploadAlterEgoPhoto(userId, res.assets[0].uri, id);
+      await saveImage(id, path, oldPath);
+    } catch (err) {
+      showAlert({ title: 'Could not add that photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  async function saveImage(id: string, path: string | null, oldPath?: string | null) {
+    const { error } = await supabase.from('personality_sketches').update({ image_path: path }).eq('id', id);
+    if (error) {
+      // The new upload is now orphaned — tidy it away.
+      if (path) removeAlterEgoPhoto(path);
+      showAlert({ title: 'Could not update the image', body: 'Please try again.' });
+      return;
+    }
+    // The replaced / removed photo is no longer referenced.
+    if (oldPath && oldPath !== path) removeAlterEgoPhoto(oldPath);
+    qc.invalidateQueries({ queryKey: ['alter-ego-sketches', userId] });
+  }
+
+  function confirmDelete(s: { id: string; text?: string | null; image_path?: string | null }) {
     const { title } = splitPersonality(s.text ?? '');
     showAlert({
       title: 'Delete this alter-ego?',
@@ -62,6 +131,7 @@ export function AlterEgoCarousel() {
               // silently swallowed and the card would reappear on refetch.
               const { error } = await supabase.from('personality_sketches').delete().eq('id', s.id);
               if (error) throw new Error(error.message);
+              if (s.image_path) removeAlterEgoPhoto(s.image_path);
               qc.invalidateQueries({ queryKey: ['alter-ego-sketches', userId] });
             } catch (e) {
               showAlert({ title: 'Could not delete', body: e instanceof Error ? e.message : 'Please try again.' });
@@ -83,12 +153,25 @@ export function AlterEgoCarousel() {
               key={s.id}
               style={styles.card}
               onPress={() => router.push(`/profile/personality?category=alter-ego&sketchId=${s.id}` as any)}
-              onLongPress={() => confirmDelete(s)}
+              onLongPress={() => openTileMenu(s)}
               delayLongPress={400}
               activeOpacity={0.85}
             >
-              <Text style={styles.cardName} numberOfLines={3}>{title || 'Your Vinster Alter-Ego'}</Text>
-              <Text style={styles.cardDate}>{fmtDate(s.created_at)}</Text>
+              {s.image_path ? (
+                <>
+                  <TileImage path={s.image_path} />
+                  {/* Over a photo the title and date sit on a band, as on the Cookbook tiles. */}
+                  <View style={styles.band}>
+                    <Text style={styles.cardName} numberOfLines={2}>{title || 'Your Vinster Alter-Ego'}</Text>
+                    <Text style={styles.cardDate}>{fmtDate(s.created_at)}</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.cardName} numberOfLines={3}>{title || 'Your Vinster Alter-Ego'}</Text>
+                  <Text style={styles.cardDate}>{fmtDate(s.created_at)}</Text>
+                </>
+              )}
             </TouchableOpacity>
           );
         })
@@ -124,7 +207,8 @@ const styles = StyleSheet.create({
   // 152×108), with bigger type, as these alter-ego cards are the hero here.
   // Sage-green cards with a black outline (match the Cookbook / storage cards);
   // black title, dark-green date.
-  card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 12, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface },
+  band: { backgroundColor: colors.titleBand, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6, alignItems: 'center', gap: 2 },
+  card: { width: 190, height: 134, overflow: 'hidden', borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 12, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface },
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted, textAlign: 'center' },
   // Brown "your alter-ego is coming" placeholder.

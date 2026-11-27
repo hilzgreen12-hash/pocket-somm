@@ -1,22 +1,34 @@
 import { supabase } from './supabase';
+import { syncList, type ListSpec } from './listSync';
 import { cellarOwner, assertCanEditCellar, canEditCellar, VIEW_ONLY_MESSAGE } from './cellarContext';
 import { selectAllPages, chunkIds } from './paging';
 import type { CellarWine } from '../types/wine';
 import { findSameCellarWine, type WineLike } from '../utils/wineMatch';
 
-// Every live wine in the selected cellar, newest first. Paged past PostgREST's
-// 1000-row cap (large imported cellars run to ~9,000 wines); `id` breaks ties
-// between rows created together (an import) so no page overlaps or skips one.
-export async function getCellarWines(userId: string): Promise<CellarWine[]> {
-  return selectAllPages<CellarWine>((from, to) =>
-    supabase
-      .from('cellar_wines')
-      .select('*')
-      .eq('user_id', cellarOwner(userId))
-      .is('archived_at', null)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: true })
-      .range(from, to));
+// Every live wine in the selected cellar, newest first, and the archive,
+// newest archived first. A cellar can run to thousands of bottles (an import), so the app keeps its
+// own copy of the live list and the archive and syncs only what changed (see
+// listSync). Shared cellar: the rows are the cellar owner's.
+const liveList = (userId: string): ListSpec<CellarWine> => ({
+  table: 'cellar_wines',
+  ownerId: cellarOwner(userId),
+  stamp: 'changed_at',
+  filter: (q) => q.is('archived_at', null),
+  belongs: (w) => w.archived_at == null,
+  orderBy: { column: 'created_at', ascending: false },
+});
+const archiveList = (userId: string): ListSpec<CellarWine> => ({
+  table: 'cellar_wines',
+  ownerId: cellarOwner(userId),
+  stamp: 'changed_at',
+  filter: (q) => q.not('archived_at', 'is', null),
+  belongs: (w) => w.archived_at != null,
+  orderBy: { column: 'archived_at', ascending: false },
+});
+
+// `prev`: the copy already held, brought up to date rather than re-downloaded.
+export async function getCellarWines(userId: string, prev?: CellarWine[]): Promise<CellarWine[]> {
+  return syncList(liveList(userId), prev);
 }
 
 // ----- Removal events (cellar_wine_removals) -----
@@ -127,16 +139,8 @@ export async function repairRackedWines(userId: string): Promise<number> {
 }
 
 // Newest archive first. Paged past PostgREST's 1000-row cap, like getCellarWines.
-export async function getArchivedWines(userId: string): Promise<CellarWine[]> {
-  return selectAllPages<CellarWine>((from, to) =>
-    supabase
-      .from('cellar_wines')
-      .select('*')
-      .eq('user_id', cellarOwner(userId))
-      .not('archived_at', 'is', null)
-      .order('archived_at', { ascending: false })
-      .order('id', { ascending: true })
-      .range(from, to));
+export async function getArchivedWines(userId: string, prev?: CellarWine[]): Promise<CellarWine[]> {
+  return syncList(archiveList(userId), prev);
 }
 
 // Fetch a single cellar wine by id — used when a screen holds a per-location

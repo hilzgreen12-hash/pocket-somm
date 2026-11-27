@@ -32,6 +32,7 @@ import { todayYmd } from '../utils/reviewDate';
 import type { CellarWine } from '../types/wine';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+import { DictationSwirl } from './DictationSwirl';
 
 const MARK = require('../../assets/vinster-mark.png');
 
@@ -408,12 +409,12 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
       const what = bottlesOf(p.count, p.label);
       if (!dest) {
         await updateCellarWine(p.id, { awaiting_placement: true, awaiting_placement_unit_id: null });
-        finish({ action: 'add', wine: p.wine, line: `Added. ${what}, waiting to be placed in Your Cellar List.`, viewLabel: 'View in Your Cellar List', viewRoute: '/cellar/list' });
+        finish({ action: 'add', wine: p.wine, line: `Added. ${what}, waiting to be placed in Your Full Cellar List.`, viewLabel: 'View in Your Full Cellar List', viewRoute: '/cellar/list' });
         return;
       }
       const isRack = dest.kind === 'unit' && !dest.isBin;
-      const fit = isRack ? await fitInRack(dest.id, wines.find((w) => w.id === p.id)?.bottle_size_ml ?? 750, p.count, 'stay in Your Cellar List') : null;
-      if (fit?.fits === 0) throw new Error(`There's no free slot in the ${fit.name} — choose another place, or leave them in Your Cellar List.`);
+      const fit = isRack ? await fitInRack(dest.id, wines.find((w) => w.id === p.id)?.bottle_size_ml ?? 750, p.count, 'stay in Your Full Cellar List') : null;
+      if (fit?.fits === 0) throw new Error(`There's no free slot in the ${fit.name} — choose another place, or leave them in Your Full Cellar List.`);
       if (dest.kind === 'location') await addLocationPlacement(p.id, dest.id, null, p.count);
       await updateCellarWine(p.id, { awaiting_placement: true, awaiting_placement_unit_id: dest.id });
       finish(
@@ -602,10 +603,10 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
   }
 
   // Where moved bottles came from: the places that hold fewer of them now.
-  // Bottles with no placement count as Your Cellar List.
+  // Bottles with no placement count as Your Full Cellar List.
   function movedFrom(before: Place[], after: Place[]): string {
     const left = before.filter((p) => p.key !== 'loose' && !p.key.startsWith('u:') && (after.find((a) => a.key === p.key)?.count ?? 0) < p.count);
-    if (left.length === 0) return 'Your Cellar List';
+    if (left.length === 0) return 'Your Full Cellar List';
     const names = left.map((p) => `the ${p.name}`);
     return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   }
@@ -624,7 +625,7 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
       await releaseHomeBottles(wine.id, count, externalIds, scope);
       if (count >= wine.quantity) await updateCellarWine(wine.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
       const from = movedFrom(before, await placesFor(wine));
-      finish({ action: 'move', wine: title, line: `${bottlesOf(count, wineName(wine))} moved from ${from} to Your Cellar List.`, viewLabel: 'View in Your Cellar List', viewRoute: '/cellar/list' });
+      finish({ action: 'move', wine: title, line: `${bottlesOf(count, wineName(wine))} moved from ${from} to Your Full Cellar List.`, viewLabel: 'View in Your Full Cellar List', viewRoute: '/cellar/list' });
       return;
     }
 
@@ -716,8 +717,8 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
     const locationId = result?.locationId ?? null;
     let addedId: string | null = null;
     // A rack or fridge only takes as many new bottles as it has free slots for;
-    // with none free they wait in Your Cellar List instead.
-    const fit = unitId && targetUnit?.storage_type !== 'bin' ? await fitInRack(unitId, 750, count, 'stay in Your Cellar List') : null;
+    // with none free they wait in Your Full Cellar List instead.
+    const fit = unitId && targetUnit?.storage_type !== 'bin' ? await fitInRack(unitId, 750, count, 'stay in Your Full Cellar List') : null;
     const waitUnitId = fit?.fits === 0 ? null : unitId;
 
     const twin = findSameCellarWine(wines, { producer: a.producer, wineName: name, region: a.region, vintage: a.vintage }, 750);
@@ -798,7 +799,7 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
     if (fit?.fits === 0) {
       finish({
         action: 'add', wine: title,
-        line: `Added. There's no free slot in the ${fit.name}, so ${what} ${count === 1 ? 'is' : 'are'} waiting to be placed in Your Cellar List.`,
+        line: `Added. There's no free slot in the ${fit.name}, so ${what} ${count === 1 ? 'is' : 'are'} waiting to be placed in Your Full Cellar List.`,
         viewLabel: 'View the wine card', viewRoute: `/cellar/${addedId}`,
       });
       return;
@@ -895,7 +896,7 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
     if (rest > 0) {
       const unit = w.awaiting_placement_unit_id ? units.find((u) => u.id === w.awaiting_placement_unit_id) : null;
       if (unit) add(`u:${unit.id}`, unit.name, unit.storage_type === 'bin' ? `/cellar/bin/${unit.id}?highlight=${w.id}` : `/cellar/rack/${unit.id}?placeWine=${w.id}&placeLimit=${rest}`, rest, { note: 'waiting to be placed' });
-      else add('loose', 'Your Cellar List', `/cellar/${w.id}`, rest, { note: 'not yet placed' });
+      else add('loose', 'Your Full Cellar List', `/cellar/${w.id}`, rest, { note: 'not yet placed' });
     }
     return Array.from(out.values());
   }
@@ -960,7 +961,7 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
         <View style={qs.card}>
           <Text style={qs.cardAction}>Add</Text>
           <Text style={qs.cardWine}>{[a?.producer, a?.wineName, a?.vintage].filter(Boolean).join(' · ') || 'This wine'}</Text>
-          <Text style={qs.cardLine}>{`${n} ${n === 1 ? 'bottle' : 'bottles'} · ${targetUnit?.name ?? targetLocation?.name ?? 'Your Cellar List'}${addCaseId ? ` · ${scopeCases.find((c) => c.id === addCaseId)?.name ?? ''}` : ''}`}</Text>
+          <Text style={qs.cardLine}>{`${n} ${n === 1 ? 'bottle' : 'bottles'} · ${targetUnit?.name ?? targetLocation?.name ?? 'Your Full Cellar List'}${addCaseId ? ` · ${scopeCases.find((c) => c.id === addCaseId)?.name ?? ''}` : ''}`}</Text>
         </View>
       );
     }
@@ -1163,16 +1164,22 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
 
 // ---- small building blocks (Quick Command look) ---------------------------
 function CommandField({ value, onChange, onSend, placeholder }: { value: string; onChange: (t: string) => void; onSend: () => void; placeholder: string }) {
-  const can = !!value.trim();
+  // Swirl while a spoken wine name is being worked out — the field is locked and
+  // Send disabled meanwhile, so typing can't be wiped by the finished text.
+  const [dictating, setDictating] = useState(false);
+  const can = !!value.trim() && !dictating;
   return (
     <View style={qs.field}>
-      <TextInput style={qs.fieldInput} value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="rgba(255,255,255,0.4)" multiline returnKeyType="send" blurOnSubmit onSubmitEditing={() => { if (can) onSend(); }} />
+      <View style={{ flex: 1 }}>
+        <TextInput style={qs.fieldInput} value={value} onChangeText={onChange} editable={!dictating} placeholder={placeholder} placeholderTextColor="rgba(255,255,255,0.4)" multiline returnKeyType="send" blurOnSubmit onSubmitEditing={() => { if (can) onSend(); }} />
+        <DictationSwirl visible={dictating} />
+      </View>
       {/* No catalogue (server) correction here: Quick Command is about bottles
           the user OWNS, which the on-phone cellar sound-match handles — the
           catalogue pass could turn their wine into one they don't have, and it
           lands late, changing the text after it was sent. */}
       {/* Bin: clear the instruction and start fresh. */}
-      <MicButton value={value} onChangeText={onChange} onClear={() => onChange('')} domain="query" />
+      <MicButton value={value} onChangeText={onChange} onClear={() => onChange('')} domain="query"  onWorkingChange={setDictating} />
       <TouchableOpacity onPress={() => { if (can) onSend(); }} disabled={!can} accessibilityLabel="Send" style={qs.send} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}>
         <Text style={[qs.sendText, !can && { opacity: 0.4 }]}>›</Text>
       </TouchableOpacity>

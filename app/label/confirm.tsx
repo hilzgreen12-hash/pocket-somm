@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
+import { ManualInputToggle } from '../../src/components/ManualInputToggle';
 import { Text, TextInput, TouchableOpacity, StyleSheet, Modal, View, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { ensureConnectionForUpload } from '../../src/utils/connectionGuard';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { normaliseVintage } from '../../src/utils/wineIdentity';
-import { fetchAutoLabelUri, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
-import { launchImageLibrary } from '../../src/utils/imagePicker';
-import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
+import { wineDotColour, wineDotColourKey } from '../../src/utils/wineStyle';
+import { fetchAutoLabelUri, fetchWineCandidates, searchWines, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { generateWineIntel, isWineNotFound } from '../../src/services/pricing';
 import { marketValuePer75 } from '../../src/services/purchaseEstimate';
@@ -50,10 +49,15 @@ export default function LabelConfirmScreen() {
   // not search — so no predictive search bar, and the screen reads "Input Wine
   // Details" rather than "Confirm …".
   const isPureInput = mode === 'input';
+  // Search first: the manual fields stay folded under "Input Your Wine
+  // Instead ▾" until tapped, or until a search pick fills them in. A typed
+  // seed (a wine the search didn't know) opens them straight away.
+  const [manualOpen, setManualOpen] = useState(!!seed);
+  const showFields = !isManual || isPureInput || manualOpen;
   // Reached from Scan a Lineup — Back returns to the lineup list to continue
   // onboarding the remaining bottles.
   const isLineup = context === 'lineup';
-  const { wineDetails, imageUri, setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError } = useLabelStore();
+  const { wineDetails, imageUri, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError } = useLabelStore();
   const { preferences } = usePreferences();
   // Rack-placement context: when the user reached here by tapping an empty rack
   // slot, we skip Wine Intel and drop the bottle straight into the slot.
@@ -77,7 +81,12 @@ export default function LabelConfirmScreen() {
   // Manual input always starts blank — not every entry point resets the label
   // store first, so seeding from a leftover scan would carry the PREVIOUS wine's
   // details (and, via the store, its photo) into this fresh manual entry.
-  const [producer, setProducer] = useState(isManual ? '' : (wineDetails?.producer ?? ''));
+  // A typed seed (Home's "use what I typed") lands in Producer as well as the
+  // search bar, so Confirm works without picking a suggestion.
+  const [producer, setProducer] = useState(isManual ? (seed ?? '').trim() : (wineDetails?.producer ?? ''));
+  // What's in the search bar now — the fallback Producer when the user typed a
+  // wine but didn't pick a suggestion and the fields are still folded away.
+  const [searchText, setSearchText] = useState(seed ?? '');
   const [region, setRegion] = useState(isManual ? '' : (wineDetails?.region ?? ''));
   const [wineName, setWineName] = useState(isManual ? '' : (wineDetails?.wineName ?? ''));
   const [grape, setGrape] = useState(isManual ? '' : (wineDetails?.grape ?? ''));
@@ -91,7 +100,6 @@ export default function LabelConfirmScreen() {
   // hand-typed entry needs it). Reset if they then edit the producer / wine name.
   const [pickedFromSearch, setPickedFromSearch] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [scanning, setScanning] = useState(false);
 
   // Manual entry starts with a blank "+ Add" thumbnail: clear any leftover scan
   // image / intel on mount so a previous scan's photo can't be auto-applied to
@@ -247,6 +255,15 @@ export default function LabelConfirmScreen() {
     // Wine Intel works the region out itself, so only the cellar / review flows
     // (which store it) insist on one.
     const regionNeeded = context !== 'intel';
+    // Typed in the search bar, no suggestion picked, fields still hidden: open
+    // them with the typed text as the Producer rather than complaining about a
+    // field the user can't see.
+    if (isManual && !showFields && !producer.trim()) {
+      const typed = searchText.trim();
+      if (typed) setProducer(typed);
+      setManualOpen(true);
+      return;
+    }
     if (!producer.trim() || (regionNeeded && !region.trim())) {
       showAlert({
         title: 'Missing details',
@@ -313,7 +330,7 @@ export default function LabelConfirmScreen() {
     // A wine saved without a photo gets a web label from the add itself.
     if (!context || context === 'add-location') {
       setIntelligence(null);
-      router.replace(`/label/results?context=${context === 'add-location' ? 'add-location' : 'add'}`);
+      router.replace(`/label/results?context=${context === 'add-location' ? 'add-location' : 'add'}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}`);
       return;
     }
 
@@ -591,34 +608,6 @@ export default function LabelConfirmScreen() {
     if (choice !== 'cancel') await commit(choice === 'merge' ? existing : null);
   }
 
-  // "Upload Again" — reopen the photo library, rescan a new label, and refresh
-  // the fields in place. Mirrors the upload-label flow on the Scan hub.
-  async function handleUploadAgain() {
-    if (scanning) return;
-    if (!(await ensureMediaPermission('library'))) return;
-    const result = await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
-    if (result.canceled || !result.assets[0]) return;
-    const uri = result.assets[0].uri;
-    if (!(await ensureConnectionForUpload())) return;
-    setScanning(true);
-    try {
-      const base64 = await prepareImageBase64(uri);
-      setImage(uri, base64);
-      const details = await scanLabel(base64);
-      setWineDetails(details);
-      setProducer(details.producer ?? '');
-      setRegion(details.region ?? '');
-      setWineName(details.wineName ?? '');
-      setGrape(details.grape ?? '');
-      setVintage(details.vintage ?? '');
-      setStyle(details.style ?? '');
-    } catch (err) {
-      showAlert({ title: 'Scan failed', body: err instanceof Error ? err.message : 'Could not read that label. Please try another photo.' });
-    } finally {
-      setScanning(false);
-    }
-  }
-
   // Leave an upload or manual entry: to the screen the caller named (backTo),
   // else the one it came from — a rack slot, a bin, the Cellar List.
   function leaveFlow() {
@@ -627,11 +616,11 @@ export default function LabelConfirmScreen() {
     else router.replace('/(tabs)/scan');
   }
 
-  // The header's back arrow leaves by the same route as this mode's bottom link.
+  // The header's back arrow leaves by the same route as this mode's bottom link
+  // ("Back to Lineup" for a lineup, otherwise "Input Again" → leaveFlow).
   function goBack() {
     if (isLineup) router.replace('/cellar/scan-lineup');
-    else if (isUpload || isManual) leaveFlow();
-    else router.replace(`/label/camera${contextQuery}`);
+    else leaveFlow();
   }
 
   return (
@@ -688,7 +677,7 @@ export default function LabelConfirmScreen() {
           Montalcino") and doesn't become a near-duplicate. */}
       {isManual && !isPureInput ? (
         <>
-          <WineSearchInput initialQuery={seed} onSelect={(r) => {
+          <WineSearchInput initialQuery={seed} onQueryChange={setSearchText} onSelect={(r) => {
             setProducer(r.producer);
             setWineName(r.wineName ?? '');
             setRegion(r.region ?? '');
@@ -699,12 +688,15 @@ export default function LabelConfirmScreen() {
             else if (!vintage.trim()) setHighlightVintage(true);
             // A search-bar pick IS the confirmation — skip the match popup.
             setPickedFromSearch(true);
+            // Show the filled-in fields so the vintage can be checked.
+            setManualOpen(true);
           }} />
-          {/* Gold header for the input fields, matching "Search your wine" above. */}
-          <Text style={styles.inputYourWineLabel}>Input Your Wine</Text>
+          <ManualInputToggle open={manualOpen} onToggle={() => setManualOpen((v) => !v)} />
         </>
       ) : null}
 
+      {showFields ? (
+      <>
       <Text style={styles.label}>Producer</Text>
       <StartAlignedInput
         style={styles.input}
@@ -762,6 +754,8 @@ export default function LabelConfirmScreen() {
         placeholderTextColor={colors.textMuted}
         autoCapitalize="words"
       />
+      </>
+      ) : null}
 
       {/* Bin diamond add: bottles + format + purchase price are collected in a
           popup AFTER this Confirm (see the placement modal below). */}
@@ -789,17 +783,11 @@ export default function LabelConfirmScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/cellar/scan-lineup')}>
           <Text style={styles.backText}>Back to Lineup</Text>
         </TouchableOpacity>
-      ) : isUpload ? (
-        <TouchableOpacity style={styles.backButton} onPress={handleUploadAgain} disabled={scanning}>
-          <Text style={styles.backText}>{scanning ? 'Reading…' : 'Upload Again'}</Text>
-        </TouchableOpacity>
-      ) : isManual ? (
-        <TouchableOpacity style={styles.backButton} onPress={leaveFlow}>
-          <Text style={styles.backText}>Cancel</Text>
-        </TouchableOpacity>
       ) : (
-        <TouchableOpacity style={styles.backButton} onPress={() => router.replace(`/label/camera${contextQuery}`)}>
-          <Text style={styles.backText}>Scan Again</Text>
+        // However the wine came in (scanned, uploaded, searched or typed), the
+        // way to correct it is the same: back to where it was entered.
+        <TouchableOpacity style={styles.backButton} onPress={leaveFlow}>
+          <Text style={styles.backText}>Input Again</Text>
         </TouchableOpacity>
       )}
 
@@ -820,6 +808,7 @@ export default function LabelConfirmScreen() {
                 <ScrollView style={{ maxHeight: 320 }}>
                   {matchOptions.map((r, i) => (
                     <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.candRow} onPress={() => pickMatch(r)} activeOpacity={0.7}>
+                      <View style={[styles.colourDot, { backgroundColor: wineDotColour(wineDotColourKey(r)) }]} />
                       <View style={styles.candRowText}>
                         <Text style={styles.candItemName} numberOfLines={2}>{formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region, vintage })}</Text>
                         {r.style ? <Text style={styles.candItemMeta} numberOfLines={1}>{r.style}</Text> : null}
@@ -936,20 +925,13 @@ export default function LabelConfirmScreen() {
     </KeyboardAwareScrollView>
     </View>
 
-    {/* Full-screen overlay while a re-uploaded label is being read. */}
-    <Modal visible={scanning} transparent animationType="fade">
-      <View style={styles.scanOverlay}>
-        <View style={styles.scanSheet}>
-          <ActivityIndicator color={colors.gold} size="large" />
-          <Text style={styles.scanText}>Reading the label…</Text>
-        </View>
-      </View>
-    </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  // The wine's colour dot, as in every wine search list.
+  colourDot: { width: 8, height: 8, borderRadius: 4, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.3)' },
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, paddingBottom: 60 },
   // Header bar — identical to the Edit Wine Details screen so the confirm and
@@ -1024,7 +1006,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.headingSemibold,
     fontSize: 17,
   },
-  // Secondary link under it (Scan Again / Upload Again / Cancel) — the edit
+  // Secondary link under it (Input Again / Back to Lineup) — the edit
   // screen's underlined "Cancel" treatment.
   backButton: { alignItems: 'center', paddingVertical: spacing.md },
   backText: {

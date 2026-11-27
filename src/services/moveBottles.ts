@@ -77,7 +77,7 @@ export async function releaseLeavingBottles(wineId: string, quantity: number, n:
   if (toFree > 0) await releaseBottlesFromPlacements(wineId, toFree);
 }
 
-// Where bottles coming home can go: Your Cellar List (unplaced), a rack or
+// Where bottles coming home can go: Your Full Cellar List (unplaced), a rack or
 // fridge, a bin, or a home alt cellar. Never an external cellar — storage only
 // ever moves external → home.
 export type HomeDestination =
@@ -86,7 +86,7 @@ export type HomeDestination =
 
 // Move to Home Storage: bring `n` of a wine's bottles out of its external
 // cellar(s). An alt cellar takes them straight away; a bin gets them flagged
-// awaiting placement; for a rack/fridge or Your Cellar List they're left loose
+// awaiting placement; for a rack/fridge or Your Full Cellar List they're left loose
 // (the rack's own screen places them). Returns how many actually moved.
 export async function moveExternalBottlesHome(
   wineId: string, n: number, externalPlacements: CellarPlacement[], dest: HomeDestination,

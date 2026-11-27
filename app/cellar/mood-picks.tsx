@@ -7,14 +7,8 @@ import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { perBottle } from '../../src/utils/bottleValue';
-import { effectiveMaturity } from '../../src/utils/maturity';
+import { wineDrinkingStage, STAGE_LABEL } from '../../src/utils/maturity';
 
-const WINDOW_LABEL: Record<string, string> = {
-  too_young: 'Too Young',
-  approaching: 'Approaching',
-  peak: 'At Peak',
-  declining: 'Declining',
-};
 
 function windowValue(w: MoodPickView['wine']): string {
   const from = w.drinking_window_from;
@@ -32,7 +26,8 @@ function PickCard({ pick }: { pick: MoodPickView }) {
     ? `${currencySymbol(w.estimated_value_currency ?? 'GBP')}${Math.round(w.estimated_value)}${perBottle(w.bottle_size_ml)}`
     : '—';
   // Derived from the window against this year, as everywhere else in the cellar.
-  const winLabel = WINDOW_LABEL[effectiveMaturity(w)] ?? '';
+  const winStage = wineDrinkingStage(w);
+  const winLabel = winStage === 'spirit' || winStage === 'unknown' ? '' : STAGE_LABEL[winStage];
 
   return (
     <View style={styles.card}>

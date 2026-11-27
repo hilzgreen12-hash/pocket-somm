@@ -44,13 +44,24 @@ function buildBriefBlock(
   budget: number | null | undefined,
   currency: string,
   mode: 'cellar' | 'general',
+  // The lowest price per bottle, when the person set one.
+  minBudget: number | null | undefined = null,
 ): string {
   const lines: string[] = [];
   if (stylePreference) {
     lines.push(`WINE STYLE PREFERENCE: The user wants ${stylePreference} wine. Recommend only ${stylePreference} wines unless nothing of that colour could pair acceptably, in which case explain why.`);
   }
   const sym = symbolFor(currency);
-  if (budget != null) {
+  const hasMin = minBudget != null && minBudget > 0;
+  if (hasMin) {
+    // A price range (or a floor with no ceiling — "Baller").
+    const range = budget != null ? `between ${sym}${minBudget} and ${sym}${budget}` : `at least ${sym}${minBudget}`;
+    if (mode === 'cellar') {
+      lines.push(`BUDGET CONTEXT: The user wants a bottle ${range} per bottle. Each cellar wine below shows its purchase price where known. Favour wines in that range when the pairing is strong; go outside it only for a clearly superior match, and say so in the rationale.`);
+    } else {
+      lines.push(`BUDGET: The user wants to spend ${range} per bottle. All three recommendations must be findable in that range. Differentiate the three options by style, grape, region and how well they match the dish — NOT by offering cheaper and pricier tiers.`);
+    }
+  } else if (budget != null) {
     if (mode === 'cellar') {
       lines.push(`BUDGET CONTEXT: The user's budget is around ${sym}${budget} per bottle. Each cellar wine below shows its purchase price where known. Favour wines at or below this price when the pairing is strong; recommend a more expensive bottle only if it is a clearly superior match, and say so in the rationale.`);
     } else {
@@ -70,6 +81,7 @@ function buildCellarPrompt(
   currency: string,
   userPreferences: Record<string, any> | null | undefined,
   tasteSection: string,
+  minBudget: number | null = null,
 ): string {
   const wineList = wines.map((w, i) => {
     const price = w.purchase_price != null
@@ -78,7 +90,7 @@ function buildCellarPrompt(
     return `${i + 1}. ${w.wine_name}${w.producer ? ` by ${w.producer}` : ''}${w.region ? `, ${w.region}` : ''}${w.vintage ? ` (${w.vintage})` : ''}${w.grape_variety ? ` — ${w.grape_variety}` : ''} [status: ${w.drinking_window_status}]${price} [id: ${w.id}]`;
   }).join('\n');
 
-  const briefBlock = buildBriefBlock(stylePreference, budget, currency, 'cellar');
+  const briefBlock = buildBriefBlock(stylePreference, budget, currency, 'cellar', minBudget);
   const preferenceBlock = buildPreferenceBlock(userPreferences);
 
   return `You are a world-class sommelier. A user is cooking the following dish and wants to know which wine from their cellar to open.
@@ -128,8 +140,9 @@ function buildGeneralPrompt(
   currency: string,
   userPreferences: Record<string, any> | null | undefined,
   tasteSection: string,
+  minBudget: number | null = null,
 ): string {
-  const briefBlock = buildBriefBlock(stylePreference, budget, currency, 'general');
+  const briefBlock = buildBriefBlock(stylePreference, budget, currency, 'general', minBudget);
   const preferenceBlock = buildPreferenceBlock(userPreferences);
 
   return `You are a world-class sommelier. A user is cooking the following dish and wants to know what wine to buy.
@@ -184,7 +197,8 @@ Deno.serve(async (req) => {
     const limited = await checkRateLimit(auth.userId, 'food-wine-pairing', PAIRING_HOURLY_LIMIT, PAIRING_DAILY_LIMIT);
     if (limited) return limited;
 
-    const { dish, mode, cellarWines, userPreferences, stylePreference, budget } = await req.json();
+    const { dish, mode, cellarWines, userPreferences, stylePreference, budget, minBudget: rawMin } = await req.json();
+    const minBudget = typeof rawMin === 'number' && Number.isFinite(rawMin) && rawMin > 0 ? rawMin : null;
 
     // Without this, a malformed request interpolates "Dish: undefined" into
     // the prompt and burns a full Sonnet call on nonsense.
@@ -198,8 +212,8 @@ Deno.serve(async (req) => {
 
     const tasteSection = tasteProfileSection(await getTasteProfile(req));
     const prompt = mode === 'cellar'
-      ? buildCellarPrompt(dish, cellarWines ?? [], stylePreference, budget, currency, userPreferences, tasteSection)
-      : buildGeneralPrompt(dish, stylePreference, budget, currency, userPreferences, tasteSection);
+      ? buildCellarPrompt(dish, cellarWines ?? [], stylePreference, budget, currency, userPreferences, tasteSection, minBudget)
+      : buildGeneralPrompt(dish, stylePreference, budget, currency, userPreferences, tasteSection, minBudget);
 
     const response = await client.messages.create({
       system: HOUSE_RULES,

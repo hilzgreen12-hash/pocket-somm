@@ -21,7 +21,7 @@ import { LabelThumb } from '../../src/components/LabelThumb';
 import { WineCardThumb } from '../../src/components/WineCardThumb';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { uploadCookbookPhoto } from '../../src/api/labelPhotos';
-import type { ChefArchiveCollection } from '../../src/api/chefArchiveCollections';
+import { setChefCollectionImage, type ChefArchiveCollection } from '../../src/api/chefArchiveCollections';
 
 const FILTER_ALL = 'ALL';
 const FILTER_FAVOURITES = 'FAVOURITES';
@@ -106,14 +106,25 @@ export default function ChefArchiveScreen() {
 
   // A `filter` param arriving from the Pair-tab Cookbook carousel is either
   // 'favourites', a folder id, or nothing (→ All).
+  // The Favourites filter: All (every recipe) or Favourites only.
   const [filter, setFilter] = useState<string>(
     initialFilter === 'favourites' ? FILTER_FAVOURITES
       : initialFilter && initialFilter !== 'all' && initialFilter !== FILTER_ALL ? initialFilter
       : FILTER_ALL,
   );
+  function openFavouritesFilter() {
+    showAlert({
+      title: 'Favourites',
+      buttons: [
+        { text: `All (${allItems.length})`, onPress: () => setFilter(FILTER_ALL) },
+        { text: `★ Favourites (${favouritesCount})`, onPress: () => setFilter(FILTER_FAVOURITES) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
   // ?addFolder=1 (the carousel's "+ Add folder") opens the create sheet on arrival.
   const [newFolderOpen, setNewFolderOpen] = useState(addFolder === '1');
-  // Remembered when the user taps "+ Create new folder" from inside the
+  // Remembered when the user taps "Create New Folder" from inside the
   // Add to Folder modal — once the folder is created we add this recipe
   // to it automatically, so the user doesn't have to find it again.
   const [pendingAssignAfterCreate, setPendingAssignAfterCreate] = useState<UnifiedItem | null>(null);
@@ -123,6 +134,8 @@ export default function ChefArchiveScreen() {
   // doing both before the await resolves would create two folders.
   const creatingFolderRef = useRef(false);
   const [manageFolder, setManageFolder] = useState<ChefArchiveCollection | null>(null);
+  // Renaming happens in its own small pop-up, opened from Manage Folder.
+  const [renamingFolder, setRenamingFolder] = useState<ChefArchiveCollection | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   // Edit Recipe → Rename.
   const [renamingRecipe, setRenamingRecipe] = useState<UnifiedItem | null>(null);
@@ -211,24 +224,85 @@ export default function ChefArchiveScreen() {
   }
 
   function handleRenameFolder() {
-    if (!manageFolder) return;
+    if (!renamingFolder) return;
     const trimmed = renameDraft.trim();
     if (!trimmed) return;
-    rename.mutate({ id: manageFolder.id, name: trimmed }, {
-      onSuccess: () => setManageFolder(null),
+    rename.mutate({ id: renamingFolder.id, name: trimmed }, {
+      onSuccess: () => setRenamingFolder(null),
       onError: (err) => showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' }),
     });
   }
 
+  // Manage Folder → Rename Folder: its own pop-up with the name field.
+  function openRenameFolder() {
+    const c = manageFolder;
+    if (!c) return;
+    setManageFolder(null);
+    setRenameDraft(c.name);
+    setTimeout(() => setRenamingFolder(c), 300);
+  }
+
+  // Manage Folder → Update Folder Thumbnail: replace the photo Vinster chose,
+  // or one the user added, the same ways a recipe's photo can be set.
+  function openFolderThumbnail() {
+    const c = manageFolder;
+    if (!c) return;
+    setManageFolder(null);
+    setTimeout(() => showAlert({
+      title: 'Update Folder Thumbnail',
+      buttons: [
+        // AppAlert fires as it dismisses; the picker can't open mid-dismiss on iOS.
+        { text: 'Take a Photo', onPress: () => setTimeout(() => void pickFolderImage(c, 'camera'), 350) },
+        { text: 'Upload a Photo', onPress: () => setTimeout(() => void pickFolderImage(c, 'library'), 350) },
+        { text: 'Find a Photo Online', onPress: () => router.push(`/chef/find-folder-photo?folderId=${c.id}&name=${encodeURIComponent(c.name)}` as any) },
+        ...(c.image_path ? [{ text: "Use Vinster's Image", onPress: () => void saveFolderImage(c, null) }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    }), 300);
+  }
+  async function pickFolderImage(c: ChefArchiveCollection, source: 'camera' | 'library') {
+    try {
+      if (!session?.user.id) return;
+      if (!(await ensureMediaPermission(source))) return;
+      const res = source === 'camera'
+        ? await launchCamera({ mediaTypes: ['images'], quality: 1 })
+        : await launchImageLibrary({ mediaTypes: ['images'], quality: 1 });
+      if (res.canceled || !res.assets[0]) return;
+      const path = await uploadCookbookPhoto(session.user.id, res.assets[0].uri, c.id);
+      await saveFolderImage(c, path);
+    } catch (err) {
+      showAlert({ title: 'Could not add that photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+  async function saveFolderImage(c: ChefArchiveCollection, path: string | null) {
+    try {
+      await setChefCollectionImage(c.id, path);
+      qcRecipe.invalidateQueries({ queryKey: ['chef-archive-collections'] });
+    } catch (err) {
+      showAlert({ title: 'Could not update the thumbnail', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Manage Folder → Delete folder asks first: "Delete Autumn Recipes?"
   function handleDeleteFolder() {
-    if (!manageFolder) return;
-    remove.mutate(manageFolder.id, {
-      onSuccess: () => {
-        if (filter === manageFolder.id) setFilter(FILTER_ALL);
-        setManageFolder(null);
-      },
-      onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
-    });
+    const c = manageFolder;
+    if (!c) return;
+    setManageFolder(null);
+    setTimeout(() => showAlert({
+      title: `Delete ${c.name}?`,
+      body: 'This action cannot be undone.',
+      buttons: [
+        {
+          text: 'Confirm Delete',
+          style: 'destructive',
+          onPress: () => remove.mutate(c.id, {
+            onSuccess: () => { if (filter === c.id) setFilter(FILTER_ALL); },
+            onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
+          }),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    }), 300);
   }
 
   // Add-only assignment. Folder removal is intentionally not available
@@ -267,14 +341,18 @@ export default function ChefArchiveScreen() {
   }
 
   function handleLongPressItem(item: UnifiedItem) {
+    const inFolder = (membershipMap.get(item.key)?.size ?? 0) > 0;
     showAlert({
       title: 'Edit Recipe',
       body: itemRecipeName(item),
       buttons: [
-        {
+        // Once the tile's own links are gone (it has a folder / an image), these
+        // are where folders and the image are changed.
+        { text: inFolder ? 'Add to Another Folder' : 'Add to Folder', onPress: () => setTimeout(() => setAssigning(item), 350) },
+        ...(inFolder ? [{
           text: 'Remove from Folder',
           onPress: () => handleRemoveFromAllFolders(item),
-        },
+        }] : []),
         {
           text: 'Delete from Cookbook',
           style: 'destructive',
@@ -287,7 +365,7 @@ export default function ChefArchiveScreen() {
         { text: 'Rename', onPress: () => { setRenamingRecipe(item); setRecipeNameDraft(itemRecipeName(item)); } },
         // AppAlert fires as it dismisses; open the next menu after it closes.
         { text: 'Update Image', onPress: () => setTimeout(() => openRecipeImageMenu(item), 350) },
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
@@ -328,46 +406,49 @@ export default function ChefArchiveScreen() {
           {allItems.length} {allItems.length === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
         </Text>
       </View>
-      <Text style={styles.filterHint}>Listed by Recently Added · Swipe to see all folders →</Text>
+      <Text style={styles.filterHint}>Swipe to see all folders · Long press a folder to edit →</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.filterScroll}
         contentContainerStyle={styles.folderCarousel}
       >
-        <TouchableOpacity
-          style={[styles.folderChip, filter === FILTER_ALL && styles.folderChipActive]}
-          onPress={() => setFilter(FILTER_ALL)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.folderChipText, filter === FILTER_ALL && styles.folderChipTextActive]} numberOfLines={1}>All ({allItems.length})</Text>
+        {/* Vinster's filter, as on the review screens: FAVOURITES with All
+            beneath — every recipe shows by default; pick Favourites to filter. */}
+        <TouchableOpacity style={styles.filterChip} onPress={openFavouritesFilter} activeOpacity={0.7}>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Favourites</Text>
+            <Text style={styles.filterChipChevron}>▾</Text>
+          </View>
+          <Text style={[styles.filterChipValue, filter === FILTER_FAVOURITES && { color: colors.gold }]} numberOfLines={1}>
+            {filter === FILTER_FAVOURITES ? `★ ${favouritesCount} ${favouritesCount === 1 ? 'Recipe' : 'Recipes'}` : 'All'}
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.folderChip, filter === FILTER_FAVOURITES && styles.folderChipActive]}
-          onPress={() => setFilter(FILTER_FAVOURITES)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.folderChipText, filter === FILTER_FAVOURITES && styles.folderChipTextActive]} numberOfLines={1}>★ Favourites ({favouritesCount})</Text>
-        </TouchableOpacity>
+        {/* The user's own folders, in gold: the folder name as the heading and
+            how many recipes it holds beneath. Long-press to manage. */}
         {collections.map((c) => {
           const active = filter === c.id;
           return (
             <TouchableOpacity
               key={c.id}
-              style={[styles.folderChip, active && styles.folderChipActive]}
-              onPress={() => setFilter(c.id)}
+              style={[styles.filterChip, styles.userFolderChip, active && styles.userFolderChipActive]}
+              onPress={() => setFilter(active ? FILTER_ALL : c.id)}
               onLongPress={() => { setManageFolder(c); setRenameDraft(c.name); }}
               delayLongPress={400}
               activeOpacity={0.7}
             >
-              <Text style={[styles.folderChipText, active && styles.folderChipTextActive]} numberOfLines={1}>
-                {c.name} ({c.item_count})
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={[styles.filterChipLabel, styles.userFolderText]} numberOfLines={1} ellipsizeMode="tail">{c.name}</Text>
+                <Text style={[styles.filterChipChevron, styles.userFolderText]}>▾</Text>
+              </View>
+              <Text style={[styles.filterChipValue, styles.userFolderText]} numberOfLines={1}>
+                {`${c.item_count} ${c.item_count === 1 ? 'Recipe' : 'Recipes'}`}
               </Text>
             </TouchableOpacity>
           );
         })}
         <TouchableOpacity style={styles.folderChipAdd} onPress={() => setNewFolderOpen(true)} activeOpacity={0.7}>
-          <Text style={styles.folderChipAddText}>+ Add folder</Text>
+          <Text style={styles.folderChipAddText}>+ Add</Text>
         </TouchableOpacity>
       </ScrollView>
       <TextInput
@@ -440,32 +521,37 @@ export default function ChefArchiveScreen() {
                 <Text style={styles.cardTitle}>{itemRecipeName(item)}</Text>
                 {itemWineHeader(item) ? <Text style={styles.cardSubtitle}>{itemWineHeader(item)}</Text> : null}
 
-                {memberFolderNames.length > 0 ? (
-                  <View style={styles.folderBadgeRow}>
-                    {memberFolderNames.map((name) => (
-                      <View key={name} style={styles.folderBadge}>
-                        <Text style={styles.folderBadgeText}>{name}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-
                 {/* "+ Add to folder" sits at the bottom of the card; the
                     inner Touchable claims the press so the outer card's
                     onPress (open recipe) doesn't fire when this is tapped. */}
+                {/* Below the rule: the recipe's folder tags — or, until it's in
+                    one, "+ Add to folder". Once it has a folder / its own image,
+                    those are changed from the long-press menu instead. */}
                 <View style={styles.cardActions}>
-                  <TouchableOpacity
-                    onPress={() => setAssigning(item)}
-                    onLongPress={() => setAssigning(item)}
-                    delayLongPress={400}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.assignLink}>+ Add to folder</Text>
-                  </TouchableOpacity>
+                  {memberFolderNames.length > 0 ? (
+                    <View style={[styles.folderBadgeRow, { marginTop: 0 }]}>
+                      {memberFolderNames.map((name) => (
+                        <View key={name} style={styles.folderBadge}>
+                          <Text style={styles.folderBadgeText}>{name}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => setAssigning(item)}
+                      onLongPress={() => setAssigning(item)}
+                      delayLongPress={400}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.assignLink}>+ Add to folder</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-                <TouchableOpacity onPress={() => openRecipeImageMenu(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ alignSelf: 'flex-start' }}>
-                  <Text style={styles.assignLink}>Update image</Text>
-                </TouchableOpacity>
+                {!(item.session as ChefLabelSession).image_path ? (
+                  <TouchableOpacity onPress={() => openRecipeImageMenu(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ alignSelf: 'flex-start' }}>
+                    <Text style={styles.assignLink}>Update image</Text>
+                  </TouchableOpacity>
+                ) : null}
               </TouchableOpacity>
             );
           })}
@@ -543,26 +629,48 @@ export default function ChefArchiveScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Manage folder modal (rename / delete) */}
+      {/* Manage Folder: thumbnail, rename, delete */}
       <Modal visible={!!manageFolder} transparent animationType="fade" onRequestClose={() => setManageFolder(null)}>
-        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setManageFolder(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Manage folder</Text>
+            <Text style={styles.modalTitle}>Manage Folder</Text>
+            <TouchableOpacity style={styles.modalConfirm} onPress={openFolderThumbnail}>
+              <Text style={styles.modalConfirmText}>Update Folder Thumbnail</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.modalConfirm, { marginTop: spacing.sm }]} onPress={openRenameFolder}>
+              <Text style={styles.modalConfirmText}>Rename Folder</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalDanger} onPress={handleDeleteFolder}>
+              <Text style={styles.modalDangerText}>Delete folder</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setManageFolder(null)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Rename Folder */}
+      <Modal visible={!!renamingFolder} transparent animationType="fade" onRequestClose={() => setRenamingFolder(null)}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRenamingFolder(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Rename Folder</Text>
             <TextInput
               style={styles.modalInput}
               value={renameDraft}
               onChangeText={setRenameDraft}
               placeholder="Folder name"
               placeholderTextColor={colors.textMuted}
+              autoFocus
+              maxLength={40}
+              returnKeyType="done"
+              onSubmitEditing={handleRenameFolder}
             />
-            <TouchableOpacity style={styles.modalConfirm} onPress={handleRenameFolder}>
-              <Text style={styles.modalConfirmText}>Rename</Text>
+            <TouchableOpacity style={[styles.modalConfirm, !renameDraft.trim() && { opacity: 0.5 }]} onPress={handleRenameFolder} disabled={!renameDraft.trim()}>
+              <Text style={styles.modalConfirmText}>Confirm</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.modalDanger} onPress={handleDeleteFolder}>
-              <Text style={styles.modalDangerText}>Delete folder</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setManageFolder(null)}>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setRenamingFolder(null)}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -596,7 +704,8 @@ export default function ChefArchiveScreen() {
               </ScrollView>
             )}
             <TouchableOpacity
-              style={styles.modalCancel}
+              style={styles.modalNewFolderBtn}
+              activeOpacity={0.85}
               onPress={() => {
                 // Carry the recipe-being-assigned forward so the
                 // post-create flow can auto-add it once the new folder
@@ -607,7 +716,7 @@ export default function ChefArchiveScreen() {
                 setNewFolderOpen(true);
               }}
             >
-              <Text style={styles.modalNewFolderText}>+ Create new folder</Text>
+              <Text style={styles.modalNewFolderText}>Create New Folder</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancel} onPress={() => setAssigning(null)}>
               <Text style={styles.modalCancelText}>Done</Text>
@@ -634,6 +743,16 @@ const styles = StyleSheet.create({
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   folderCarousel: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
   // Folder chips — same pill shape as the Cellar List's custom-filter chips.
+  // Filter tiles — same size and type as the review screens' filter carousels.
+  filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
+  filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },
+  filterChipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+  // The user's own folders: gold outline and type; selected = thicker + tint.
+  userFolderChip: { borderColor: colors.gold },
+  userFolderChipActive: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.12)' },
+  userFolderText: { color: colors.gold, flexShrink: 1 },
   folderChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm, maxWidth: 200 },
   folderChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
   folderChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, letterSpacing: 0.3 },
@@ -673,7 +792,9 @@ const styles = StyleSheet.create({
   modalCancel: { alignItems: 'center', paddingTop: spacing.sm },
   modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   // "+ New folder" inline link inside the assign modal — treat as a button.
-  modalNewFolderText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
+  // Gold outlined button, the same size as the app's other buttons.
+  modalNewFolderBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.sm },
+  modalNewFolderText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   assignEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
   assignRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   assignRowActive: { backgroundColor: 'rgba(212,176,96,0.10)' },

@@ -18,7 +18,7 @@ interface Props {
   onClose: () => void;
 }
 
-// Where bottles can go in Home Storage: Your Cellar List, a rack or fridge, a
+// Where bottles can go in Home Storage: Your Full Cellar List, a rack or fridge, a
 // bin, or a home alt cellar. External cellars are never offered — storage only
 // ever moves external → home.
 export function MoveHomeModal({ visible, subtitle, maxBottles, racks, bins, storageLocations, onPick, onClose }: Props) {
@@ -51,7 +51,7 @@ export function MoveHomeModal({ visible, subtitle, maxBottles, racks, bins, stor
           )}
           <ScrollView style={{ maxHeight: 340 }}>
             <TouchableOpacity style={styles.row} onPress={() => onPick({ kind: 'list' }, count)}>
-              <Text style={styles.name}>Your Cellar List</Text>
+              <Text style={styles.name}>Your Full Cellar List</Text>
               <Text style={styles.type}>Unplaced</Text>
             </TouchableOpacity>
             {dests.map(({ dest, type }) => (

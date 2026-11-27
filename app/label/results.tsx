@@ -27,6 +27,8 @@ import { canEditCellar, VIEW_ONLY_MESSAGE } from '../../src/api/cellarContext';
 import { WineCardHero } from '../../src/components/winecard/WineCardHero';
 import { MessageScreen } from '../../src/components/MessageScreen';
 import { wc } from '../../src/components/winecard/wcStyles';
+import { stageFrom, STAGE_LABEL, type DrinkingStage } from '../../src/utils/maturity';
+import { WineHistorySection, type HistoryLine } from '../../src/components/winecard/WineHistorySection';
 import { WhereToBuyCard } from '../../src/components/winecard/WhereToBuyCard';
 import { PER_75CL, isStandardBottle } from '../../src/utils/bottleValue';
 import { vintageVerdict, tooFewVintagesNote, pickFromCellar, ordinal, type CellarPick } from '../../src/utils/wineCardInsights';
@@ -35,6 +37,7 @@ import { wineQueryName, wineQueryAltName, wineNameKey, normaliseVintage } from '
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { patchChosenWine } from '../../src/api/chosenWines';
 import { findExistingReview } from '../../src/utils/reviewDedup';
+import { chosenHasReview } from '../../src/utils/reviewModel';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
 import { createStorageCase, fetchStorageLocationCases, fetchStorageLocation, fetchStorageLocations } from '../../src/api/storageLocations';
 import { addLocationPlacement, fetchPlacementsForWine, type CellarPlacement } from '../../src/api/placements';
@@ -71,18 +74,15 @@ import { BottleSizePicker, COMMON_BOTTLE_SIZES, bottleSizeLabel, bottleSizeCl } 
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { hasRealInsiderNote } from '../../src/constants/insiderNote';
+import { ShareSheet } from '../../src/components/ShareSheet';
 
 // Compact label + colour for the drinking-window stat cell — mirrors the badge
 // above and the cellar wine card, with shorter labels for the tight cell.
-function windowMeta(status: string): { text: string; color: string } {
-  const map: Record<string, { text: string; color: string }> = {
-    too_young: { text: 'Too Young', color: colors.warning },
-    approaching: { text: 'Approaching', color: colors.gold },
-    peak: { text: 'Peak Now', color: colors.gold },
-    declining: { text: 'Declining', color: colors.gold },
-    unknown: { text: 'Unknown', color: colors.textMuted },
-  };
-  return map[status] ?? map.unknown;
+// The window's stage label (see utils/maturity: where today falls in the
+// window) and its colour.
+function windowMeta(stage: DrinkingStage): { text: string; color: string } {
+  if (stage === 'unknown') return { text: 'Unknown', color: colors.textMuted };
+  return { text: STAGE_LABEL[stage], color: stage === 'too_young' ? colors.warning : colors.gold };
 }
 
 // Stand-in intel for the no-intel "Add Wine" flow so the shared render + save
@@ -740,6 +740,8 @@ export default function LabelResultsScreen() {
   // off-screen WineIntelShareCard. Mirrors the cellar wine-card share so every
   // Vinster share reads as one family. Falls back to plain text on devices
   // without share-sheet support.
+  // Share → the Share pop-up (Share externally / Cancel).
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   async function handleShare() {
     if (sharing) return;
     const w = wineDetailsConfirmed;
@@ -1575,16 +1577,30 @@ export default function LabelResultsScreen() {
   // (opens the +Add review pre-filled) or later (files it as an awaiting pick).
   function handleSaveToReviews() {
     if (!wine) return;
-    // A review already exists for this wine → go straight to its review card
-    // (Add/View), skipping the "review now / later" prompt.
     const existingReview = findExistingReview(chosenWines, {
       producer: wine.producer, wineName: wine.wineName, vintage: wine.vintage, wsWineId: intel.wsWineId ?? null,
     });
-    if (existingReview) {
-      router.push(`/wines/chosen?openReview=${existingReview.id}&backTo=${encodeURIComponent('/label/results?context=intel')}&fromIntel=1` as any);
+    const openExisting = (id: string) =>
+      router.push(`/wines/chosen?openReview=${id}&backTo=${encodeURIComponent('/label/results?context=intel')}&fromIntel=1` as any);
+    // Already reviewed → straight to its review card (Add/View).
+    if (existingReview && chosenHasReview(existingReview)) {
+      openExisting(existingReview.id);
       return;
     }
     const label = [wine.producer, wine.wineName, wine.vintage].filter(Boolean).join(' ');
+    // Saved to review later but not reviewed yet → ask again; "later" just
+    // closes, as it's already waiting in Your Wine Reviews.
+    if (existingReview) {
+      showAlert({
+        title: 'Add Your Wine Review',
+        body: `${label}\n\nIt's waiting in Your Wine Reviews. Review it now, or later?`,
+        buttons: [
+          { text: 'Review now', onPress: () => openExisting(existingReview.id) },
+          { text: 'Review later', style: 'cancel' },
+        ],
+      });
+      return;
+    }
     showAlert({
       title: 'Add Your Wine Review',
       body: `${label}\n\nReview it now, or save it to review later?`,
@@ -1693,7 +1709,6 @@ export default function LabelResultsScreen() {
 
   // "Your History With This Wine": plain statements (no link) and lines that
   // open where the wine is, or the occasion it was drunk.
-  type HistoryLine = { key: string; text: string; link?: string; onPress?: () => void };
   function intelHistoryLines(): HistoryLine[] {
     const lines: HistoryLine[] = [];
     const b = (n: number) => `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
@@ -1714,15 +1729,33 @@ export default function LabelResultsScreen() {
       addedByDay.set(dayKey(day), (addedByDay.get(dayKey(day)) ?? 0) + w.quantity);
     }
     const newestFirst = (a: string, b: string) => new Date(b).getTime() - new Date(a).getTime();
-    for (const day of Array.from(addedByDay.keys()).sort(newestFirst)) {
-      const n = addedByDay.get(day)!;
-      lines.push({ key: `added-${day}`, text: `${n} ${n === 1 ? 'Bottle' : 'Bottles'} added to your cellar on ${fmtIntelDay(day)}` });
+    const B = (n: number) => `${n} ${n === 1 ? 'Bottle' : 'Bottles'}`;
+    // One line for all the bottles added, and one for all those archived;
+    // View lists them by date (an archived entry opens its own card).
+    const addedTotal = [...addedByDay.values()].reduce((n, q) => n + q, 0);
+    if (addedTotal > 0) {
+      lines.push({
+        key: 'added',
+        text: `${B(addedTotal)} added to your cellar`,
+        sheet: {
+          title: 'Bottles Added to Your Cellar',
+          rows: Array.from(addedByDay.keys()).sort(newestFirst).map((day) => ({ key: day, text: `${B(addedByDay.get(day)!)} added on ${fmtIntelDay(day)}` })),
+        },
+      });
     }
     const archivedRows = archiveMatches
       .filter((w) => !!w.archived_at && w.quantity > 0)
       .sort((a, b) => newestFirst(a.archived_at!, b.archived_at!));
-    for (const w of archivedRows) {
-      lines.push({ key: `archived-${w.id}`, text: `${w.quantity} ${w.quantity === 1 ? 'Bottle' : 'Bottles'} added to your archive on ${fmtIntelDay(w.archived_at!)}`, link: 'View', onPress: () => openWine(w.id) });
+    const archivedTotal = archivedRows.reduce((n, w) => n + w.quantity, 0);
+    if (archivedTotal > 0) {
+      lines.push({
+        key: 'archived',
+        text: `${B(archivedTotal)} added to your archive`,
+        sheet: {
+          title: 'Bottles Added to Your Archive',
+          rows: archivedRows.map((w) => ({ key: w.id, text: `${B(w.quantity)} added on ${fmtIntelDay(w.archived_at!)}`, onPress: () => openWine(w.id) })),
+        },
+      });
     }
 
     // 2. Where the bottles are now: one line per rack, fridge, bin or alt
@@ -1764,7 +1797,7 @@ export default function LabelResultsScreen() {
     const loose = total - placed;
     // Not filed anywhere: the Full Cellar List, filtered to this wine.
     const listWineId = wineId ?? cellarMatches[0]?.id;
-    if (loose > 0 && listWineId) lines.push({ key: 'loose', text: `${cap(b(loose))} in Your Cellar List`, link: 'View', onPress: () => router.push(`/cellar/list?wine=${listWineId}` as any) });
+    if (loose > 0 && listWineId) lines.push({ key: 'loose', text: `${cap(b(loose))} in Your Full Cellar List`, link: 'View', onPress: () => router.push(`/cellar/list?wine=${listWineId}` as any) });
 
 
     // 3. Each time the wine was drunk at a restaurant — picked from a list,
@@ -1859,13 +1892,30 @@ export default function LabelResultsScreen() {
                   <Text style={wc.FactValue}>NA</Text>
                 ) : (
                   <>
-                    <Text style={[wc.FactValue, { color: windowMeta(intel.drinkingWindowStatus).color }]} numberOfLines={1}>{intel.drinkingWindowStatus === 'unknown' ? '—' : windowMeta(intel.drinkingWindowStatus).text}</Text>
+                    {(() => {
+                      const stage = stageFrom(intel.drinkingWindowFrom, intel.drinkingWindowTo, intel.drinkingWindowStatus);
+                      const meta = windowMeta(stage);
+                      return <Text style={[wc.FactValue, { color: meta.color }]} numberOfLines={1}>{stage === 'unknown' ? '—' : meta.text}</Text>;
+                    })()}
                     {windowYears ? <Text style={wc.FactSub}>{windowYears}</Text> : null}
                   </>
                 )}
               </TouchableOpacity>
             </View>
-            {intel.wsUnavailable && !intelLoading ? (
+            {intel.labelOnly && !intelLoading ? (
+              <>
+                <Text style={[styles.statBarHint, { color: colors.gold }]}>
+                  Vinster doesn't yet have published scores, prices or a drinking window for this wine.
+                </Text>
+                {intel.wsUnavailable ? (
+                  <TouchableOpacity onPress={retryWineSearcher} disabled={wsRetrying} activeOpacity={0.7}>
+                    <Text style={[styles.statBarHint, { color: colors.gold }]}>
+                      {wsRetrying ? 'Checking Wine-Searcher…' : "Wine-Searcher couldn't be checked just now, so these are Vinster's estimates. Tap to try again."}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            ) : intel.wsUnavailable && !intelLoading ? (
               <TouchableOpacity onPress={retryWineSearcher} disabled={wsRetrying} activeOpacity={0.7}>
                 <Text style={[styles.statBarHint, { color: colors.gold }]}>
                   {wsRetrying ? 'Checking Wine-Searcher…' : "Wine-Searcher couldn't be checked just now, so these are Vinster's estimates. Tap to try again."}
@@ -1876,17 +1926,7 @@ export default function LabelResultsScreen() {
             )}
 
             <View style={wc.Body}>
-              {lines.length ? (
-                <View style={wc.History}>
-                  <Text style={wc.HistoryTitle}>Your History With This Wine</Text>
-                  {lines.map((l, i) => (
-                    <TouchableOpacity key={l.key} style={[wc.HistoryRow, i === lines.length - 1 && wc.RowLast]} onPress={l.onPress} disabled={!l.onPress} activeOpacity={0.7}>
-                      <Text style={wc.HistoryText}>{l.text}</Text>
-                      {l.link ? <Text style={wc.Link}>{l.link} ›</Text> : null}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null}
+              <WineHistorySection lines={lines} />
 
               {latestIntelReview ? (
                 <View style={wc.Card}>
@@ -1965,7 +2005,8 @@ export default function LabelResultsScreen() {
               >
                 <Text style={wc.outlineBtnText}>Save to Your Cellar</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={wc.outlineBtn} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
+              <ShareSheet visible={shareSheetOpen} heading="Your Wine Intel" name={[wine?.producer, wine?.wineName, wine?.vintage].filter(Boolean).join(' ') || null} detail={null} onShareExternally={() => void handleShare()} onClose={() => setShareSheetOpen(false)} />
+              <TouchableOpacity style={wc.outlineBtn} onPress={() => setShareSheetOpen(true)} disabled={sharing} activeOpacity={0.85}>
                 <Text style={wc.outlineBtnText}>{sharing ? 'Preparing…' : 'Share Result'}</Text>
               </TouchableOpacity>
               <Text style={[wc.Small, { textAlign: 'center' }]}>Community notes on this wine · coming soon</Text>
@@ -2306,7 +2347,7 @@ export default function LabelResultsScreen() {
       {/* Weak intel: if we found candidate bottlings, the disambiguation modal
           takes over; otherwise fall back to the check-details prompt. */}
       <NoIntelPrompt
-        visible={isIntelOnlyFlow && intelligence != null && intel.criticScore == null && intel.estimatedValue == null && !noIntelDismissed && !candidatesOpen && candidates.length === 0}
+        visible={isIntelOnlyFlow && intelligence != null && intel.criticScore == null && intel.estimatedValue == null && !intel.labelOnly && !noIntelDismissed && !candidatesOpen && candidates.length === 0}
         onDismiss={() => setNoIntelDismissed(true)}
         onEdit={() => router.dismissTo(exitTo)}
         editLabel="Check details"

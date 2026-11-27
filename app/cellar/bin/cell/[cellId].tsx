@@ -145,7 +145,7 @@ export default function BinCellScreen() {
   }
 
   // Where a wine's bottles outside this cell are, e.g. "Large Rack and Your
-  // Cellar List" — loose bottles count as being in Your Cellar List.
+  // Cellar List" — loose bottles count as being in Your Full Cellar List.
   function describeWhere(w: CellarWine, placements: CellarPlacement[]): string {
     const names: string[] = [];
     const add = (name: string) => { if (!names.includes(name)) names.push(name); };
@@ -158,8 +158,8 @@ export default function BinCellScreen() {
         add(loc ? `${loc.name}${loc.is_external ? ' (external)' : ''}` : 'an alt cellar');
       }
     }
-    if ((w.quantity ?? 0) > placedCount(placements)) add('Your Cellar List');
-    return names.length <= 1 ? (names[0] ?? 'Your Cellar List') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    if ((w.quantity ?? 0) > placedCount(placements)) add('Your Full Cellar List');
+    return names.length <= 1 ? (names[0] ?? 'Your Full Cellar List') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   }
 
   // "Select from Cellar List": bring bottles of a wine already in the cellar
@@ -305,7 +305,7 @@ export default function BinCellScreen() {
         && (await setCellBottleSize(userId, draft.id, cellId, draft.bottleSizeMl)) === 'split') {
         showAlert({
           title: 'Bottle size changed',
-          body: `The bottles in this ${noun} are now their own line in Your Cellar List. This wine's other bottles keep their size.`,
+          body: `The bottles in this ${noun} are now their own line in Your Full Cellar List. This wine's other bottles keep their size.`,
         });
       }
       setDraft(null);

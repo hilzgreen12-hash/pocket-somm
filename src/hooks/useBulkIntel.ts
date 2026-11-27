@@ -96,6 +96,14 @@ export function useBulkIntel(onFinished: () => void, opts?: { findLabels?: boole
     });
   }
 
+  // Update these wines now, no confirmation: the screen has already shown the
+  // person exactly which wines (the Cellar List's "View and update" list).
+  // At most one bunch of BULK_BATCH_SIZE per run.
+  function runNow(targets: CellarWine[]) {
+    if (!canRun || inFlightRef.current || targets.length === 0) return;
+    void run(targets.slice(0, BULK_BATCH_SIZE));
+  }
+
   // "Save Progress and Exit Update": no further wines start; each wine already
   // updated is saved. The run's own finish refreshes the screen.
   function stop() {
@@ -103,5 +111,5 @@ export function useBulkIntel(onFinished: () => void, opts?: { findLabels?: boole
     setProgress(null);
   }
 
-  return { canRun, eligible, progress, start, stop };
+  return { canRun, eligible, progress, start, runNow, stop };
 }

@@ -20,6 +20,12 @@ import { fonts } from '../constants/fonts';
 const WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
 const MAX = 10;
 let shownThisSession = false;
+// Set (to the time) when a wine is opened for review from this list: coming
+// back to the Cellar tab soon after reopens the list with the wines still
+// waiting. Consumed by the next Cellar focus, and ignored once stale (the user
+// went elsewhere instead), so it can't reopen the list out of the blue later.
+let resumeAfterReview: number | null = null;
+const RESUME_WITHIN_MS = 15 * 60 * 1000;
 
 // A review entry, or on older rows a written review, score or drinking date.
 // Personal notes on their own aren't a review.
@@ -33,10 +39,27 @@ export function ArchivedReviewPrompt() {
   const { wines: archive, isLoading } = useArchive();
   const { wines: live } = useCellar();
   const { chosenWines } = useChosenWines();
-  const [list, setList] = useState<CellarWine[] | null>(null);
+  const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
-  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    if (resumeAfterReview != null) {
+      const fresh = Date.now() - resumeAfterReview <= RESUME_WITHIN_MS;
+      resumeAfterReview = null;
+      if (fresh) setOpen(true);
+    }
+    return () => setFocused(false);
+  }, []));
   const key = `vinster-archived-review-prompt-off:${userId ?? 'anon'}`;
+  // Wines removed from the list with their ✕ — never offered again.
+  const dismissedKey = `vinster-archived-review-dismissed:${userId ?? 'anon'}`;
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!userId) return;
+    AsyncStorage.getItem(dismissedKey)
+      .then((v) => { try { setDismissed(new Set(JSON.parse(v ?? '[]'))); } catch { /* ignore */ } })
+      .catch(() => {});
+  }, [userId, dismissedKey]);
   const checkedRef = useRef(false);
 
   const awaiting = useMemo(() => {
@@ -49,6 +72,7 @@ export function ArchivedReviewPrompt() {
       .sort((a, b) => new Date(b.archived_at!).getTime() - new Date(a.archived_at!).getTime());
     for (const w of recent) {
       if (picked.length >= MAX) break;
+      if (dismissed.has(w.id)) continue;
       // Reviewed already: on this entry, another archived entry of it, its
       // bottles still in the cellar (where a partial archive leaves the
       // reviews), or a restaurant / other review.
@@ -58,49 +82,69 @@ export function ArchivedReviewPrompt() {
       picked.push(w);
     }
     return picked;
-  }, [archive, live, chosenWines, userId]);
+  }, [archive, live, chosenWines, userId, dismissed]);
 
   useEffect(() => {
     if (!userId || !focused || isLoading || shownThisSession || checkedRef.current || awaiting.length === 0) return;
     checkedRef.current = true;
     AsyncStorage.getItem(key)
-      .then((off) => { if (!off && !shownThisSession) { shownThisSession = true; setList(awaiting); } })
+      .then((off) => { if (!off && !shownThisSession) { shownThisSession = true; setOpen(true); } })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, focused, isLoading, awaiting.length]);
 
   function review(w: CellarWine) {
-    setList(null);
+    setOpen(false);
+    resumeAfterReview = Date.now();
     // fromArchive: the review is dated the day it was archived, at the place
     // its Archive Note names.
     router.push(`/wines/chosen?openCellarReviewInput=${w.id}&fromArchive=1` as any);
   }
   async function dontShowAgain() {
     try { await AsyncStorage.setItem(key, '1'); } catch { /* non-fatal */ }
-    setList(null);
+    setOpen(false);
+  }
+  // ✕ on a wine: take it off this list for good (it stays in the archive).
+  function dismiss(w: CellarWine) {
+    setDismissed((prev) => {
+      const next = new Set(prev).add(w.id);
+      AsyncStorage.setItem(dismissedKey, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
   }
 
+  // The list is live: a wine just reviewed, or removed, drops off it, and the
+  // pop-up closes once none are left.
+  const list = awaiting;
+  // Nothing left: close for real, so a wine archived later can't pop the list
+  // back up on its own.
+  useEffect(() => { if (open && list.length === 0) setOpen(false); }, [open, list.length]);
   return (
-    <Modal visible={!!list && focused} transparent animationType="fade" onRequestClose={() => setList(null)}>
+    <Modal visible={open && focused && list.length > 0} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          <TouchableOpacity style={styles.close} onPress={() => setList(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7} accessibilityLabel="Close">
+          <TouchableOpacity style={styles.close} onPress={() => setOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7} accessibilityLabel="Close">
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.title}>You've archived wines without a review:</Text>
           <Text style={styles.sub}>Select a wine to review it</Text>
           <ScrollView style={{ maxHeight: 280 }} alwaysBounceVertical={false}>
-            {(list ?? []).map((w) => (
-              <TouchableOpacity key={w.id} style={styles.row} onPress={() => review(w)} activeOpacity={0.7}>
-                <Text style={styles.wine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name || 'Wine'}</Text>
-                {w.archived_at ? <Text style={styles.meta}>Archived {new Date(w.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text> : null}
-              </TouchableOpacity>
+            {list.map((w) => (
+              <View key={w.id} style={styles.row}>
+                <TouchableOpacity style={{ flex: 1 }} onPress={() => review(w)} activeOpacity={0.7}>
+                  <Text style={styles.wine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name || 'Wine'}</Text>
+                  {w.archived_at ? <Text style={styles.meta}>Archived {new Date(w.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text> : null}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => dismiss(w)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Remove from this list" style={styles.rowX}>
+                  <Text style={styles.rowXText}>✕</Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </ScrollView>
-          <TouchableOpacity style={styles.primary} onPress={() => list?.[0] && review(list[0])} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.primary} onPress={() => list[0] && review(list[0])} activeOpacity={0.85}>
             <Text style={styles.primaryText}>Review Now</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondary} onPress={() => setList(null)} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.secondary} onPress={() => setOpen(false)} activeOpacity={0.7}>
             <Text style={styles.secondaryText}>Review Later</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.dontShow} onPress={dontShowAgain} activeOpacity={0.7}>
@@ -120,7 +164,10 @@ const styles = StyleSheet.create({
   closeText: { fontFamily: fonts.bodyRegular, fontSize: 18, color: colors.textMuted, lineHeight: 20 },
   title: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
   sub: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.md },
-  row: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderLight },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderLight },
+  // Small ✕ to take a wine off the list.
+  rowX: { paddingHorizontal: 4 },
+  rowXText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   wine: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold, lineHeight: 22 },
   meta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   primary: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },

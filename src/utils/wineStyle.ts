@@ -55,3 +55,32 @@ export function inferWineStyle(input: { style?: string | null; region?: string |
 
   return null;
 }
+
+// The colour dot beside a wine in search results: 'red' | 'white' | 'rosé', or
+// null when nothing is known. The catalogue's own colour comes first (a rosé
+// Champagne is rosé, not sparkling); otherwise it's worked out from the style,
+// region or grape. Sparkling and fortified wines take the colour of most of
+// their kind.
+export function wineDotColourKey(w: { colour?: string | null; style?: string | null; region?: string | null; grape?: string | null }): 'red' | 'white' | 'rosé' | null {
+  const c = (w.colour ?? '').toLowerCase();
+  if (c === 'red' || c === 'white') return c;
+  if (c === 'rosé' || c === 'rose') return 'rosé';
+  switch (inferWineStyle({ style: w.style, region: w.region, grape_variety: w.grape })) {
+    case 'Red': return 'red';
+    case 'Rosé': return 'rosé';
+    case 'White': case 'Sparkling': return 'white';
+    case 'Fortified': return 'red';
+    default: return null;
+  }
+}
+
+// The dot's paint: red, gold for white, pink for rosé, and a muted neutral
+// when the colour isn't known, so every wine still shows a dot.
+export function wineDotColour(key: 'red' | 'white' | 'rosé' | null): string {
+  switch (key) {
+    case 'red': return '#B23A2E';
+    case 'white': return '#E0B84A';
+    case 'rosé': return '#E39AA6';
+    default: return '#8C7B78';
+  }
+}

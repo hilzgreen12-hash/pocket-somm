@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
@@ -13,6 +13,12 @@ import { buildRecipeHtml } from '../../src/utils/recipeHtml';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { Pairing, WineDetailsComplete } from '../../src/types/wine';
+import { ShareSheet } from '../../src/components/ShareSheet';
+import { RecipeShareCard } from '../../src/components/RecipeShareCard';
+import { RecipeNotesModal } from '../../src/components/RecipeNotesModal';
+import { latestRecipeNote } from '../../src/utils/recipeNotes';
+import { uploadSharedPdf } from '../../src/api/sharedFiles';
+import { captureRef } from 'react-native-view-shot';
 
 // Full-screen "artifact" view of a single pairing — the surface users
 // hand to friends as a PDF (Export). Designed to feel like a recipe
@@ -28,12 +34,28 @@ export default function RecipeFullScreen() {
   const { wineDetailsConfirmed, pairings: freshPairings, filters: labelFilters } = useLabelStore();
   const { sessions: labelSessions, updateNotes, save: saveLabelSession } = useChefLabelHistory();
   const [sharing, setSharing] = useState(false);
+  // The off-screen "The Vinster Kitchen" card captured as the share image.
+  const shareCardRef = useRef<View>(null);
+  // Pairing Notes pop-up before sharing: an optional note for the share card.
+  const [pairingNoteOpen, setPairingNoteOpen] = useState(false);
+  const [pairingNoteDraft, setPairingNoteDraft] = useState('');
+  const [shareNote, setShareNote] = useState<string | null>(null);
+  function askPairingNote() {
+    // Start from the newest saved recipe note, if there is one.
+    setPairingNoteDraft(latestRecipeNote(savedSession?.user_notes));
+    setPairingNoteOpen(true);
+  }
+  function finishPairingNote(note: string | null) {
+    setPairingNoteOpen(false);
+    setShareNote(note);
+    // Let the card redraw with the note before it is captured.
+    setTimeout(() => void handleShare(), 350);
+  }
   // The user's own pairing notes on this saved recipe (chef_label_sessions
   // .user_notes, migration 036). Editable via the "Add Your Pairing Notes" link.
   const savedSession = sessionId ? labelSessions.find((row) => row.id === sessionId) : null;
   const userNotes = (savedSession?.user_notes ?? '').trim();
   const [notesOpen, setNotesOpen] = useState(false);
-  const [notesDraft, setNotesDraft] = useState('');
 
   // Resolve the pairing + wine from whichever source the caller indicated.
   const { pairing, wine } = useMemo<{ pairing: Pairing | null; wine: WineDetailsComplete | null }>(() => {
@@ -77,23 +99,39 @@ export default function RecipeFullScreen() {
     }
   }
 
+  // Share → the Share pop-up (Share externally / Cancel).
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   async function handleShare() {
     if (!pairing || sharing) return;
     setSharing(true);
     try {
-      // Share as a PDF (not a screenshot) so an emailed recipe arrives as a
-      // readable document. expo-print is lazy-required so this file still
-      // typechecks even if the native module isn't in a given build.
+      // The message: the "The Vinster Kitchen · Recipe Pairings" card as the
+      // image, "<name> has shared a recipe pairing with you.", a link to the
+      // full recipe as a PDF, then "Get Vinster". expo-print is lazy-required
+      // so this file still typechecks even if the native module isn't in a build.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const Print = require('expo-print');
-      const { uri } = await Print.printToFileAsync({ html: buildRecipeHtml(pairing, wineLine) });
-      if (await Sharing.isAvailableAsync()) {
-        const name = sharerNameFrom(session);
-        await shareResult(uri, {
-          sharerName: name,
-          mimeType: 'application/pdf',
-          message: `${name} has shared a recipe with you: ${pairing.dishName}${wineLine ? ` paired to ${wineLine}` : ''}`,
-        });
+      const { uri: pdfUri } = await Print.printToFileAsync({ html: buildRecipeHtml(pairing, wineLine) });
+      if (!(await Sharing.isAvailableAsync())) {
+        showAlert({ title: 'Sharing unavailable', body: 'This device cannot open the share sheet.' });
+        return;
+      }
+      const name = sharerNameFrom(session);
+      const lead = `${name} has shared a recipe pairing with you.`;
+      // Upload the PDF for the link; if that fails, send the PDF itself.
+      let pdfUrl: string | null = null;
+      try { if (session?.user.id) pdfUrl = await uploadSharedPdf(session.user.id, pdfUri, pairing.dishName); } catch { /* fall back to the file */ }
+      await new Promise((r) => setTimeout(r, 150));
+      // captureRef throws (rather than returning null) when the snapshot
+      // fails — fall back to sending the PDF file itself.
+      let imageUri: string | null = null;
+      try {
+        if (shareCardRef.current) imageUri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
+      } catch { /* fall back to the PDF */ }
+      if (imageUri && pdfUrl) {
+        await shareResult(imageUri, { sharerName: name, message: `${lead}\n${pdfUrl}`, getVinsterOnNewLine: true });
+      } else {
+        await shareResult(pdfUri, { sharerName: name, mimeType: 'application/pdf', message: lead, getVinsterOnNewLine: true });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -119,6 +157,20 @@ export default function RecipeFullScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Off-screen share image — "The Vinster Kitchen · Recipe Pairings". */}
+      <View style={styles.offscreen} pointerEvents="none">
+        <RecipeShareCard
+          ref={shareCardRef}
+          dishName={pairing.dishName}
+          chef={pairing.chefInspiration}
+          servings={pairing.recipe?.servings}
+          prepTime={pairing.recipe?.prepTime}
+          cookTime={pairing.recipe?.cookTime}
+          wineLine={wineLine}
+          pairingNotes={pairing.pairingNotes}
+          userNote={shareNote}
+        />
+      </View>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
@@ -127,11 +179,12 @@ export default function RecipeFullScreen() {
           {/* Notes live in a popup now (not inline on the recipe). Only on a
               saved recipe, which has a session to attach them to. */}
           {sessionId ? (
-            <TouchableOpacity onPress={() => { setNotesDraft(userNotes); setNotesOpen(true); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity onPress={() => setNotesOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Text style={styles.actionLink}>{userNotes ? '+ VIEW NOTES' : '+ ADD NOTES'}</Text>
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <ShareSheet visible={shareSheetOpen} heading="Your Recipe" name={pairing?.dishName ?? null} detail={[wine?.producer, wine?.wineName, wine?.vintage].filter(Boolean).join(' ') || null} onShareExternally={askPairingNote} onClose={() => setShareSheetOpen(false)} />
+          <TouchableOpacity onPress={() => setShareSheetOpen(true)} disabled={sharing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={[styles.actionLink, sharing && { opacity: 0.4 }]}>
               {sharing ? 'PREPARING…' : '+ EXPORT'}
             </Text>
@@ -191,42 +244,56 @@ export default function RecipeFullScreen() {
       </ScrollView>
 
       {/* Add / edit the user's own pairing notes on this recipe. */}
-      <Modal visible={notesOpen} transparent animationType="fade" onRequestClose={() => setNotesOpen(false)}>
+      {/* Pairing Notes — asked before the share sheet opens; the note appears
+          on the share card. */}
+      <Modal visible={pairingNoteOpen} transparent animationType="fade" onRequestClose={() => setPairingNoteOpen(false)}>
         <View style={styles.notesOverlay}>
           <View style={styles.notesSheet}>
-            <Text style={styles.notesTitle}>Your Pairing Notes</Text>
+            <Text style={styles.notesTitle}>Pairing Notes</Text>
+            <Text style={styles.pairingNoteDish}>{pairing.dishName}</Text>
+            {wineLine ? <Text style={styles.pairingNoteWine}>{wineLine}</Text> : null}
+            <Text style={styles.pairingNoteLabel}>Add A Pairing Note</Text>
             <TextInput
               style={styles.notesInput}
-              value={notesDraft}
-              onChangeText={setNotesDraft}
+              value={pairingNoteDraft}
+              onChangeText={setPairingNoteDraft}
               placeholder="How did the pairing go? Tweaks, occasion, who you cooked it for…"
               placeholderTextColor={colors.textMuted}
               multiline
-              autoFocus
+              maxLength={400}
               textAlignVertical="top"
             />
             <TouchableOpacity
-              style={styles.notesSaveBtn}
-              onPress={() => {
-                if (!sessionId) return;
-                updateNotes.mutate({ id: sessionId, notes: notesDraft.trim() || null });
-                setNotesOpen(false);
-              }}
+              style={[styles.notesSaveBtn, !pairingNoteDraft.trim() && { opacity: 0.5 }]}
+              disabled={!pairingNoteDraft.trim()}
+              onPress={() => finishPairingNote(pairingNoteDraft.trim())}
               activeOpacity={0.85}
             >
-              <Text style={styles.notesSaveText}>Save</Text>
+              <Text style={styles.notesSaveText}>Confirm Note</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setNotesOpen(false)} style={styles.notesCancel} activeOpacity={0.7}>
-              <Text style={styles.notesCancelText}>Cancel</Text>
+            <TouchableOpacity style={[styles.notesSaveBtn, { marginTop: spacing.sm }]} onPress={() => finishPairingNote(null)} activeOpacity={0.85}>
+              <Text style={styles.notesSaveText}>No Note</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      {/* Recipe notes — dated entries, each editable / deletable, plus Add
+          Note for another (like review entries). */}
+      <RecipeNotesModal
+        visible={notesOpen}
+        title={pairing.dishName}
+        rawNotes={savedSession?.user_notes}
+        notesUpdatedAt={savedSession?.user_notes_updated_at ?? savedSession?.saved_at ?? null}
+        onSave={async (notes) => { if (sessionId) await updateNotes.mutateAsync({ id: sessionId, notes }); }}
+        onClose={() => setNotesOpen(false)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  offscreen: { position: 'absolute', left: -9999, top: -9999 },
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
@@ -254,8 +321,9 @@ const styles = StyleSheet.create({
   addCookbookBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
   addCookbookBtnDisabled: { opacity: 0.6 },
   addCookbookText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
-  notesCancel: { alignItems: 'center', paddingTop: spacing.md },
-  notesCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
+  pairingNoteDish: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.gold, textAlign: 'center' },
+  pairingNoteWine: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: 4 },
+  pairingNoteLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.lg, marginBottom: spacing.xs },
   wineHeader: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginTop: 4, lineHeight: 28 },
   shortDivider: { width: 40, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', alignSelf: 'center', marginVertical: spacing.lg },
 

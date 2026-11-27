@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
         vintage: str(w?.vintage),
         region: str(w?.region),
         country: str(w?.country),
-        colour: ['Red', 'White', 'Rosé', 'Sparkling', 'Fortified'].includes(w?.colour) ? w.colour : null,
+        colour: colourOf(w?.colour),
         bottleSizeMl,
         totalBottles: total,
         packaging: pk,
@@ -216,6 +216,19 @@ Deno.serve(async (req) => {
 // A reply cut off at max_tokens ends part-way through a wine; the wines are
 // flat objects, so cutting back to the last closing brace and closing the array
 // keeps every complete one.
+// A colour in any case or accenting, mapped to the app's labels; else null.
+function colourOf(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const c = v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  if (c === 'red') return 'Red';
+  if (c === 'white') return 'White';
+  if (['rose', 'rosado', 'rosato'].includes(c)) return 'Rosé';
+  if (['sparkling', 'champagne', 'fizz'].includes(c)) return 'Sparkling';
+  if (['fortified', 'port', 'sherry'].includes(c)) return 'Fortified';
+  if (['sweet', 'dessert'].includes(c)) return 'Sweet';
+  return null;
+}
+
 function winesFromReply(raw: string): any[] | null {
   const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   const start = cleaned.indexOf('{');

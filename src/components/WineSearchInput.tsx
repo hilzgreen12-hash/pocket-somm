@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { searchWines, type WineSearchResult } from '../api/label';
 import { WineIdentityHeader } from './WineIdentityHeader';
+import { wineDotColour, wineDotColourKey } from '../utils/wineStyle';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -11,13 +12,16 @@ interface Props {
   // Optional starting text — used when the user typed a wine in the Review
   // tab's "Search A Wine" bar and we carry it straight into this box.
   initialQuery?: string;
+  // Optional: told about every keystroke, so the caller can fall back to the
+  // typed text when no suggestion is picked.
+  onQueryChange?: (text: string) => void;
 }
 
 // Predictive "search your wine" box for manual entry. As the user types
 // (debounced, from 3 characters) it lists real matching wines; picking one fills
 // the producer / name / region / style fields below. The user can still edit
 // those fields afterwards — this is a shortcut, not a lock-in.
-export function WineSearchInput({ onSelect, initialQuery }: Props) {
+export function WineSearchInput({ onSelect, initialQuery, onQueryChange }: Props) {
   const [query, setQuery] = useState(initialQuery ?? '');
   const [results, setResults] = useState<WineSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,7 +70,7 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
         <TextInput
           style={styles.input}
           value={query}
-          onChangeText={setQuery}
+          onChangeText={(t) => { setQuery(t); onQueryChange?.(t); }}
           placeholder="Start typing — e.g. Penfolds Grange"
           placeholderTextColor={colors.textMuted}
           autoCapitalize="words"
@@ -84,16 +88,22 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
                 <View key={`${r.producer}-${r.wineName ?? ''}-${i}`}>
                 {r.suggested && !results[i - 1]?.suggested ? <Text style={styles.didYouMean}>Did you mean…</Text> : null}
                 <TouchableOpacity style={styles.option} onPress={() => choose(r)} activeOpacity={0.7}>
-                  {/* White producer+name, gold region + grape beneath (shared header). */}
-                  <WineIdentityHeader
-                    producer={r.producer}
-                    wineName={r.wineName}
-                    vintage={r.vintage}
-                    region={r.region}
-                    grape={r.grape}
-                    size="sm"
-                    align="left"
-                  />
+                  {/* The wine's colour dot, then white producer+name with gold
+                      region + grape beneath (shared header). */}
+                  <View style={styles.optionRow}>
+                    <View style={[styles.colourDot, { backgroundColor: wineDotColour(wineDotColourKey(r)) }]} />
+                    <View style={{ flex: 1 }}>
+                      <WineIdentityHeader
+                        producer={r.producer}
+                        wineName={r.wineName}
+                        vintage={r.vintage}
+                        region={r.region}
+                        grape={r.grape}
+                        size="sm"
+                        align="left"
+                      />
+                    </View>
+                  </View>
                 </TouchableOpacity>
                 </View>
               ))}
@@ -138,6 +148,9 @@ const styles = StyleSheet.create({
   searchingText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, padding: spacing.md },
   didYouMean: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 2 },
   option: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  optionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  // Same dot as the Home search list.
+  colourDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.3)' },
   optionName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
   optionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
 });

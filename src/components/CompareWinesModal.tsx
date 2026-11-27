@@ -3,6 +3,7 @@ import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
 import { Feather } from '@expo/vector-icons';
 import { launchCamera } from '../utils/imagePicker';
 import { searchWines, scanLabel, prepareImageBase64, type WineSearchResult } from '../api/label';
+import { wineDotColour, wineDotColourKey } from '../utils/wineStyle';
 import type { CompareWineInput } from '../api/compareWines';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { wineHeaderLine } from '../utils/wineHeader';
@@ -191,7 +192,10 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
                         {results.length === 0 && loading ? <Text style={styles.dropdownEmpty}>Searching…</Text> : null}
                         {results.slice(0, 6).map((res, k) => (
                           <TouchableOpacity key={`${res.producer}-${res.wineName ?? ''}-${k}`} style={styles.option} onPress={() => pick(i, res)} activeOpacity={0.7}>
-                            <Text style={styles.optionName}>{wineHeaderLine(res.producer, res.wineName, res.vintage)}</Text>
+                            <View style={styles.optionNameRow}>
+                              <View style={[styles.colourDot, { backgroundColor: wineDotColour(wineDotColourKey(res)) }]} />
+                              <Text style={[styles.optionName, { flex: 1 }]}>{wineHeaderLine(res.producer, res.wineName, res.vintage)}</Text>
+                            </View>
                             {tidyWineRegion(res.region) || res.grape ? (
                               <Text style={styles.optionMeta} numberOfLines={1}>{[tidyWineRegion(res.region), res.grape].filter(Boolean).join(' · ')}</Text>
                             ) : null}
@@ -228,6 +232,9 @@ export function CompareWinesModal({ visible, onClose, onConfirm }: {
 }
 
 const styles = StyleSheet.create({
+  // The wine's colour dot, as in every wine search list.
+  colourDot: { width: 8, height: 8, borderRadius: 4, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.3)' },
+  optionNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.lg },
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg, maxHeight: '88%' },
   closeRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.xs },

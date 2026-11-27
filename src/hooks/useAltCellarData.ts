@@ -3,18 +3,15 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationCases, fetchStorageLocations } from '../api/storageLocations';
 import { fetchLocationPlacementRows, type LocationWineRow } from '../api/placements';
 import { useRacks } from './useRacks';
-import { effectiveMaturity } from '../utils/maturity';
+import { wineDrinkingStage, STAGE_SEARCH_TERMS } from '../utils/maturity';
 import { foldAccents, matchesWineSearch } from '../utils/wineIdentity';
 import type { StorageCase } from '../types/wine';
 
 // Search terms that map free text onto a drinking-window status (mirrors the
 // rack screen), so a search for "peak" or "young" filters by maturity too.
-const STATUS_SEARCH: { status: string; terms: string[] }[] = [
-  { status: 'too_young', terms: ['too young', 'young', 'hold'] },
-  { status: 'approaching', terms: ['approaching', 'approach'] },
-  { status: 'peak', terms: ['peak', 'drinking now', 'drink now', 'ready', 'drinking'] },
-  { status: 'declining', terms: ['declining', 'decline', 'fading', 'past peak'] },
-];
+// The words for a stage (utils/maturity STAGE_SEARCH_TERMS).
+const termsFor = (stage: string | undefined): string[] =>
+  STAGE_SEARCH_TERMS.filter((t) => (t.stages as string[]).includes(stage ?? '')).map((t) => t.term);
 
 // One line of the alt cellar's list. The grouped view lays each case out as a
 // header followed by its wines (`inCase`, the last one closing the box), then
@@ -62,7 +59,7 @@ export function useAltCellarData(id: string | undefined, userId: string | undefi
   useEffect(() => { setHighlightOnly(highlight ?? null); }, [id, highlight]);
 
   // Worked out once per row, not on every filter pass.
-  const maturityOf = useMemo(() => new Map(rows.map((r) => [r.placement_id, effectiveMaturity(r)])), [rows]);
+  const maturityOf = useMemo(() => new Map(rows.map((r) => [r.placement_id, wineDrinkingStage(r) as string])), [rows]);
 
   const filtered = useMemo(() => {
     const q = foldAccents(search.trim());
@@ -73,7 +70,7 @@ export function useAltCellarData(id: string | undefined, userId: string | undefi
       if (highlightOnly && r.id !== highlightOnly) return false;
       if (caseFilter && r.case_id !== caseFilter) return false;
       if (q) {
-        const statusTerms = STATUS_SEARCH.find((s) => s.status === status)?.terms ?? [];
+        const statusTerms = termsFor(status);
         if (!matchesWineSearch([r.producer, r.wine_name, r.region, r.vintage], q) && !statusTerms.some((t) => t.includes(q))) return false;
       }
       return true;

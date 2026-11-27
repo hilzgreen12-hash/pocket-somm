@@ -1,3 +1,4 @@
+import { DRINKING_STAGE_OPTIONS } from '../../utils/maturity';
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import type { useAltCellarData, AltCellarView } from '../../hooks/useAltCellarData';
@@ -8,10 +9,7 @@ import { fonts } from '../../constants/fonts';
 
 const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All' },
-  { value: 'too_young', label: 'Too Young' },
-  { value: 'approaching', label: 'Early but Approachable' },
-  { value: 'peak', label: 'Sweet Spot' },
-  { value: 'declining', label: 'In Decline' },
+  ...DRINKING_STAGE_OPTIONS,
 ];
 
 const VIEW_OPTIONS: { value: AltCellarView; label: string }[] = [

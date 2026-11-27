@@ -38,6 +38,11 @@ import { wineHeaderLine } from '../utils/wineHeader';
 import { formatVisitDate } from '../utils/restaurantReview';
 import { matchesWineSearch } from '../utils/wineIdentity';
 import { launchCamera, launchImageLibrary } from '../utils/imagePicker';
+import { useCommunityMember } from '../hooks/useCommunityMember';
+import { isMember, shareReview } from '../api/community';
+import { confirmAndUnshare, confirmShare, restaurantShare, withMembership } from '../services/communityShare';
+import { ShareSheet } from './ShareSheet';
+import { getRestaurantDraft, setRestaurantDraft, clearRestaurantDraft, type RestaurantReviewDraft } from '../services/restaurantReviewDraft';
 
 interface WineLine {
   producer: string | null;
@@ -78,6 +83,9 @@ interface Props {
   // it off this visit or delete its review too.
   onDeleteWine?: (index: number) => void;
   onClose: () => void;
+  // Closes the form only — no navigating back — for when this modal hands off
+  // to another screen (joining the Community). Falls back to onClose.
+  onCloseForNav?: () => void;
   // Reports the saved name + city back so callers (e.g. the List results
   // card) can reflect edits without refetching.
   onSaved: (details?: { name: string | null; city: string | null }) => void;
@@ -118,11 +126,12 @@ async function writeVisit(sessionId: string, payload: Place, before: Place) {
 
 export function RestaurantReviewModal({
   visible, sessionId, initialName, initialNote, initialRatings, initialFavourite,
-  city, date, capturedAt, wines, onReviewWine, onViewIntel, onEditWine, onDeleteWine, onClose, onSaved,
+  city, date, capturedAt, wines, onReviewWine, onViewIntel, onEditWine, onDeleteWine, onClose, onCloseForNav, onSaved,
   sessionError, onRetrySession, restaurantPhotoPath, onViewPhoto, onAddPhoto, onAddLineup, onOpenLineup,
 }: Props) {
   const qc = useQueryClient();
   const { session } = useAuth();
+  const community = useCommunityMember();
   const { wines: cellarWines } = useCellar();
   // Lineups matched to THIS restaurant visit (their restaurant_session_id points
   // here) — listed under "Matched Lineups", each opening its lineup card.
@@ -155,33 +164,38 @@ export function RestaurantReviewModal({
     });
   }
   const { chosenWines } = useChosenWines();
+  // Unsaved edits left when the person stepped away from this form (to a wine's
+  // review, its Wine Intel…): they come back exactly as left, still unsaved.
+  const [draft] = useState(() => getRestaurantDraft(sessionId));
+  const [draftRestored, setDraftRestored] = useState(!!draft);
   // Restaurant identity — prefilled from the scan but editable here so the
   // user can correct the name or place while saving their review.
-  const [restaurantName, setRestaurantName] = useState((initialName ?? '').trim());
-  const [cityValue, setCityValue] = useState((city ?? '').trim());
-  const [note, setNote] = useState(initialNote ?? '');
+  const [restaurantName, setRestaurantName] = useState(draft?.restaurantName ?? (initialName ?? '').trim());
+  const [cityValue, setCityValue] = useState(draft?.cityValue ?? (city ?? '').trim());
+  const [note, setNote] = useState(draft?.note ?? initialNote ?? '');
   // A SAVED review opens read-only — plain wrapped text that reads from the first
   // word (no scrolled-down input box). A brand-new review (no saved note) opens
   // straight into the editable box. Tapping Edit (or the text) switches to edit.
-  const [noteEditing, setNoteEditing] = useState(() => !(initialNote ?? '').trim());
-  // A saved review (a note or any rating) has no Save button at its foot:
-  // changes are saved from the review's Edit box, or on leaving.
+  const [noteEditing, setNoteEditing] = useState(() => !!draft || !(initialNote ?? '').trim());
+  // A saved review (a note or any rating) shows no Save button at its foot until
+  // something changes (Edit, a star, the name/city/date) — nothing saves on leaving.
   const [savedReview, setSavedReview] = useState(() => !!(initialNote ?? '').trim()
     || Object.values(initialRatings ?? {}).some((r) => r != null));
-  const [overall, setOverall] = useState<number | null>(initialRatings?.overall ?? null);
-  const [food, setFood] = useState<number | null>(initialRatings?.food ?? null);
-  const [wineList, setWineList] = useState<number | null>(initialRatings?.wineList ?? null);
-  const [service, setService] = useState<number | null>(initialRatings?.service ?? null);
-  const [atmosphere, setAtmosphere] = useState<number | null>(initialRatings?.atmosphere ?? null);
-  const [glassware, setGlassware] = useState<number | null>(initialRatings?.glassware ?? null);
-  const [value, setValue] = useState<number | null>(initialRatings?.value ?? null);
+  const [overall, setOverall] = useState<number | null>(draft ? draft.overall : initialRatings?.overall ?? null);
+  const [food, setFood] = useState<number | null>(draft ? draft.food : initialRatings?.food ?? null);
+  const [wineList, setWineList] = useState<number | null>(draft ? draft.wineList : initialRatings?.wineList ?? null);
+  const [service, setService] = useState<number | null>(draft ? draft.service : initialRatings?.service ?? null);
+  const [atmosphere, setAtmosphere] = useState<number | null>(draft ? draft.atmosphere : initialRatings?.atmosphere ?? null);
+  const [glassware, setGlassware] = useState<number | null>(draft ? draft.glassware : initialRatings?.glassware ?? null);
+  const [value, setValue] = useState<number | null>(draft ? draft.value : initialRatings?.value ?? null);
   // Not editable here, but written back with every save.
   const isFavourite = initialFavourite ?? false;
   // Visit date, editable as YYYY-MM-DD. Only writable when a raw capturedAt was
   // passed in (i.e. we know which timestamp to overwrite).
-  const [dateValue, setDateValue] = useState(() => isoToYmd(capturedAt));
+  const [dateValue, setDateValue] = useState(() => draft?.dateValue ?? isoToYmd(capturedAt));
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const shareCardRef = useRef<View>(null);
   // The visit photo for the share card (a local file) and the resolver the
   // card's onImageReady calls, so handleShare can wait for it to be drawn.
@@ -226,9 +240,14 @@ export function RestaurantReviewModal({
   const payloadRef = useRef(buildPayload());
   payloadRef.current = buildPayload();
   const currentSnap = JSON.stringify(payloadRef.current);
-  const savedSnapRef = useRef(currentSnap); // initialised to the loaded values
+  // Initialised to the loaded values — or, when unsaved edits were restored,
+  // to nothing, so the form reads as unsaved until the person saves.
+  const savedSnapRef = useRef(draft ? '' : currentSnap);
   // The place as last written, so only a real rename/move touches the wines.
-  const savedPlaceRef = useRef<Place>({ restaurant_name: payloadRef.current.restaurant_name, city: payloadRef.current.city });
+  const savedPlaceRef = useRef<Place>({ restaurant_name: (initialName ?? '').trim() || null, city: (city ?? '').trim() || null });
+  // The form's current values, for keeping as a draft on the way out.
+  const draftValuesRef = useRef<RestaurantReviewDraft>({ restaurantName, cityValue, note, overall, food, wineList, service, atmosphere, glassware, value, dateValue });
+  draftValuesRef.current = { restaurantName, cityValue, note, overall, food, wineList, service, atmosphere, glassware, value, dateValue };
   const dirtyRef = useRef(false);
   dirtyRef.current = currentSnap !== savedSnapRef.current;
   const sessionIdRef = useRef(sessionId);
@@ -237,19 +256,15 @@ export function RestaurantReviewModal({
   // so the unmount safety-net below doesn't silently re-save what they discarded.
   const discardRef = useRef(false);
 
+  // Leaving without Save (to a wine's review, its Wine Intel, Edit Wine Name…):
+  // nothing is written. Unsaved edits are kept as a draft and come back when
+  // this visit's form reopens, for the person to save — or Discard from Back.
   useEffect(() => {
     return () => {
-      if (discardRef.current || !dirtyRef.current || !sessionIdRef.current) return;
-      // Fire-and-forget: the component is unmounting so we can't await. The
-      // invalidations refresh the list and a re-opened form with what was saved.
-      writeVisit(sessionIdRef.current, payloadRef.current, savedPlaceRef.current)
-        // Only refetch on a confirmed write: refetching after a failure would
-        // silently render the pre-edit values back over the user's changes.
-        .then(() => {
-          qc.invalidateQueries({ queryKey: ['scan-archive'] });
-          qc.invalidateQueries({ queryKey: ['chosen-wines'] });
-        })
-        .catch(() => {});
+      const id = sessionIdRef.current;
+      if (!id) return;
+      if (discardRef.current || !dirtyRef.current) { clearRestaurantDraft(id); return; }
+      setRestaurantDraft(id, draftValuesRef.current);
     };
   }, []);
 
@@ -557,6 +572,9 @@ export function RestaurantReviewModal({
     // dirty and the unmount autosave still gets its attempt.
     savedSnapRef.current = JSON.stringify(payload);
     savedPlaceRef.current = { restaurant_name: payload.restaurant_name, city: payload.city };
+    // Saved: no draft to bring back.
+    clearRestaurantDraft(sessionId);
+    setDraftRestored(false);
     qc.invalidateQueries({ queryKey: ['chosen-wines'] });
   }
 
@@ -601,11 +619,13 @@ export function RestaurantReviewModal({
       // review) — Edit re-opens the box on command.
       setNoteEditing(false);
       setSavedReview(true);
-      // Saving a restaurant review no longer auto-publishes it. Community
-      // sharing happens only via the explicit "Share to Community" button
-      // (handleShareToCommunity) so nothing reaches the public feed silently.
+      // Saving never shares a review by itself — only "Share to Community"
+      // does. But a review that's already shared shows its edit there too.
+      if (myShare) {
+        const input = communityInput();
+        if (input) void shareReview(input).then(community.refreshShares).catch(() => { /* earlier version stays up */ });
+      }
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
-      qc.invalidateQueries({ queryKey: ['my-community-uploads'] });
       onSaved({ name: restaurantName.trim() || null, city: cityValue.trim() || null });
       noteHappyMoment('restaurant-review');
     } catch {
@@ -631,13 +651,41 @@ export function RestaurantReviewModal({
         body: "You've started a review but haven't saved it. Save it so you can finish later, or discard it?",
         buttons: [
           { text: 'Save', onPress: () => { void handleSave(); } },
-          { text: 'Discard', style: 'destructive', onPress: () => { discardRef.current = true; onClose(); } },
+          { text: 'Discard', style: 'destructive', onPress: () => { discardRef.current = true; clearRestaurantDraft(sessionId); onClose(); } },
           { text: 'Keep editing', style: 'cancel' },
         ],
       });
       return;
     }
     onClose();
+  }
+
+  // Vinster Community: share the saved review (name, stars, note, photo and
+  // the wines drunk), or take the share down again.
+  const myShare = sessionId ? community.shares.get(`scan_sessions:${sessionId}`) : undefined;
+  const communityInput = () => restaurantShare({
+    id: sessionId,
+    restaurantName,
+    city: cityValue,
+    capturedAt: capturedAt ?? null,
+    note,
+    ratings: { overall, food, service, wineList, value, atmosphere, glassware },
+    photoPath: restaurantPhotoPath ?? null,
+    wines: (wines ?? []).map((w) => [w.producer, w.wineName, w.vintage].filter(Boolean).join(' ')),
+  });
+  function handleCommunity() {
+    const title = restaurantName.trim() || 'This restaurant';
+    if (myShare) { confirmAndUnshare(myShare.id, title, community.refreshShares); return; }
+    const input = communityInput();
+    if (!input) {
+      showAlert({ title: 'Nothing to Share Yet', body: 'Add the restaurant’s name and a rating or a few words about the visit first.' });
+      return;
+    }
+    if (isMember(community.member)) { confirmShare(input, community.refreshShares); return; }
+    // The joining screen can't show over this card: close it (without navigating
+    // back — withMembership pushes the joining screen), join, then share.
+    (onCloseForNav ?? onClose)();
+    withMembership(community.member, () => confirmShare(input, community.refreshShares));
   }
 
   async function handleShare() {
@@ -897,17 +945,25 @@ export function RestaurantReviewModal({
               </>
             ) : null}
 
+            {/* Edits made before stepping away to a wine (or its Wine Intel)
+                come back unsaved — say so, so they're saved on purpose. */}
+            {draftRestored ? (
+              <Text style={styles.draftNote}>Your unsaved changes are here — press Save to keep them.</Text>
+            ) : null}
+
             {!sessionId && sessionError ? (
               <TouchableOpacity style={styles.saveButton} onPress={onRetrySession}>
                 <Text style={styles.saveButtonText}>Couldn't start this visit · Tap to Retry</Text>
               </TouchableOpacity>
-            ) : !savedReview || noteEditing ? (
+            ) : !savedReview || noteEditing || draftRestored || dirtyRef.current ? (
               <TouchableOpacity style={[styles.saveButton, (saving || !sessionId) && styles.btnDisabled]} onPress={handleSave} disabled={saving || !sessionId}>
                 <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save to Your Restaurant Reviews'}</Text>
               </TouchableOpacity>
             ) : null}
 
-            <TouchableOpacity style={[styles.shareButton, sharing && styles.btnDisabled]} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
+            {/* Share Review → the Share pop-up: Share to Community (a saved
+                review) and Share externally. */}
+            <TouchableOpacity style={[styles.shareButton, sharing && styles.btnDisabled]} onPress={() => { Keyboard.dismiss(); setShareSheetOpen(true); }} disabled={sharing} activeOpacity={0.85}>
               <Text style={styles.shareButtonText}>{sharing ? 'Preparing…' : 'Share Review'}</Text>
             </TouchableOpacity>
           </KeyboardAwareScrollView>
@@ -930,6 +986,19 @@ export function RestaurantReviewModal({
           )}
 
           <WineSearchModal visible={wineSearchOpen} onClose={() => setWineSearchOpen(false)} onSelect={handleSearchSelect} />
+
+          <ShareSheet
+            visible={shareSheetOpen}
+            heading="Your Restaurant Review"
+            name={restaurantName.trim() || UNNAMED_RESTAURANT_LABEL}
+            detail={[displayDate, cityValue.trim()].filter(Boolean).join(' · ') || null}
+            community={community.enabled && sessionId && savedReview && !noteEditing ? {
+              label: !myShare ? 'Share to Community' : myShare.status === 'visible' ? '✓ Shared to Community' : 'Waiting for Vinster’s Check',
+              onPress: handleCommunity,
+            } : null}
+            onShareExternally={() => void handleShare()}
+            onClose={() => setShareSheetOpen(false)}
+          />
 
           {/* Cellar picker — a simple searchable list. */}
           {cellarPickerOpen && (
@@ -1135,7 +1204,11 @@ export function RestaurantReviewModal({
   );
 }
 
+// Heading for a visit saved without a name.
+const UNNAMED_RESTAURANT_LABEL = 'Unnamed restaurant';
+
 const styles = StyleSheet.create({
+  draftNote: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', marginTop: spacing.md },
   overlay: { flex: 1, backgroundColor: colors.background },
   sheet: { flex: 1, backgroundColor: colors.background },
   // Top bar — gold back arrow (left); the title is overlaid centrally.

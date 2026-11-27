@@ -180,8 +180,10 @@ export function CellarInsightsCarousel() {
     if (k && !distinctRestos.has(k)) distinctRestos.set(k, r.restaurant_photo_path ?? null);
   }
   const restoPhotos = [...distinctRestos.values()].filter(Boolean) as string[];
-  // Always shown for a signed-in user — "0 restaurants" included.
-  if (userId) {
+  // Shown once there's a visit to count. At zero the carousel's example tiles
+  // (with their "appear here as you use Vinster" note) stand in instead, as
+  // on every other Home carousel, rather than a real-looking "0 restaurants".
+  if (userId && distinctRestos.size > 0) {
     tiles.push({
       key: 'restaurants',
       title: 'Dined Out Last Month', meta: `${distinctRestos.size} restaurant${distinctRestos.size === 1 ? '' : 's'}`,
@@ -216,7 +218,7 @@ export function CellarInsightsCarousel() {
         : (recent(w.review_date) && (w.review_score != null || (w.review_note ?? '').trim()) ? 1 : 0);
       if (n > 0) { reviewCount += n; addPic(w.label_image_path, w.producer, w.wine_name); }
     }
-    tiles.push({
+    if (reviewCount > 0) tiles.push({
       key: 'wine-reviews',
       title: 'Wines Reviewed Last Month', meta: `${reviewCount} review${reviewCount === 1 ? '' : 's'}`,
       collage: pics,

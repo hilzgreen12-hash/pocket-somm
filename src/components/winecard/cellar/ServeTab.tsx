@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { wc } from '../wcStyles';
+import { useWc } from '../wcStyles';
 import { s } from './styles';
 import { PairingIngredientsCard } from '../PairingIngredientsCard';
 import { GenerateRecipesCard, ServingGlance, ComplementaryPairings, CellarPickRow } from '../ServeSections';
@@ -17,6 +17,7 @@ export function ServeTab({ wine, serving, canEdit, onFindPairings }: {
   canEdit: boolean;
   onFindPairings: () => void;
 }) {
+  const wc = useWc();
   // Before/after picks come only from bottles kept at home.
   const { wines: homeWines } = useHomeCellarWines();
   const suggestion = wine.serving_suggestion ?? null;

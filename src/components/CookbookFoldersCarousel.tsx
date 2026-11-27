@@ -25,13 +25,13 @@ import { fonts } from '../constants/fonts';
 // that page's own layout. KITCHEN_IMG (cookbook spines, bundled) is Favourite
 // Recipes' stand-in cover until the user adds their own image.
 
-// A new cook (no recipes, no folders) sees three example tiles instead of an
-// empty Favourites box, each with its own food photo.
+// A new cook (no recipes, no folders) sees an example Favourites tile instead
+// of an empty one. No example folders: someone without folders sees two
+// "+ Add folder" tiles instead, and once they have one, a single add tile
+// always follows their folders.
 const COOKBOOK_OVERLAY = 'Your recipes and folders appear here as you use Vinster';
 const COOKBOOK_EXAMPLES: PlaceholderCard[] = [
   { kind: 'image', image: KITCHEN_IMG, title: '★ Favourite Recipes', stamp: 'Cookbook · 12 Recipes', overlay: COOKBOOK_OVERLAY },
-  { kind: 'image', image: FOOD_ROAST_IMG, title: 'Sunday Roasts', stamp: 'Your Folder · 6 Recipes', overlay: COOKBOOK_OVERLAY },
-  { kind: 'image', image: FOOD_SUMMER_IMG, title: 'Summer Suppers', stamp: 'Your Folder · 4 Recipes', overlay: COOKBOOK_OVERLAY },
 ];
 
 function recipeLabel(n: number): string {
@@ -211,11 +211,15 @@ export function CookbookFoldersCarousel() {
             </View>
           ),
         }))}
-        trailing={
-          <TouchableOpacity style={styles.cardAdd} onPress={() => router.push('/chef/archive?addFolder=1' as any)} activeOpacity={0.8}>
-            <Text style={styles.cardAddText}>+ Add folder</Text>
-          </TouchableOpacity>
-        }
+        trailing={loading ? null : (
+          <View style={styles.addRow}>
+            {Array.from({ length: collections.length === 0 ? 2 : 1 }, (_, i) => (
+              <TouchableOpacity key={`add-${i}`} style={styles.cardAdd} onPress={() => router.push('/chef/archive?addFolder=1' as any)} activeOpacity={0.8}>
+                <Text style={styles.cardAddText}>+ Add folder</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       />
 
       {/* Rename Folder */}
@@ -270,6 +274,8 @@ const styles = StyleSheet.create({
   tileImg: { position: 'absolute', left: 0, top: 0, width: HOME_TILE.w, height: HOME_TILE.h },
   cardMeta: { fontSize: 12, fontFamily: fonts.bodySemibold, color: '#FFFFFF', marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
+  // The add tile(s) after the folders, spaced like the folders themselves.
+  addRow: { flexDirection: 'row', gap: spacing.sm },
   cardAdd: { width: HOME_TILE.w, height: HOME_TILE.h, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   cardAddText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   renameOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },

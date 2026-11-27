@@ -23,6 +23,12 @@ function norm(s: string): string {
 
 Deno.serve(async (req) => {
   try {
+    // Admin-only (same gate as verify-catalog-batch): runs Sonnet and writes the catalogue.
+    const secret = Deno.env.get('CATALOG_ADMIN_SECRET');
+    if (!secret || req.headers.get('x-admin-secret') !== secret) {
+      return json({ error: 'unauthorized' }, 401);
+    }
+
     const { category, count } = await req.json().catch(() => ({}));
     const cat = typeof category === 'string' ? category.trim() : '';
     const n = Math.min(Math.max(Number(count) || 150, 20), 200);

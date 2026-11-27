@@ -190,6 +190,17 @@ export async function uploadCookbookPhoto(userId: string, localUri: string, fold
   return path;
 }
 
+// A photo for an alter-ego tile in Vinster's Review of You.
+export async function uploadAlterEgoPhoto(userId: string, localUri: string, sketchId: string): Promise<string> {
+  const base64 = await processToBase64(localUri);
+  const bytes = base64ToBytes(base64);
+  const path = `${userId}/alter-ego/${sketchId}-${Date.now()}.jpg`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, { contentType: 'image/jpeg', upsert: true });
+  if (error) throw error;
+  primeCachedLabel(path, bytes);
+  return path;
+}
+
 export async function uploadCookbookPhotoFromUrl(userId: string, imageUrl: string, folderId: string): Promise<string> {
   const dest = new File(Paths.cache, `fetched-cookbook-${folderId}.img`);
   try { if (dest.exists) dest.delete(); } catch { /* ignore */ }

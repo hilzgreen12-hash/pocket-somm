@@ -27,6 +27,9 @@ import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import { launchCamera, launchImageLibrary } from '../../src/utils/imagePicker';
+import { useCommunityMember } from '../../src/hooks/useCommunityMember';
+import { confirmBulkShare } from '../../src/services/communityShare';
+import { GATHER_LOCKED, GATHER_LOCKED_OPACITY } from '../../src/constants/features';
 
 type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'location' | 'adding' | 'done' | 'reviews-done';
 
@@ -104,6 +107,9 @@ function newCellarRow(userId: string, id: string, w: CellarImportWine, defaultCu
     wine_name: (w.wineName || w.producer || '').trim(),
     producer: w.wineName ? (w.producer ?? null) : null,
     region: w.region ?? null,
+    // The colour column off the import sheet (Red / White / Rosé / Sparkling /
+    // Fortified) — kept so Cellar Statistics' Style breakdown has it.
+    style: w.colour ?? null,
     vintage: w.vintage ?? null,
     quantity: bottlesOf(w),
     date_received: new Date().toISOString().split('T')[0],
@@ -266,10 +272,16 @@ export default function ImportCellarScreen() {
   // Whether a NEW import location is stored externally (offsite) vs at home — so it
   // files under "All Wines Stored Externally" vs "All Wines At Home" in the list.
   const [newLocationExternal, setNewLocationExternal] = useState(false);
+  // Where an external cellar is ("Octavian, Corsham") — required for external.
+  const [newLocationStoredAt, setNewLocationStoredAt] = useState('');
   const [savingLocation, setSavingLocation] = useState(false);
   // Reviews import summary: reviews added, across how many wines, and exact
   // duplicates skipped.
   const [reviewSummary, setReviewSummary] = useState<{ reviews: number; wines: number; skipped: number } | null>(null);
+  // The reviews just imported, for sharing them to the Community in one go.
+  const [importedReviewIds, setImportedReviewIds] = useState<string[]>([]);
+  const [sharedImport, setSharedImport] = useState(false);
+  const community = useCommunityMember();
 
   // Set when the screen is left, so a long read or import stops instead of
   // carrying on paying for reads and writing wines nobody is waiting for.
@@ -599,6 +611,7 @@ export default function ImportCellarScreen() {
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
       qc.invalidateQueries({ queryKey: ['library-filters'] });
       setReviewSummary({ reviews: ids.length, wines: groupIds.size, skipped: trueDupes });
+      setImportedReviewIds(ids);
       setStage('reviews-done');
     } catch (err) {
       showAlert({ title: 'Could not import reviews', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -694,6 +707,7 @@ export default function ImportCellarScreen() {
   function goToLocationStep() {
     if (keptCount === 0) return;
     setNewLocationName('');
+    setNewLocationStoredAt('');
     void loadLocations();
     setStage('location');
   }
@@ -702,10 +716,10 @@ export default function ImportCellarScreen() {
   async function createLocationAndImport() {
     const userId = session?.user.id;
     const name = newLocationName.trim();
-    if (!userId || !name) return;
+    if (!userId || !name || (newLocationExternal && !newLocationStoredAt.trim())) return;
     setSavingLocation(true);
     try {
-      const loc = await createStorageLocation(userId, name, newLocationExternal);
+      const loc = await createStorageLocation(userId, name, newLocationExternal, newLocationExternal ? newLocationStoredAt : null);
       await confirmImport(loc);
     } catch (err) {
       showAlert({ title: 'Could not create location', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -769,7 +783,7 @@ export default function ImportCellarScreen() {
     invalidateCellarViews(qc);
     setUnfiled(still);
     setFilingRest(false);
-    if (still.length) showAlert({ title: "Couldn't file them yet", body: 'Those bottles are still in Your Cellar List, unplaced. Please try again in a moment.' });
+    if (still.length) showAlert({ title: "Couldn't file them yet", body: 'Those bottles are still in Your Full Cellar List, unplaced. Please try again in a moment.' });
   }
 
   // Materialize the import. `location` null → wines land unplaced; otherwise
@@ -1067,10 +1081,24 @@ export default function ImportCellarScreen() {
               <Text style={[styles.homeExtText, newLocationExternal && styles.homeExtTextOn]}>Stored externally</Text>
             </TouchableOpacity>
           </View>
+          {/* An external cellar also says where it is — shown on each wine
+              card as "Stored at …". */}
+          {newLocationExternal ? (
+            <>
+              <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>Where is it stored?</Text>
+              <TextInput
+                style={styles.newLocInput}
+                value={newLocationStoredAt}
+                onChangeText={setNewLocationStoredAt}
+                placeholder="e.g. Octavian, Corsham"
+                placeholderTextColor={colors.textMuted}
+              />
+            </>
+          ) : null}
           <TouchableOpacity
-            style={[styles.primaryBtn, (!newLocationName.trim() || savingLocation) && styles.primaryBtnDisabled]}
+            style={[styles.primaryBtn, (!newLocationName.trim() || (newLocationExternal && !newLocationStoredAt.trim()) || savingLocation) && styles.primaryBtnDisabled]}
             onPress={() => once(createLocationAndImport)}
-            disabled={!newLocationName.trim() || savingLocation}
+            disabled={!newLocationName.trim() || (newLocationExternal && !newLocationStoredAt.trim()) || savingLocation}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>{savingLocation ? 'Creating…' : 'Create & import here'}</Text>
@@ -1093,8 +1121,8 @@ export default function ImportCellarScreen() {
         <View style={styles.centerBlock}>
           <Text style={styles.doneTitle}>Cellar imported</Text>
           <Text style={styles.hint}>
-            {addedCount} bottle{addedCount === 1 ? '' : 's'} added{mergedBottles > 0 ? ` — ${mergedBottles} of them merged into wines already in your cellar` : ''}.{'\n\n'}This import can be viewed in Your Cellar List{importedLocationName ? ` in your ${importedLocationName} folder` : ''}.
-            {unfiledBottles > 0 ? `\n\n${unfiledBottles} bottle${unfiledBottles === 1 ? '' : 's'} couldn't be filed in ${importedLocationName ?? 'that location'} — ${unfiledBottles === 1 ? "it's" : "they're"} in Your Cellar List, unplaced.` : ''}
+            {addedCount} bottle{addedCount === 1 ? '' : 's'} added{mergedBottles > 0 ? ` — ${mergedBottles} of them merged into wines already in your cellar` : ''}.{'\n\n'}This import can be viewed in Your Full Cellar List{importedLocationName ? ` in your ${importedLocationName} folder` : ''}.
+            {unfiledBottles > 0 ? `\n\n${unfiledBottles} bottle${unfiledBottles === 1 ? '' : 's'} couldn't be filed in ${importedLocationName ?? 'that location'} — ${unfiledBottles === 1 ? "it's" : "they're"} in Your Full Cellar List, unplaced.` : ''}
           </Text>
           {unfiledBottles > 0 ? (
             <TouchableOpacity
@@ -1133,6 +1161,16 @@ export default function ImportCellarScreen() {
               ? `${reviewSummary.reviews} review${reviewSummary.reviews === 1 ? '' : 's'} across ${reviewSummary.wines} wine${reviewSummary.wines === 1 ? '' : 's'} imported into a new dated Import folder in Your Wine Reviews${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} exact duplicate${reviewSummary.skipped === 1 ? ' was' : 's were'} skipped` : ''}. Open Pair · Wine Reviews, then the Import folder, to see them.`
               : 'Your reviews have been imported.'}
           </Text>
+          {community.enabled && importedReviewIds.length > 0 ? (
+            <TouchableOpacity
+              style={[styles.doneBtn, sharedImport && { opacity: 0.5 }, GATHER_LOCKED && { opacity: GATHER_LOCKED_OPACITY }]}
+              onPress={() => confirmBulkShare(importedReviewIds, community.member, () => { setSharedImport(true); community.refreshShares(); })}
+              disabled={sharedImport || GATHER_LOCKED}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.doneBtnText}>{sharedImport ? '✓ Shared to Community' : 'Share These Reviews to Community'}</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/wines/chosen')} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>View Wine Reviews</Text>
           </TouchableOpacity>

@@ -11,6 +11,7 @@ import {
   type SortMode, type CellarListRowData,
 } from '../../src/hooks/useCellarListFilters';
 import { useBulkIntel } from '../../src/hooks/useBulkIntel';
+import { UpdateIntelSheet } from '../../src/components/cellarList/UpdateIntelSheet';
 import { archiveBottles } from '../../src/services/archiveNight';
 import { moveExternalBottlesHome, type HomeDestination } from '../../src/services/moveBottles';
 import { rackRoomFor, confirmRackRoom } from '../../src/services/rackMoves';
@@ -43,7 +44,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { CellarWine, StorageLocation, WineRack } from '../../src/types/wine';
 
-// Your Cellar List — and, opened with ?archived=1, Your Cellar Archive (the
+// Your Full Cellar List — and, opened with ?archived=1, Your Cellar Archive (the
 // archived wines, one line per wine). ?add=1 opens the Add Wine chooser;
 // ?region= pre-filters to a region group (from Cellar Insights' Most Collected).
 
@@ -268,7 +269,7 @@ export default function CellarListScreen() {
       const n = w.quantity ?? 0;
       showAlert({
         title: `${wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name} is not yet placed.`,
-        body: `There ${n === 1 ? 'is' : 'are'} ${n} in Your Cellar List.`,
+        body: `There ${n === 1 ? 'is' : 'are'} ${n} in Your Full Cellar List.`,
         showCloseX: true,
         buttons: canEdit
           ? [{ text: 'Add to Location', style: 'gold', onPress: () => place.openPlaceMenu(w, placementsByWine.get(w.id) ?? []) }]
@@ -348,7 +349,7 @@ export default function CellarListScreen() {
       refreshAll();
       if (dest.kind === 'rack') router.push(`/cellar/rack/${dest.id}?placeWine=${w.id}&placeLimit=${moved}`);
       else if (dest.kind === 'bin') router.push(`/cellar/bin/${dest.id}`);
-      else showAlert({ title: 'Moved home', body: `${bottlesLabel(moved)} of ${w.wine_name} moved out of external storage to ${dest.kind === 'location' ? dest.name : 'Your Cellar List'}.` });
+      else showAlert({ title: 'Moved home', body: `${bottlesLabel(moved)} of ${w.wine_name} moved out of external storage to ${dest.kind === 'location' ? dest.name : 'Your Full Cellar List'}.` });
     } catch (err) {
       refreshAll();
       showAlert({ title: 'Could not move', body: errorText(err) });
@@ -561,10 +562,18 @@ export default function CellarListScreen() {
   // services/bulkIntel). The photo-less get a label photo found while we're here.
   const bulkIntel = useBulkIntel(refreshAll, { findLabels: true });
   const { eligible: bulkEligible } = bulkIntel;
-  const intelTargets = useMemo(
-    () => (isArchiveView ? [] : bulkEligible(filters.missingIntel)),
-    [isArchiveView, bulkEligible, filters.missingIntel],
-  );
+  // "View and update": the wines missing intel, to tick and update.
+  const [updateSheetOpen, setUpdateSheetOpen] = useState(false);
+  // Home storage only: wines held entirely in External Storage get their intel
+  // when opened (like imports), so the line can say "in Home Storage" and mean it.
+  const intelTargets = useMemo(() => {
+    if (isArchiveView) return [];
+    const externalOnly = (w: CellarWine) => {
+      const external = externalPlacementsOf(w).reduce((n, p) => n + (p.quantity ?? 0), 0);
+      return external > 0 && external >= (w.quantity ?? 0);
+    };
+    return bulkEligible(filters.missingIntel).filter((w) => !externalOnly(w));
+  }, [isArchiveView, bulkEligible, filters.missingIntel, externalPlacementsOf]);
   // Imported wines still without intel: not in Update all, so say why.
   const importsMissingIntel = useMemo(
     () => (isArchiveView ? 0 : filters.missingIntel.filter(isImported).length),
@@ -633,11 +642,11 @@ export default function CellarListScreen() {
           <Text style={styles.back}>←</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.title}>{isArchiveView ? 'Your Cellar Archive' : 'Your Cellar List'}</Text>
+      <Text style={styles.title}>{isArchiveView ? 'Your Cellar Archive' : 'Your Full Cellar List'}</Text>
 
       {showAddedToast && (
         <View style={styles.addedToast} pointerEvents="none">
-          <Text style={styles.addedToastText}>Added to Your Cellar List ✓</Text>
+          <Text style={styles.addedToastText}>Added to Your Full Cellar List ✓</Text>
         </View>
       )}
 
@@ -646,9 +655,9 @@ export default function CellarListScreen() {
           {winesLabel(filters.rows.length)} · {bottlesLabel(filters.totalBottles)}
         </Text>
         {intelTargets.length > 0 ? (
-          <TouchableOpacity onPress={() => bulkIntel.start(intelTargets, 'intel', 'Update all')} activeOpacity={0.7} style={styles.missingIntelBtn}>
+          <TouchableOpacity onPress={() => setUpdateSheetOpen(true)} activeOpacity={0.7} style={styles.missingIntelBtn}>
             <Text style={styles.missingIntelText}>
-              {winesLabel(intelTargets.length)} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
+              {intelTargets.length === 1 ? '1 Wine in Home Storage Needs Intel' : `${intelTargets.length} Wines in Home Storage Need Intel`} · <Text style={styles.missingIntelLink}>View and update</Text>
             </Text>
           </TouchableOpacity>
         ) : null}
@@ -716,7 +725,7 @@ export default function CellarListScreen() {
             isArchiveView ? (
               <>
                 <Text style={styles.emptyTitle}>Your Cellar Archive is empty</Text>
-                <Text style={styles.emptyBody}>Wines you archive from Your Cellar List land here.</Text>
+                <Text style={styles.emptyBody}>Wines you archive from Your Full Cellar List land here.</Text>
               </>
             ) : (
               <>
@@ -745,6 +754,7 @@ export default function CellarListScreen() {
       )}
 
       <BulkIntelProgress progress={bulkIntel.progress} title="Updating wine intel…" onStop={bulkIntel.stop} />
+      <UpdateIntelSheet visible={updateSheetOpen} wines={intelTargets} onClose={() => setUpdateSheetOpen(false)} onUpdate={(ws) => bulkIntel.runNow(ws)} />
 
       {/* Deleting a location's wines. Back is blocked mid-delete. */}
       <Modal visible={deleting} animationType="fade" onRequestClose={() => {}}>

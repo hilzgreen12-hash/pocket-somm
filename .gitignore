@@ -62,3 +62,5 @@ Business Plan *.md
 
 # Local Claude Code settings — may contain machine-specific tokens; never commit
 .claude/settings.local.json
+# Test-account login for the pre-build recognition check
+scripts/recognition-check.env

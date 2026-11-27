@@ -1,8 +1,7 @@
 import { NAMED_LABELS, RESTAURANT_IMG } from '../../src/components/ExamplePlaceholder';
 import { JournalCarousel } from '../../src/components/JournalCarousel';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, useWindowDimensions, Platform } from 'react-native';
 // Page scroll from the gesture library, so a picked-up carousel section cancels
 // the page scroll instead of fighting it.
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
@@ -25,22 +24,13 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
-import { prepareImageBase64, scanLabel, searchWines, fetchAutoLabelUri, type WineSearchResult } from '../../src/api/label';
-import { formatWineTitle } from '../../src/utils/wineTitle';
-import { wineHeaderLine } from '../../src/utils/wineHeader';
-import { tidyWineRegion } from '../../src/utils/regionFormat';
-import { verifyOnWineSearcher } from '../../src/services/pricing';
-import { useCellar } from '../../src/hooks/useCellar';
-import { useChosenWines } from '../../src/hooks/useChosenWines';
-import { wineNameKey, normaliseVintage } from '../../src/utils/wineIdentity';
+import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { classifyLabelRead, alertBadLabelPhoto, alertLabelFailure } from '../../src/services/labelRead';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
-import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import type { WineDetailsComplete } from '../../src/types/wine';
 import { HOME_TILE, colors, spacing } from '../../src/constants/theme';
-import { withBordeauxInfo } from '../../src/constants/bordeauxClassification';
 import { fonts } from '../../src/constants/fonts';
 import { MAX_SHARED_PDF_BYTES } from '../../src/api/scanJob';
 
@@ -78,17 +68,6 @@ Home is your starting point. Scan a label for instant Wine Intel — critic scor
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
 // a corner "Upload" button) plus a Search tile, then the Your Lineup Archive
 // carousel. The six-tab bar handles all other navigation, so there's no hamburger.
-// Dot colour for a wine's colour in the search results: red → wine red, white →
-// gold/yellow (as requested), rosé → pink. Unknown → transparent (no dot).
-function colourDotColour(c: string | null | undefined): string {
-  switch ((c ?? '').toLowerCase()) {
-    case 'red': return '#B23A2E';
-    case 'white': return '#E0B84A';
-    case 'rosé': case 'rose': return '#E39AA6';
-    default: return 'transparent';
-  }
-}
-
 // The web link in a share: the shared URL itself, or the first link in shared
 // text ("Our list (https://…pdf)." → without the trailing bracket and full stop).
 function sharedLink(webUrl: string | null | undefined, text: string | null | undefined): string | null {
@@ -116,26 +95,10 @@ export default function ScanLandingScreen() {
   const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, reset: resetLabelStore } = useLabelStore();
   const { setExtractedWines, setRecommendation } = useScanStore();
   const { preferences } = usePreferences();
-  // The user's cellar — search results say when they already own the wine.
-  const { wines: cellarWines } = useCellar();
-  // The user's reviews — search results say when they've reviewed the wine.
-  const { chosenWines } = useChosenWines();
 
-  const [wineSearch, setWineSearch] = useState('');
-  // Predictive "Search a Wine" dropdown, powered by the wines_catalog.
-  const [searchResults, setSearchResults] = useState<WineSearchResult[]>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const searchReqRef = useRef(0);
-  const skipSearchRef = useRef(false);
-  // A wine picked from the dropdown, awaiting only its vintage before intel.
-  const [vintageWine, setVintageWine] = useState<WineSearchResult | null>(null);
-  const [vintageDraft, setVintageDraft] = useState('');
   // Compare Wines or Vintages pop-up.
   const [compareOpen, setCompareOpen] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
-  // The "Search a Wine" tile opens the predictive typeahead in a prompt.
-  const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   // The Scan tab always shows its normal compact header. On the first landing
   // after opening the app, a welcome overlay (logo · "Real Wine Experience, AI Delivered" ·
@@ -183,135 +146,6 @@ export default function ScanLandingScreen() {
     router.push('/label/results?context=intel');
   }
 
-  // Predictive dropdown — query the catalog (debounced, from 3 chars). Ignores
-  // stale responses and skips the search that follows a pick.
-  useEffect(() => {
-    if (skipSearchRef.current) { skipSearchRef.current = false; setSearchLoading(false); setSearchOpen(false); return; }
-    const q = wineSearch.trim();
-    if (q.length < 3) { setSearchResults([]); setSearchLoading(false); setSearchOpen(false); return; }
-    setSearchLoading(true);
-    setSearchOpen(true);
-    const id = ++searchReqRef.current;
-    const t = setTimeout(async () => {
-      try {
-        const r = await searchWines(q);
-        if (id !== searchReqRef.current) return;
-        setSearchResults(r);
-      } catch {
-        if (id === searchReqRef.current) setSearchResults([]);
-      } finally {
-        if (id === searchReqRef.current) setSearchLoading(false);
-      }
-    }, 150);
-    return () => clearTimeout(t);
-  }, [wineSearch]);
-
-  // Pick a wine from the dropdown. If the search query already carried a vintage
-  // (e.g. "Forts de Latour 2009"), apply it and go straight to the intel card —
-  // don't re-ask. Otherwise open the vintage prompt so the user can specify one.
-  function selectWine(wine: WineSearchResult) {
-    skipSearchRef.current = true;
-    setSearchOpen(false);
-    setSearchModalOpen(false);
-    setSearchResults([]);
-    setWineSearch('');
-    if (wine.vintage) {
-      void generateSelectedIntel(wine.vintage, wine);
-    } else {
-      setVintageDraft('');
-      setVintageWine(wine);
-    }
-  }
-
-  // Escape hatch: a wine the catalog doesn't know → the manual Confirm flow,
-  // seeded with the typed text.
-  function useTypedWine() {
-    const q = wineSearch.trim();
-    if (!q) return;
-    skipSearchRef.current = true;
-    setSearchOpen(false);
-    setSearchModalOpen(false);
-    resetLabelStore();
-    setWineSearch('');
-    router.push(`/label/confirm?manual=1&context=intel&seed=${encodeURIComponent(q)}&backTo=${encodeURIComponent('/(tabs)')}`);
-  }
-
-  // Best-effort label thumbnail for the intel card (mirrors confirm's ensureAutoLabel).
-  async function fetchLabelThumb(producer: string, wineName: string | null) {
-    try {
-      if (useLabelStore.getState().imageUri) return;
-      if (!producer.trim()) return;
-      const uri = await fetchAutoLabelUri(producer, wineName);
-      if (uri && !useLabelStore.getState().imageUri) useLabelStore.getState().setImageUri(uri);
-    } catch { /* no thumbnail is fine */ }
-  }
-
-  // Vintage entered (or carried in from the search query) → generate intel
-  // straight to the card, with a label thumbnail. `wineArg` lets selectWine pass
-  // the picked wine directly, bypassing the vintage-prompt state.
-  // "You have X bottles of this wine in your cellar" for a search result: same
-  // wine (producer + name), and the same vintage when one was typed.
-  function cellarHoldings(r: WineSearchResult): { n: number; id: string } | null {
-    const key = wineNameKey(r.producer, r.wineName);
-    if (!key) return null;
-    const v = (r.vintage ?? '').trim();
-    const matches = cellarWines.filter((w) => !w.archived_at && (w.quantity ?? 0) > 0
-      && wineNameKey(w.producer, w.wine_name) === key && (!v || (w.vintage ?? '').trim() === v));
-    if (!matches.length) return null;
-    const n = matches.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
-    const top = [...matches].sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))[0];
-    return { n, id: top.id };
-  }
-
-  // "You reviewed this wine on dd/mm/yy" — their most recent written review of
-  // the same wine (and vintage, when one was typed).
-  function reviewHolding(r: WineSearchResult): { id: string; date: string } | null {
-    const key = wineNameKey(r.producer, r.wineName);
-    if (!key) return null;
-    const v = (r.vintage ?? '').trim();
-    const mine = chosenWines.filter((c) => !c.review_dismissed
-      && (!!(c.tasting_note && c.tasting_note.trim()) || c.user_score != null)
-      && wineNameKey(c.producer, c.wine_name) === key && (!v || String(c.vintage ?? '').trim() === v));
-    if (!mine.length) return null;
-    const when = (c: typeof mine[number]) => new Date(c.reviewed_at ?? c.chosen_at).getTime();
-    const latest = [...mine].sort((a, b) => when(b) - when(a))[0];
-    const d = new Date(latest.reviewed_at ?? latest.chosen_at);
-    return { id: latest.id, date: d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' }) };
-  }
-
-  // "Confirm Vintage": a 4-digit year or NV only — a blank or "19" isn't sent on.
-  function submitVintageDraft() {
-    const v = normaliseVintage(vintageDraft);
-    if (!v) { showAlert({ title: 'Enter a 4-digit year or NV', body: 'e.g. 2018, or NV for a non-vintage wine.' }); return; }
-    void generateSelectedIntel(v);
-  }
-
-  async function generateSelectedIntel(vintage: string, wineArg?: WineSearchResult | null) {
-    const wine = wineArg ?? vintageWine;
-    if (!wine) return;
-    setVintageWine(null);
-    resetLabelStore();
-    const confirmed: WineDetailsComplete = withBordeauxInfo({
-      producer: wine.producer,
-      region: wine.region ?? '',
-      wineName: wine.wineName,
-      vintage: vintage.trim() || 'NV',
-      style: wine.style ?? null,
-      grape: wine.grape ?? null,
-      bottleSizeMl: null,
-      quantity: 1,
-    });
-    setWineDetailsConfirmed(confirmed);
-    setIntelligence(null);
-    // Fetch a web label in the background so the shell gets a header image; it
-    // sets the store's imageUri when it lands. Navigate immediately.
-    void fetchLabelThumb(confirmed.producer, confirmed.wineName);
-    // gen=1: build the intel ON the results screen (instant shell + swirls).
-    // confirmed=1: the user picked this exact wine, so don't re-ask "which wine".
-    // noRecent=1: Manually Search isn't a tile scan — keep it out of Recent Scans.
-    router.push(`/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1&backTo=${encodeURIComponent('/(tabs)')}`);
-  }
-
   async function handleUploadLabel() {
     try {
       if (!(await ensureMediaPermission('library'))) return;
@@ -355,18 +189,11 @@ export default function ScanLandingScreen() {
         quantity: details.quantity ?? 1,
       };
       setWineDetailsConfirmed(confirmed);
-      const currency = await resolveIntelCurrency(preferences?.defaultCurrency);
-      const verified = await verifyOnWineSearcher(confirmed, currency);
-
-      if (!verified) {
-        setIntelligence(null);
-        setScanningLabel(false);
-        router.push(`/label/results?context=intel&via=upload&fresh=1&confirm=1&backTo=${backTo}`);
-        return;
-      }
-
-      // Verified — build the intel ON the results screen (instant shell + swirls).
-      // A label upload IS a tile scan, so it records to Recent Scans (no noRecent).
+      // Straight to the card, built ON the results screen (instant shell +
+      // swirls), as a camera scan does: no confirm detour when Wine-Searcher
+      // doesn't list the wine by this name (the card's own checks still stop a
+      // wine that doesn't exist). A label upload IS a tile scan, so it records
+      // to Recent Scans (no noRecent).
       setIntelligence(null);
       setScanningLabel(false);
       router.push(`/label/results?context=intel&via=upload&fresh=1&gen=1&backTo=${backTo}`);
@@ -471,7 +298,9 @@ export default function ScanLandingScreen() {
       title: 'How would you like to search your wine?',
       showCloseX: true,
       buttons: [
-        { text: 'Manual Input', onPress: after(() => setSearchModalOpen(true)) },
+        // The same Search/Manual Input screen as Cellar → Add Wines: search
+        // first, "Input Your Wine Instead ▾" to type it in; Confirm → Wine Intel.
+        { text: 'Search/Manual Input', onPress: after(() => { resetLabelStore(); router.push(`/label/confirm?manual=1&context=intel&backTo=${encodeURIComponent('/(tabs)')}`); }) },
         { text: 'Scan a Label', onPress: after(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`)) },
         { text: 'Upload a Label', onPress: after(handleUploadLabel) },
       ],
@@ -545,7 +374,7 @@ export default function ScanLandingScreen() {
                   <Text style={styles.sdSubheader} allowFontScaling={false}>Powered by Wine Searcher</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sdCarousel}>
                     {/* Generate Wine Intel — one tile for every way in: a pop-up
-                        offers Manual Input, Scan a Label or Upload a Label.
+                        offers Search/Manual Input, Scan a Label or Upload a Label.
                         Long-press reopens the last intel. */}
                     <View style={styles.sdCard}>
                       <TouchableOpacity
@@ -626,118 +455,6 @@ export default function ScanLandingScreen() {
         }}
       />
 
-      {/* "What's the Vintage?" — the only thing Vinster needs after a pick. */}
-      <Modal visible={!!vintageWine} transparent animationType="fade" onRequestClose={() => setVintageWine(null)}>
-        <View style={styles.vintageOverlay}>
-          <View style={styles.vintageSheet}>
-            <Text style={styles.vintageWine} numberOfLines={2}>
-              {vintageWine ? formatWineTitle({ producer: vintageWine.producer, wineName: vintageWine.wineName, region: vintageWine.region }) : ''}
-            </Text>
-            <Text style={styles.vintageTitle}>Confirm Vintage</Text>
-            <TextInput
-              style={styles.vintageInput}
-              value={vintageDraft}
-              onChangeText={(t) => setVintageDraft(t.replace(/[^0-9a-zA-Z ]/g, '').slice(0, 12))}
-              placeholder="e.g. 2019 or NV"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              maxLength={12}
-              autoFocus
-              onSubmitEditing={submitVintageDraft}
-            />
-            <TouchableOpacity style={styles.vintageBtn} onPress={submitVintageDraft} activeOpacity={0.8}>
-              <Text style={styles.vintageBtnText}>Generate Intel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setVintageWine(null)} style={styles.vintageCancel}>
-              <Text style={styles.vintageCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Search a Wine — predictive typeahead in a prompt (opened from the tile). */}
-      <Modal visible={searchModalOpen} transparent animationType="fade" onRequestClose={() => setSearchModalOpen(false)}>
-        <KeyboardAvoidingView style={styles.searchModalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={styles.searchModalSheet}>
-            <View style={styles.searchModalHeaderRow}>
-              <Text style={styles.searchModalTitle}>Search a Wine</Text>
-            </View>
-            <View style={styles.searchRow}>
-              <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInputInner}
-                value={wineSearch}
-                onChangeText={setWineSearch}
-                placeholder="Search a Wine Name for Intel"
-                placeholderTextColor={colors.textMuted}
-                returnKeyType="search"
-                autoCapitalize="words"
-                autoCorrect={false}
-                autoFocus
-                onSubmitEditing={useTypedWine}
-              />
-              {searchLoading ? <ActivityIndicator color={colors.gold} style={{ marginLeft: spacing.sm }} /> : null}
-            </View>
-            {searchOpen && (searchLoading || searchResults.length > 0 || wineSearch.trim().length >= 3) ? (
-              <ScrollView style={styles.searchDropdown} keyboardShouldPersistTaps="handled">
-                {searchResults.length === 0 && searchLoading ? (
-                  <Text style={styles.searchDropdownEmpty}>Searching…</Text>
-                ) : (
-                  <>
-                    {searchResults.map((r, i) => (
-                      <View key={`${r.producer}-${r.wineName ?? ''}-${i}`}>
-                      {/* "Did you mean…" heads the sound-alike suggestions (typos, winemaker names). */}
-                      {r.suggested && !searchResults[i - 1]?.suggested ? <Text style={styles.searchDidYouMean}>Did you mean…</Text> : null}
-                      <TouchableOpacity style={styles.searchOption} onPress={() => selectWine(r)} activeOpacity={0.7}>
-                        {/* Show the typed vintage on the result so the list offers
-                            the full wine + vintage the user searched. */}
-                        <View style={styles.searchOptionNameRow}>
-                          {r.colour ? <View style={[styles.colourDot, { backgroundColor: colourDotColour(r.colour) }]} /> : null}
-                          <Text style={styles.searchOptionName}>{wineHeaderLine(r.producer, r.wineName, r.vintage)}</Text>
-                        </View>
-                        {/* Region + grape in gold beneath the white name (shared style). */}
-                        {tidyWineRegion(r.region) || r.grape ? <Text style={[styles.searchOptionMeta, { color: colors.gold }]} numberOfLines={1}>{[tidyWineRegion(r.region), r.grape].filter(Boolean).join(' · ')}</Text> : null}
-                        {(() => {
-                          const h = cellarHoldings(r);
-                          if (!h) return null;
-                          return (
-                            <Text style={styles.searchHolding}>
-                              You have {h.n} {h.n === 1 ? 'bottle' : 'bottles'} of this wine in your cellar ·{' '}
-                              <Text style={styles.searchHoldingLink} onPress={() => { setSearchModalOpen(false); setSearchOpen(false); router.push(`/cellar/${h.id}` as any); }}>View in Cellar</Text>
-                            </Text>
-                          );
-                        })()}
-                        {(() => {
-                          const rv = reviewHolding(r);
-                          if (!rv) return null;
-                          return (
-                            <Text style={styles.searchHolding}>
-                              You reviewed this wine on {rv.date} ·{' '}
-                              <Text style={styles.searchHoldingLink} onPress={() => { setSearchModalOpen(false); setSearchOpen(false); router.push(`/wines/chosen?openReview=${rv.id}&backTo=${encodeURIComponent('/(tabs)')}` as any); }}>View review</Text>
-                            </Text>
-                          );
-                        })()}
-                      </TouchableOpacity>
-                      </View>
-                    ))}
-                    {!searchLoading && wineSearch.trim().length >= 3 ? (
-                      <TouchableOpacity style={styles.searchOption} onPress={useTypedWine} activeOpacity={0.7}>
-                        <Text style={styles.searchOptionName}>Use “{wineSearch.trim()}”</Text>
-                        <Text style={styles.searchOptionMeta}>{searchResults.length ? 'Not listed? Enter it yourself.' : 'No match — enter it yourself.'}</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </>
-                )}
-              </ScrollView>
-            ) : null}
-            <TouchableOpacity onPress={() => { setSearchModalOpen(false); setWineSearch(''); setSearchOpen(false); }} style={styles.searchModalCancel}>
-              <Text style={styles.searchModalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
       {/* Welcome overlay — brand block on first landing; "Continue" dismisses it. */}
       <Modal visible={welcomeOpen} transparent animationType="fade" onRequestClose={() => setWelcomeOpen(false)}>
         <View style={styles.welcomeOverlay}>
@@ -815,40 +532,6 @@ const styles = StyleSheet.create({
   // the gold line beneath takes the heading font.
   sdName: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.text, marginTop: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
   sdStamp: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, marginTop: 3, letterSpacing: 0.2 },
-
-  // Search-a-Wine prompt (opened from the Search tile).
-  searchModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.xl },
-  searchModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg },
-  // Header row: title on the left, mic + bin (voice command) top-right, above the field.
-  searchModalHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  searchModalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, letterSpacing: 0.5, flexShrink: 1 },
-  searchModalCancel: { alignItems: 'center', paddingTop: spacing.md },
-  searchHolding: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: colors.text, marginTop: 3 },
-  searchHoldingLink: { fontFamily: fonts.bodySemibold, fontStyle: 'normal', color: colors.gold, textDecorationLine: 'underline' },
-  searchDidYouMean: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: 2 },
-  searchModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
-  // "Search a Wine Name for Intel" — magnifying-glass icon left of the field.
-  searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
-  searchIcon: { marginRight: spacing.sm },
-  searchInputInner: { flex: 1, paddingVertical: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
-  // Predictive dropdown under the search bar.
-  searchDropdown: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surface, marginTop: spacing.xs, maxHeight: 280 },
-  searchDropdownEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, padding: spacing.md },
-  searchOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  searchOptionNameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  colourDot: { width: 8, height: 8, borderRadius: 4, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.3)' },
-  searchOptionName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, flexShrink: 1 },
-  searchOptionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 1 },
-  // "What's the Vintage?" prompt.
-  vintageOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  vintageSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%' },
-  // Wine name — now the white header (matches how "What's the Vintage?" used to
-  // read), with "Input Vintage" as a gold-italic subtitle beneath it.
-  vintageWine: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  vintageTitle: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.gold, textAlign: 'center', marginBottom: spacing.md },
-  vintageInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, fontSize: 18, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', marginBottom: spacing.md },
-  vintageBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  vintageBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
 
   vintageCancel: { alignItems: 'center', paddingBottom: 4 },
   vintageCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },

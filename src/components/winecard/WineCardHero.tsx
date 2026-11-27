@@ -5,6 +5,7 @@ import { repairLabelImage, useLabelImageState } from '../../hooks/useLabelImageU
 import { LabelImage } from '../LabelImage';
 import { colors, spacing } from '../../constants/theme';
 import { fonts } from '../../constants/fonts';
+import { useArchivedCard, ARCHIVED } from './cardTheme';
 
 // Wine card hero: the label photo large across the top, with a see-through
 // terracotta band at its foot, with the wine's identity laid over its foot. Tap the photo to
@@ -43,6 +44,7 @@ const BAND_HEADROOM = 20;
 const IDENTITY_BOTTOM = 16;
 
 export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress, onPhotoLongPress, onTitlePress, badge, uri: uriProp, placeholder, rightAction, busy }: Props) {
+  const archived = useArchivedCard();
   const qc = useQueryClient();
   const stored = useLabelImageState(uriProp ? null : path);
   const uri = uriProp ?? stored.uri;
@@ -81,20 +83,20 @@ export function WineCardHero({ path, title, subtitle, chip, onBack, onPhotoPress
 
       {/* One even see-through terracotta band behind the title, so the hero
           runs into the page colour below rather than a dark brown block. */}
-      <View pointerEvents="none" style={[styles.fade, { height: bandHeight }]} />
-      <View pointerEvents="none" style={styles.topShade} />
+      <View pointerEvents="none" style={[styles.fade, archived && arch.fade, { height: bandHeight }]} />
+      <View pointerEvents="none" style={[styles.topShade, archived && arch.topShade]} />
 
       <View style={styles.topBar}>
         <TouchableOpacity onPress={onBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} style={styles.backBtn} accessibilityLabel="Back">
-          <Text style={styles.backText}>←</Text>
+          <Text style={[styles.backText, archived && arch.dark]}>←</Text>
         </TouchableOpacity>
-        {chip ? <Text style={styles.chip}>{chip}</Text> : null}
+        {chip ? <Text style={[styles.chip, archived && arch.dark]}>{chip}</Text> : null}
         {rightAction ?? <View style={styles.backBtn} />}
       </View>
 
       <TouchableOpacity style={styles.identity} onLayout={(e) => setIdentityHeight(e.nativeEvent.layout.height)} onPress={onTitlePress} activeOpacity={0.8} accessibilityLabel="Edit wine details">
-        <Text style={styles.title} numberOfLines={3}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text> : null}
+        <Text style={[styles.title, archived && arch.title]} numberOfLines={3}>{title}</Text>
+        {subtitle ? <Text style={[styles.subtitle, archived && arch.subtitle]} numberOfLines={2}>{subtitle}</Text> : null}
         {badge}
       </TouchableOpacity>
     </View>
@@ -117,4 +119,14 @@ const styles = StyleSheet.create({
   identity: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: IDENTITY_BOTTOM, gap: 4 },
   title: { fontFamily: fonts.headingBold, fontSize: 28, lineHeight: 31, color: colors.text, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 6 },
   subtitle: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.gold, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4 },
+});
+
+// Archived wine cards: a cream band under the photo with dark type, matching
+// the card's cream page.
+const arch = StyleSheet.create({
+  fade: { backgroundColor: 'rgba(244,235,224,0.94)' },
+  topShade: { backgroundColor: 'rgba(244,235,224,0.35)' },
+  dark: { color: ARCHIVED.espresso },
+  title: { color: ARCHIVED.espresso, textShadowRadius: 0 },
+  subtitle: { color: ARCHIVED.accent, textShadowRadius: 0 },
 });

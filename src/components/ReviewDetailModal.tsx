@@ -3,6 +3,7 @@ import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
 import { formatCurrency } from '../constants/currency';
 import { Ionicons } from '@expo/vector-icons';
 import { LabelThumb } from './LabelThumb';
+import { ShareSheet } from './ShareSheet';
 import { AddPhotoThumb } from './AddPhotoThumb';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { WineIdentityHeader } from './WineIdentityHeader';
@@ -12,6 +13,8 @@ import { drinkingDateTime } from '../utils/cellarReview';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { UnifiedReview, UnifiedEntry } from '../utils/reviewModel';
+import type { ShareStatus } from '../api/community';
+import { GATHER_LOCKED, GATHER_LOCKED_OPACITY } from '../constants/features';
 
 // The personal note is a short private aside. Existing longer notes (e.g. from
 // an import) are kept whole; the cap only stops new text going past it.
@@ -29,7 +32,7 @@ function fmtDate(date: string | null): string {
 
 export function ReviewDetailModal({
   review, visible, onClose, onAddReview, onEditEntry, onDeleteEntry, thumbPath, onAddPhoto,
-  cellarBottles = 0, archiveBottles = 0, onShare, onNoteGenerated, onSavePersonalNote,
+  cellarBottles = 0, archiveBottles = 0, onShare, onNoteGenerated, onSavePersonalNote, communityStatus, onCommunity,
 }: {
   review: UnifiedReview | null;
   visible: boolean;
@@ -48,6 +51,10 @@ export function ReviewDetailModal({
   // Save (or clear, with '') the personal note on a restaurant/other entry —
   // wired to the "Your Personal Note" popup below.
   onSavePersonalNote?: (entry: UnifiedEntry, note: string) => Promise<void> | void;
+  // Vinster Community: whether an entry is shared ('none' = not yet; null =
+  // nothing to share, no link), and what tapping the link does.
+  communityStatus?: (entry: UnifiedEntry) => 'none' | ShareStatus | null;
+  onCommunity?: (entry: UnifiedEntry) => void;
 }) {
   // "View Vinster's Note" is collapsed by default; the sommelier note is fetched
   // on demand (like the results card) when it wasn't saved on the wine.
@@ -64,11 +71,13 @@ export function ReviewDetailModal({
   const [personalNoteMax, setPersonalNoteMax] = useState(PERSONAL_NOTE_MAX);
   const [savingPersonalNote, setSavingPersonalNote] = useState(false);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
+  // Share Review → the Share pop-up.
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
 
   // A different review opened → reset the collapsible, its fetched note, and
   // the photo viewer (a sibling modal that would otherwise linger).
   const reviewKey = review?.key ?? null;
-  useEffect(() => { setNoteOpen(false); setFetchedNote(null); setNoteUnknown(false); setNoteLoading(false); setViewerOpen(false); setPersonalNoteEntry(null); }, [reviewKey]);
+  useEffect(() => { setNoteOpen(false); setFetchedNote(null); setNoteUnknown(false); setNoteLoading(false); setViewerOpen(false); setPersonalNoteEntry(null); setShareSheetOpen(false); }, [reviewKey]);
 
   if (!review) return null;
   const { entries } = review; // newest first
@@ -274,17 +283,59 @@ export function ReviewDetailModal({
                   </TouchableOpacity>
                 ) : null}
 
+                {(() => {
+                  // A tasting already on the Community shows where it stands
+                  // (tap to manage it); sharing a new one is from Share Review.
+                  const status = onCommunity && communityStatus ? communityStatus(e) : null;
+                  if (!status || status === 'none') return null;
+                  const label = status === 'visible' ? '✓ Shared to Community'
+                    : status === 'removed' ? 'Removed from Community'
+                    : 'Waiting for Vinster’s check';
+                  return (
+                    <TouchableOpacity
+                      onPress={() => onCommunity!(e)}
+                      disabled={GATHER_LOCKED}
+                      style={GATHER_LOCKED ? { opacity: GATHER_LOCKED_OPACITY } : undefined}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      <Text style={styles.communityLink}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })()}
+
                 <View style={styles.rule} />
               </View>
             );
           })}
 
           {/* Share Review — a full-width gold button at the foot of the card. */}
-          {onShare ? (
-            <TouchableOpacity style={styles.exportBtn} onPress={onShare} activeOpacity={0.85}>
+          {onShare || onCommunity ? (
+            <TouchableOpacity style={styles.exportBtn} onPress={() => setShareSheetOpen(true)} activeOpacity={0.85}>
               <Text style={styles.exportBtnText}>Share Review</Text>
             </TouchableOpacity>
           ) : null}
+          {(() => {
+            // Share Review → Share to Community (the newest tasting) and
+            // Share externally (the share card).
+            const latest = entries[0];
+            const st = latest && onCommunity && communityStatus ? communityStatus(latest) : null;
+            const when = latest?.dateIso ? new Date(drinkingDateTime(latest.dateIso)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+            return (
+              <ShareSheet
+                visible={shareSheetOpen}
+                heading="Your Wine Review"
+                name={review.title}
+                detail={[when, latest?.location].filter(Boolean).join(' · ') || null}
+                community={st && latest ? {
+                  label: st === 'none' ? 'Share to Community' : st === 'visible' ? '✓ Shared to Community' : st === 'removed' ? 'Removed from Community' : 'Waiting for Vinster’s Check',
+                  onPress: () => onCommunity!(latest),
+                } : null}
+                onShareExternally={() => onShare?.()}
+                onClose={() => setShareSheetOpen(false)}
+              />
+            );
+          })()}
         </ScrollView>
       </View>
     </Modal>
@@ -389,6 +440,7 @@ const styles = StyleSheet.create({
 
   // Yellow link that opens the private-note popup, below the review copy.
   personalNoteLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', marginTop: spacing.sm, marginBottom: spacing.xs },
+  communityLink: { marginTop: spacing.sm, fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold },
 
   // "Your Personal Note" popup.
   pnOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },

@@ -4,7 +4,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useCustomFilters } from '../../hooks/useCustomFilters';
 import { foldAccents, matchesWineSearch } from '../../utils/wineIdentity';
 import { wineHeaderLine } from '../../utils/wineHeader';
-import { effectiveMaturity } from '../../utils/maturity';
+import { wineDrinkingStage, DRINKING_STAGE_OPTIONS, STAGE_SEARCH_TERMS } from '../../utils/maturity';
 import { WineIdentityHeader } from '../WineIdentityHeader';
 import { RenameModal } from '../RenameModal';
 import { showAlert } from '../AppAlert';
@@ -16,20 +16,12 @@ export type RackWine = { wine: CellarWine; count: number };
 
 // Words a user might type for each drinking-window status, so the rack search
 // can find "drinking now" or "declining" bottles as well as names and regions.
-const STATUS_TERMS: { term: string; status: string }[] = [
-  ...['too young', 'young', 'hold'].map((term) => ({ term, status: 'too_young' })),
-  ...['approaching', 'approach'].map((term) => ({ term, status: 'approaching' })),
-  ...['peak', 'drinking now', 'drink now', 'ready', 'drinking'].map((term) => ({ term, status: 'peak' })),
-  ...['declining', 'decline', 'fading', 'past peak'].map((term) => ({ term, status: 'declining' })),
-].sort((a, b) => b.term.length - a.term.length); // longest first: "past peak" before "peak"
+// (Shared with every maturity search: utils/maturity STAGE_SEARCH_TERMS.)
 
-// Readiness-for-drinking options for the Maturity filter chip.
+// The drinking-window stages for the Maturity filter chip.
 const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All' },
-  { value: 'too_young', label: 'Too Young' },
-  { value: 'approaching', label: 'Early but Approachable' },
-  { value: 'peak', label: 'Sweet Spot' },
-  { value: 'declining', label: 'In Decline' },
+  ...DRINKING_STAGE_OPTIONS,
 ];
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -43,14 +35,14 @@ export function searchRackWines(wines: RackWine[], query: string): RackWine[] {
   if (!q) return wines;
   const statuses = new Set<string>();
   let rest = ` ${q} `;
-  for (const { term, status } of STATUS_TERMS) {
+  for (const { term, stages } of STAGE_SEARCH_TERMS) {
     const re = new RegExp(`\\s${escapeRe(term)}(?=\\s)`, 'g');
-    if (re.test(rest)) { statuses.add(status); rest = rest.replace(re, ' '); }
+    if (re.test(rest)) { stages.forEach((st) => statuses.add(st)); rest = rest.replace(re, ' '); }
   }
   const fields = (w: CellarWine) => [w.producer, w.wine_name, w.region, w.grape_variety, w.vintage];
   return wines.filter(({ wine }) =>
     matchesWineSearch(fields(wine), q)
-    || (statuses.size > 0 && statuses.has(effectiveMaturity(wine)) && matchesWineSearch(fields(wine), rest)));
+    || (statuses.size > 0 && statuses.has(wineDrinkingStage(wine)) && matchesWineSearch(fields(wine), rest)));
 }
 
 // Which bottles the rack grid lights up: search matches, a maturity, a saved
@@ -78,7 +70,7 @@ export function useRackFilters(rackId: string, winesInRack: RackWine[], initialH
 
   const highlightedIds = useMemo<ReadonlySet<string>>(() => {
     if (searchQuery.trim()) return new Set(filteredWines.map(({ wine }) => wine.id));
-    if (maturity) return new Set(winesInRack.filter(({ wine }) => effectiveMaturity(wine) === maturity).map(({ wine }) => wine.id));
+    if (maturity) return new Set(winesInRack.filter(({ wine }) => wineDrinkingStage(wine) === maturity).map(({ wine }) => wine.id));
     if (activeFilterId) return new Set(saved.customFilters.find((f) => f.id === activeFilterId)?.wineIds ?? []);
     return highlightedWineId ? new Set([highlightedWineId]) : new Set<string>();
   }, [searchQuery, filteredWines, maturity, winesInRack, activeFilterId, saved.customFilters, highlightedWineId]);

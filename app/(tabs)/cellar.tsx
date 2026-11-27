@@ -17,6 +17,8 @@ import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HomeStorageSection } from '../../src/components/HomeStorageSection';
 import { CellarCommandModal } from '../../src/components/CellarCommandModal';
 import { ArchivedReviewPrompt } from '../../src/components/ArchivedReviewPrompt';
+import { AddWineChooser } from '../../src/components/cellarList/AddWineChooser';
+import { useRacks } from '../../src/hooks/useRacks';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -36,6 +38,10 @@ export default function CellarTab() {
   const canEdit = cellarCtx.role !== 'view';
   const { locations: storageLocs } = useStorageLocationNav();
   const [voiceOpen, setVoiceOpen] = useState(false);
+  // Add Wines opens its chooser right here, so Cancel — or backing out of a
+  // search, scan or upload — returns to this tab, not Your Full Cellar List.
+  const [addWineOpen, setAddWineOpen] = useState(false);
+  const { racks } = useRacks();
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -138,7 +144,7 @@ export default function CellarTab() {
           Quick Command (gold outline) side by side. */}
       <View style={styles.actionRow}>
         {canEdit ? (
-          <TouchableOpacity onPress={() => router.push('/cellar/list?add=1' as any)} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1 }]}>
+          <TouchableOpacity onPress={() => setAddWineOpen(true)} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1 }]}>
             <Text style={styles.buttonText}>Add Wines</Text>
           </TouchableOpacity>
         ) : null}
@@ -156,10 +162,10 @@ export default function CellarTab() {
       {/* Rule between the home-storage carousel and the buttons below it. */}
       <View style={styles.divider} />
 
-      {/* Your Cellar List, Statistics and Archive — below the home-storage carousel. */}
+      {/* Your Full Cellar List, Statistics and Archive — below the home-storage carousel. */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/cellar/list')}>
-          <Text style={styles.buttonText}>Your Cellar List</Text>
+          <Text style={styles.buttonText}>Your Full Cellar List</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => router.push('/cellar/stats')}>
           <Text style={styles.buttonText}>Your Cellar Statistics</Text>
@@ -221,6 +227,7 @@ export default function CellarTab() {
       {/* Nudge to review recently archived bottles (like Your Wine Reviews'). */}
       <ArchivedReviewPrompt />
     </ScrollView>
+      <AddWineChooser visible={addWineOpen} racks={racks} onClose={() => setAddWineOpen(false)} backTo="/(tabs)/cellar" />
     </TabSwipeView>
   );
 }
@@ -243,7 +250,7 @@ const styles = StyleSheet.create({
   exportingText: { fontFamily: fonts.bodyItalic, fontSize: 15, color: '#FFFFFF' },
 
   // The Add Wines / Quick Command row — same side padding as the sections
-  // below, so it lines up with "Your Cellar List".
+  // below, so it lines up with "Your Full Cellar List".
   actionRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
 
   // Blurb under the "Cellar" title (Cormorant, like every tab-screen blurb).

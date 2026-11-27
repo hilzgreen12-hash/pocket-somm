@@ -155,20 +155,51 @@ export function lookupWineName(
   return appellation;
 }
 
-// FALLBACK query when the plain name finds nothing on Wine-Searcher: when the
-// name is blank or only repeats the producer, producer + the region's
-// appellation ("Il Marroneto" → "Il Marroneto Brunello di Montalcino"). Null
-// when there's no better name to try.
+// The producer as Wine-Searcher would write it: without an aside in brackets
+// or a second name after a slash ("Famille Perrin (Perrin & Fils)" or
+// "Famille Perrin / Perrin & Fils" → "Famille Perrin").
+function plainProducer(producer: string | null | undefined): string {
+  return (producer ?? '')
+    .replace(/\([^)]*\)/g, ' ')
+    .split(/\s+\/\s+/)[0]
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+// FALLBACK query when the plain name finds nothing on Wine-Searcher. Its API
+// matches names strictly and writes most French wines as producer +
+// appellation + cuvée ("Famille Perrin Chateauneuf-du-Pape Les Sinards"), so:
+//   • blank name, or one that only repeats the producer: producer + the
+//     region's appellation ("Il Marroneto" → "Il Marroneto Brunello di Montalcino");
+//   • a cuvée name: producer + appellation + cuvée, unless the appellation is
+//     already in the name;
+//   • otherwise, a producer written with extras in brackets or after a slash,
+//     without them.
+// Null when there's no better name to try.
 export function wineQueryAltName(
   producer: string | null | undefined,
   wineName: string | null | undefined,
   region?: string | null,
 ): string | null {
   const plain = wineQueryName(producer, wineName);
-  const n = lookupWineName(producer, wineName, region);
-  const p = (producer ?? '').trim();
-  const alt = !p ? n : !n ? p : `${p} ${n}`;
-  return alt && alt.toLowerCase() !== plain.toLowerCase() ? alt : null;
+  const p = plainProducer(producer);
+  const n = (wineName ?? '').trim();
+  const differs = (alt: string) => (alt && alt.toLowerCase() !== plain.toLowerCase() ? alt : null);
+
+  // Blank or repeated name: the appellation stands in for it (or, for a
+  // self-named château, nothing better is tried).
+  const repeats = !n || norm(n) === norm(producer) || norm(n) === norm(p);
+  const swapped = lookupWineName(producer, wineName, region);
+  if (swapped !== n) return differs(!p ? swapped : !swapped ? p : `${p} ${swapped}`);
+  if (repeats) return differs(wineQueryName(p, n));
+
+  // A cuvée: put the appellation between producer and cuvée.
+  const parts = (region ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const appellation = parts.length >= 3 ? parts[0] : null;
+  if (appellation && n && p && !norm(n).includes(norm(appellation)) && !norm(p).includes(norm(appellation))) {
+    return differs(`${p} ${appellation} ${wineQueryName(p, n).slice(p.length).trim() || n}`);
+  }
+  return differs(wineQueryName(p, n));
 }
 
 // A typed vintage as Vinster stores it: a plausible 4-digit year, or 'NV' for

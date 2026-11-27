@@ -18,8 +18,13 @@ import { generatePersonality } from '../../src/api/label';
 import { supabase } from '../../src/api/supabase';
 import { splitPersonality, personalityBlurb } from '../../src/utils/personalityText';
 import { PersonalityShareCard } from '../../src/components/PersonalityShareCard';
+import { useCommunityMember } from '../../src/hooks/useCommunityMember';
+import { isMember, joinCommunity } from '../../src/api/community';
+import { withMembership } from '../../src/services/communityShare';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
+import { ShareSheet } from '../../src/components/ShareSheet';
+import { GATHER_LOCKED, GATHER_LOCKED_OPACITY } from '../../src/constants/features';
 
 type Category = 'wine' | 'recipe' | 'alter-ego';
 
@@ -40,6 +45,7 @@ export default function PersonalityScreen() {
   const cat: Category = category === 'recipe' ? 'recipe' : category === 'alter-ego' ? 'alter-ego' : 'wine';
   const { session } = useAuth();
   const { preferences } = usePreferences();
+  const community = useCommunityMember();
   const { wines, isLoading: cellarLoading } = useCellar();
   const { chosenWines, isLoading: chosenLoading } = useChosenWines();
   const { archive, archiveLoading } = useScanHistory();
@@ -246,6 +252,8 @@ export default function PersonalityScreen() {
     }
   }
 
+  // Share → the Share pop-up (Share externally / Cancel).
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   async function handleShare() {
     if (!text || sharingRef.current) return;
     sharingRef.current = true;
@@ -278,6 +286,28 @@ export default function PersonalityScreen() {
     }
   }
 
+  // Show or hide the Alter-Ego on the user's Community profile. The server
+  // copies the sketch Vinster wrote, so it's always this current one.
+  const onProfile = !!community.member?.alter_ego_personality;
+  function toggleOnProfile() {
+    const m = community.member;
+    if (!isMember(m)) { withMembership(m, () => {}); return; }
+    const update = async () => {
+      try {
+        await joinCommunity({ username: m!.username, discoverableByEmail: m!.discoverable_by_email, showPersonality: !onProfile });
+        community.refreshMember();
+      } catch (err) {
+        showAlert({ title: 'Could Not Update', body: err instanceof Error ? err.message : 'Please try again.' });
+      }
+    };
+    if (!onProfile) { void update(); return; }
+    showAlert({
+      title: 'Remove From Your Profile',
+      body: 'Your Alter-Ego will no longer show on your Community profile.',
+      buttons: [{ text: 'Remove', style: 'destructive', onPress: () => void update() }, { text: 'Cancel', style: 'cancel' }],
+    });
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
@@ -287,14 +317,16 @@ export default function PersonalityScreen() {
           </TouchableOpacity>
           {text ? (
             <View style={styles.topRightStack}>
-              <TouchableOpacity onPress={handleShare} style={styles.shareBtn} activeOpacity={0.7}>
+              <ShareSheet visible={shareSheetOpen} heading={cat === 'wine' ? 'Your Wine Personality' : cat === 'recipe' ? 'Your Foodie Personality' : 'Your Vinster Alter-Ego'} name={null} detail={null} onShareExternally={() => void handleShare()} onClose={() => setShareSheetOpen(false)} />
+              <TouchableOpacity onPress={() => setShareSheetOpen(true)} style={styles.shareBtn} activeOpacity={0.7}>
                 <Text style={styles.shareText}>+ Share</Text>
               </TouchableOpacity>
-              {/* Community isn't live yet — the "post to community" link is
-                  faded out and non-interactive until there's a feed to post to. */}
-              <View style={[styles.postLinkBtn, styles.postLinkDisabled]} pointerEvents="none">
-                <Text style={styles.postLinkText}>post to community</Text>
-              </View>
+              {/* The current Alter-Ego is what a Community profile shows. */}
+              {community.enabled && cat === 'alter-ego' && !sketchId ? (
+                <TouchableOpacity onPress={toggleOnProfile} style={[styles.postLinkBtn, GATHER_LOCKED && { opacity: GATHER_LOCKED_OPACITY }]} disabled={GATHER_LOCKED} activeOpacity={0.7}>
+                  <Text style={styles.postLinkText}>{onProfile ? '✓ on your Community profile' : 'show on my Community profile'}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -396,8 +428,6 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
   topRightStack: { alignItems: 'flex-end', gap: 4 },
   postLinkBtn: { paddingVertical: 2, paddingHorizontal: 8 },
-  // Faded/disabled until the community feed is live.
-  postLinkDisabled: { opacity: 0.35 },
   postLinkText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   backRow: {},
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },

@@ -96,11 +96,13 @@ export function PlaceholderCardView({ card, compact = true, stampCaps = false }:
           // Faded generic photo (restaurant).
           <Image source={card.image} style={styles.genericImg} resizeMode="cover" />
         )}
-        <View style={styles.overlay} pointerEvents="none">
-          <View style={styles.overlayBand}>
-            <Text style={styles.overlayText} allowFontScaling={false}>{card.overlay}</Text>
+        {card.overlay ? (
+          <View style={styles.overlay} pointerEvents="none">
+            <View style={styles.overlayBand}>
+              <Text style={styles.overlayText} allowFontScaling={false}>{card.overlay}</Text>
+            </View>
           </View>
-        </View>
+        ) : null}
       </View>
       <Text style={styles.cardName} numberOfLines={2} allowFontScaling={false}>{card.title}</Text>
       <Text style={[styles.cardStamp, stampCaps && styles.cardStampCaps]} numberOfLines={1} allowFontScaling={false}>{card.stamp}</Text>

@@ -2,10 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { MicButton } from '../../src/components/MicButton';
 import { PairVoiceModal } from '../../src/components/PairVoiceModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
-import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
+import { BudgetSlider, snapBudget } from '../../src/components/preferences/BudgetSlider';
+import { currencySymbol } from '../../src/constants/currency';
 import { ChipPicker } from '../../src/components/preferences/ChipPicker';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
@@ -23,7 +23,7 @@ export default function FindPairingScreen() {
   // Pairings only ever recommend bottles kept at home, never external storage.
   const { wines, allWines, ready: homeReady } = useHomeCellarWines();
   const { preferences: savedPreferences } = usePreferences();
-  const { setCellarResult, setGeneralResult, setDish, setMode, setStylePreference: storeStyle, setBudget: storeBudget, generalResult, cellarResult } = useFoodPairingStore();
+  const { setCellarResult, setGeneralResult, setDish, setMode, setStylePreference: storeStyle, setBudget: storeBudget, setMinBudget: storeMinBudget, generalResult, cellarResult } = useFoodPairingStore();
   const { sessions: pairingSessions, save: savePairing } = useChefPairingHistory();
 
   const [dish, setDishLocal] = useState('');
@@ -34,7 +34,11 @@ export default function FindPairingScreen() {
   // Accordions (collapsed by default) — mirror the You → Your Preferences page.
   const [regionOpen, setRegionOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  const [budget, setBudget] = useState<number | null>(savedPreferences?.defaultBudget ?? null);
+  const [budget, setBudget] = useState<number | null>(snapBudget(savedPreferences?.defaultBudget ?? null));
+  // Optional lowest price per bottle (the slider's left handle); null = none.
+  const [minBudget, setMinBudget] = useState<number | null>(null);
+  // Where the handles are while being dragged, so the amount follows live.
+  const [budgetPreview, setBudgetPreview] = useState<{ min: number | null; max: number | null } | null>(null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [loading, setLoading] = useState(false);
   // Quick Command — the "Find a wine for my dish" conversation instead of the form.
@@ -69,7 +73,8 @@ export default function FindPairingScreen() {
   const budgetSeededRef = useRef(false);
   useEffect(() => {
     if (!budgetSeededRef.current && savedPreferences?.defaultBudget != null) {
-      setBudget(savedPreferences.defaultBudget);
+      // Snapped to a slider stop so the amount sent matches the thumb.
+      setBudget(snapBudget(savedPreferences.defaultBudget));
       budgetSeededRef.current = true;
     }
   }, [savedPreferences?.defaultBudget]);
@@ -105,7 +110,10 @@ export default function FindPairingScreen() {
     setDish(cleanDish);
     setMode(mode);
     storeStyle(styleStr);
+    // Never send a minimum above the maximum ("between £30 and £28").
+    const minSend = minBudget != null && budget != null && minBudget > budget ? budget : minBudget;
     storeBudget(budget);
+    storeMinBudget(minSend);
 
     try {
       const cellarSummary = wines.map((w) => ({
@@ -128,6 +136,7 @@ export default function FindPairingScreen() {
         savedPreferences ? (savedPreferences as unknown as Record<string, unknown>) : null,
         styleStr,
         budget,
+        minSend,
       ) as any;
 
       if (mode === 'cellar') {
@@ -186,10 +195,11 @@ export default function FindPairingScreen() {
 
       <View style={styles.divider} />
 
-      {/* What are you cooking — left-aligned, with the mic + bin beside it. */}
+      {/* THE DISH — gold subheader (as "Powered by Wine Searcher" on Home), then
+          the typed dish. Speaking is through Quick Command above. */}
+      <Text style={styles.sectionSubheader}>The Dish</Text>
       <View style={styles.cookingHeaderRow}>
-        <Text style={styles.cookingLabel}>What are you cooking?</Text>
-        <MicButton value={dish} onChangeText={setDishLocal} onClear={() => setDishLocal('')} domain="food" serverCorrect />
+        <Text style={styles.cookingLabel}>What Are You Cooking?</Text>
       </View>
       <TextInput
         style={styles.inputLeft}
@@ -203,6 +213,9 @@ export default function FindPairingScreen() {
       />
 
       <View style={styles.divider} />
+
+      {/* THE WINE — the preferences for the bottle. */}
+      <Text style={styles.sectionSubheader}>The Wine</Text>
 
       {/* Regional + Style preference — collapsible accordions that mirror the
           You → Your Preferences "Regional/Varietal Dislikes" exactly: a header
@@ -241,9 +254,32 @@ export default function FindPairingScreen() {
         </View>
       )}
 
-      {/* Budget? Baller — inline header via the slider's label prop, mirroring List. */}
+      {/* Budget — a heading like Regional / Wine Style Preference, the current
+          amount beneath it ("Baller" by default, as "Any" is for the others),
+          then the slider. */}
+      <View style={styles.budgetHeader}>
+        <Text style={styles.styleQuestion}>Budget</Text>
+        <Text style={[styles.styleAccordionSummary, (budget != null || minBudget != null || budgetPreview != null) && styles.styleAccordionSummaryActive]}>
+          {(() => {
+            const sym = currencySymbol(savedPreferences?.defaultCurrency);
+            const lo = budgetPreview ? budgetPreview.min : minBudget;
+            const hi = budgetPreview ? budgetPreview.max : budget;
+            const top = hi == null ? 'Baller' : `${sym}${hi}`;
+            return lo == null ? top : `${sym}${lo} – ${top}`;
+          })()}
+        </Text>
+      </View>
       <View style={styles.budgetBlock}>
-        <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} label="Budget?" compact />
+        <BudgetSlider
+          value={budget}
+          onChange={(v) => { setBudget(v); setBudgetPreview(null); }}
+          minValue={minBudget}
+          onMinChange={(v) => { setMinBudget(v); setBudgetPreview(null); }}
+          onPreview={(min, max) => setBudgetPreview({ min, max })}
+          currency={savedPreferences?.defaultCurrency}
+          compact
+          hideHeader
+        />
       </View>
 
       {/* Rule between the budget slider and the From My Cellar / Suggest a
@@ -314,7 +350,11 @@ const styles = StyleSheet.create({
 
   inputLeft: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 10, padding: 12, fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 84, marginBottom: spacing.sm, width: '100%', textAlign: 'left' },
 
-  budgetBlock: { width: '100%', marginTop: spacing.md, marginBottom: spacing.sm },
+  budgetBlock: { width: '100%', marginTop: spacing.xs, marginBottom: spacing.sm },
+  // Budget heading row — same left-aligned type and padding as the accordions.
+  budgetHeader: { alignItems: 'flex-start', paddingTop: 8 },
+  // "THE DISH" / "THE WINE" — gold caps, as "Powered by Wine Searcher" on Home.
+  sectionSubheader: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.xs, marginBottom: spacing.xs },
 
   toggleRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm, marginBottom: spacing.sm, width: '100%' },
   toggleBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
@@ -328,8 +368,8 @@ const styles = StyleSheet.create({
 
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%' },
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
-  // White "View Last Result" bubble beneath Find Pairing — same footprint as the
-  // Find Pairing button, white outline + text.
-  lastResultBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.sm },
-  lastResultBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
+  // Gold "View Last Result" bubble beneath Find Pairing — same footprint as the
+  // Find Pairing button, matching Recipe Requirements' gold outline + text.
+  lastResultBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.sm },
+  lastResultBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
 });

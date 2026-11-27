@@ -18,7 +18,9 @@ export function useChosenWines() {
 
   const { data: chosenWines = [], isLoading } = useQuery({
     queryKey: ['chosen-wines', userId],
-    queryFn: () => fetchChosenWines(userId!),
+    // Syncs the copy already held (restored from disk or loaded earlier), so
+    // only changed reviews are downloaded.
+    queryFn: () => fetchChosenWines(userId!, qc.getQueryData<ChosenWine[]>(['chosen-wines', userId])),
     enabled: !!userId,
   });
   // The Review tab's wine carousel tiles.
@@ -127,11 +129,27 @@ export function useWineReviewCards() {
   const { chosenWines, isLoading } = useChosenWines();
   const { wines: live } = useCellar();
   const { wines: archived } = useArchive();
-  const ownBottles = useMemo(
-    () => [...live, ...archived].filter((w) => w.user_id === userId),
-    [live, archived, userId],
+  const { cards, awaiting } = useMemo(
+    () => reviewCardsFor(chosenWines, live, archived, userId),
+    [chosenWines, live, archived, userId],
   );
-  const cards = useMemo(() => buildReviewCards(chosenWines, ownBottles), [chosenWines, ownBottles]);
-  const awaiting = useMemo(() => awaitingPicks(chosenWines, cards), [chosenWines, cards]);
   return { cards, awaiting, isLoading };
+}
+
+// Several screens show review cards at once (Reviews, the Review-tab carousel,
+// the awaiting-review prompt). Building them for a big history takes a moment,
+// so the latest result is shared rather than rebuilt by each.
+let lastCards: {
+  chosen: ChosenWine[]; live: CellarWine[]; archived: CellarWine[]; userId: string | undefined;
+  result: { cards: ReturnType<typeof buildReviewCards>; awaiting: ChosenWine[] };
+} | null = null;
+function reviewCardsFor(chosen: ChosenWine[], live: CellarWine[], archived: CellarWine[], userId: string | undefined) {
+  if (lastCards && lastCards.chosen === chosen && lastCards.live === live && lastCards.archived === archived && lastCards.userId === userId) {
+    return lastCards.result;
+  }
+  const ownBottles = [...live, ...archived].filter((w) => w.user_id === userId);
+  const cards = buildReviewCards(chosen, ownBottles);
+  const result = { cards, awaiting: awaitingPicks(chosen, cards) };
+  lastCards = { chosen, live, archived, userId, result };
+  return result;
 }

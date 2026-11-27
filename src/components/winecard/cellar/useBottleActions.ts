@@ -167,7 +167,7 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
     }
   }
 
-  // Add bottles to Your Cellar List (unplaced), a bin (flagged to place there)
+  // Add bottles to Your Full Cellar List (unplaced), a bin (flagged to place there)
   // or an alt cellar (placed there), then open that bin or cellar.
   async function addBottles(dest: { kind: 'list' | 'bin' | 'location'; id: string | null }, count: number) {
     const fresh = await getCellarWineById(wine.id);
@@ -184,7 +184,7 @@ export function useBottleActions(wine: CellarWine, data: WineCardData, opts: { t
 
   // Move home bottles (never external ones, never ones already there). An alt
   // cellar takes them directly; a rack, fridge or bin gets them loose and
-  // flagged, then its screen places them; Your Cellar List unplaces them.
+  // flagged, then its screen places them; Your Full Cellar List unplaces them.
   async function move(dest: MoveDestination, requested: number) {
     if (moving) return;
     const n = Math.min(requested, data.movableTo(dest));

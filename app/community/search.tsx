@@ -1,92 +1,66 @@
-import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { searchCommunityReviews, type CommunityCategory } from '../../src/api/community';
-import { ReviewCard } from './view';
+import { FeedCard } from '../../src/components/community/CommunityCards';
+import { FEED_KEY, searchFeed } from '../../src/api/community';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
-const HEADINGS: Record<string, string> = {
-  wine: 'Search Wine Reviews',
-  recipe: 'Search Recipe Reviews',
-  restaurant: 'Search Restaurant Reviews',
-};
-
+// Search the Community: wines, restaurants, words in reviews and members' names.
 export default function CommunitySearchScreen() {
-  const { category } = useLocalSearchParams<{ category: string }>();
-  const key = (category ?? 'wine').toLowerCase() as CommunityCategory;
-  const heading = HEADINGS[key] ?? 'Search Reviews';
-
   const [query, setQuery] = useState('');
-  const [debounced, setDebounced] = useState('');
+  const [term, setTerm] = useState('');
 
+  // Search once typing pauses.
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(query), 250);
+    const t = setTimeout(() => setTerm(query.trim()), 350);
     return () => clearTimeout(t);
   }, [query]);
 
   const { data: results = [], isFetching } = useQuery({
-    queryKey: ['community-search', key, debounced],
-    queryFn: () => searchCommunityReviews(key, debounced, 50),
-    enabled: debounced.trim().length > 0,
+    queryKey: [FEED_KEY, 'search', term],
+    enabled: term.length >= 2,
+    queryFn: () => searchFeed(term),
   });
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
+          <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{heading}</Text>
+        <Text style={styles.title}>Search the Community</Text>
         <View style={{ width: 40 }} />
       </View>
-
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          value={query}
-          onChangeText={setQuery}
-          placeholder={key === 'wine' ? 'Search by wine, producer, or note…' : key === 'restaurant' ? 'Search by restaurant or city…' : 'Search by recipe or ingredient…'}
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          clearButtonMode="while-editing"
-        />
-      </View>
-
-      {!debounced.trim() ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Start typing to search</Text>
-          <Text style={styles.emptyBody}>Find reviews by wine name, producer, ingredient, restaurant, or anything in the body of a review.</Text>
-        </View>
-      ) : isFetching ? (
-        <View style={styles.empty}>
-          <ActivityIndicator color={colors.gold} />
-        </View>
-      ) : results.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No matches</Text>
-          <Text style={styles.emptyBody}>Try a different word — search looks across titles, subtitles, and review bodies.</Text>
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 60, paddingTop: spacing.md }}>
-          {results.map((r) => <ReviewCard key={r.id} review={r} />)}
-        </ScrollView>
-      )}
+      <TextInput
+        style={styles.input}
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Wines, restaurants or members"
+        placeholderTextColor={colors.textMuted}
+        autoFocus
+        autoCorrect={false}
+        returnKeyType="search"
+      />
+      {isFetching ? <ActivityIndicator color={colors.gold} style={{ marginTop: spacing.lg }} /> : null}
+      <FlatList
+        data={term.length >= 2 ? results : []}
+        keyExtractor={(i) => i.id}
+        keyboardShouldPersistTaps="handled"
+        renderItem={({ item }) => <FeedCard item={item} onPress={() => router.push(`/community/post/${item.id}` as any)} />}
+        ListEmptyComponent={term.length >= 2 && !isFetching ? <Text style={styles.empty}>Nothing found for “{term}”.</Text> : null}
+        contentContainerStyle={{ paddingBottom: 80 }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
-  headerTitle: { fontSize: 18, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
-  searchRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  searchInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
-  emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
+  title: { flex: 1, fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.6, textAlign: 'center' },
+  input: { marginHorizontal: spacing.xl, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
+  empty: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', padding: spacing.xl },
 });

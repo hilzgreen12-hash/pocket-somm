@@ -32,14 +32,39 @@ interface Props {
   // Enable on short, name-heavy fields (search, dish, voice command), NOT on
   // long free-text notes.
   serverCorrect?: boolean;
+  // True from the moment dictation starts until the finished, corrected text is
+  // in the field — the field shows a swirl (DictationSwirl) meanwhile instead of
+  // the raw words and their corrections appearing as the user speaks.
+  onWorkingChange?: (working: boolean) => void;
 }
 
 // On-device dictation mic, drawn in the gold motif style, with an optional
 // bin. Tap the mic to speak, tap again to stop. Speech→text happens on the
 // phone (Apple/Google) — the audio never leaves the device and nothing is
 // stored; only the resulting text is written into the field.
-export function MicButton({ value, onChangeText, onClear, style, domain = 'wine', serverCorrect = false }: Props) {
+export function MicButton({ value, onChangeText, onClear, style, domain = 'wine', serverCorrect = false, onWorkingChange }: Props) {
   const [listening, setListening] = useState(false);
+  const workingRef = useRef(onWorkingChange);
+  workingRef.current = onWorkingChange;
+  // Live field text, so a late finish can tell whether the field has changed.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  // Set once a final transcript is being corrected, so "end" doesn't hide the
+  // swirl before the finished text lands.
+  const finishingRef = useRef(false);
+  // Each dictation gets a stamp; a late finish from an earlier dictation (its
+  // server correction still pending) must not overwrite a newer one or hide
+  // its swirl.
+  const sessionRef = useRef(0);
+  // Latest interim (locally corrected) transcript, and whether a final result
+  // arrived — Android often ends/errors without a final, and for wine fields
+  // the interim words are hidden, so they'd otherwise be lost.
+  const interimRef = useRef('');
+  const gotFinalRef = useRef(false);
+  // Only wine names are worked out behind the swirl (they're what speech-to-
+  // text mangles); notes, dishes and plain answers still fill in live.
+  const hideLive = domain === 'wine' || domain === 'query';
+  const setWorking = (w: boolean) => { if (hideLive) workingRef.current?.(w); };
   // Refs, not state, so the global event handlers always read live values —
   // multiple MicButtons can be mounted (one per field) and all receive
   // events; only the one actually listening should write. `base` holds the
@@ -63,6 +88,63 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
   function stopState() {
     listeningRef.current = false;
     setListening(false);
+    if (!finishingRef.current) setWorking(false);
+  }
+
+  // The finished utterance: run the heavier corrections (cellar fuzzy snap,
+  // optional server pass) and write the result once.
+  function finalize(spoken: string) {
+    gotFinalRef.current = true;
+    const session = sessionRef.current;
+    // The fuzzy cellar-producer snap is wine-only; for food, the dictionary pass
+    // is the final correction.
+    const base = baseRef.current;
+    const refined = domain === 'food' || domain === 'text' ? spoken
+      : domain === 'note' ? refineRef.current(spoken)
+      : soundRef.current(refineRef.current(spoken));
+    const joined = joinDictation(base, refined);
+    if (!hideLive) {
+      // Live fields: show the local text now; the server pass may replace it.
+      onChangeText(joined);
+      baseRef.current = joined;
+    }
+    finishingRef.current = hideLive;
+    // Write the finished text once — after the server correction when there
+    // is one — so the user never sees the raw words being fixed.
+    const finish = (text: string) => {
+      // A newer dictation has started: this result is stale.
+      if (session !== sessionRef.current) return;
+      finishingRef.current = false;
+      setWorking(false);
+      if (!hideLive) {
+        // Only replace the live text if nothing has changed since.
+        if (text !== joined && baseRef.current === joined) { onChangeText(text); baseRef.current = text; }
+        return;
+      }
+      // Defensive: the field is locked while the swirl shows, but never
+      // overwrite text that changed since dictation started.
+      if ((valueRef.current ?? '').trim() !== base) return;
+      onChangeText(text);
+      baseRef.current = text;
+    };
+    // Server-side LLM pass for the long tail the local dictionary misses.
+    // Re-joins onto the SAME base. If the on-phone pass already snapped a name
+    // to one of the user's OWN wines, trust it: the server corrector matches
+    // against the whole wine catalogue and could swap the user's wine for one
+    // they don't own ("Rieussec" → "d'Armailhac").
+    const ownWineHit = domain !== 'food' && refined !== spoken;
+    if (serverCorrect && domain !== 'text' && !ownWineHit && refined.trim()) {
+      // Never wait forever: after 12s the on-phone correction stands.
+      const timeout = new Promise<null>((r) => setTimeout(() => r(null), 12000));
+      Promise.race([correctVoiceTranscript(refined, domain), timeout])
+        .then((corrected) => {
+          const c = (corrected ?? '').trim();
+          finish(c && c !== refined.trim() ? joinDictation(base, c) : joined);
+        })
+        .catch(() => finish(joined));
+    } else {
+      finish(joined);
+    }
   }
 
   useSpeechRecognitionEvent('result', (e) => {
@@ -77,47 +159,27 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
     // as written.
     const spoken = domain === 'text' ? transcript : (domain === 'food' ? correctFoodTerms : correctWineTerms)(transcript);
     // Interim transcripts are the full hypothesis-so-far for the utterance, so
-    // re-join onto the captured base each time rather than appending — this fills
-    // the field live instead of only on stop. On the FINAL transcript, also run
-    // the (heavier) fuzzy cellar-producer correction once, so a misheard producer
-    // snaps to the real name the user owns without slowing the live typing.
+    // re-join onto the captured base each time rather than appending. On the
+    // FINAL transcript, also run the (heavier) corrections once.
     if (e.isFinal) {
-      // The fuzzy cellar-producer snap is wine-only; for food, the dictionary pass
-      // above is the final correction.
-      const base = baseRef.current;
-      const refined = domain === 'food' || domain === 'text' ? spoken
-        : domain === 'note' ? refineRef.current(spoken)
-        : soundRef.current(refineRef.current(spoken));
-      const joined = joinDictation(base, refined);
-      onChangeText(joined);
-      baseRef.current = joined;
-      // Server-side LLM pass for the long tail the local dictionary misses. Fires
-      // after the local text is already shown; replaces it only if the server
-      // returns something different. Re-joins onto the SAME base so a slow
-      // response can't clobber text typed/dictated afterwards being rare here.
-      // If the on-phone pass already snapped a name to one of the user's OWN
-      // wines, trust it: the server corrector matches against the whole wine
-      // catalogue and could swap the user's wine for one they don't own
-      // ("Rieussec" → "d'Armailhac").
-      const ownWineHit = domain !== 'food' && refined !== spoken;
-      if (serverCorrect && domain !== 'text' && !ownWineHit && refined.trim()) {
-        correctVoiceTranscript(refined, domain)
-          .then((corrected) => {
-            const c = (corrected ?? '').trim();
-            if (c && c !== refined.trim() && baseRef.current === joined) {
-              const rejoined = joinDictation(base, c);
-              onChangeText(rejoined);
-              baseRef.current = rejoined;
-            }
-          })
-          .catch(() => { /* keep local-corrected text */ });
-      }
+      finalize(spoken);
     } else {
-      onChangeText(joinDictation(baseRef.current, spoken));
+      interimRef.current = spoken;
+      // Notes, dishes and answers fill the field live as the user speaks.
+      if (!hideLive) onChangeText(joinDictation(baseRef.current, spoken));
+      // Wine names: interim results stay hidden — the swirl stands in for them.
     }
   });
-  useSpeechRecognitionEvent('end', () => { stopState(); });
-  useSpeechRecognitionEvent('error', () => { stopState(); });
+  // Ended/errored without a final result (common on Android): for hidden-live
+  // fields, finish with the last interim words rather than dropping them.
+  function endWithoutFinal() {
+    if (listeningRef.current && hideLive && !gotFinalRef.current && interimRef.current.trim()) {
+      finalize(interimRef.current);
+    }
+    stopState();
+  }
+  useSpeechRecognitionEvent('end', endWithoutFinal);
+  useSpeechRecognitionEvent('error', endWithoutFinal);
 
   async function toggle() {
     if (listeningRef.current) {
@@ -130,9 +192,14 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
         showAlert({ title: 'Microphone needed', body: 'Allow microphone and speech access to dictate.' });
         return;
       }
+      sessionRef.current += 1;
       baseRef.current = (value ?? '').trim();
+      interimRef.current = '';
+      gotFinalRef.current = false;
       listeningRef.current = true;
+      finishingRef.current = false;
       setListening(true);
+      setWorking(true);
       // interimResults:true so the field updates as the user speaks.
       // British English (Vinster's users say "Château" and "Sadie" the UK way),
       // biased towards the names in the user's own cellar for wine fields.

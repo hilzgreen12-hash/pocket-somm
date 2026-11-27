@@ -23,6 +23,10 @@ export type CellarEntry = {
   caseName: string | null;
   isExternal: boolean;
   href: string | null;
+  // External cellars: where it is ("Octavian, Corsham"), and the location id
+  // so it can be filled in from the wine card.
+  storedAt?: string | null;
+  locationId?: string | null;
 };
 
 // A place bottles can be archived from when the wine is split across several.
@@ -81,7 +85,7 @@ export function useWineCardData(wine: CellarWine) {
     queryFn: () => getSlotAssignments(rackIds),
     enabled: rackIds.length > 0,
   });
-  // Bottles covered by no placement are loose (in Your Cellar List, unplaced).
+  // Bottles covered by no placement are loose (in Your Full Cellar List, unplaced).
   const { data: placements = NO_PLACEMENTS } = useQuery({
     queryKey: ['placements', wine.id],
     queryFn: () => fetchPlacementsForWine(wine.id),
@@ -133,6 +137,8 @@ export function useWineCardData(wine: CellarWine) {
           caseName: cases.find((c) => c.id === p.case_id)?.name ?? null,
           isExternal: !!loc?.is_external,
           href: loc?.is_external ? null : `/cellar/storage-location/${p.storage_location_id}?highlight=${wine.id}`,
+          storedAt: loc?.stored_at ?? null,
+          locationId: p.storage_location_id ?? null,
         });
       } else if (p.kind === 'bin') {
         const bin = bins.find((b) => b.id === binOf(p));

@@ -14,6 +14,7 @@ import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { ReviewCardHeader, ReviewedLineEditable } from './ReviewCardHeader';
 import { WineReviewFields } from './WineReviewFields';
 import { WineSearchInput } from './WineSearchInput';
+import { ManualInputToggle } from './ManualInputToggle';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { invalidateCellarViews } from '../hooks/useCellar';
@@ -80,6 +81,9 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
 
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
 
+  // Search first: the hand-entry fields stay folded under "Input Your Wine
+  // Instead ▾" until tapped (open straight away when the wine arrives filled in).
+  const [manualOpen, setManualOpen] = useState(false);
   const [producer, setProducer] = useState('');
   const [wineName, setWineName] = useState('');
   const [vintage, setVintage] = useState('');
@@ -223,6 +227,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
 
   useEffect(() => {
     if (visible) {
+      setManualOpen(!!(initial?.producer || initial?.wineName));
       setProducer(initial?.producer ?? '');
       setWineName(initial?.wineName ?? '');
       setVintage(initial?.vintage != null ? String(initial.vintage) : '');
@@ -578,9 +583,11 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                   </>
                 ) : (
                   <>
-                    {/* Manual entry — a gold prompt matching "Search your wine",
-                        sitting above the identity fields. */}
-                    {!labelImageUri ? <Text style={styles.inputYourWineLabel}>Or, Input your wine</Text> : null}
+                    {/* Manual entry — folded under a gold "Input Your Wine
+                        Instead ▾" header matching "Search your wine". */}
+                    {!labelImageUri ? <ManualInputToggle open={manualOpen} onToggle={() => setManualOpen((v) => !v)} /> : null}
+                    {labelImageUri || manualOpen ? (
+                    <>
 
                     {/* Scanned / uploaded label sits to the left of the identity
                         fields, mirroring a cellar wine card. */}
@@ -621,6 +628,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                       <TouchableOpacity style={styles.confirmIdentityBtn} onPress={confirmIdentity} activeOpacity={0.85}>
                         <Text style={styles.confirmIdentityText}>✓  Confirm Wine</Text>
                       </TouchableOpacity>
+                    ) : null}
+                    </>
                     ) : null}
                   </>
                 )}

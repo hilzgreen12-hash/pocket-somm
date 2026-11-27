@@ -20,6 +20,7 @@ import { WineReviewFields } from './WineReviewFields';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
+import { ShareSheet } from './ShareSheet';
 
 // What a NEW entry starts with instead of today and a blank place (a review of
 // an archived bottle: the day it was archived, at its Archive Note's place).
@@ -182,6 +183,8 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEnt
     }
   }
 
+  // Share → the Share pop-up (Share externally / Cancel).
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   async function handleShare() {
     if (!wine || shareBusy.current) return;
     shareBusy.current = true;
@@ -257,7 +260,8 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editEnt
                 {/* No "Edit" here — a cellar wine's identity is already confirmed
                     (edit it from the wine card). Date + location are editable
                     inline in the stamp below. */}
-                <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
+                <ShareSheet visible={shareSheetOpen} heading="Your Wine Review" name={[wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ') || null} detail={null} onShareExternally={() => void handleShare()} onClose={() => setShareSheetOpen(false)} />
+                <TouchableOpacity onPress={() => setShareSheetOpen(true)} disabled={sharing} hitSlop={{ top: 8, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
                   <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share Review'}</Text>
                 </TouchableOpacity>
               </View>

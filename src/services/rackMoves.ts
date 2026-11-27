@@ -53,7 +53,7 @@ export async function rackRoomFor(rackId: string, bottleMl: number): Promise<Rac
 // Before bottles are sent to a rack to wait for a slot: say how many will fit.
 // Resolves how many to send (0 = none fit, or the user cancelled). `rest` ends
 // "the rest …" — where the bottles that don't fit stay.
-export function confirmRackRoom(room: RackRoom, wanted: number, rest = 'stay in Your Cellar List'): Promise<number> {
+export function confirmRackRoom(room: RackRoom, wanted: number, rest = 'stay in Your Full Cellar List'): Promise<number> {
   if (room.free >= wanted) return Promise.resolve(wanted);
   return new Promise((resolve) => {
     if (room.free <= 0) {
@@ -139,7 +139,7 @@ async function releaseFromLocationsAndBins(wineId: string, n: number): Promise<n
 // free rack slots. One wine = one Cellar List line: the quantity never changes;
 // the bottles are freed from their old place first (so placed never exceeds the
 // quantity), then slotted here. Returns how many landed in the rack — any
-// shortfall (a slot taken meanwhile) stays in Your Cellar List, unplaced.
+// shortfall (a slot taken meanwhile) stays in Your Full Cellar List, unplaced.
 export async function moveIntoRackFromStorage(wine: CellarWine, count: number, rackId: string, freeSlots: SlotPos[]): Promise<number> {
   const n = Math.min(count, freeSlots.length, wine.quantity ?? 1);
   if (n < 1) return 0;

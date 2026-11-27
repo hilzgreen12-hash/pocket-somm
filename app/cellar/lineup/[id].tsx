@@ -47,6 +47,7 @@ import { SearchProgress } from '../../../src/components/SearchProgress';
 import { MessageScreen } from '../../../src/components/MessageScreen';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
+import { ShareSheet } from '../../../src/components/ShareSheet';
 
 // Local YYYY-MM-DD of a lineup's date — matches the date shown on screen (a UTC
 // split can be a day out for rows saved near midnight).
@@ -658,6 +659,8 @@ export default function LineupDetailScreen() {
     }
   }
 
+  // Share → the Share pop-up (Share externally / Cancel).
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   async function handleShare() {
     if (!lineup || !begin('share')) return;
     setSharing(true);
@@ -916,7 +919,8 @@ export default function LineupDetailScreen() {
             </TouchableOpacity>
           ) : null}
 
-          <TouchableOpacity style={[styles.whiteButton, styles.footButton]} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
+          <ShareSheet visible={shareSheetOpen} heading="Your Lineup" name={name.trim() || lineup?.name || null} detail={lineup?.venue ?? null} onShareExternally={() => void handleShare()} onClose={() => setShareSheetOpen(false)} />
+          <TouchableOpacity style={[styles.whiteButton, styles.footButton]} onPress={() => setShareSheetOpen(true)} disabled={sharing} activeOpacity={0.85}>
             <Text style={styles.whiteButtonText}>{sharing ? 'Sharing…' : 'Share'}</Text>
           </TouchableOpacity>
 

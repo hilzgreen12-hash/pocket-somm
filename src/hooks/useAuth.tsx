@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../api/supabase';
 import { clearAllStores } from '../stores/clearAllStores';
 import { getCellarContext, loadCellarContext, subscribeCellarContext } from '../api/cellarContext';
-import { clearPersistedQueries, savePersistedQueries, setPersistedQueryUser } from '../api/queryPersistence';
+import { clearPersistedQueries, saveBigListsNow, savePersistedQueries, setPersistedQueryUser } from '../api/queryPersistence';
 import { recordAccountActivity } from '../api/accountActivity';
 
 interface AuthContextValue {
@@ -110,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (thisSwitch !== switchCount || getCellarContext().userId !== userId) return;
         setPersistedQueryUser(userId);
         savePersistedQueries(qc);
+        saveBigListsNow(qc);
       });
     });
 

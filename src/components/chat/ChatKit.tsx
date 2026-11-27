@@ -10,6 +10,7 @@ import { isNetworkError } from '../../api/invokeResilient';
 import type { CellarWine, WineServingSuggestion } from '../../types/wine';
 import { colors, spacing } from '../../constants/theme';
 import { fonts } from '../../constants/fonts';
+import { DictationSwirl } from '../DictationSwirl';
 
 // Shared pieces for the "Ask Vinster" chats (Home + Pair). Design: the Voice
 // Command Mockups canvases. Vinster speaks in LEFT bubbles; the user's answers
@@ -264,23 +265,30 @@ function AnswerField({ placeholder, domain, onSend, links, alt, onSendAlt }: { p
 
 function InputField({ placeholder, domain, onSend }: { placeholder: string; domain: Domain; onSend: (t: string) => void }) {
   const [value, setValue] = useState('');
-  const can = !!value.trim();
+  // Swirl while a spoken wine name is being worked out — the field is locked and
+  // Send disabled meanwhile, so typing can't be wiped by the finished text.
+  const [dictating, setDictating] = useState(false);
+  const can = !!value.trim() && !dictating;
   return (
     <View>
       <View style={styles.field}>
-        <TextInput
-          style={styles.fieldInput}
-          value={value}
-          onChangeText={setValue}
-          placeholder={placeholder}
-          placeholderTextColor="rgba(255,255,255,0.4)"
-          multiline
-          returnKeyType="send"
-          blurOnSubmit
-          onSubmitEditing={() => { if (can) onSend(value); }}
-        />
+        <View style={{ flex: 1 }}>
+          <TextInput
+            style={styles.fieldInput}
+            value={value}
+            onChangeText={setValue}
+            editable={!dictating}
+            placeholder={placeholder}
+            placeholderTextColor="rgba(255,255,255,0.4)"
+            multiline
+            returnKeyType="send"
+            blurOnSubmit
+            onSubmitEditing={() => { if (can) onSend(value); }}
+          />
+          <DictationSwirl visible={dictating} />
+        </View>
         {/* Bin: clear the request and start fresh. */}
-        <MicButton value={value} onChangeText={setValue} onClear={() => setValue('')} domain={domain} serverCorrect />
+        <MicButton value={value} onChangeText={setValue} onClear={() => setValue('')} domain={domain} serverCorrect  onWorkingChange={setDictating} />
         <TouchableOpacity onPress={() => { if (can) onSend(value); }} disabled={!can} accessibilityLabel="Send" hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} style={styles.send}>
           <Text style={[styles.sendText, !can && { opacity: 0.4 }]}>›</Text>
         </TouchableOpacity>

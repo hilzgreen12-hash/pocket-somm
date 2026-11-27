@@ -38,7 +38,7 @@ export default function WelcomeTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Share</Text>
+        <Text style={styles.sectionTitle}>Gather</Text>
         <Text style={styles.sectionDesc}>Share wine and recipe discoveries, rate restaurants, and connect with fellow wine lovers. Coming soon.</Text>
       </View>
 

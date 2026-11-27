@@ -29,7 +29,10 @@ export function WineSearchModal({
         <View style={styles.sheet}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
-          <WineSearchInput onSelect={(r) => { onSelect(r); onClose(); }} />
+          {/* Close first, then hand over the pick a moment later: a screen opened
+              while this pop-up is still up can end up hidden behind it on
+              Android, leaving the person back where they started. */}
+          <WineSearchInput onSelect={(r) => { onClose(); setTimeout(() => onSelect(r), 300); }} />
           <TouchableOpacity style={styles.cancel} onPress={onClose} activeOpacity={0.7}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>

@@ -1,6 +1,6 @@
 import type { CellarWine } from '../types/wine';
 import type { VintageComparisonRow } from '../services/pricing';
-import { effectiveMaturity } from './maturity';
+import { wineDrinkingStage } from './maturity';
 import { inferWineStyle } from './wineStyle';
 
 // Small, data-only insights for the wine card — computed on the phone from data
@@ -130,7 +130,15 @@ function computeFamilyOfWine(w: CellarWine): Family | null {
   if (s) return s as Family;
   return named ?? familyOfText(w.grape_variety ?? '');
 }
-const readiness = (w: CellarWine) => { const m = effectiveMaturity(w); return m === 'peak' ? 0.5 : m === 'approaching' ? 0.25 : m === 'declining' ? 0.1 : 0; };
+// Prefer bottles ready to drink: inside the window, then nearly open (Too
+// Young but opening within two years), then Declining.
+const IN_WINDOW_STAGES = new Set(['approachable', 'within_peak', 'sweet_spot', 'getting_on', 'drink_up']);
+const readiness = (w: CellarWine) => {
+  const st = wineDrinkingStage(w);
+  if (IN_WINDOW_STAGES.has(st)) return 0.5;
+  if (st === 'too_young') return w.drinking_window_from != null && w.drinking_window_from - new Date().getFullYear() <= 2 ? 0.25 : 0;
+  return st === 'declining' ? 0.1 : 0;
+};
 const available = (w: CellarWine, excludeId?: string) => w.id !== excludeId && (w.quantity ?? 0) > 0 && !w.archived_at && !/\bprosecco\b/.test(fold([w.producer, w.wine_name, w.region].filter(Boolean).join(' '))); // house rule: never pick Prosecco
 
 export type CellarPick = { wine: CellarWine; exact: boolean };

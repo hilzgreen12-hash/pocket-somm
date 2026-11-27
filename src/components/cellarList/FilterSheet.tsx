@@ -23,7 +23,7 @@ interface Props {
   onClose: () => void;
 }
 
-// The pop-up list behind each filter chip on Your Cellar List. Picking an
+// The pop-up list behind each filter chip on Your Full Cellar List. Picking an
 // option closes it.
 export function FilterSheet({ visible, title, hint, options, selected, onSelect, onLongPress, onClose }: Props) {
   return (

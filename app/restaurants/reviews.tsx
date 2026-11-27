@@ -89,6 +89,9 @@ export default function RestaurantReviewsScreen() {
   // The visit to reopen when this screen regains focus after Find Online.
   const resumeOnFocusRef = useRef<string | null>(null);
   const [pendingOpen, setPendingOpen] = useState<{ id: string; via: OpenedVia } | null>(null);
+  // The visit to reopen when the in-page Edit Wine sheet (opened from it) closes,
+  // so its unsaved draft and Save button come back.
+  const resumeAfterWineEditRef = useRef<string | null>(null);
 
   useFocusEffect(useCallback(() => {
     const resumeId = resumeOnFocusRef.current;
@@ -204,6 +207,15 @@ export default function RestaurantReviewsScreen() {
     resumeOnFocusRef.current = editing.id;
     setEditing(null);
     saving.catch((err) => showAlert({ title: 'Could not save your review', body: err instanceof Error ? err.message : 'Please try again.' }));
+  }
+
+  // Edit Wine (from a visit's form) closed or saved: reopen that visit.
+  function finishWineEdit() {
+    setEditingWine(null);
+    setEditWineIdentity(false);
+    const resumeId = resumeAfterWineEditRef.current;
+    resumeAfterWineEditRef.current = null;
+    if (resumeId) setTimeout(() => setPendingOpen({ id: resumeId, via: 'resume' }), DISMISS_DELAY_MS);
   }
 
   function handleLongPressRestaurant(item: RestaurantVisit) {
@@ -431,11 +443,34 @@ export default function RestaurantReviewsScreen() {
     }
   }
   // Items offered in the create/edit sheet — every visit, by name + date.
-  const filterItems = useMemo(() => visits.map((item) => ({
-    id: item.id,
-    label: item.restaurantName?.trim() || UNNAMED_RESTAURANT,
-    sublabel: [formatVisitDate(item.capturedAt), item.city].filter(Boolean).join(' · ') || undefined,
-  })), [visits]);
+  // Searchable by name, city, date and the wines drunk there.
+  const filterItems = useMemo(() => {
+    const winesBySession = new Map<string, string[]>();
+    for (const cw of chosenWines) {
+      if (!cw.scan_session_id) continue;
+      const list = winesBySession.get(cw.scan_session_id) ?? [];
+      list.push([cw.producer, cw.wine_name, cw.region].filter(Boolean).join(' '));
+      winesBySession.set(cw.scan_session_id, list);
+    }
+    return visits.map((item) => ({
+      id: item.id,
+      label: item.restaurantName?.trim() || UNNAMED_RESTAURANT,
+      sublabel: [item.city, formatVisitDate(item.capturedAt)].filter(Boolean).join(' · ') || undefined,
+      searchText: (winesBySession.get(item.id) ?? []).join(' '),
+    }));
+  }, [visits, chosenWines]);
+  // The folder's visits that still exist — deleted ones would inflate the
+  // sheet's "N selected" and be saved back.
+  const editingFilterSelected = useMemo(() => {
+    if (!editingFilter) return undefined;
+    const present = new Set(filterItems.map((f) => f.id));
+    return editingFilter.itemIds.filter((id) => present.has(id));
+  }, [editingFilter, filterItems]);
+  // How many visits are in each folder (ignoring any since deleted).
+  const folderCounts = useMemo(() => {
+    const ids = new Set(visits.map((v) => v.id));
+    return new Map(customFilters.map((f) => [f.id, f.itemIds.filter((id) => ids.has(id)).length]));
+  }, [visits, customFilters]);
 
   // Chip value labels.
   const dateChipLabel = dateFilter === 'all' ? 'All' : (availableMonths.find((m) => m.value === dateFilter)?.label ?? 'All');
@@ -501,7 +536,7 @@ export default function RestaurantReviewsScreen() {
             <Text style={[styles.summaryLink, awaitingRestaurants.length === 0 && { opacity: 0.5 }]}>View Restaurants Awaiting Review</Text>
           </TouchableOpacity>
         </View>
-          <Text style={styles.filterHint}>Listed by recency · Swipe to see all filters →</Text>
+          <Text style={styles.filterHint}>Listed by Recency · Swipe to view and create filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterChipRow}>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
               <View style={styles.filterChipHeadingRow}>
@@ -517,24 +552,28 @@ export default function RestaurantReviewsScreen() {
               </View>
               <Text style={[styles.filterChipValue, ratingFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{ratingChipLabel}</Text>
             </TouchableOpacity>
-            {customFilters.map((f) => (
-              <TouchableOpacity
-                key={f.id}
-                style={[styles.customChip, activeCustomId === f.id && styles.customChipActive]}
-                onPress={() => applyCustom(f.id)}
-                onLongPress={() => openFilterOptions(f)}
-                delayLongPress={400}
-                activeOpacity={0.7}
-              >
-                {/* Capitalized "YOUR FOLDER" heading mirrors the built-in
-                    chips' CITY / FAVOURITES label so bespoke folders read the
-                    same way in the filter row. */}
-                <View style={styles.filterChipHeadingRow}>
-                  <Text style={styles.filterChipLabel}>Your Folder</Text>
-                </View>
-                <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
-              </TouchableOpacity>
-            ))}
+            {/* The user's own folders, newest first next to Rating: the folder
+                name as the heading and how many restaurants it holds beneath,
+                in gold so they stand apart from Vinster's filters. */}
+            {[...customFilters].reverse().map((f) => {
+              const n = folderCounts.get(f.id) ?? 0;
+              return (
+                <TouchableOpacity
+                  key={f.id}
+                  style={[styles.filterChip, styles.folderChip, activeCustomId === f.id && styles.folderChipActive]}
+                  onPress={() => applyCustom(f.id)}
+                  onLongPress={() => openFilterOptions(f)}
+                  delayLongPress={400}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.filterChipHeadingRow}>
+                    <Text style={[styles.filterChipLabel, styles.folderChipText]} numberOfLines={1} ellipsizeMode="tail">{f.name}</Text>
+                    <Text style={[styles.filterChipChevron, styles.folderChipText]}>▾</Text>
+                  </View>
+                  <Text style={[styles.filterChipValue, styles.folderChipText]} numberOfLines={1}>{`${n} ${n === 1 ? 'Restaurant' : 'Restaurants'}`}</Text>
+                </TouchableOpacity>
+              );
+            })}
             <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
               <Text style={styles.customChipAddText}>+ Add</Text>
             </TouchableOpacity>
@@ -695,7 +734,10 @@ export default function RestaurantReviewsScreen() {
           onEditWine={(i) => {
             const cw = editingWines[i];
             if (!cw) return;
-            closeRestaurantReview(false);
+            // Close the form (its draft is kept) and reopen this visit when
+            // the Edit Wine sheet closes — see finishWineEdit.
+            resumeAfterWineEditRef.current = editing.id;
+            setEditing(null);
             setEditWineIdentity(true);
             setEditingWine(cw);
           }}
@@ -711,6 +753,7 @@ export default function RestaurantReviewsScreen() {
             if (cw) confirmDeleteWine(cw);
           }}
           onClose={() => closeRestaurantReview()}
+          onCloseForNav={() => closeRestaurantReview(false)}
           onSaved={() => { manualDraftIdRef.current = null; closeRestaurantReview(); }}
         />
       )}
@@ -721,17 +764,19 @@ export default function RestaurantReviewsScreen() {
         wine={editingWine ? (chosenWines.find((w) => w.id === editingWine.id) ?? editingWine) : null}
         visible={editingWine !== null}
         initialIdentityEdit={editWineIdentity}
-        onClose={() => { setEditingWine(null); setEditWineIdentity(false); }}
-        onSaved={() => { setEditingWine(null); setEditWineIdentity(false); }}
+        onClose={finishWineEdit}
+        onSaved={finishWineEdit}
       />
 
       <LibraryFilterModal
         visible={filterModalOpen}
-        title={editingFilter ? 'Edit filter' : 'New filter'}
+        title={editingFilter ? 'Edit folder' : 'New folder'}
         itemNoun="restaurants"
+        nounLabel="folder"
         items={filterItems}
+        searchPlaceholder="Search by name, city, date or wine"
         initialName={editingFilter?.name}
-        initialSelected={editingFilter?.itemIds}
+        initialSelected={editingFilterSelected}
         saving={savingFilter}
         onSave={saveFilter}
         onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
@@ -855,6 +900,10 @@ const styles = StyleSheet.create({
   customChip: { height: 56, justifyContent: 'center', alignItems: 'flex-start', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, minWidth: 110, maxWidth: 180, overflow: 'hidden' },
   customChipActive: { borderColor: colors.gold },
   customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+  // The user's own folders: gold outline and type; selected = thicker + tint.
+  folderChip: { borderColor: colors.gold },
+  folderChipActive: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.12)' },
+  folderChipText: { color: colors.gold, flexShrink: 1 },
   customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md },
   customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },

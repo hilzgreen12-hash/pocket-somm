@@ -12,8 +12,6 @@ import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraO
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { prepareImageBase64 } from '../../src/api/label';
 import { scanLabel } from '../../src/api/label';
-import { verifyOnWineSearcher } from '../../src/services/pricing';
-import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -25,7 +23,17 @@ export default function LabelCameraScreen() {
   // Forward any context (reviews / lineup / …) + an optional backTo (where the
   // intel screen's Back should land, e.g. the Label Library) to downstream label
   // screens so the back button + post-save routing know where to land.
-  const contextQuery = context ? `?context=${context}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` : '';
+  // context and backTo are forwarded independently (backTo without a context
+  // still lands Back in the right place). `withQuery` adds any extra params so
+  // the URL stays valid whether or not either is present.
+  const forwardParams = [
+    context ? `context=${context}` : null,
+    backTo ? `backTo=${encodeURIComponent(backTo)}` : null,
+  ].filter(Boolean) as string[];
+  const withQuery = (path: string, ...extra: string[]) => {
+    const all = [...forwardParams, ...extra];
+    return all.length ? `${path}?${all.join('&')}` : path;
+  };
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   // Set from the first tap until the read finishes: a quick double tap on the
@@ -51,7 +59,7 @@ export default function LabelCameraScreen() {
   // couldn't be read. Wine Intel just retakes the photo.
   const enterManually = context === 'intel'
     ? undefined
-    : { text: 'Enter Manually', onPress: () => router.replace(`/label/confirm?manual=1${context ? `&context=${context}` : ''}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}`) };
+    : { text: 'Enter Manually', onPress: () => router.replace(withQuery('/label/confirm', 'manual=1')) };
 
   async function handleCapture() {
     if (capturingRef.current) return;
@@ -137,7 +145,7 @@ export default function LabelCameraScreen() {
       if (context === 'intel') {
         await runIntel(details);
       } else {
-        router.replace(`/label/confirm${contextQuery}`);
+        router.replace(withQuery('/label/confirm'));
       }
     } catch (err) {
       // Server or connection trouble — say which, and stay on the camera.
@@ -167,33 +175,15 @@ export default function LabelCameraScreen() {
       quantity: details.quantity ?? 1,
     };
     setWineDetailsConfirmed(confirmed);
-    setStatus('Finding this wine…');
-    try {
-      const currency = await resolveIntelCurrency(preferences?.defaultCurrency);
-      // Verify the read against Wine-Searcher (cheap, no AI) BEFORE committing to
-      // a card. A confident match goes straight to the intel card; an unconfirmed
-      // read (often a misspelt producer or a missed cuvée) routes to the confirm
-      // step first, so the user fixes the identity before Vinster builds a card
-      // for the wrong — or fictional — wine.
-      const verified = await verifyOnWineSearcher(confirmed, currency);
-
-      if (!verified) {
-        // Don't generate a guessed card yet — let the user confirm the wine first.
-        setIntelligence(null);
-        router.replace(`/label/results${contextQuery}&fresh=1&confirm=1`);
-        return;
-      }
-
-      // Verified — generate on the results screen (instant shell + swirls). The
-      // captured photo is already the header image; it's a tile scan, so it
-      // records to Recent Scans (no noRecent).
-      setIntelligence(null);
-      router.replace(`/label/results${contextQuery}&fresh=1&gen=1`);
-    } catch {
-      // Couldn't check the wine — let the user confirm it (not a blank form).
-      setIntelligence(null);
-      router.replace(`/label/results${contextQuery}&fresh=1&confirm=1`);
-    }
+    // Straight to the card, built on the results screen (instant shell +
+    // swirls). A wine Wine-Searcher doesn't list by this name is NOT sent to a
+    // confirm step any more — plenty of real wines are listed under another
+    // spelling, and the detour lost people. The card's own checks (Wine-Searcher,
+    // Vinster's knowledge, then a web check) still stop a wine that doesn't
+    // exist. The captured photo is already the header image; it's a tile scan,
+    // so it records to Recent Scans (no noRecent).
+    setIntelligence(null);
+    router.replace(withQuery('/label/results', 'fresh=1', 'gen=1'));
   }
 
   if (previewUri) {

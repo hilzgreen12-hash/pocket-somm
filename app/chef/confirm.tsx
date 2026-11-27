@@ -129,8 +129,10 @@ export default function ChefConfirmScreen() {
           <Text style={styles.confirmButtonText}>Confirm Wine</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.scanAgain} onPress={() => router.replace('/chef/camera')}>
-          <Text style={styles.scanAgainText}>Scan again</Text>
+        {/* However the wine came in (scanned, uploaded or searched), go back to
+            where it was entered to put it in again. */}
+        <TouchableOpacity style={styles.scanAgain} onPress={() => (router.canGoBack() ? router.back() : router.replace('/chef/review-requirements'))}>
+          <Text style={styles.scanAgainText}>Input again</Text>
         </TouchableOpacity>
       </KeyboardAwareScrollView>
     </View>
@@ -154,6 +156,6 @@ const styles = StyleSheet.create({
   confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
   confirmButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 17 },
   scanAgain: { alignItems: 'center', paddingVertical: spacing.md },
-  // Underlined "Scan again" inline link — treat as a subtle text link.
+  // Underlined "Input again" inline link — treat as a subtle text link.
   scanAgainText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
 });

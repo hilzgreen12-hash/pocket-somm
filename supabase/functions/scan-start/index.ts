@@ -297,8 +297,27 @@ interface ScanJob {
 async function runScanJob(job: ScanJob): Promise<void> {
   const { admin, jobId, params, images, sourceUrl, pdfBase64, currency, scanPreferences, profile, authHeader } = job;
   const fromWeb = !!(sourceUrl || pdfBase64);   // read by find-wine-list, not ocr
-  const patch = (fields: Record<string, unknown>) =>
-    admin.from('scan_jobs').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', jobId);
+  // Write to the job row, checking the result and trying once more on failure.
+  const patch = async (fields: Record<string, unknown>): Promise<boolean> => {
+    for (let i = 0; i < 2; i++) {
+      try {
+        const { error } = await admin.from('scan_jobs').update({ ...fields, updated_at: new Date().toISOString() }).eq('id', jobId);
+        if (!error) return true;
+        console.error('[scan-start] job write failed', jobId, error.message);
+      } catch (e) {
+        console.error('[scan-start] job write threw', jobId, e instanceof Error ? e.message : e);
+      }
+    }
+    return false;
+  };
+  // The final done/error write: if it can't be saved, at least end the job
+  // so the app doesn't sit waiting for the stall timeout.
+  const finish = async (fields: Record<string, unknown>) => {
+    if (!(await patch(fields))) await patch({ status: 'error', error: 'save failed' });
+  };
+  // Touch updated_at so the app (src/api/scanJob.ts, 150s stall window) sees
+  // the job is still alive through long recommend calls and retries.
+  const heartbeat = () => patch({});
 
   const t0 = Date.now();
   const elapsed = () => Date.now() - t0;
@@ -360,7 +379,7 @@ async function runScanJob(job: ScanJob): Promise<void> {
             : f?.status === 429
               ? f.message
               : "Vinster couldn't find any wines in this photo. Make sure the wine list fills the frame, the text is in focus, and there's no glare or shadow across it.";
-      await patch({ status: 'error', error: msg, params: { ...params, failure: f ? `read:${f.fn}:${f.detail}` : 'read:no_wines' } });
+      await finish({ status: 'error', error: msg, params: { ...params, failure: f ? `read:${f.fn}:${f.detail}` : 'read:no_wines' } });
       return;
     }
 
@@ -370,7 +389,7 @@ async function runScanJob(job: ScanJob): Promise<void> {
     // "No {colour} wines on this list" — deterministic, before recommend.
     const requestedColours = colourTypes(scanPreferences.wineTypes);
     if (requestedColours.length && confidentNoColourMatch(wines, requestedColours)) {
-      await patch({ status: 'error', extracted_wines: wines,
+      await finish({ status: 'error', extracted_wines: wines,
         params: { ...params, failure: 'pick:no_colour' },
         error: `There appear to be no ${describeColours(requestedColours)} wines on this list. Please double check the wine list or reset your request and try again. Cheers!` });
       return;
@@ -404,11 +423,13 @@ async function runScanJob(job: ScanJob): Promise<void> {
     // used to end the scan. Try once more while there's time.
     let rec: any;
     try {
+      await heartbeat();
       rec = await callFn('recommend', recBody, authHeader, 80_000);
     } catch (e) {
       const fe = e instanceof FnError ? e : new FnError('recommend', 0, String(e), 'other');
       log('recommend_failed', { detail: fe.detail, status: fe.status });
       if (fe.status === 429 || elapsed() > 100_000) throw fe;
+      await heartbeat();
       rec = await callFn('recommend', recBody, authHeader, 80_000);
       log('recommend_retry_ok');
     }
@@ -421,6 +442,7 @@ async function runScanJob(job: ScanJob): Promise<void> {
     if (!recWines.length && winesForRecommend.length && elapsed() < 120_000) {
       log('empty_picks_retry', { qualifying: winesForRecommend.length });
       try {
+        await heartbeat();
         const retry = await callFn('recommend', {
           ...recBody, styleProfiles: [], foodPairing: '', preferredCountry: '', profileWineTypes: [], profileStyleProfiles: [], useTasteProfile: false,
         }, authHeader, 80_000);
@@ -431,7 +453,7 @@ async function runScanJob(job: ScanJob): Promise<void> {
       }
     }
     if (!recWines.length) {
-      await patch({ status: 'error', extracted_wines: wines, params: { ...params, failure: 'pick:none_matched' },
+      await finish({ status: 'error', extracted_wines: wines, params: { ...params, failure: 'pick:none_matched' },
         error: 'No wines on this list matched your preferences. Try widening your budget or clearing a filter, then scan again.' });
       return;
     }
@@ -444,7 +466,7 @@ async function runScanJob(job: ScanJob): Promise<void> {
     const photos = fromWeb
       ? { photosSent: webParts.read + webParts.unread, photosFailed: webParts.unread }
       : { photosSent: images.length, photosFailed: failures.length };
-    await patch({ status: 'done', extracted_wines: wines, result: rec, params: { ...params, ...photos } });
+    await finish({ status: 'done', extracted_wines: wines, result: rec, params: { ...params, ...photos } });
     log('done', { picks: rec.wines.length });
   } catch (err) {
     const fe = err instanceof FnError ? err : null;
@@ -461,7 +483,7 @@ async function runScanJob(job: ScanJob): Promise<void> {
         : (fromWeb
           ? "Vinster read this list but couldn't finish choosing your wines just now. Please try again in a moment."
           : 'Vinster read your list but couldn\'t finish choosing your wines just now — it isn\'t your photo. Please try again in a moment.');
-    await patch({
+    await finish({
       // The real reason (step, function, code), kept with the job so the app
       // shows it beside the reference code and it can be looked up later.
       params: { ...params, failure: `${stage}:${fe ? `${fe.fn}:${fe.detail}` : 'error'}:${message.slice(0, 160)}` },

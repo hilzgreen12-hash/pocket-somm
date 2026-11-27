@@ -141,15 +141,31 @@ export default function LineupLibraryScreen() {
       setSavingFilter(false);
     }
   }
-  // Items offered in the create/edit sheet — every lineup, by date.
+  // Items offered in the create/edit sheet — every lineup by name, with its
+  // venue, city and date. Searchable by those and the wines in it (producer,
+  // wine, region, grape).
   const filterItems = useMemo(() => lineups.map((l) => {
     const bottles = lineupBottleTotal(l);
+    const date = new Date(l.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     return {
       id: l.id,
-      label: new Date(l.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-      sublabel: bottles ? `${bottles} bottle${bottles === 1 ? '' : 's'}` : undefined,
+      label: l.name?.trim() || 'Your Lineup',
+      sublabel: [l.venue?.trim(), l.city?.trim(), date, bottles ? `${bottles} bottle${bottles === 1 ? '' : 's'}` : null].filter(Boolean).join(' · '),
+      searchText: (l.wines ?? []).map((w) => [w.producer, w.wine_name, w.region, w.grape].filter(Boolean).join(' ')).join(' '),
     };
   }), [lineups]);
+  // The folder's lineups that still exist — deleted ones would inflate the
+  // sheet's "N selected" and be saved back.
+  const editingFilterSelected = useMemo(() => {
+    if (!editingFilter) return undefined;
+    const present = new Set(lineups.map((l) => l.id));
+    return editingFilter.itemIds.filter((id) => present.has(id));
+  }, [editingFilter, lineups]);
+  // How many lineups are in each folder (ignoring any since deleted).
+  const folderCounts = useMemo(() => {
+    const ids = new Set(lineups.map((l) => l.id));
+    return new Map(customFilters.map((f) => [f.id, f.itemIds.filter((id) => ids.has(id)).length]));
+  }, [lineups, customFilters]);
 
   // Long-press a tile to delete the lineup (photo + record).
   function confirmDeleteLineup(item: LineupArchive) {
@@ -221,19 +237,19 @@ export default function LineupLibraryScreen() {
         </View>
       ) : (
         <>
-          <Text style={styles.lineupSummary}>
-            {filtered.length} {filtered.length === 1 ? 'Lineup' : 'Lineups'} · {lineupBottles} {lineupBottles === 1 ? 'Bottle' : 'Bottles'}
-          </Text>
-          {/* Awaiting-attention line — mirrors "N wines awaiting your review".
-              Shown whenever there is a backlog; the count is the whole library,
-              not the active filter. */}
-          {awaitingLineups.length > 0 && (
-            <Text style={styles.lineupAwaiting}>
-              {awaitingLineups.length} {awaitingLineups.length === 1 ? 'lineup' : 'lineups'} awaiting attention
+          {/* Stats bar — same layout as Your Wine Reviews / Restaurant Reviews.
+              The awaiting line counts the whole library, not the active filter. */}
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryText}>
+              {filtered.length} {filtered.length === 1 ? 'Lineup' : 'Lineups'} · {lineupBottles} {lineupBottles === 1 ? 'Bottle' : 'Bottles'}
             </Text>
-          )}
-          <View style={styles.summaryDivider} />
-          <Text style={styles.filterHint}>Listed by Recency · Swipe to see all filters →</Text>
+            {awaitingLineups.length > 0 && (
+              <Text style={[styles.summaryText, styles.summaryLink]}>
+                {awaitingLineups.length} {awaitingLineups.length === 1 ? 'Lineup' : 'Lineups'} awaiting attention
+              </Text>
+            )}
+          </View>
+          <Text style={styles.filterHint}>Listed by Recency · Swipe to view and create filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
             <TouchableOpacity style={[styles.filterChip, monthFilter !== 'All' && styles.filterChipActive]} onPress={() => setOpenDropdown('month')}>
               <View style={styles.filterChipHeadingRow}>
@@ -249,18 +265,28 @@ export default function LineupLibraryScreen() {
               </View>
               <Text style={[styles.filterChipValue, cityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1}>{cityLabel}</Text>
             </TouchableOpacity>
-            {customFilters.map((f) => (
-              <TouchableOpacity
-                key={f.id}
-                style={[styles.customChip, activeCustomId === f.id && styles.customChipActive]}
-                onPress={() => applyCustom(f.id)}
-                onLongPress={() => openFilterOptions(f)}
-                delayLongPress={400}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
-              </TouchableOpacity>
-            ))}
+            {/* The user's own folders, newest first next to City: the folder
+                name as the heading and how many lineups it holds beneath, in
+                gold so they stand apart from Vinster's filters. */}
+            {[...customFilters].reverse().map((f) => {
+              const n = folderCounts.get(f.id) ?? 0;
+              return (
+                <TouchableOpacity
+                  key={f.id}
+                  style={[styles.filterChip, styles.folderChip, activeCustomId === f.id && styles.folderChipActive]}
+                  onPress={() => applyCustom(f.id)}
+                  onLongPress={() => openFilterOptions(f)}
+                  delayLongPress={400}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.filterChipHeadingRow}>
+                    <Text style={[styles.filterChipLabel, styles.folderChipText]} numberOfLines={1} ellipsizeMode="tail">{f.name}</Text>
+                    <Text style={[styles.filterChipChevron, styles.folderChipText]}>▾</Text>
+                  </View>
+                  <Text style={[styles.filterChipValue, styles.folderChipText]} numberOfLines={1}>{`${n} ${n === 1 ? 'Lineup' : 'Lineups'}`}</Text>
+                </TouchableOpacity>
+              );
+            })}
             <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
               <Text style={styles.customChipAddText}>+ Add</Text>
             </TouchableOpacity>
@@ -309,11 +335,13 @@ export default function LineupLibraryScreen() {
 
       <LibraryFilterModal
         visible={filterModalOpen}
-        title={editingFilter ? 'Edit filter' : 'New filter'}
+        title={editingFilter ? 'Edit folder' : 'New folder'}
         itemNoun="lineups"
+        nounLabel="folder"
         items={filterItems}
+        searchPlaceholder="Search by name, venue, city, date or wine"
         initialName={editingFilter?.name}
-        initialSelected={editingFilter?.itemIds}
+        initialSelected={editingFilterSelected}
         saving={savingFilter}
         onSave={saveFilter}
         onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
@@ -329,17 +357,22 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
 
-  addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
-  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
-  // Gold whole-library tally, same treatment as the Full Cellar List summary.
-  lineupSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.md },
-  lineupAwaiting: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: 4 },
-  summaryDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: spacing.md },
+  // Header type matches Your Wine Reviews / Restaurant Reviews.
+  addLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, width: 50, textAlign: 'right' },
+  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
+  // Stats bar — same as Your Wine Reviews / Restaurant Reviews.
+  summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
+  summaryLink: { marginTop: 4 },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
-  filterChip: { width: 112, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   filterChipActive: { borderColor: colors.gold },
+  // The user's own folders: gold outline and type; selected = thicker + tint.
+  folderChip: { borderColor: colors.gold },
+  folderChipActive: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.12)' },
+  folderChipText: { color: colors.gold, flexShrink: 1 },
   filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { RecipeNotesModal } from '../../src/components/RecipeNotesModal';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
@@ -198,37 +199,6 @@ export default function ChefResultsScreen() {
   // the screen, now lifted into a popup modal reachable from the
   // "+ View/Edit Your Recipe Notes" link on the recipe header.
   const [notesModalOpen, setNotesModalOpen] = useState(false);
-  const [notesDraft, setNotesDraft] = useState('');
-  const [notesSaving, setNotesSaving] = useState(false);
-
-  useEffect(() => {
-    setNotesDraft(viewingSession?.user_notes ?? '');
-  }, [viewingSession?.user_notes, viewingSession?.id]);
-
-  async function handleSaveNotes() {
-    if (!viewingSession) return;
-    Keyboard.dismiss();
-    setNotesSaving(true);
-    try {
-      const trimmed = notesDraft.trim();
-      await updateNotes.mutateAsync({ id: viewingSession.id, notes: trimmed.length > 0 ? trimmed : null });
-      setNotesModalOpen(false);
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setNotesSaving(false);
-    }
-  }
-
-  function handleCancelNotes() {
-    setNotesDraft(viewingSession?.user_notes ?? '');
-    setNotesModalOpen(false);
-  }
-
-  function formatNotesDate(iso: string | null | undefined): string | null {
-    if (!iso) return null;
-    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  }
 
   // sharingIndex tracks which recipe's share is in flight so its button can
   // show "Preparing..." without freezing all three.
@@ -577,50 +547,16 @@ export default function ChefResultsScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Recipe-notes popup — opened from the "View/Edit Your Recipe Notes"
-          link on the saved-recipe card. Replaces the old inline notes
-          editor block that used to sit at the bottom of the screen. */}
-      <Modal
+      {/* Recipe notes — dated entries, each editable / deletable, plus Add
+          Note for another (like review entries). From "+ View Notes". */}
+      <RecipeNotesModal
         visible={notesModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelNotes}
-      >
-        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-        <TouchableOpacity style={styles.notesModalOverlay} activeOpacity={1} onPress={handleCancelNotes}>
-          <TouchableOpacity activeOpacity={1} style={styles.notesModalSheet} onPress={() => {}}>
-            <Text style={styles.notesModalTitle}>Your Recipe Notes</Text>
-            <Text style={styles.notesModalHint}>Tweaks, swaps, who you cooked it for — keep your own version of the recipe alongside Vinster's.</Text>
-            <TextInput
-              style={styles.notesModalInput}
-              value={notesDraft}
-              onChangeText={setNotesDraft}
-              placeholder="Your notes…"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-              autoFocus
-            />
-            <View style={styles.notesModalActions}>
-              <TouchableOpacity onPress={handleCancelNotes} disabled={notesSaving}>
-                <Text style={styles.notesCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.notesSaveBtn, notesSaving && styles.notesSaveBtnDisabled]}
-                onPress={handleSaveNotes}
-                disabled={notesSaving}
-              >
-                <Text style={styles.notesSaveBtnText}>{notesSaving ? 'Saving…' : 'Save Notes'}</Text>
-              </TouchableOpacity>
-            </View>
-            {viewingSession?.user_notes_updated_at ? (
-              <Text style={styles.notesModalDate}>Last updated {formatNotesDate(viewingSession.user_notes_updated_at)}</Text>
-            ) : null}
-          </TouchableOpacity>
-        </TouchableOpacity>
-        </KeyboardAvoidingView>
-      </Modal>
+        title={pairings[0]?.dishName ?? null}
+        rawNotes={viewingSession?.user_notes}
+        notesUpdatedAt={viewingSession?.user_notes_updated_at ?? viewingSession?.saved_at ?? null}
+        onSave={async (notes) => { if (viewingSession) await updateNotes.mutateAsync({ id: viewingSession.id, notes }); }}
+        onClose={() => setNotesModalOpen(false)}
+      />
     </ScrollView>
   );
 }
@@ -692,5 +628,4 @@ const styles = StyleSheet.create({
   notesModalHint: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
   notesModalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 140, lineHeight: 22, marginBottom: spacing.md },
   notesModalActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md },
-  notesModalDate: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm },
 });

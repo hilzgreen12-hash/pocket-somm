@@ -24,7 +24,7 @@ export function useReturnToCellar(onReturned?: (r: { archivedWineId: string; cel
       const { returned, cellarWineId } = await returnToCellar(entry.id);
       showAlert({
         title: 'Returned to Your Cellar',
-        body: `${bottlesLabel(returned)} of ${name} ${returned === 1 ? 'is' : 'are'} back in Your Cellar List, not yet placed.`,
+        body: `${bottlesLabel(returned)} of ${name} ${returned === 1 ? 'is' : 'are'} back in Your Full Cellar List, not yet placed.`,
       });
       onReturned?.({ archivedWineId: entry.id, cellarWineId });
     } catch (err) {
@@ -39,7 +39,7 @@ export function useReturnToCellar(onReturned?: (r: { archivedWineId: string; cel
     const n = entry.quantity ?? 1;
     showAlert({
       title: `Return ${bottlesLabel(n)} of ${name} to your cellar?`,
-      body: `${n === 1 ? 'It leaves' : 'They leave'} your archive and go back to Your Cellar List, ready to place.`,
+      body: `${n === 1 ? 'It leaves' : 'They leave'} your archive and go back to Your Full Cellar List, ready to place.`,
       buttons: [
         { text: 'Return to Cellar', onPress: () => void run(entry, name) },
         { text: 'Cancel', style: 'cancel' },

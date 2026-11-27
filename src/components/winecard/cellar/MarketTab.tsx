@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, Keyboard } from 'react-native';
-import { wc } from '../wcStyles';
+import { useWc } from '../wcStyles';
+import { useArchivedCard, ARCHIVED } from '../cardTheme';
 import { s } from './styles';
 import { fmtDay } from './format';
 import { showAlert } from '../../AppAlert';
@@ -20,6 +21,7 @@ import type { WineIntel } from './useWineIntel';
 // What the user paid, editable in place. An estimate is dated the day the wine
 // was cellared; a price the user entered, the day they entered it.
 function PurchasePriceCard({ wine, canEdit }: { wine: CellarWine; canEdit: boolean }) {
+  const wc = useWc();
   const { updateWine } = useCellar();
   const { preferences } = usePreferences();
   const [editing, setEditing] = useState(false);
@@ -108,6 +110,8 @@ function MarketNoteLines({ note }: { note: WineMarketVintageNote | null }) {
 // The per-vintage table with Vinster's verdict, or the written note when
 // Wine-Searcher has too little to compare.
 function VintageComparison({ wine, market, canEdit, currency }: { wine: CellarWine; market: MarketComparison; canEdit: boolean; currency: string }) {
+  const wc = useWc();
+  const archived = useArchivedCard();
   const fmtMoney = (n: number) => formatCurrency(n, currency, { decimals: 0 });
   const verdict = market.rows ? vintageVerdict(market.rows, wine.vintage, fmtMoney) : null;
   const refreshLink = canEdit
@@ -152,7 +156,7 @@ function VintageComparison({ wine, market, canEdit, currency }: { wine: CellarWi
             </View>
           );
         })}
-        <Text style={s.vintageFootnote}>Wine-Searcher market value and aggregate critic score, by vintage.</Text>
+        <Text style={[s.vintageFootnote, archived && { color: ARCHIVED.inkMuted }]}>Wine-Searcher market value and aggregate critic score, by vintage.</Text>
         {verdict.total >= 2 ? (
           <View style={wc.Verdict}>
             <Text style={s.insiderTitle}>Vinster's verdict</Text>
@@ -223,6 +227,7 @@ export function MarketTab({ wine, market, intel, canEdit, currency }: {
   canEdit: boolean;
   currency: string;
 }) {
+  const wc = useWc();
   const isArchived = !!wine.archived_at;
   const ev = wine.estimated_value != null ? Number(wine.estimated_value) : null;
   const pp = wine.purchase_price != null ? Number(wine.purchase_price) : null;

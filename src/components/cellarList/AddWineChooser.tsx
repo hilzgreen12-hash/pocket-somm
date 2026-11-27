@@ -8,25 +8,27 @@ import type { WineRack } from '../../types/wine';
 import { colors, spacing } from '../../constants/theme';
 import { fontsSpectral as fonts } from '../../constants/fonts';
 
-const BACK_TO_LIST = encodeURIComponent('/cellar/list');
-
 interface Props {
   visible: boolean;
   racks: WineRack[];   // for "Add a Lineup"
   onClose: () => void;
+  // Where a cancelled search / scan / upload returns to — the screen this
+  // chooser was opened from (the Cellar tab or Your Full Cellar List).
+  backTo?: string;
 }
 
 // Add Wine to Your Cellar: Scan / Upload a label, Add a Lineup, Search/Manual
 // Input, or Import a cellar document. Every source lands on the same /label/*
-// screens, which return to Your Cellar List.
-export function AddWineChooser({ visible, racks, onClose }: Props) {
+// screens, which return to Your Full Cellar List.
+export function AddWineChooser({ visible, racks, onClose, backTo = '/cellar/list' }: Props) {
+  const BACK_TO = encodeURIComponent(backTo);
   const [readingLabel, setReadingLabel] = useState(false);
   const resetLabelStore = useLabelStore((s) => s.reset);
 
   // A blank Confirm form that returns here when cancelled.
   function startManualAdd() {
     resetLabelStore();
-    router.push(`/label/confirm?manual=1&backTo=${BACK_TO_LIST}`);
+    router.push(`/label/confirm?manual=1&backTo=${BACK_TO}`);
   }
 
   // Read the photo the same way the label camera does — a wine list can be read
@@ -38,7 +40,7 @@ export function AddWineChooser({ visible, racks, onClose }: Props) {
       enterManually: { text: 'Enter Manually', onPress: startManualAdd },
     });
     if (read === 'list') router.push('/scan/wine-list?shared=1');
-    else if (read === 'label') router.push(`/label/confirm?via=upload&backTo=${BACK_TO_LIST}`);
+    else if (read === 'label') router.push(`/label/confirm?via=upload&backTo=${BACK_TO}`);
   }
 
   // A lineup is placed straight into a rack or fridge grid, so pick which one
@@ -78,7 +80,7 @@ export function AddWineChooser({ visible, racks, onClose }: Props) {
   }
 
   const choices: { label: string; run: () => void }[] = [
-    { label: 'Scan Label', run: () => router.push('/label/camera') },
+    { label: 'Scan Label', run: () => router.push(`/label/camera?backTo=${BACK_TO}`) },
     { label: 'Upload Label', run: () => void uploadLabel() },
     { label: 'Add a Lineup (up to 6 bottles)', run: startLineup },
     { label: 'Search/Manual Input', run: startManualAdd },

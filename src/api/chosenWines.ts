@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { syncList, type ListSpec } from './listSync';
 import { evictCachedLabel } from './labelImageCache';
 import { ymdToIso } from '../utils/reviewDate';
 import type { ChosenWine, WineRecommendation } from '../types/wine';
@@ -259,8 +260,12 @@ export async function updateChosenWine(id: string, input: UpdateChosenWineInput)
     updates.purchase_price_currency = input.purchasePriceCurrency ?? null;
   }
   if (input.userDrinkingWindow !== undefined) updates.user_drinking_window = input.userDrinkingWindow;
-  const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
+  const { data, error } = await supabase.from('chosen_wines').update(updates).eq('id', id).select('id');
   if (error) throw new Error(error.message);
+  // RLS refusing the update returns no rows and no error — not a save.
+  if (!data || data.length === 0) {
+    throw new Error('That review could not be saved — please pull to refresh (you may need to sign in again).');
+  }
 }
 
 export async function deleteChosenWine(id: string): Promise<void> {
@@ -320,30 +325,17 @@ export async function clearChosenReview(id: string, options: { dismiss?: boolean
   }
 }
 
-// Fetch ALL of a user's chosen_wines, paging past PostgREST's ~1000-row cap. A
-// large imported review history (e.g. a full Vivino export, ~9000) would silently
-// truncate to the first 1000 on a single request, so we loop in pages until a
-// short page signals the end.
-async function fetchAllChosenWines(userId: string): Promise<ChosenWine[]> {
-  const PAGE = 1000;
-  const out: ChosenWine[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase
-      .from('chosen_wines')
-      .select('*')
-      .eq('user_id', userId)
-      .order('chosen_at', { ascending: false })
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    const batch = (data ?? []) as ChosenWine[];
-    out.push(...batch);
-    if (batch.length < PAGE) break;
-  }
-  return out;
-}
+// A user's reviews can run to thousands (a full Vivino import is ~9,000), so
+// the app keeps its own copy and syncs only what changed (see listSync).
+const chosenList = (userId: string): ListSpec<ChosenWine> => ({
+  table: 'chosen_wines',
+  ownerId: userId,
+  stamp: 'updated_at',
+  orderBy: { column: 'chosen_at', ascending: false },
+});
 
-export async function fetchChosenWines(userId: string): Promise<ChosenWine[]> {
-  return fetchAllChosenWines(userId);
+export async function fetchChosenWines(userId: string, prev?: ChosenWine[]): Promise<ChosenWine[]> {
+  return syncList(chosenList(userId), prev);
 }
 
 // Partial update — touches only the fields given.
@@ -377,8 +369,12 @@ export async function patchChosenWine(
     scan_session_id: string | null; // link an existing review to a restaurant visit
   }>
 ): Promise<void> {
-  const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
+  const { data, error } = await supabase.from('chosen_wines').update(updates).eq('id', id).select('id');
   if (error) throw new Error(error.message);
+  // RLS refusing the update returns no rows and no error — not a save.
+  if (!data || data.length === 0) {
+    throw new Error('That review could not be saved — please pull to refresh (you may need to sign in again).');
+  }
 }
 
 // Take a wine off a restaurant visit without deleting its review. The

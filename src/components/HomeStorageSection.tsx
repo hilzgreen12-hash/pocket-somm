@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ReorderableRow, type ReorderableTile } from './ReorderableRow';
 import { useStorageOrder, storageKey } from '../hooks/useStorageOrder';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput, Image } from 'react-native';
@@ -7,14 +7,14 @@ import { router } from 'expo-router';
 import { useRacks } from '../hooks/useRacks';
 import { useAuth } from '../hooks/useAuth';
 import { useCellarContext } from '../hooks/useCellarContext';
-import { invalidateCellarViews } from '../hooks/useCellar';
+import { invalidateCellarViews, useCellar } from '../hooks/useCellar';
 import { useRackStore } from '../stores/rackStore';
 import { VIEW_ONLY_MESSAGE } from '../api/cellarContext';
 import { getRackBottleCounts } from '../api/racks';
 import { summariseRackContents, deleteRackWithContents } from '../services/rackContents';
 import { getBins, getBinBottleCounts, deleteBin } from '../api/bins';
 import { fetchStorageLocations, fetchLocationBottleCounts, renameStorageLocation } from '../api/storageLocations';
-import { deleteLocationKeepWines, fetchLatestLocationThumbs, type LocationCollageItem } from '../api/placements';
+import { deleteLocationKeepWines, fetchLatestLocationThumbs, fetchPlacementsForWines, type LocationCollageItem } from '../api/placements';
 import { summariseBinContents, deleteBinWithContents, type UnitContents } from '../services/storageContents';
 import { confirmDeleteAltCellar } from './altCellar/confirmDeleteAltCellar';
 import { WineCardThumb } from './WineCardThumb';
@@ -187,12 +187,32 @@ export function HomeStorageSection() {
     enabled: homeLocationIds.length > 0,
   });
   const sum = (counts: Record<string, number>) => Object.values(counts).reduce((n, c) => n + c, 0);
-  const totalBottles = sum(rackCounts) + sum(binCounts) + sum(locationCounts);
+  const placedBottles = sum(rackCounts) + sum(binCounts) + sum(locationCounts);
 
-  // Up to four wines per unit for the tile collages. Keyed on the bottle total
+  // The headline total: every bottle at home, placed or not — the same count
+  // (and the same query, so it's shared from the cache) as Your Wines At
+  // Home's stats bar (app/cellar/home.tsx). External bottles never count.
+  const { wines: cellarWines } = useCellar();
+  const allWineIds = useMemo(() => cellarWines.map((w) => w.id), [cellarWines]);
+  const { data: allPlacements } = useQuery({
+    queryKey: ['placements-list', allWineIds],
+    queryFn: () => fetchPlacementsForWines(allWineIds),
+    enabled: allWineIds.length > 0,
+  });
+  const totalBottles = useMemo(() => {
+    const externalIds = new Set(storageLocations.filter((l) => l.is_external).map((l) => l.id));
+    const extByWine = new Map<string, number>();
+    for (const p of allPlacements ?? []) {
+      if (p.kind !== 'location' || !externalIds.has(p.storage_location_id ?? '')) continue;
+      extByWine.set(p.cellar_wine_id, (extByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+    }
+    return cellarWines.reduce((n, w) => n + Math.max(0, (w.quantity ?? 0) - (extByWine.get(w.id) ?? 0)), 0);
+  }, [cellarWines, allPlacements, storageLocations]);
+
+  // Up to four wines per unit for the tile collages. Keyed on the placed total
   // too, so screens that only refresh the cellar still update the tiles.
   const { data: tileThumbs } = useQuery({
-    queryKey: ['home-storage-thumbs', rackIds, binIds, homeLocationIds, totalBottles],
+    queryKey: ['home-storage-thumbs', rackIds, binIds, homeLocationIds, placedBottles],
     queryFn: () => fetchLatestLocationThumbs({ rackIds, binIds, locationIds: homeLocationIds }),
     enabled: !!userId,
   });
@@ -382,9 +402,11 @@ export function HomeStorageSection() {
         <>
           {/* Stats bar — green outline + light-green fill (matches the other
               inverted pages), not bracketing rules. */}
-          <Text style={styles.stats}>
-            {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
-          </Text>
+          <TouchableOpacity onPress={() => router.push('/cellar/home')} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Text style={styles.stats}>
+              {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'} · View All →
+            </Text>
+          </TouchableOpacity>
         </>
       )}
 

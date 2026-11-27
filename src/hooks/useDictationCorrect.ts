@@ -1,4 +1,5 @@
 import { useMemo, useCallback, useSyncExternalStore } from 'react';
+import { FAMOUS_WINE_HINTS } from '../constants/dictationHints';
 import { useCellar } from './useCellar';
 import { buildProducerIndex, fuzzyCorrectProducers } from '../utils/fuzzyWineCorrect';
 import { correctWineNamesBySound, buildSoundNameIndex } from '../utils/soundAlike';
@@ -43,6 +44,10 @@ export function useSoundCorrect(): (text: string) => string {
   return useCallback((text: string) => correctWineNamesBySound(text, index), [index]);
 }
 
+// Total hints sent to the recogniser: up to 100 of the user's own names, then
+// well-known ones.
+const HINT_CAP = 250;
+
 export function useDictationHints(): string[] {
   const { wines } = useCellar();
   const first = useSyncExternalStore(subscribeHints, () => priorityHints, () => priorityHints);
@@ -57,8 +62,15 @@ export function useDictationHints(): string[] {
       for (const v of [w.producer, w.wine_name]) {
         const t = (v ?? '').trim();
         if (t && t.length <= 60) seen.add(t);
-        if (seen.size >= 100) return Array.from(seen);
+        if (seen.size >= 100) break;
       }
+      if (seen.size >= 100) break;
+    }
+    // Then well-known names speech-to-text often turns into English words
+    // ("Beaucastel" → "Broadcast"), so wines outside the cellar are heard too.
+    for (const t of FAMOUS_WINE_HINTS) {
+      if (seen.size >= HINT_CAP) break;
+      seen.add(t);
     }
     return Array.from(seen);
   }, [wines, first]);

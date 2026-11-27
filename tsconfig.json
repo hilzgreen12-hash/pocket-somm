@@ -13,6 +13,8 @@
     "supabase/functions",
     // Standalone Astro project (the public web Journal) with its own tsconfig,
     // toolchain and import.meta.env — not part of the React Native app.
-    "web"
+    "web",
+    // A Node script run with Node's own TypeScript support (.ts imports).
+    "scripts/recognition-check.mts"
   ]
 }

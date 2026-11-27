@@ -377,7 +377,7 @@ export default function ScanLineupScreen() {
 
   // Before anything is saved: how many bottles of each size the rack still
   // has room for. When they don't all fit, say so — the rows beyond the room
-  // are still added, but wait in Your Cellar List instead of the rack.
+  // are still added, but wait in Your Full Cellar List instead of the rack.
   // Resolves the room per size, or null if the user cancelled.
   async function checkRoom(rackId: string, rows: DetectedBottle[]): Promise<Map<number, number> | null> {
     const wanted = new Map<number, number>();
@@ -396,8 +396,8 @@ export default function ScanLineupScreen() {
       showAlert({
         title: 'Not enough room',
         body: fit > 0
-          ? `Only ${fit} of ${total} will fit in ${lineupRackName} — the rest stay in Your Cellar List.`
-          : `There's no free slot in ${lineupRackName} for these bottles — they'll stay in Your Cellar List.`,
+          ? `Only ${fit} of ${total} will fit in ${lineupRackName} — the rest stay in Your Full Cellar List.`
+          : `There's no free slot in ${lineupRackName} for these bottles — they'll stay in Your Full Cellar List.`,
         dismissable: false,
         buttons: [
           { text: 'Add Wines', onPress: () => resolve(room) },

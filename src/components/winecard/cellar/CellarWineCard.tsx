@@ -6,13 +6,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
-import { wc } from '../wcStyles';
+import { wc as wcBase, wcArchived } from '../wcStyles';
+import { ArchivedCardProvider, ARCHIVED } from '../cardTheme';
 import { s } from './styles';
 import { WineCardHero } from '../WineCardHero';
 import { DrinkingWindowSheet } from '../DrinkingWindowSheet';
 import { PlaceWinesSheet } from '../PlaceWinesSheet';
 import { showAlert } from '../../AppAlert';
 import { WineIntelShareCard } from '../../WineIntelShareCard';
+import { ShareSheet } from '../../ShareSheet';
+import { wineHeaderLine } from '../../../utils/wineHeader';
 import { NoIntelPrompt } from '../../NoIntelPrompt';
 import { SpiritBadge } from '../../SpiritBadge';
 import { LabelPhotoViewer } from '../../LabelPhotoViewer';
@@ -24,7 +27,9 @@ import { usePreferences } from '../../../hooks/usePreferences';
 import { useLabelStore } from '../../../stores/labelStore';
 import { uploadLabelImage } from '../../../api/labelPhotos';
 import { getCachedLabelUri } from '../../../api/labelImageCache';
-import { publishCommunityReview } from '../../../api/community';
+import { useCommunityMember } from '../../../hooks/useCommunityMember';
+import { cellarShare, confirmAndShare, confirmAndUnshare } from '../../../services/communityShare';
+import { entriesOf, latestEntry } from '../../../utils/cellarReview';
 import { launchCamera, launchImageLibrary } from '../../../utils/imagePicker';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../../utils/shareCard';
 import { perBottle } from '../../../utils/bottleValue';
@@ -75,6 +80,8 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
   const { preferences } = usePreferences();
   const { setWineDetailsConfirmed } = useLabelStore();
   const isArchived = !!wine.archived_at;
+  // Archived cards wear their own colours (cream page, terracotta panels).
+  const wc = isArchived ? wcArchived : wcBase;
   const currency = preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP';
 
   const [tab, setTab] = useState<Tab>('overview');
@@ -90,6 +97,8 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
   });
 
   const [windowSheetOpen, setWindowSheetOpen] = useState(false);
+  // Share Result → the Share pop-up.
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const [placeOpen, setPlaceOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -100,8 +109,7 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
   // The just-picked photo, shown at once while it uploads (and kept, so the
   // stored copy's reload never flashes the old label).
   const [localPhotoUri, setLocalPhotoUri] = useState<string | null>(null);
-  const [postingReview, setPostingReview] = useState(false);
-  const [reviewPosted, setReviewPosted] = useState(false);
+  const community = useCommunityMember();
   // Share Result renders the Wine Intel share card off-screen and captures it.
   const intelShareRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
@@ -311,62 +319,20 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
     }
   }
 
-  // Opened from Your Wine Reviews: share the user's review with the community.
+  // Opened from Your Wine Reviews: share the bottle's latest tasting with the
+  // Vinster Community, or take the share down again.
+  const latestTasting = latestEntry(entriesOf(wine));
+  const communityInput = latestTasting ? cellarShare(wine, latestTasting) : null;
+  const myShare = community.shares.get(`cellar_wines:${wine.id}`);
   function postToCommunity() {
-    const user = session?.user;
-    if (postingReview || reviewPosted) return;
-    if (!user) return;
-    const title = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' · ').trim() || wine.wine_name || 'Wine review';
-    showAlert({
-      title: 'Share with the community?',
-      body: `Post your review of ${title} to the Vinster community feed. Other users will be able to read your notes and rating.`,
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Post',
-          onPress: async () => {
-            setPostingReview(true);
-            try {
-              await publishCommunityReview({
-                category: 'wine',
-                source_table: 'cellar_wines',
-                source_id: wine.id,
-                title,
-                subtitle: [wine.region, wine.grape_variety].filter(Boolean).join(' · ') || null,
-                rating: wine.review_score,
-                // review_note is the written review; older rows kept it in user_notes.
-                body: (wine.review_note ?? '').trim() || (wine.user_notes ?? '').trim() || null,
-                metadata: {
-                  producer: wine.producer ?? null,
-                  region: wine.region ?? null,
-                  vintage: wine.vintage ?? null,
-                  grape_variety: wine.grape_variety ?? null,
-                  critic_score: wine.critic_score ?? null,
-                  review_date: wine.review_date ?? null,
-                },
-              }, (user.email ?? '').split('@')[0] || null);
-              setReviewPosted(true);
-              showAlert({ title: 'Shared to community', body: 'Thanks for sharing your review — it now appears in the Vinster community feed.' });
-            } catch (err) {
-              const detail = err instanceof Error ? err.message : String(err);
-              if (/community_reviews_source_unique|duplicate/i.test(detail)) {
-                setReviewPosted(true);
-                showAlert({ title: 'Already shared', body: "You've already posted a review of this wine to the community." });
-              } else {
-                showAlert({ title: 'Could not post', body: detail });
-              }
-            } finally {
-              setPostingReview(false);
-            }
-          },
-        },
-      ],
-    });
+    if (myShare) confirmAndUnshare(myShare.id, communityInput?.title ?? wine.wine_name, community.refreshShares);
+    else if (communityInput) confirmAndShare(communityInput, community.member, community.refreshShares);
   }
 
   return (
+    <ArchivedCardProvider value={isArchived}>
     <KeyboardAwareScrollView
-      style={s.container}
+      style={[s.container, isArchived && { backgroundColor: ARCHIVED.page }]}
       contentContainerStyle={{ paddingBottom: 80 }}
       keyboardShouldPersistTaps="always"
       automaticallyAdjustKeyboardInsets
@@ -392,8 +358,8 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
         // An archived wine is one page: its history, archive entries and
         // reviews, with no market, serving or storage tabs.
         <>
-          <Text style={s.archivedHeading}>Archived Wine</Text>
-          <View style={s.archivedRule} />
+          <Text style={[s.archivedHeading, { color: ARCHIVED.espresso }]}>Archived Wine</Text>
+          <View style={[s.archivedRule, { backgroundColor: ARCHIVED.accent }]} />
           <OverviewFacts wine={wine} data={data} intel={intel} canEdit={canEdit} onWindow={() => setWindowSheetOpen(true)} />
           <View style={wc.Body}>
             <OverviewTab
@@ -407,8 +373,8 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
               afterHistory={<ArchiveBottlesCard data={data} canEdit={canEdit} returning={returnToCellar.returning} onReturn={() => returnToCellar.start(data.archiveLine)} />}
             />
             {canEdit ? (
-              <TouchableOpacity style={[s.exportBtn, s.archivedDeleteBtn, actions.working && s.buttonDisabled]} onPress={() => confirmDelete(wine.quantity)} disabled={actions.working}>
-                <Text style={s.exportBtnText}>Delete Wine From Your Records</Text>
+              <TouchableOpacity style={[s.exportBtn, s.archivedDeleteBtn, { borderColor: ARCHIVED.espresso }, actions.working && s.buttonDisabled]} onPress={() => confirmDelete(wine.quantity)} disabled={actions.working}>
+                <Text style={[s.exportBtnText, { color: ARCHIVED.espresso }]}>Delete Wine From Your Records</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -457,17 +423,27 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
               />
             ) : null}
 
-            {cameFromReviews ? (
-              <TouchableOpacity style={[s.chefBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted) && s.buttonDisabled]} onPress={postToCommunity} disabled={!COMMUNITY_ENABLED || postingReview || reviewPosted} activeOpacity={0.7}>
-                <Text style={s.chefBtnText}>{!COMMUNITY_ENABLED ? 'Share Review To Community (coming soon)' : reviewPosted ? '✓ Shared to Community' : postingReview ? 'Sharing…' : 'Share Review To Community'}</Text>
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity style={s.exportBtn} onPress={() => void shareIntel()} disabled={sharing} activeOpacity={0.85}>
+            {/* Share Result → the Share pop-up: Share to Community (the review,
+                when opened from Your Wine Reviews) and Share externally. */}
+            <TouchableOpacity style={s.exportBtn} onPress={() => setShareSheetOpen(true)} disabled={sharing} activeOpacity={0.85}>
               <Text style={s.exportBtnText}>{sharing ? 'Preparing…' : 'Share Result'}</Text>
             </TouchableOpacity>
           </View>
         </>
       )}
+
+      <ShareSheet
+        visible={shareSheetOpen}
+        heading={COMMUNITY_ENABLED && cameFromReviews ? 'Your Wine Review' : 'Your Wine'}
+        name={wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name}
+        detail={wine.region ?? null}
+        community={COMMUNITY_ENABLED && cameFromReviews && (communityInput || myShare) ? {
+          label: !myShare ? 'Share to Community' : myShare.status === 'visible' ? '✓ Shared to Community' : 'Waiting for Vinster’s Check',
+          onPress: postToCommunity,
+        } : null}
+        onShareExternally={() => void shareIntel()}
+        onClose={() => setShareSheetOpen(false)}
+      />
 
       <PlaceWinesSheet visible={placeOpen} onClose={() => setPlaceOpen(false)} wine={wine} available={data.unplaced} racks={data.racks} bins={data.bins} locations={data.storageLocations} />
       <AddBottlesSheet visible={addOpen} wine={wine} data={data} actions={actions} onClose={() => setAddOpen(false)} />
@@ -522,5 +498,6 @@ export function CellarWineCard({ wine, intel, canEdit, cameFromReviews, tappedSl
         </View>
       ) : null}
     </KeyboardAwareScrollView>
+    </ArchivedCardProvider>
   );
 }

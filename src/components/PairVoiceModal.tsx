@@ -174,14 +174,26 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
     // ingredients, allergies), then straight to the dishes.
     const brief = await chat.ask('Tell me in as much detail as you like any guidelines for the dish', 'ie. A cosy main course, no shellfish, ready in an hour', 'food');
     const t = chat.token();
-    const { identity, pairings } = await chat.working('Thinking about what to cook…', async () => {
+    const { pairings } = await chat.working('Thinking about what to cook…', async () => {
       const id = preset ?? await toIdentity(wineSaid);
       const none = /^\s*(no|none|nope|nothing|anything|surprise me)\b/i.test(brief);
+      // The same filters the full recipe form builds: the profile's dietary
+      // needs, allergies, concerns and food preferences, plus what was said
+      // here — so the recipes are as tailored as the form's.
+      const profileConcerns = preferences?.specificConcerns?.trim() || '';
       const filters: Record<string, unknown> = {
-        dietary: null, allergens: [], customAllergen: '',
+        dietary: (preferences?.dietaryNeeds ?? [])[0] ?? null,
+        allergens: preferences?.allergyRisks ?? [],
+        customAllergen: '',
+        dietaryNote: null,
         // Any allergies or dislikes in the brief are honoured through here.
-        specificConcerns: none ? null : brief,
+        specificConcerns: [profileConcerns, none ? '' : brief].filter(Boolean).join('. ') || null,
         course: courseFilter(brief),
+        difficulty: null,
+        timeConsideration: null,
+        regionalPreferences: preferences?.regionalPreferences ?? [],
+        nutritionalPreferences: preferences?.nutritionalPreferences ?? [],
+        servings: null,
       };
       const p = await generatePairings(id, filters as any, { additionalRequest: none ? undefined : `The diner's guidelines for the dish (course, style, ingredients, allergies — follow all of them): ${brief}.` });
       if (chat.alive(t)) {
@@ -191,20 +203,11 @@ export function PairVoiceModal({ visible, onClose, startWith, presetWine }: { vi
       return { identity: id, pairings: p };
     }, "Matching the wine's weight, spice and savoury edge");
     if (!pairings.length) { chat.say("I couldn't come up with dishes for that just now — please try again."); chat.push(<DoneButton onPress={onClose} />); return; }
-    const wineLabel = [identity.producer, identity.wineName, identity.vintage].filter(Boolean).join(' ');
-    chat.say(`Three dishes for ${wineLabel}`);
-    chat.push(
-      <View>
-        {pairings.slice(0, 3).map((p, i) => (
-          <ResultRow key={p.dishName} first={i === 0} rank={RANKS[i]} name={p.dishName} why={(p.pairingNotes ?? '').split(/(?<=[.!?])\s/)[0]}>
-            <View style={{ paddingBottom: 10 }}>
-              <GoldLink label="Get the recipe" onPress={() => { onClose(); router.push(`/chef/recipe-full?index=${i}` as any); }} />
-            </View>
-          </ResultRow>
-        ))}
-      </View>,
-    );
-    chat.push(<DoneButton onPress={onClose} />);
+    if (!chat.alive(t)) return;
+    // The same Pairing Results screen the full recipe form opens — same layout
+    // and depth — with Back returning to where the quick command was started.
+    onClose();
+    router.push('/chef/results?backTo=quick' as any);
   });
 
   // Spoken/typed wine → identity for the recipe generator.

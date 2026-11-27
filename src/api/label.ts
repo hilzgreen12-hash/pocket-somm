@@ -176,7 +176,8 @@ export async function searchWines(query: string): Promise<WineSearchResult[]> {
 async function soundsLikeCatalog(q: string, vintage: string | null): Promise<WineSearchResult[]> {
   const { data, error } = await supabase.rpc('catalog_sounds_like', { q, lim: 12 });
   if (error || !Array.isArray(data) || data.length === 0) return [];
-  const rows = data as { producer: string; wine_name: string | null; region: string | null; score: number }[];
+  // colour / grape / style arrive from migration 151 on; absent before it.
+  const rows = data as { producer: string; wine_name: string | null; region: string | null; score: number; colour?: string | null; grape?: string | null; style?: string | null }[];
   // Keep only the clearly-better matches (within 70% of the best score).
   const top = rows[0].score ?? 0;
   const seen = new Set<string>();
@@ -186,7 +187,7 @@ async function soundsLikeCatalog(q: string, vintage: string | null): Promise<Win
     const key = wineNameKey(r.producer, r.wine_name ?? null);
     if (key && seen.has(key)) continue;
     if (key) seen.add(key);
-    out.push({ producer: r.producer, wineName: r.wine_name ?? null, region: r.region ?? null, style: null, colour: null, grape: null, vintage, suggested: true });
+    out.push({ producer: r.producer, wineName: r.wine_name ?? null, region: r.region ?? null, style: r.style ?? null, colour: r.colour ?? null, grape: r.grape ?? null, vintage, suggested: true });
     if (out.length >= 6) break;
   }
   return out;
@@ -756,6 +757,8 @@ export async function findFoodWinePairing(
   userPreferences?: Record<string, unknown> | null,
   stylePreference?: string | null,
   budget?: number | null,
+  // Lowest price per bottle, when the person set one (null = none).
+  minBudget?: number | null,
 ): Promise<unknown> {
-  return invokeFunction('food-wine-pairing', { dish, mode, cellarWines, difficulty, userPreferences, stylePreference, budget });
+  return invokeFunction('food-wine-pairing', { dish, mode, cellarWines, difficulty, userPreferences, stylePreference, budget, minBudget: minBudget ?? null });
 }

@@ -4,7 +4,7 @@ import type { CellarPlacement, StorageUnitRef } from '../api/placements';
 import type { CustomFilter } from '../api/customFilters';
 import { foldAccents, matchesWineSearch } from '../utils/wineIdentity';
 import { inferWineStyle, WINE_STYLES } from '../utils/wineStyle';
-import { effectiveMaturity } from '../utils/maturity';
+import { wineDrinkingStage, DRINKING_STAGE_OPTIONS } from '../utils/maturity';
 import { inferCountry } from '../utils/wineCountry';
 import { baseRegionGroup } from '../utils/wineRegionGroup';
 import { groupWinesByIdentity } from '../utils/wineMatch';
@@ -12,7 +12,7 @@ import { bottleValue } from '../utils/bottleValue';
 import { visibleReviewScore } from '../utils/cellarReview';
 import { isMissingIntel } from '../services/bulkIntel';
 
-// Filtering, grouping and sorting for Your Cellar List and Your Cellar Archive
+// Filtering, grouping and sorting for Your Full Cellar List and Your Cellar Archive
 // (app/cellar/list.tsx). Every step is memoised and the search is debounced, so
 // a large imported cellar (thousands of lines) stays responsive.
 
@@ -44,10 +44,7 @@ export const COLOUR_OPTIONS = ['All', ...WINE_STYLES, 'Other'];
 // ordered youngest → oldest.
 export const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'All', label: 'All maturities' },
-  { value: 'too_young', label: 'Too Young' },
-  { value: 'approaching', label: 'Early but Approachable' },
-  { value: 'peak', label: 'Sweet Spot' },
-  { value: 'declining', label: 'In Decline' },
+  ...DRINKING_STAGE_OPTIONS,
 ];
 
 // Location filter values: 'All' · 'home' · 'external' · 'unplaced' ·
@@ -117,7 +114,7 @@ export function useCellarListFilters(input: {
   binOfCell: Map<string, string>;
   customLocations: CustomFilter[];
   initialRegion: string | null;
-  // One wine only (?wine=<id>, from Wine Intel's "in Your Cellar List" line).
+  // One wine only (?wine=<id>, from Wine Intel's "in Your Full Cellar List" line).
   initialWineId: string | null;
 }) {
   const { wines, isArchiveView, placementsByWine, externalLocIds, binOfCell, customLocations } = input;
@@ -179,7 +176,7 @@ export function useCellarListFilters(input: {
       if (onlyWineId && w.id !== onlyWineId) continue;
       if (region && baseRegionGroup(w.region) !== region) continue;
       if (colour !== 'All' && wineColour(w) !== colour) continue;
-      if (maturity !== 'All' && effectiveMaturity(w) !== maturity) continue;
+      if (maturity !== 'All' && wineDrinkingStage(w) !== maturity) continue;
       if (query && !matchesWineSearch([w.producer, w.wine_name, w.region, w.grape_variety, w.vintage], query)) continue;
       out.push({ wine: w, bottles });
     }

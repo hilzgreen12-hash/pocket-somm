@@ -275,7 +275,7 @@ export default function ChosenRecipesScreen() {
               style={[styles.modalButton, { marginTop: spacing.sm }]}
               onPress={() => { setAssigningRecipe(null); setNewFolderOpen(true); }}
             >
-              <Text style={styles.modalButtonText}>+ Create new folder</Text>
+              <Text style={styles.modalButtonText}>Create New Folder</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setAssigningRecipe(null)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Done</Text>

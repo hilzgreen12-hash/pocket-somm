@@ -140,7 +140,7 @@ export async function archiveBottles(
 }
 
 // Return to Cellar — undo an archive. The archived row's bottles come back as
-// unplaced bottles (loose in Your Cellar List, ready to place). When the cellar
+// unplaced bottles (loose in Your Full Cellar List, ready to place). When the cellar
 // still holds the same wine, vintage and bottle size they join that line — its
 // count grows, any reviews only the archive row holds move onto it, and the
 // archive row is deleted; otherwise the archive row simply becomes live again.

@@ -96,9 +96,11 @@ Return raw JSON only. No markdown. No explanation.`,
     });
 
       const text = response.content.find((b) => b.type === 'text')?.text ?? '';
-      const match = text.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
-      return JSON.parse(match[0]);
+      // Tolerant parse: a long screenshot can run out of reply room mid-list,
+      // so keep the wines that were complete rather than failing the import.
+      const wines = winesFromReply(text);
+      if (wines === null) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
+      return { wines };
     }
 
     // Buffered path (stream !== true): unchanged single-JSON response. Kept as
@@ -145,3 +147,19 @@ Return raw JSON only. No markdown. No explanation.`,
     return jsonError('Something went wrong. Please try again.', 500);
   }
 });
+
+// The { wines: [...] } reply, or what was complete of it when the reply was cut
+// off mid-list (same as parse-cellar-import). null when unreadable.
+function winesFromReply(raw: string): any[] | null {
+  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const start = cleaned.indexOf('{');
+  if (start < 0) return null;
+  const body = cleaned.slice(start, cleaned.lastIndexOf('}') + 1);
+  for (const candidate of [body, `${body}]}`]) {
+    try {
+      const parsed = JSON.parse(candidate);
+      return Array.isArray(parsed?.wines) ? parsed.wines : null;
+    } catch { /* try the next */ }
+  }
+  return null;
+}

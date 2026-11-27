@@ -19,7 +19,7 @@ interface Props {
   onLongPress: (wine: CellarWine) => void;
 }
 
-// One line of Your Cellar List / Your Cellar Archive. Memoised: the list can
+// One line of Your Full Cellar List / Your Cellar Archive. Memoised: the list can
 // hold thousands of lines, so a line only re-renders when its own props change.
 export const CellarListRow = memo(function CellarListRow({
   wine: w, bottles, showYourScore, showArchivedDate, onPress, onLongPress,

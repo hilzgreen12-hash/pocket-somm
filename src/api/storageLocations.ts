@@ -9,7 +9,7 @@ import type { StorageLocation, StorageCase } from '../types/wine';
 // 'location' placements in cellar_placements. Photos live in the wine-labels
 // bucket; display via useLabelImageUrl.
 
-const LIST_COLS = 'id, user_id, name, photo_path, created_at, is_external';
+const LIST_COLS = 'id, user_id, name, photo_path, created_at, is_external, stored_at';
 
 // All of the cellar's alt cellars, oldest first.
 export async function fetchStorageLocations(userId: string): Promise<StorageLocation[]> {
@@ -48,14 +48,19 @@ export async function fetchStorageLocation(id: string): Promise<StorageLocation 
   return (data as StorageLocation) ?? null;
 }
 
-export async function createStorageLocation(userId: string, name: string, isExternal = false): Promise<StorageLocation> {
+export async function createStorageLocation(userId: string, name: string, isExternal = false, storedAt: string | null = null): Promise<StorageLocation> {
   const { data, error } = await supabase
     .from('storage_locations')
-    .insert({ user_id: cellarOwner(userId), name: name.trim() || 'My Location', is_external: isExternal })
+    .insert({ user_id: cellarOwner(userId), name: name.trim() || 'My Location', is_external: isExternal, stored_at: storedAt?.trim() || null })
     .select(LIST_COLS)
     .single();
   if (error) throw error;
   return data as StorageLocation;
+}
+
+// Where an external cellar is kept ("Stored at …" on the wine card).
+export async function setStorageLocationStoredAt(id: string, storedAt: string | null): Promise<void> {
+  await updateLocation(id, { stored_at: storedAt?.trim() || null });
 }
 
 // Update one alt cellar, failing loudly when RLS refuses (no row changes).

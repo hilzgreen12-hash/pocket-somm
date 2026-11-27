@@ -174,6 +174,84 @@ function sameWine(query: string, wsName: string | null | undefined): boolean {
   return own.length === 0 || own.some((w) => ws.has(w));
 }
 
+// --- One name per wine --------------------------------------------------------
+// The same wine reaches us written several ways — "François Mitjavile Roc de
+// Cambes" from the catalogue, "Francois et Emilie Mitjavile Roc de Cambes" from
+// a label, "Roc de Cambes Roc de Cambes" from a list — and each spelling used to
+// cost its own Wine-Searcher lookup and keep its own price. Vinster's catalogue
+// holds one agreed producer + name per wine, so a query that is clearly that
+// wine is looked up, and saved, under the catalogue's name.
+
+const wordsOf = (t: string) => cacheName(t).split(/[^a-z0-9]+/).filter(Boolean);
+
+// Same word, allowing one slip in a long one ("Mitjavile" / "Mitjaville").
+function closeWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) < 6 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+// The catalogue's producer + name joined the way the app builds a query
+// (wineQueryName): the producer is left off when the name already starts with it.
+function catalogueQuery(producer: string, wine: string): string {
+  // Without an aside in brackets or a second name after a slash ("Famille
+  // Perrin (Perrin & Fils)" → "Famille Perrin"), as the app does: Wine-Searcher
+  // matches neither.
+  const p = producer.replace(/\([^)]*\)/g, ' ').split(/\s+\/\s+/)[0].replace(/\s{2,}/g, ' ').trim();
+  const n = wine.trim();
+  if (!p) return n;
+  if (!n) return p;
+  const pl = p.toLowerCase(), nl = n.toLowerCase();
+  return nl === pl || nl.startsWith(pl + ' ') ? n : `${p} ${n}`;
+}
+
+// The catalogue's name for this query, or null when there's no single clear
+// match (then the query is used as written, as before). A catalogue wine
+// matches when the query ends with its wine name and the words before it are
+// its producer written another way: sharing a distinctive word, the estate's
+// own name repeated, or nothing at all.
+async function canonicalQuery(query: string): Promise<string | null> {
+  const q = wordsOf(query);
+  // Search on a few of the query's distinctive words, so one misspelt word
+  // ("Mitjaville") can't hide the wine. `display` has a trigram index, so this
+  // takes about a millisecond; an accented word ("Pérignon") may not match
+  // through it, which only means the query is used as written.
+  const probes = [...new Set(distinctiveWords(query))].sort((a, b) => b.length - a.length).slice(0, 3);
+  if (probes.length === 0 || q.length === 0) return null;
+  const { data, error } = await supabase
+    .from('wines_catalog')
+    .select('producer, wine_name')
+    .or(probes.map((w) => `display.ilike.%${w}%`).join(','))
+    .limit(300);
+  if (error || !data) return null;
+  const found = new Set<string>();
+  for (const row of data as { producer: string | null; wine_name: string | null }[]) {
+    const producer = row.producer ?? '', wine = row.wine_name ?? '';
+    const canon = catalogueQuery(producer, wine);
+    const c = wordsOf(canon);
+    if (c.join(' ') === q.join(' ')) return canon; // already the catalogue's spelling
+    const w = wordsOf(wine);
+    // A generic wine name ("Grand Vin", "Brut Rosé") can't tell producers apart.
+    if (w.length === 0 || distinctiveWords(wine).length === 0 || q.length < w.length) continue;
+    if (q.slice(q.length - w.length).join(' ') !== w.join(' ')) continue;
+    const rest = q.slice(0, q.length - w.length);
+    const restDistinct = rest.filter((x) => x.length >= 4 && !GENERIC_WORDS.has(x));
+    const producerDistinct = distinctiveWords(producer);
+    const sameProducer = rest.length === 0
+      || rest.join(' ') === w.join(' ')
+      || restDistinct.some((x) => producerDistinct.some((y) => closeWord(x, y)));
+    if (sameProducer) found.add(canon);
+  }
+  // Two different catalogue wines fit: too unsure to rename.
+  return found.size === 1 ? [...found][0] : null;
+}
+
 // The Wine-Searcher plan allows 500 API calls a day for the whole app. Each
 // real call is logged (one request can make two: exact vintage, then all
 // vintages), and new lookups stop a little short of the cap so a request that
@@ -213,7 +291,7 @@ Deno.serve(async (req) => {
 
     // exactOnly: just this vintage — no all-vintage broadening (the per-vintage
     // comparison table only uses exact rows, so the broaden was wasted credits).
-    const { wineName: rawWineName, vintage, currency, exactOnly } = await req.json();
+    const { wineName: rawWineName, vintage, currency, exactOnly } = await req.json().catch(() => ({}));
 
     if (!rawWineName) {
       return new Response(JSON.stringify({ error: 'wineName required' }), { status: 400 });
@@ -228,21 +306,38 @@ Deno.serve(async (req) => {
 
     const cur = (currency ?? 'GBP').toString().toUpperCase();
     const vintageParam = vintage ?? 'NV';
+    // The catalogue's spelling of this wine, when the query is clearly it — so
+    // every spelling shares one lookup and one saved price. Fetched alongside
+    // the exchange rate, so it adds no waiting of its own.
+    const [canonical, usdRate] = await Promise.all([
+      canonicalQuery(wineName).catch(() => null),
+      getUsdRate(supabase, cur),
+    ]);
+    const lookupName = canonical ?? wineName;
     // This endpoint returns one fixed currency per account (no currency
     // param), so the same wine+vintage is a single cache entry.
-    const wineKey = `${cacheName(wineName)}_${vintageParam}`;
-    // Rows written before keys were normalised, read as a fallback.
+    const wineKey = `${cacheName(lookupName)}_${vintageParam}`;
+    // The query as written, and rows saved before keys were normalised: read as
+    // fallbacks so prices already saved under them are still used.
+    const asWrittenKey = `${cacheName(wineName)}_${vintageParam}`;
     const legacyKey = `${wineName}_${vintageParam}`;
 
     // USD→user-currency rate, applied to the (USD) prices on the way out.
-    const fxRate = (await getUsdRate(supabase, cur)) ?? 1;
+    const fxRate = usdRate ?? 1;
 
     // 1) Cache hit within TTL → serve immediately.
+    const keys = [...new Set([wineKey, asWrittenKey, legacyKey])];
     const { data: rows } = await supabase
       .from('pricing_cache')
       .select('*')
-      .in('wine_key', legacyKey === wineKey ? [wineKey] : [wineKey, legacyKey]);
-    const cached = rows?.find((r) => r.wine_key === wineKey) ?? rows?.[0] ?? null;
+      .in('wine_key', keys);
+    // The catalogue spelling's row first; else the freshest row for a price
+    // (not a remembered miss) under another spelling.
+    const isPriced = (r: { price_scope: string | null }) => r.price_scope !== 'miss' && r.price_scope !== 'miss-exact';
+    const own = rows?.find((r) => r.wine_key === wineKey) ?? null;
+    const freshestPriced = [...(rows ?? [])].filter(isPriced)
+      .sort((a, b) => String(b.fetched_at).localeCompare(String(a.fetched_at)))[0] ?? null;
+    const cached = (own && isPriced(own) ? own : freshestPriced ?? own) ?? rows?.[0] ?? null;
 
     if (cached) {
       const ageDays = (Date.now() - new Date(cached.fetched_at).getTime()) / 86_400_000;
@@ -299,46 +394,58 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ...UNAVAILABLE, down: true }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    let result: Awaited<ReturnType<typeof lookupWineSearcher>> = null;
-    let priceScope: 'vintage' | 'all-vintage' = 'vintage';
-    // Set when a lookup failed transiently (timeout / 5xx / suspension or
-    // daily limit) — so a blank answer can say "down", not "no such wine".
-    let down = false;
-    // Exact vintage first. A transient throw here must NOT stop us broadening to
-    // the all-vintage average — catch it and fall through to that query.
-    try {
-      result = await lookupWineSearcher(wineName, String(vintageParam), cur, auth.userId);
-    } catch (e) {
-      console.error('[wine-searcher-proxy] exact-vintage lookup failed transiently:', e instanceof Error ? e.message : 'error');
-      down = true;
-    }
-    // Broaden to the all-vintage average when the exact vintage EITHER didn't
-    // match OR matched but carries no market price (some vintages list a score
-    // but no live price). Keep the exact match's score/anchor when it had them.
-    // The exact vintage's own score; an all-vintage score is kept separately.
-    let allVintageScore: number | null = null;
-    if (hasRealVintage && !exactOnly && (!result || result.averageMarketPrice == null)) {
+    // Exact vintage, then (on a miss or a vintage with no price) the all-vintage
+    // average, for one spelling of the wine.
+    const lookUp = async (name: string) => {
+      let result: Awaited<ReturnType<typeof lookupWineSearcher>> = null;
+      let priceScope: 'vintage' | 'all-vintage' = 'vintage';
+      // Set when a lookup failed transiently (timeout / 5xx / suspension or
+      // daily limit) — so a blank answer can say "down", not "no such wine".
+      let down = false;
+      // A transient throw on the exact vintage must NOT stop us broadening to
+      // the all-vintage average — catch it and fall through to that query.
       try {
-        const allV = await lookupWineSearcher(wineName, null, cur, auth.userId);
-        if (allV && (allV.averageMarketPrice != null || !result)) {
-          allVintageScore = allV.criticScore;
-          result = result
-            ? { ...allV, criticScore: result.criticScore, wsWineId: result.wsWineId ?? allV.wsWineId, wineName: result.wineName ?? allV.wineName }
-            : { ...allV, criticScore: null };
-          priceScope = 'all-vintage';
-        }
+        result = await lookupWineSearcher(name, String(vintageParam), cur, auth.userId);
       } catch (e) {
-        console.error('[wine-searcher-proxy] all-vintage lookup failed transiently:', e instanceof Error ? e.message : 'error');
+        console.error('[wine-searcher-proxy] exact-vintage lookup failed transiently:', e instanceof Error ? e.message : 'error');
         down = true;
       }
-    }
+      // Broaden to the all-vintage average when the exact vintage EITHER didn't
+      // match OR matched but carries no market price (some vintages list a score
+      // but no live price). Keep the exact match's score/anchor when it had them.
+      let allVintageScore: number | null = null;
+      if (hasRealVintage && !exactOnly && (!result || result.averageMarketPrice == null)) {
+        try {
+          const allV = await lookupWineSearcher(name, null, cur, auth.userId);
+          if (allV && (allV.averageMarketPrice != null || !result)) {
+            allVintageScore = allV.criticScore;
+            result = result
+              ? { ...allV, criticScore: result.criticScore, wsWineId: result.wsWineId ?? allV.wsWineId, wineName: result.wineName ?? allV.wineName }
+              : { ...allV, criticScore: null };
+            priceScope = 'all-vintage';
+          }
+        } catch (e) {
+          console.error('[wine-searcher-proxy] all-vintage lookup failed transiently:', e instanceof Error ? e.message : 'error');
+          down = true;
+        }
+      }
+      // A "match" that names a different wine is no match at all.
+      if (result && !sameWine(name, result.wineName)) {
+        console.log(`[wine-searcher-proxy] rejected mismatch: query="${name}" ws="${result.wineName}"`);
+        result = null;
+        allVintageScore = null;
+      }
+      return { result, priceScope, allVintageScore, down };
+    };
 
-    // A "match" that names a different wine is no match at all.
-    if (result && !sameWine(wineName, result.wineName)) {
-      console.log(`[wine-searcher-proxy] rejected mismatch: query="${wineName}" ws="${result.wineName}"`);
-      result = null;
-      allVintageScore = null;
+    // The catalogue's spelling first. Should Wine-Searcher not know it by that
+    // name, the name as written is tried before giving up.
+    let attempt = await lookUp(lookupName);
+    if (!attempt.result && !attempt.down && lookupName !== wineName) {
+      console.log(`[wine-searcher-proxy] catalogue name missed, trying as written: "${wineName}"`);
+      attempt = await lookUp(wineName);
     }
+    const { result, priceScope, allVintageScore, down } = attempt;
 
     // Genuine no-match (or both queries down after retries) → the client falls
     // back to a labelled Vinster estimate, so a price is still shown. A genuine
@@ -388,14 +495,19 @@ Deno.serve(async (req) => {
     // NEVER affect the price response.
     if (result.region || result.grape || result.criticScore != null) {
       try {
-        const { error: factsErr } = await supabase.from('wine_facts').upsert({
-          wine_key: wineKey,
+        // Under the catalogue's spelling and the spelling the app asked with,
+        // which is the key the app reads these facts back by.
+        const fact = {
           region: result.region ?? null,
           grape: result.grape ?? null,
           critic_score: result.criticScore ?? null,
           score_as_of: new Date().toISOString().slice(0, 10),
           verified_at: new Date().toISOString(),
-        }, { onConflict: 'wine_key' });
+        };
+        const { error: factsErr } = await supabase.from('wine_facts').upsert(
+          [...new Set([wineKey, asWrittenKey])].map((k) => ({ wine_key: k, ...fact })),
+          { onConflict: 'wine_key' },
+        );
         if (factsErr) console.error('[wine-searcher-proxy] wine_facts upsert skipped:', factsErr.message);
       } catch (e) {
         console.error('[wine-searcher-proxy] wine_facts upsert threw:', e instanceof Error ? e.message : 'error');

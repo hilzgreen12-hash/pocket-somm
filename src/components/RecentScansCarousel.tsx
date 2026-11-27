@@ -116,7 +116,9 @@ export function RecentScansCarousel() {
         // hiccup at scan time — would just surface the "unable to generate intel"
         // prompt, so treat it like a missing one and regenerate (results heals the
         // stored row on success). A usable snapshot displays instantly, no cost.
-        const usable = !!(l.intel && (l.intel.criticScore != null || l.intel.estimatedValue != null));
+        // A labelOnly snapshot (a real wine with no published scores/prices) is a
+        // complete result too — regenerating it would just repeat paid lookups.
+        const usable = !!(l.intel && (l.intel.criticScore != null || l.intel.estimatedValue != null || l.intel.labelOnly));
         ls.setIntelligence(usable ? l.intel : null);
         // Resolve the stored photo to a local uri for the hero image.
         let uri: string | null = null;

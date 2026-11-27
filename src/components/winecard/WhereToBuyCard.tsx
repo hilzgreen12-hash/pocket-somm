@@ -2,12 +2,13 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { openWhereToBuy, WHERE_TO_BUY_RECENT_KEY, type WhereToBuySource, type WhereToBuyWine } from '../../api/merchantLinks';
-import { wc } from './wcStyles';
+import { useWc } from './wcStyles';
 import { s } from './cellar/styles';
 
 // Where to Buy — Wine-Searcher's merchants for this wine; each tap is recorded.
 // Shared by the cellar wine card and the Wine Intel card.
 export function WhereToBuyCard({ wine, source }: { wine: WhereToBuyWine; source: WhereToBuySource }) {
+  const wc = useWc();
   const { session } = useAuth();
   const qc = useQueryClient();
   const refreshList = () => void qc.invalidateQueries({ queryKey: [WHERE_TO_BUY_RECENT_KEY] });

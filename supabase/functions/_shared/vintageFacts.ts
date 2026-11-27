@@ -115,6 +115,31 @@ export async function verifiedProducerWines(producer: string): Promise<string[]>
   }
 }
 
+// True when resolve-wine's live web lookup has added this exact wine to the
+// catalogue (source 'web-lookup'). Wine Intel only trusts a client-sent
+// webResearch when this holds — a crafted request can't claim a wine is real.
+// True when the wine exists in Vinster's catalogue, so research the client
+// passes along can be trusted.
+export async function webLookupConfirmed(producer: string, wineName: string | null): Promise<boolean> {
+  const producerKey = norm(producer);
+  if (!producerKey) return false;
+  const key = catalogKey(producer, wineName);
+  try {
+    const { data } = await admin
+      .from('wines_catalog')
+      .select('producer, wine_name')
+      .like('search_key', `${producerKey}%`)
+      // Any real catalogue wine counts (a web lookup's own row, or one already
+      // there from a seed / liquor-board list) — a forged request can't add one.
+      .not('verification_status', 'in', '(implausible,needs_review)')
+      .limit(200);
+    return ((data ?? []) as { producer: string; wine_name: string | null }[])
+      .some((r) => catalogKey(r.producer, r.wine_name) === key);
+  } catch {
+    return false;
+  }
+}
+
 // A vintage as stored: 'NV' or a 4-digit year; anything else isn't recorded.
 export function vintageKey(v: unknown): string | null {
   const s = String(v ?? '').trim();

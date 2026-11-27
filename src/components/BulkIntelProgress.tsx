@@ -5,9 +5,10 @@ import { fontsSpectral as fonts } from '../constants/fonts';
 
 // Full-screen progress for a bulk critic-score + value run (useBulkIntel), with
 // the way out. Back is blocked so a stray dismiss can't strand the run.
-export function BulkIntelProgress({ progress, title, onStop }: {
+export function BulkIntelProgress({ progress, title, body, onStop }: {
   progress: { done: number; total: number } | null;
   title: string;
+  body?: string;
   onStop: () => void;
 }) {
   return (
@@ -16,7 +17,7 @@ export function BulkIntelProgress({ progress, title, onStop }: {
         <SearchProgress
           title={title}
           subtitle="Vinster needs a moment"
-          body="Vinster is fetching critic scores and market values for your wines."
+          body={body ?? 'Vinster is fetching critic scores and market values for your wines.'}
           durationMs={Math.max(15000, (progress?.total ?? 0) * 2500)}
         />
         <TouchableOpacity style={styles.exitBtn} onPress={onStop} activeOpacity={0.85}>

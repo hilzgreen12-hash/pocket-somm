@@ -36,6 +36,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { WineRecommendation } from '../../src/types/wine';
 import { lineupForVisitHref } from '../../src/utils/restaurantReview';
+import { ShareSheet } from '../../src/components/ShareSheet';
 
 // Shown by the "(what's this)" link next to Vinster's Review — mirrors the
 // explainer on the wine card so the two surfaces read consistently.
@@ -263,6 +264,8 @@ export default function ResultsScreen() {
   const qc = useQueryClient();
   const shareCardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
+  // Share → the Share pop-up (Share externally / Cancel).
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
 
   // Pre-fill restaurant name from GPS once the search has been saved
   useEffect(() => {
@@ -982,8 +985,9 @@ export default function ResultsScreen() {
             <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
           </TouchableOpacity>
           <View style={styles.topRightCol}>
+            <ShareSheet visible={shareSheetOpen} heading="Your Wine List Results" name={restaurantName.trim() || null} detail={[stampDate, stampCity].filter(Boolean).join(' · ') || null} onShareExternally={() => void handleShare()} onClose={() => setShareSheetOpen(false)} />
             <TouchableOpacity
-              onPress={handleShare}
+              onPress={() => setShareSheetOpen(true)}
               disabled={sharing}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               activeOpacity={0.7}
