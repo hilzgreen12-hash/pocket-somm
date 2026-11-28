@@ -16,7 +16,7 @@ import { useCommunityMember } from '../../src/hooks/useCommunityMember';
 import { FEED_KEY, getMyStats, isMember, listFeed, toTiles, type FeedTile } from '../../src/api/community';
 import { confirmShareAll, withMembership } from '../../src/services/communityShare';
 import { colors, spacing } from '../../src/constants/theme';
-import { GATHER_LOCKED } from '../../src/constants/features';
+import { GATHER_LOCKED, GATHER_LOCKED_OPACITY } from '../../src/constants/features';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 const COMMUNITY_HELP = `Gather is the Vinster Community, where members share their wine and restaurant reviews, and meet the people behind them.
@@ -60,7 +60,7 @@ export default function CommunityTab() {
     <TabSwipeView style={styles.container}>
       {community.enabled ? <CommunityHub paddingTop={paddingTop} /> : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
-          <VinsterHeader />
+          <VinsterHeader blank />
           <View style={styles.titleRow}>
             <HelpTitle label="Gather" title="How the Community works" body={SOON_HELP} textStyle={styles.title} />
           </View>
@@ -154,16 +154,16 @@ function CommunityHub({ paddingTop }: { paddingTop: number }) {
       contentContainerStyle={{ paddingBottom: 40, paddingTop }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.gold} />}
     >
-      {/* While Gather is locked the whole page shows, faded, and nothing on it
-          can be used (scrolling still works). */}
-      <View style={GATHER_LOCKED ? styles.locked : undefined} pointerEvents={GATHER_LOCKED ? 'none' : 'auto'}>
-      <VinsterHeader />
+      <VinsterHeader blank />
       <View style={styles.titleRow}>
         <HelpTitle label="Gather" title="How the Community works" body={COMMUNITY_HELP} textStyle={styles.title} />
       </View>
       <View style={styles.section}>
         <Text style={styles.sectionDesc}>Be a part of the Vinster community, share and discover wine and restaurant reviews while connecting with friends, old and new.</Text>
       </View>
+      {/* While Gather is locked, everything below the title and blurb shows
+          faded and can't be used (scrolling still works). */}
+      <View style={GATHER_LOCKED ? { opacity: GATHER_LOCKED_OPACITY } : undefined} pointerEvents={GATHER_LOCKED ? 'none' : 'auto'}>
       <View style={styles.headerDivider} />
 
       {/* You: your Community profile, or an invitation to join. */}
@@ -270,7 +270,6 @@ function Carousel({ tiles, examples, extras = [], showHint = true, onOpen }: {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  locked: { opacity: 0.35 },
   title: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   // 18pt either side of every separator, app-wide.

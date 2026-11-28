@@ -130,18 +130,15 @@ export default function CellarTab() {
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
-      <VinsterHeader />
+      <VinsterHeader blank />
 
       <View style={styles.titleRow}>
         <HelpTitle label="Cellar" title="How Cellar works" body={CELLAR_HELP} textStyle={styles.title} />
       </View>
-      <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
-
-      {/* Shared cellars — switch between My Cellar and any cellar shared with you. */}
-      <CellarSwitcher />
+      <Text style={styles.subtitle}>Manage your wine collection with Vinster.</Text>
 
       {/* Add Wines (white outline, opens the scan/upload/manual chooser) and
-          Quick Command (gold outline) side by side. */}
+          Voice Command (gold outline) side by side. */}
       <View style={styles.actionRow}>
         {canEdit ? (
           <TouchableOpacity onPress={() => setAddWineOpen(true)} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1 }]}>
@@ -149,12 +146,15 @@ export default function CellarTab() {
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity onPress={() => setVoiceOpen(true)} activeOpacity={0.85} style={[styles.buttonFull, { flex: 1, borderColor: colors.gold }]}>
-          <Text style={[styles.buttonText, { color: colors.gold }]}>Quick Command</Text>
+          <Text style={[styles.buttonText, { color: colors.gold }]}>Voice Command</Text>
         </TouchableOpacity>
       </View>
 
       {/* Rule beneath Add Wines. */}
       <View style={styles.divider} />
+
+      {/* Shared cellars only: Select A Cellar ⌄ (with its own rule beneath). */}
+      <CellarSwitcher />
 
       {/* Your Wines At Home — the home-storage carousel. */}
       <HomeStorageSection />

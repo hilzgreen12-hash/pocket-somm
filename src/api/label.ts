@@ -628,17 +628,24 @@ export interface ImportedCellarWine {
   bottle_size_ml?: number | null;
   purchase_price?: number | null;
   currency?: string | null;
+  // Receipts only: bottles per case when the line was sold by the case, and
+  // whether that case is an OWC (true), a carton (false) or not said (null).
+  case_size?: number | null;
+  owc?: boolean | null;
 }
 
-export async function importCellarDocument(base64Image: string): Promise<{ wines: ImportedCellarWine[] }> {
+// kind 'receipt': a merchant receipt or invoice (Add Wine → Scan a
+// Receipt/Invoice) — also returns the purchase date and per-line case sizes.
+export async function importCellarDocument(base64Image: string, kind?: 'receipt'): Promise<{ wines: ImportedCellarWine[]; purchase_date?: string | null }> {
   // Prefer the streamed path (heartbeat-kept SSE survives a cellular blip on
   // this long read); fall back to the buffered invoke on a transport drop. A
   // real application error (not a transport drop) propagates without falling back.
+  const body = kind ? { base64Image, kind } : { base64Image };
   try {
-    return await streamEdgeFunction('import-cellar', { base64Image }) as { wines: ImportedCellarWine[] };
+    return await streamEdgeFunction('import-cellar', body) as { wines: ImportedCellarWine[]; purchase_date?: string | null };
   } catch (err) {
     if (!isNetworkError(err)) throw err;
-    return invokeFunction('import-cellar', { base64Image }) as Promise<{ wines: ImportedCellarWine[] }>;
+    return invokeFunction('import-cellar', body) as Promise<{ wines: ImportedCellarWine[]; purchase_date?: string | null }>;
   }
 }
 

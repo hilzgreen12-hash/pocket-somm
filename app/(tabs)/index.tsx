@@ -57,7 +57,12 @@ const CellarInsightsMemo = memo(CellarInsightsCarousel);
 const JournalMemo = memo(JournalCarousel);
 
 // A repeat of the same share within this window is the same event, not a re-share.
-const SHARE_REPEAT_MS = 4000;
+const SHARE_REPEAT_MS = 15000;
+// The last share handled and when — kept at module level, not in the screen,
+// because Android can restart Home while a share arrives, and a per-screen ref
+// started fresh each time (the same lineup photo asked "What's in this photo?"
+// three times, and each answer opened its own lineup screen).
+let lastSharedHandled: { key: string; at: number } | null = null;
 const HOME_ORDER_KEY = 'home_section_order_v1';
 const HOME_SECTION_DEFAULT = ['search', 'scans', 'cellar', 'insights', 'musings'];
 
@@ -212,7 +217,6 @@ export default function ScanLandingScreen() {
   // The last share handled and when. The same share event can arrive twice in
   // quick succession (the effect re-running as login or navigation settles);
   // only that is ignored — sharing the same photo again later must work.
-  const sharedHandledRef = useRef<{ key: string; at: number } | null>(null);
   // A share can restart Vinster's screen (Android opens it inside the sharing
   // app first), and Home then appears before the app's navigation is ready —
   // opening the list at that moment crashed to a white screen. Wait for it.
@@ -232,13 +236,13 @@ export default function ScanLandingScreen() {
     // One line per share in the device log (no file contents or addresses), so
     // a share that seems to do nothing can be traced with adb logcat.
     const kind = pdf ? 'pdf' : image ? 'photo' : link ? 'link' : files.length ? 'file' : 'text';
-    const last = sharedHandledRef.current;
+    const last = lastSharedHandled;
     if (!key || (last && last.key === key && Date.now() - last.at < SHARE_REPEAT_MS)) {
       console.log(`[Share] ${kind} ignored (${key ? 'repeat of the same share' : 'nothing usable'})`);
       return;
     }
     console.log(`[Share] ${kind} received`);
-    sharedHandledRef.current = { key, at: Date.now() };
+    lastSharedHandled = { key, at: Date.now() };
     const asUri = (p: string) => (p.startsWith('file://') || p.startsWith('content://') ? p : `file://${p}`);
     if (pdf?.path) {
       // Big PDFs can't be sent whole — the list's web link is the better route.

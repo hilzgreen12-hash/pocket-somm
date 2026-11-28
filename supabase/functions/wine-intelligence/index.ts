@@ -1,5 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
-import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine, verifiedProducerWines, webLookupConfirmed } from '../_shared/vintageFacts.ts';
+import { resolveCatalogKey, vintageKey, readVintageFacts, recordIdentifiedWine, verifiedProducerWines, verifiedBrandWines, webLookupConfirmed } from '../_shared/vintageFacts.ts';
 import { intelCacheKey, readIntelCache, saveIntelCache } from '../_shared/intelCache.ts';
 import { requireSignedIn } from '../_shared/auth.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
@@ -137,9 +137,16 @@ Return only the raw JSON — no markdown, no explanation.`;
     // recognise a real wine asked for under its label wording. Only a few named
     // qualifier words are allowed for: any other difference must pass the normal
     // identity check, so a near-miss name can't borrow a real wine's existence.
-    const knownWines = producer ? await verifiedProducerWines(String(producer)) : [];
+    const [knownWines, brandWines] = producer
+      ? await Promise.all([verifiedProducerWines(String(producer)), verifiedBrandWines(String(producer))])
+      : [[], []];
     const knownWinesStr = knownWines.length
       ? `\n\nVinster's verified catalogue lists these wines from ${producer}: ${knownWines.join('; ')}. If the wine asked about is one of these — exactly, or differing ONLY by one of these qualifier words: "Single Vineyard", "Viñedo Singular", "Vieilles Vignes", "Old Vines", "Estate" — it is real: treat it as identified and name it as the catalogue does. Any other extra or different word (a vineyard, cuvée or place name, a colour, a reserve tier) makes it a different wine: it gets the normal identity check, and is never identified just because it resembles a listed wine. A wine NOT on this list may still be real; judge it as usual.`
+      : '';
+
+    // A label naming only a brand the catalogue files under another producer.
+    const brandWinesStr = brandWines.length
+      ? `\n\nVinster's verified catalogue also lists wines sold under the name "${producer}" by another producer (producer — wine): ${brandWines.join('; ')}. "${producer}" on a label may be that brand. If the wine asked about is one of these — the same wine name once the brand words are set aside, differing at most by one of the qualifier words above — it is real: treat it as identified, and give that catalogue producer and wine name as the canonical names. Any other difference makes it a different wine that gets the normal identity check.`
       : '';
 
     // webResearch comes from the client, so it's only honoured when resolve-wine
@@ -152,7 +159,7 @@ Return only the raw JSON — no markdown, no explanation.`;
     const userContent = `Provide intelligence on this wine:
 - Producer: ${producer}
 - Region: ${region}${wineNameStr}
-- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}${scoreGuidance}${recordedGuidance}${knownWinesStr}${researchStr}`;
+- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}${scoreGuidance}${recordedGuidance}${knownWinesStr}${brandWinesStr}${researchStr}`;
 
     // Up to 2 attempts. Claude is non-deterministic, so an occasional response
     // that leads with a non-text block, wraps the JSON in prose/markdown, or gets

@@ -139,7 +139,9 @@ export default function ArchiveNightScreen() {
       const row = await saveLineupArchive(session.user.id, uri, { wines: lineupWines, city: params.city || city, visit });
       qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
       // A new lineup opens ready to fill in (title, notes, wines).
-      router.replace(`/cellar/lineup/${row.id}?new=1` as any);
+      // A lineup shared in from another app goes back to the Review tab (where
+      // lineups live) from its page, not to the photo screen or Home.
+      router.replace(`/cellar/lineup/${row.id}?new=1${sharedPhoto ? `&backTo=${encodeURIComponent('/(tabs)/scan')}` : ''}` as any);
     } catch (err) {
       showSaveError(err);
     }

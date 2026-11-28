@@ -1,7 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import { OfflinePhotoPlaceholder } from '../../../src/components/LineupThumb';
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator, Modal, BackHandler } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom, vinsterSharedLead } from '../../../src/utils/shareCard';
@@ -66,7 +66,19 @@ const UNDO_NOTE = 'The bottle Vinster already moved to your archive for this lin
 
 export default function LineupDetailScreen() {
   // ?new=1: a lineup that has just been added opens ready to fill in.
-  const { id, new: isNew } = useLocalSearchParams<{ id: string; new?: string }>();
+  const { id, new: isNew, backTo } = useLocalSearchParams<{ id: string; new?: string; backTo?: string }>();
+  // Back: to backTo when given (a lineup shared in → the Review tab), else the
+  // previous screen. Android's back button does the same.
+  const leave = () => {
+    if (backTo) router.dismissTo(decodeURIComponent(String(backTo)) as any);
+    else router.back();
+  };
+  useEffect(() => {
+    if (!backTo) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { leave(); return true; });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backTo]);
   // A saved lineup opens as a read-only page; Edit (top right) turns it into
   // the input screen, and Save Lineup turns it back.
   const [editing, setEditing] = useState(isNew === '1');
@@ -355,6 +367,8 @@ export default function LineupDetailScreen() {
 
   // "Off Cellar" tapped → confirm the bottle came from the cellar, then pick
   // the cellar wine it was.
+  // "Mark as from my cellar" is for a bottle with no cellar entry to pick (an
+  // old lineup from before Vinster): it gets the stamp, nothing is archived.
   function confirmFromCellar(index: number) {
     showAlert({
       title: 'This was from my cellar',
@@ -362,6 +376,22 @@ export default function LineupDetailScreen() {
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Choose from my cellar', onPress: () => setCellarPickerFor(index) },
+        { text: 'Mark as from my cellar', onPress: () => { void markFromCellar(index, true); } },
+      ],
+    });
+  }
+  async function markFromCellar(index: number, on: boolean) {
+    await updateWines((ws) => ws.map((w, i) => (i === index ? { ...w, from_cellar: on } : w)));
+  }
+  // The stamp on a bottle only marked as from the cellar (no cellar entry).
+  function openMarkedOptions(index: number, w: LineupWine) {
+    showAlert({
+      title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || 'This wine',
+      body: 'Marked as from your cellar.',
+      buttons: [
+        { text: 'Choose from my cellar', onPress: () => setCellarPickerFor(index) },
+        { text: 'This wine was Off Cellar', onPress: () => { void markFromCellar(index, false); } },
+        { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
@@ -376,7 +406,7 @@ export default function LineupDetailScreen() {
     const linked = await updateWines((ws) => ws.map((w, i) => (
       i === index ? {
         ...w,
-        cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, archived: false,
+        cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, archived: false, from_cellar: false,
         region: cw.region ?? null,
         grape: cw.grape_variety ?? null,
         style: inferWineStyle({ style: cw.style, region: cw.region, grape_variety: cw.grape_variety }),
@@ -734,7 +764,7 @@ export default function LineupDetailScreen() {
         {/* Back (and Edit, when read-only) on the top row; Share and Save Lineup
             sit at the foot of the page. */}
         <View style={styles.headerTopRow}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 16 }}>
+          <TouchableOpacity onPress={leave} hitSlop={{ top: 10, bottom: 10, left: 10, right: 16 }}>
             <Text accessibilityLabel="Back" style={styles.back}>←</Text>
           </TouchableOpacity>
           {!editing ? (
@@ -869,6 +899,10 @@ export default function LineupDetailScreen() {
                         via "This was from my cellar". */}
                     {w.cellar_wine_id ? (
                       <TouchableOpacity onPress={() => openCellarBadgeOptions(i, w)} disabled={!editing} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={styles.stampTag}>Your Cellar</Text>
+                      </TouchableOpacity>
+                    ) : w.from_cellar ? (
+                      <TouchableOpacity onPress={() => openMarkedOptions(i, w)} disabled={!editing} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.stampTag}>Your Cellar</Text>
                       </TouchableOpacity>
                     ) : (

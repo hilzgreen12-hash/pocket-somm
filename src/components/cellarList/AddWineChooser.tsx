@@ -17,8 +17,8 @@ interface Props {
   backTo?: string;
 }
 
-// Add Wine to Your Cellar: Scan / Upload a label, Add a Lineup, Search/Manual
-// Input, or Import a cellar document. Every source lands on the same /label/*
+// Add Wine to Your Cellar: Scan a Receipt/Invoice, Scan / Upload a label (side
+// by side), Add a Lineup, Search/Manual Input, or Import a cellar document. Every source lands on the same /label/*
 // screens, which return to Your Full Cellar List.
 export function AddWineChooser({ visible, racks, onClose, backTo = '/cellar/list' }: Props) {
   const BACK_TO = encodeURIComponent(backTo);
@@ -79,12 +79,17 @@ export function AddWineChooser({ visible, racks, onClose, backTo = '/cellar/list
     });
   }
 
-  const choices: { label: string; run: () => void }[] = [
-    { label: 'Scan Label', run: () => router.push(`/label/camera?backTo=${BACK_TO}`) },
-    { label: 'Upload Label', run: () => void uploadLabel() },
-    { label: 'Add a Lineup (up to 6 bottles)', run: startLineup },
-    { label: 'Search/Manual Input', run: startManualAdd },
-    { label: 'Import Cellar Doc', run: startImport },
+  type Choice = { label: string; run: () => void };
+  // A row of one full-width button, or two smaller ones side by side.
+  const rows: Choice[][] = [
+    [{ label: 'Scan a Receipt/Invoice', run: () => router.push('/cellar/import-cellar?source=receipt') }],
+    [
+      { label: 'Scan Label', run: () => router.push(`/label/camera?backTo=${BACK_TO}`) },
+      { label: 'Upload Label', run: () => void uploadLabel() },
+    ],
+    [{ label: 'Add a Lineup (up to 6 bottles)', run: startLineup }],
+    [{ label: 'Search/Manual Input', run: startManualAdd }],
+    [{ label: 'Import Cellar Document', run: startImport }],
   ];
 
   return (
@@ -93,11 +98,15 @@ export function AddWineChooser({ visible, racks, onClose, backTo = '/cellar/list
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => {}}>
             <Text style={styles.title}>Add Wine to Your Cellar</Text>
-            <Text style={styles.body}>Scan or Upload a Label or Lineup, or manually input the details.</Text>
-            {choices.map((c, i) => (
-              <TouchableOpacity key={c.label} style={[styles.btn, i > 0 && { marginTop: spacing.sm }]} onPress={() => { onClose(); c.run(); }}>
-                <Text style={styles.btnText}>{c.label}</Text>
-              </TouchableOpacity>
+            <Text style={styles.body}>Select how to add to your cellar</Text>
+            {rows.map((row, i) => (
+              <View key={row[0].label} style={[styles.row, i > 0 && { marginTop: spacing.sm }]}>
+                {row.map((c) => (
+                  <TouchableOpacity key={c.label} style={[styles.btn, row.length > 1 && styles.btnHalf]} onPress={() => { onClose(); c.run(); }}>
+                    <Text style={[styles.btnText, row.length > 1 && styles.btnTextHalf]}>{c.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             ))}
             <TouchableOpacity onPress={onClose} style={styles.cancel}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -123,8 +132,11 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
   title: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   body: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
-  btn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  row: { flexDirection: 'row', gap: spacing.sm },
+  btn: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  btnHalf: { paddingVertical: 6 },
   btnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  btnTextHalf: { fontSize: 14 },
   cancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   cancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   readingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },

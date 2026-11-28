@@ -109,6 +109,8 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
       baseRef.current = joined;
     }
     finishingRef.current = hideLive;
+    // Speaking is done: the swirl covers the correction, then the name appears.
+    if (hideLive) setWorking(true);
     // Write the finished text once — after the server correction when there
     // is one — so the user never sees the raw words being fixed.
     const finish = (text: string) => {
@@ -199,7 +201,9 @@ export function MicButton({ value, onChangeText, onClear, style, domain = 'wine'
       listeningRef.current = true;
       finishingRef.current = false;
       setListening(true);
-      setWorking(true);
+      // No swirl yet: it shows only once the user has finished speaking, while
+      // the words are turned into the wine name (finalize). Before, it appeared
+      // the moment the mic opened, before anything was said.
       // interimResults:true so the field updates as the user speaks.
       // British English (Vinster's users say "Château" and "Sadie" the UK way),
       // biased towards the names in the user's own cellar for wine fields.

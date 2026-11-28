@@ -57,6 +57,10 @@ function bottlesOf(w: CellarImportWine): number {
 function fromImported(w: ImportedCellarWine): CellarImportWine {
   const quantity = Number.isFinite(w.quantity) && w.quantity > 0 ? Math.round(w.quantity) : 1;
   const producer = w.producer || w.wine_name || null;
+  // A receipt line sold by the case ("2 x 6 x 75cl OWC") is filed as cases;
+  // any bottles beyond whole cases stay loose.
+  const perCase = w.case_size && w.case_size > 1 ? Math.round(w.case_size) : null;
+  const cases = perCase ? Math.floor(quantity / perCase) : 0;
   return {
     producer,
     // The reader often repeats the producer as the wine name.
@@ -67,10 +71,10 @@ function fromImported(w: ImportedCellarWine): CellarImportWine {
     colour: null,
     bottleSizeMl: w.bottle_size_ml ?? 750,
     totalBottles: quantity,
-    packaging: 'loose',
-    bottlesPerCase: null,
-    cases: null,
-    looseBottles: quantity,
+    packaging: cases > 0 ? (w.owc === false ? 'non_owc' : 'owc') : 'loose',
+    bottlesPerCase: cases > 0 ? perCase : null,
+    cases: cases > 0 ? cases : null,
+    looseBottles: cases > 0 ? quantity - cases * (perCase ?? 0) : quantity,
     drinkingWindowFrom: null,
     drinkingWindowTo: null,
     purchasePricePerBottle: w.purchase_price ?? null,
@@ -97,7 +101,10 @@ function caseSummary(w: CellarImportWine): string {
 // The cellar line a new holding becomes. Imported values are for the bottle as
 // listed, at its own size — as Vinster keeps them. added_via 'import' means no
 // Wine Intel is generated for it in the background.
-function newCellarRow(userId: string, id: string, w: CellarImportWine, defaultCurrency: string): NewCellarWine & { id: string } {
+// `receipt`: a wine bought on a scanned receipt/invoice — the user's own new
+// bottles, so it's an ordinary home wine (added_via 'receipt', Wine Intel as
+// usual) received on the invoice date, not an imported external cellar.
+function newCellarRow(userId: string, id: string, w: CellarImportWine, defaultCurrency: string, receipt?: { date: string | null } | null): NewCellarWine & { id: string } {
   const year = (s: string | null) => { const n = s ? parseInt(s, 10) : NaN; return Number.isFinite(n) ? n : null; };
   const market = w.marketPricePerBottle;
   const paid = w.purchasePricePerBottle;
@@ -112,7 +119,7 @@ function newCellarRow(userId: string, id: string, w: CellarImportWine, defaultCu
     style: w.colour ?? null,
     vintage: w.vintage ?? null,
     quantity: bottlesOf(w),
-    date_received: new Date().toISOString().split('T')[0],
+    date_received: receipt?.date ?? new Date().toISOString().split('T')[0],
     drinking_window_from: year(w.drinkingWindowFrom),
     drinking_window_to: year(w.drinkingWindowTo),
     drinking_window_status: 'unknown',
@@ -125,7 +132,7 @@ function newCellarRow(userId: string, id: string, w: CellarImportWine, defaultCu
     purchase_price: paid ?? null,
     purchase_price_currency: paid != null ? (w.currency ?? defaultCurrency) : null,
     bottle_size_ml: w.bottleSizeMl ?? 750,
-    added_via: 'import',
+    added_via: receipt ? 'receipt' : 'import',
   };
 }
 
@@ -226,7 +233,11 @@ export default function ImportCellarScreen() {
   const defaultCurrency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   // Entry source from the "Upload Cellar Document" chooser: camera / library
   // (photo → OCR) or vivino (a Vivino CSV export → parse).
-  const { source } = useLocalSearchParams<{ source?: 'camera' | 'library' | 'vivino' | 'cellartracker' | 'file' | 'vivino-reviews' | 'review-spreadsheet' }>();
+  // 'receipt': Add Wine → Scan a Receipt/Invoice (photo, upload or PDF).
+  const { source } = useLocalSearchParams<{ source?: 'camera' | 'library' | 'vivino' | 'cellartracker' | 'file' | 'vivino-reviews' | 'review-spreadsheet' | 'receipt' }>();
+  const isReceipt = source === 'receipt';
+  // The invoice date the receipt reader found (becomes each wine's received date).
+  const receiptDate = useRef<string | null>(null);
   const isReviewImport = source === 'vivino-reviews' || source === 'review-spreadsheet';
   // The three CSV/spreadsheet sources share one flow; only the on-screen copy
   // (name, export steps, label-image caveat) differs — driven by CSV_SOURCES.
@@ -336,7 +347,9 @@ export default function ImportCellarScreen() {
     if (total > 1) setProgress({ done, total });
     const results = await settleLimited(uris, SCREENSHOT_READS_AT_ONCE, async (uri) => {
       if (cancelled.current) return [];
-      const { wines: read } = await importCellarDocument(await prepareImageBase64(uri));
+      const res = await importCellarDocument(await prepareImageBase64(uri), isReceipt ? 'receipt' : undefined);
+      const read = res.wines;
+      if (isReceipt && res.purchase_date && /^\d{4}-\d{2}-\d{2}$/.test(res.purchase_date) && res.purchase_date <= new Date().toISOString().slice(0, 10)) receiptDate.current = res.purchase_date;
       if (total > 1) setProgress({ done: ++done, total });
       return read ?? [];
     });
@@ -444,7 +457,7 @@ export default function ImportCellarScreen() {
       showAlert({
         title: 'No purchase prices found',
         body: from === 'photo'
-          ? `Vinster can't see purchase prices in your photo, and therefore won't be able to generate accurate Cellar Stats. Please go back and choose a photo or screenshot that shows what you paid.${notes}`
+          ? `Vinster can't see purchase prices in your ${isReceipt ? 'receipt' : 'photo'}, and therefore won't be able to generate accurate Cellar Stats. Please go back and choose a photo or screenshot that shows what you paid.${notes}`
           : `Vinster can't see purchase prices in your file, and therefore won't be able to generate accurate Cellar Stats. Please go back and add a column with purchase prices.${notes}`,
         buttons: [
           { text: 'Go back', onPress: () => setStage('capture') },
@@ -840,7 +853,7 @@ export default function ImportCellarScreen() {
       for (let b = 0; b < fresh.length; b += INSERT_BATCH) {
         if (cancelled.current) return;
         const batch = fresh.slice(b, b + INSERT_BATCH);
-        const added = new Set(await addCellarWines(batch.map((i) => newCellarRow(userId, rowIds[i], wines[i], defaultCurrency))));
+        const added = new Set(await addCellarWines(batch.map((i) => newCellarRow(userId, rowIds[i], wines[i], defaultCurrency, isReceipt ? { date: receiptDate.current } : null))));
         if (locationId) unfiledRun.push(...await fileNewLines(userId, locationId, batch.map((i) => ({ id: rowIds[i], wine: wines[i] })), added));
         succeeded.push(...batch);
         bottlesAdded += batch.reduce((n, i) => n + bottlesOf(wines[i]), 0);
@@ -964,7 +977,7 @@ export default function ImportCellarScreen() {
         </Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
-        <Text style={styles.secondaryBtnText}>{isCsv ? 'Choose another file' : 'Choose another image'}</Text>
+        <Text style={styles.secondaryBtnText}>{isReceipt ? 'Choose another receipt' : isCsv ? 'Choose another file' : 'Choose another image'}</Text>
       </TouchableOpacity>
     </>
   );
@@ -975,7 +988,7 @@ export default function ImportCellarScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{csv ? `Import from ${csv.name}` : 'Import a Cellar'}</Text>
+        <Text style={styles.title}>{isReceipt ? 'Scan a Receipt/Invoice' : csv ? `Import from ${csv.name}` : 'Import a Cellar'}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -986,6 +999,20 @@ export default function ImportCellarScreen() {
               <Text style={styles.lead}>{source === 'vivino-reviews' ? 'Import your Vivino reviews' : 'Import reviews from a spreadsheet'}. Each rated wine becomes a review in Your Wine Reviews, grouped in a dated Import folder — no bottles are added to your cellar. CSV files only.</Text>
               <TouchableOpacity style={styles.primaryBtn} onPress={() => void pickReviewsFile()} activeOpacity={0.85}>
                 <Text style={styles.primaryBtnText}>Choose your CSV file</Text>
+              </TouchableOpacity>
+            </>
+          ) : isReceipt ? (
+            <>
+              <Text style={styles.lead}>Add the wines you've bought straight to your cellar from a merchant receipt or invoice.</Text>
+              <Text style={styles.hint}>Vinster reads each wine, the number of bottles and cases, and the price you paid per bottle. Delivery, discounts and anything that isn't wine are left out.</Text>
+              <TouchableOpacity style={styles.primaryBtn} onPress={() => void pick('camera')} activeOpacity={0.85}>
+                <Text style={styles.primaryBtnText}>Take Photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={() => void pick('library')} activeOpacity={0.85}>
+                <Text style={styles.secondaryBtnText}>Upload Photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={() => void pickCsvFile()} activeOpacity={0.85}>
+                <Text style={styles.secondaryBtnText}>Upload PDF</Text>
               </TouchableOpacity>
             </>
           ) : csv ? (
@@ -1044,7 +1071,7 @@ export default function ImportCellarScreen() {
         <View style={styles.centerBlock}>
           <ActivityIndicator color={colors.gold} />
           <Text style={styles.hint}>
-            Vinster is reading your cellar list…{progress ? `\n${progress.done} of ${progress.total} read` : ''}
+            {isReceipt ? 'Vinster is reading your receipt…' : 'Vinster is reading your cellar list…'}{progress ? `\n${progress.done} of ${progress.total} read` : ''}
           </Text>
         </View>
       ) : stage === 'location' ? (
@@ -1101,10 +1128,10 @@ export default function ImportCellarScreen() {
             disabled={!newLocationName.trim() || (newLocationExternal && !newLocationStoredAt.trim()) || savingLocation}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>{savingLocation ? 'Creating…' : 'Create & import here'}</Text>
+            <Text style={styles.primaryBtnText}>{savingLocation ? 'Creating…' : isReceipt ? 'Create & add here' : 'Create & import here'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => once(() => confirmImport(null))} activeOpacity={0.85}>
-            <Text style={styles.secondaryBtnText}>Import unplaced</Text>
+            <Text style={styles.secondaryBtnText}>{isReceipt ? 'Add unplaced' : 'Import unplaced'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.backLink} onPress={() => setStage('review')} activeOpacity={0.7}>
             <Text style={styles.backLinkText}>← Back to review</Text>
@@ -1119,9 +1146,9 @@ export default function ImportCellarScreen() {
         </View>
       ) : stage === 'done' ? (
         <View style={styles.centerBlock}>
-          <Text style={styles.doneTitle}>Cellar imported</Text>
+          <Text style={styles.doneTitle}>{isReceipt ? 'Wines added' : 'Cellar imported'}</Text>
           <Text style={styles.hint}>
-            {addedCount} bottle{addedCount === 1 ? '' : 's'} added{mergedBottles > 0 ? ` — ${mergedBottles} of them merged into wines already in your cellar` : ''}.{'\n\n'}This import can be viewed in Your Full Cellar List{importedLocationName ? ` in your ${importedLocationName} folder` : ''}.
+            {addedCount} bottle{addedCount === 1 ? '' : 's'} added{mergedBottles > 0 ? ` — ${mergedBottles} of them merged into wines already in your cellar` : ''}.{'\n\n'}{isReceipt ? 'They' : 'This import'} can be viewed in Your Full Cellar List{importedLocationName ? ` in your ${importedLocationName} folder` : ''}.
             {unfiledBottles > 0 ? `\n\n${unfiledBottles} bottle${unfiledBottles === 1 ? '' : 's'} couldn't be filed in ${importedLocationName ?? 'that location'} — ${unfiledBottles === 1 ? "it's" : "they're"} in Your Full Cellar List, unplaced.` : ''}
           </Text>
           {unfiledBottles > 0 ? (
@@ -1134,9 +1161,9 @@ export default function ImportCellarScreen() {
               <Text style={styles.doneBtnText}>{filingRest ? 'Filing…' : 'File the rest now'}</Text>
             </TouchableOpacity>
           ) : null}
-          <Text style={styles.doneIntelNudge}>
+          {isReceipt ? null : <Text style={styles.doneIntelNudge}>
             Please update intel on these wines so that prices and scores are included in your cellar statistics — you can do this from the Full Cellar List screen.
-          </Text>
+          </Text>}
           {mergedList.length > 0 ? (
             <View style={styles.mergedBlock}>
               {mergedList.map((m, i) => (

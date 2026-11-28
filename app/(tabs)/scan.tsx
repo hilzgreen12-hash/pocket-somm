@@ -73,7 +73,7 @@ export default function ScanTab() {
       <AwaitingReviewPrompt />
     <GHScrollView {...pageScroll.scrollProps} style={{ flex: 1 }} scrollEnabled={!scrollLocked} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
-      <VinsterHeader />
+      <VinsterHeader blank />
 
       <View style={styles.titleRow}>
         <HelpTitle label="Review" title="How Review works" body={SCAN_HELP} textStyle={styles.appName} />

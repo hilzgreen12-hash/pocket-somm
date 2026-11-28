@@ -382,6 +382,11 @@ export default function LabelResultsScreen() {
     // does a lookup that never reached Wine-Searcher: the read may well be right,
     // so the card says Wine-Searcher couldn't be checked instead.
     if (intelligence.verified || intelligence.wsUnavailable) return;
+    // Vinster recognised the wine as read (its catalogue / knowledge, even with
+    // no Wine-Searcher listing): the label was read right, so don't ask. Asking
+    // "which wine is this?" over a clearly-read La Grange St. Martin La Pointe du
+    // Vent, offering a Côtes du Rhône, was the 2026-11-27 complaint.
+    if (intelligence.identified === true && !intelligence.labelOnly) return;
     candidatesTriedRef.current = true;
     (async () => {
       try {
@@ -402,7 +407,12 @@ export default function LabelResultsScreen() {
           region: wineDetailsConfirmed.region ?? null,
           style: wineDetailsConfirmed.style ?? null,
         };
-        const alternatives = list.filter((c) => norm(c.wineName) !== norm(readAsCand.wineName));
+        // Only bottlings from the label's own appellation: a Châteauneuf-du-Pape
+        // label is never offered the producer's Côtes du Rhône.
+        const appellation = (r?: string | null) => norm((r ?? '').split(',')[0]).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const readApp = appellation(readAsCand.region);
+        const alternatives = list.filter((c) => norm(c.wineName) !== norm(readAsCand.wineName)
+          && (!readApp || !c.region || appellation(c.region) === readApp));
         const combined = [readAsCand, ...alternatives];
         if (combined.length >= 2) { setCandidates(combined); setSelectedCand(0); setCandidatesOpen(true); }
       } catch { /* silent — NoIntelPrompt stays as the fallback */ }
@@ -1011,6 +1021,62 @@ export default function LabelResultsScreen() {
         action={{ label: 'Search Again', onPress: openSearchAgain }}
         onBack={intelGoBack}
       />
+    );
+  }
+
+  // The vintage question. Declared here so it shows on the waiting screen
+  // below as well as over the card.
+  const vintagePromptModal = (
+    <>
+      {/* Vintage prompt — the label had no readable vintage. */}
+      <Modal visible={vintagePromptOpen} transparent animationType="fade" onRequestClose={confirmNoVintage}>
+        <View style={styles.candOverlay}>
+          <View style={styles.candSheet}>
+            {confirmGenerating ? (
+              <View style={styles.candLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.candLoadingText}>Updating for {vintageInput}…</Text></View>
+            ) : (
+              <>
+                <Text style={styles.candTitle}>What's the vintage?</Text>
+                <Text style={styles.candBody}>Vinster couldn't read the vintage from the label. Enter the year — or "NV" for a non-vintage wine — so the score, value and drinking window are accurate.</Text>
+                <TextInput
+                  style={styles.vintagePromptInput}
+                  value={vintageInput}
+                  onChangeText={(t) => setVintageInput(t.replace(/[^0-9a-zA-Z ]/g, '').slice(0, 12))}
+                  placeholder="e.g. 2018 or NV"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={12}
+                  autoFocus
+                />
+                <TouchableOpacity style={styles.candConfirmBtn} onPress={submitVintage} activeOpacity={0.8}>
+                  <Text style={styles.candConfirmText}>Save</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.candCancel} onPress={confirmNoVintage} activeOpacity={0.7}>
+                  <Text style={styles.candCancelText}>Skip (treat as NV)</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+
+  // A fresh scan with no readable vintage holds Wine Intel until the user gives
+  // the year (or NV). Nothing is loading yet, so without this the screen fell to
+  // "No results yet" and the vintage question — drawn over the card — never
+  // appeared (andcgreen, build 240: a Barbaresco scanned without its neck label).
+  const waitingForVintage = fresh === '1' && !!wineDetailsConfirmed && !(wineDetailsConfirmed.vintage ?? '').trim()
+    && !intelligence && !intelLoading && !genError && !isAddFlow && !awaitingConfirm
+    // Only where the question is (or is about to be) open — never a bare spinner.
+    && (vintagePromptOpen || isIntelOnlyFlow);
+  if (waitingForVintage) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color={colors.gold} />
+        {vintagePromptModal}
+      </View>
     );
   }
 
@@ -2353,38 +2419,7 @@ export default function LabelResultsScreen() {
         editLabel="Check details"
       />
 
-      {/* Vintage prompt — the label had no readable vintage. */}
-      <Modal visible={vintagePromptOpen} transparent animationType="fade" onRequestClose={confirmNoVintage}>
-        <View style={styles.candOverlay}>
-          <View style={styles.candSheet}>
-            {confirmGenerating ? (
-              <View style={styles.candLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.candLoadingText}>Updating for {vintageInput}…</Text></View>
-            ) : (
-              <>
-                <Text style={styles.candTitle}>What's the vintage?</Text>
-                <Text style={styles.candBody}>Vinster couldn't read the vintage from the label. Enter the year — or "NV" for a non-vintage wine — so the score, value and drinking window are accurate.</Text>
-                <TextInput
-                  style={styles.vintagePromptInput}
-                  value={vintageInput}
-                  onChangeText={(t) => setVintageInput(t.replace(/[^0-9a-zA-Z ]/g, '').slice(0, 12))}
-                  placeholder="e.g. 2018 or NV"
-                  placeholderTextColor={colors.textMuted}
-                  autoCapitalize="characters"
-                  autoCorrect={false}
-                  maxLength={12}
-                  autoFocus
-                />
-                <TouchableOpacity style={styles.candConfirmBtn} onPress={submitVintage} activeOpacity={0.8}>
-                  <Text style={styles.candConfirmText}>Save</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.candCancel} onPress={confirmNoVintage} activeOpacity={0.7}>
-                  <Text style={styles.candCancelText}>Skip (treat as NV)</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
+      {vintagePromptModal}
 
       {/* "Which wine is this?" — Claude's list of this producer's plausible
           bottlings, shown when intel came back weak. Picking one regenerates

@@ -124,8 +124,8 @@ const styles = StyleSheet.create({
 // Archived wine cards: a cream band under the photo with dark type, matching
 // the card's cream page.
 const arch = StyleSheet.create({
-  fade: { backgroundColor: 'rgba(244,235,224,0.94)' },
-  topShade: { backgroundColor: 'rgba(244,235,224,0.35)' },
+  fade: { backgroundColor: 'rgba(226,214,198,0.94)' },
+  topShade: { backgroundColor: 'rgba(226,214,198,0.35)' },
   dark: { color: ARCHIVED.espresso },
   title: { color: ARCHIVED.espresso, textShadowRadius: 0 },
   subtitle: { color: ARCHIVED.accent, textShadowRadius: 0 },

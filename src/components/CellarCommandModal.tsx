@@ -476,7 +476,7 @@ export function CellarCommandModal({ visible, onClose, locationName, hereWineIds
       if (scoped) {
         showAlert({
           title: 'Not available here',
-          body: 'From a storage location you can move, archive, add or delete bottles. For a recommendation, use Quick Command on the Cellar tab.',
+          body: 'From a storage location you can move, archive, add or delete bottles. For a recommendation, use Voice Command on the Cellar tab.',
         });
         return;
       }

@@ -5,7 +5,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
-import { GATHER_LOCKED, GATHER_LOCKED_OPACITY } from '../constants/features';
 
 // Order + routes match TabSwipeView / the (tabs) navigator, left-to-right.
 // 'index' is the Scan landing tab (the group's index route, '/(tabs)').
@@ -86,7 +85,7 @@ export function AppBottomBar() {
           <TouchableOpacity
             key={t.key}
             // Gather is shown faded while it's locked (its page is faded too).
-            style={[styles.item, t.key === 'community' && GATHER_LOCKED && { opacity: GATHER_LOCKED_OPACITY }]}
+            style={styles.item}
             onPress={() => router.navigate(routeFor(t.key) as any)}
             activeOpacity={0.7}
             accessibilityRole="button"

@@ -27,6 +27,33 @@ function isTransientError(err: unknown): boolean {
 
 // Per-user rate limits — slightly higher than OCR since a single scan can
 // trigger multiple recommend calls if the user re-rolls their picks.
+// The scan screen's style choices, as the diner saw them (label + description,
+// mirroring src/constants/styleProfiles.ts). The app sends only the ids; sent
+// bare ("light-red"), the model guessed at them — telling a diner who chose
+// Light Reds they'd "asked for Pinot Noir", and putting forward a Sauvignon
+// Blanc for Rich Whites.
+const STYLE_PROFILE_TEXT: Record<string, string> = {
+  'light-red': 'Light Reds (light body with fresh acidity and fruit)',
+  'elegant-red': 'Elegant Reds (light to medium body, earthy, complex)',
+  'bold-red': 'Bold Reds (full-bodied, tannic, structured)',
+  'crisp-white': 'Crisp Whites (high acidity, mineral, refreshing)',
+  'aromatic-white': 'Aromatic Whites (floral, off-dry, expressive)',
+  'rich-white': 'Rich Whites (full-bodied, oaked, textured)',
+  'pale-dry-rose': 'Pale and Dry rosé (Provençal-style: pale, crisp, mineral)',
+  'semi-sweet-rose': 'Semi Sweet rosé (off-dry, fruit-forward, gently sweet)',
+  'serious-rose': 'Serious Rosé (wine-led, structured)',
+  'champagne': 'Champagne (méthode champenoise from Champagne, France)',
+  'champagne-style': 'Champagne Style (traditional-method bubbles from outside Champagne)',
+  'tank-fermented': 'Tank Fermented sparkling (Charmat method: Prosecco, Lambrusco, frizzante)',
+  'natural-cider': 'Funk Me Up natural wine (cloudy, brisk, apple-edged, wild and hazy)',
+  'natural-funky': 'Reassuringly Ambiguous natural wine (light, refreshing, easy on the palate)',
+  'natural-clean': 'The Good Kind natural wine (clean, minimal sulphites, no faults)',
+  'sweet-dry': 'Dry fortified (Fino sherry, dry Madeira)',
+  'sweet-semi': 'Semi Sweet fortified (Amontillado, semi-dry Madeira)',
+  'sweet-rich': 'Sweet (dessert wines: Sauternes, PX sherry, Tokaji)',
+};
+const styleText = (id: string) => STYLE_PROFILE_TEXT[id] ?? id;
+
 const RECOMMEND_HOURLY_LIMIT = 60;
 const RECOMMEND_DAILY_LIMIT = 200;
 
@@ -51,6 +78,7 @@ SOFT PREFERENCE — FAVOURITE REGIONS AND GRAPES:
 If the diner has listed favourite regions or grape varieties, weight these positively in your ranking. All else being equal, a wine from a favourite region or grape should rank above one that isn't. This is a preference, not a hard filter — do not exclude wines that don't match if they are significantly better quality or value.
 
 NEVER RETURN AN EMPTY LIST WHEN WINES QUALIFY:
+A style profile describes how the wine TASTES, judged by this wine's real character (body, oak, texture, acidity) — not by grape name alone. Pick wines that genuinely have the chosen style first. E.g. Rich Whites = full-bodied, oaked or textured (white Burgundy and oaked Chardonnay, white Rhône, Viognier, white Rioja, oaked Chenin, aged Semillon…); a crisp, unoaked Sauvignon Blanc, Muscadet or Picpoul is NOT rich and comes only after every rich white within the hard rules. Light Reds = light body, fresh acidity and fruit, from any grape (Gamay, Pinot Noir, Frappato, Schiava, Zweigelt, cool-climate Grenache…).
 Only the HARD rules (colour, budget, region/grape exclusions) can rule a wine out. Style profiles, food pairing, preferred country and favourites are SOFT — they decide the ORDER, never whether there are picks. If at least one wine on the list passes the hard rules, you MUST recommend up to 3 of them (the closest fits), even when none is a perfect match for the stated style or food. When a pick departs from the requested style, say so plainly in its standoutNote (e.g. "Crisper than the rich style you asked for, but the best white within budget here.").
 
 SCORING PRIORITY — after applying the hard rules above, rank by:
@@ -144,7 +172,7 @@ For each recommended wine return:
 - outsidePreferences: string | null — almost always null. Colour, budget and excluded regions/grapes are HARD rules: a pick never breaks them. Set this ONLY when a pick CLEARLY goes against a soft preference the user EXPLICITLY stated (a style word they used, a preferred country/region/grape they named, their favourites) — e.g. they asked for "light" and this is a big, heavy red; or they named "Italian" and this is French. It is a short note, quoting their own words, on why it's still worth choosing. Strict rules:
   • Judge style by THIS wine's actual character, never by grape or region stereotypes. Elegance, freshness, richness, etc. are found in many grapes: a Côte-Rôtie or a cool-climate Syrah IS elegant; never imply only Pinot Noir is elegant, only Burgundy is fine, etc. If the wine genuinely has the style asked for, the note is null.
   • The FOOD is never a preference to depart from — how a wine suits the dish belongs in standoutNote. Never write a note about the dish or cuisine, and never compare a wine's origin to a dish (an Italian white for a Thai curry is simply a pairing, not a departure).
-  • Never mention a country, region, grape or style the user did not name.
+  • Never mention a country, region, grape or style the user did not name. Quote ONLY words that appear in the "Diner preferences" above (e.g. "Light Reds", "Rich Whites"). Never say they asked for a grape, region or wine that isn't written there — a style choice like "Light Reds" is NOT a request for Pinot Noir or any other grape. What Vinster has learned about them (the LEARNED section) is not something they asked for: never cite it as their request.
   • If in doubt, null. A note that apologises for a good match confuses the user.
 - standoutNote: FOR ALL THREE WINES — ONE to TWO concise sentences (NOT bullet points, ~35 words max) in Vinster's warm, characterful voice. This is the "why THIS one" hook, and it covers two things: (a) PAIRING / occasion — what to drink it with or when (a dish, a moment, a mood), and (b) HOW IT COMPARES with the OTHER TWO wines on this list — the specific reason it earns its place among the three (e.g. the value pick of the trio, the most ready to drink tonight, the boldest, the surest crowd-pleaser, the splurge worth saving for the main). It is NOT a tasting note (that is flavourProfile — never describe fruit/acidity/tannin/body here) and must NOT restate the four labelled param notes (critic score, value, vintage, producer) verbatim. Keep it punchy and specific to THIS list — never generic. Examples: "The one to open with dinner — its savoury depth loves roast lamb, and of the three it's the surest all-rounder tonight." / "Brighter and leaner than the other two, so the pick for shellfish or a warm evening — and the best value of the trio." / "The splurge of the group: rarer and more age-worthy than the others, worth saving for the main course." (string)
 - repeatNote: string | null. Set this ONLY when this wine's producer AND name EXACTLY match an entry in the ALREADY-SEEN set (see the rule below) and you are DELIBERATELY recommending that same wine AGAIN because it is genuinely outstanding. NEVER set it on a new or different wine — not even one from the same region or grape as a seen wine (two different Trebbiano d'Abruzzo, or two different Barolos, are NOT the same wine; do not confuse them). It MUST open with EXACTLY "Vinster is recommending this wine again because of its outstanding " and finish with the specific reason. For EVERY other wine — including all wines on a first recommendation, and any fresh alternative — set repeatNote to null.
@@ -297,7 +325,7 @@ Today's date: ${today} — use this as the anchor when assessing every wine's dr
 
 Diner preferences:
 - Colour: ${colours.length ? colours.join(', ') : profileColours.length ? `${profileColours.join(', ')} (soft preference — do not exclude other colours)` : 'No preference'}
-- Style profiles: ${mergedStyleProfiles.length ? mergedStyleProfiles.join(', ') : 'No preference — prioritise quality and value'}
+- Style profiles: ${mergedStyleProfiles.length ? mergedStyleProfiles.map(styleText).join('; ') : 'No preference — prioritise quality and value'}
 - Budget: ${budgetMin ? `${sym}${budgetMin} (min) to ` : ''}up to ${sym}${budget ?? 'unlimited'} per bottle on the menu (${cur})
 - Food pairing: ${foodPairing || 'Not specified'}
 - Preferred country of origin (soft preference — weight, do not exclude): ${countryPref || 'No preference'}

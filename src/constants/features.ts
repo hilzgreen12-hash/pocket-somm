@@ -7,12 +7,12 @@
 export const COMMUNITY_ENABLED: boolean = process.env.EXPO_PUBLIC_COMMUNITY === '1';
 
 // Gather (the Community) still needs work: while true, everything about it is
-// shown but faded and can't be used — the tab, its page, and every "Share to
+// shown but faded and can't be used — its page (below the title and blurb; the tab itself stays bright), and every "Share to
 // Community" / Community profile control. Set false to open it up.
 export const GATHER_LOCKED: boolean = true;
 
 // How faded a locked Gather control is.
-export const GATHER_LOCKED_OPACITY = 0.35;
+export const GATHER_LOCKED_OPACITY = 0.55;
 
 // Google / Apple social sign-in. Google uses Supabase web OAuth (no native
 // module, so the iOS build stays clean); Apple uses the native expo-apple-

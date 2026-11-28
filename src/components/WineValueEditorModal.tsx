@@ -10,6 +10,16 @@ import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
 
+// "Producer Wine Name", without the producer twice when the wine's name already
+// starts with it.
+function fullWineName(w: { producer?: string | null; wine_name?: string | null }): string {
+  const producer = (w.producer ?? '').trim();
+  const name = (w.wine_name ?? '').trim();
+  if (!producer) return name;
+  if (!name || name.toLowerCase().startsWith(producer.toLowerCase())) return name || producer;
+  return `${producer} ${name}`;
+}
+
 function symbolFor(code: string): string {
   return CURRENCIES.find((c) => c.code === code.toUpperCase())?.symbol ?? code;
 }
@@ -144,7 +154,8 @@ export function WineValueEditorModal({ visible, title, subtitle, field, seedFiel
   const renderRow = ({ item: w }: { item: CellarWine }) => (
     <View style={styles.row}>
       <View style={styles.rowMain}>
-        <Text style={styles.rowName} numberOfLines={2}>{[w.producer, w.wine_name].filter(Boolean).join(' ') || w.wine_name}</Text>
+        {/* The full name, never cut short. */}
+        <Text style={styles.rowName}>{fullWineName(w)}</Text>
         <Text style={styles.rowMeta} numberOfLines={1}>
           {[w.vintage, w.region].filter(Boolean).join(' · ')}  ·  {bottleSizeCl(w.bottle_size_ml ?? 750)}cl
         </Text>
@@ -204,12 +215,13 @@ const styles = StyleSheet.create({
   list: { flexGrow: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMain: { flex: 1, minWidth: 0 },
-  rowName: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text },
+  // Same face and size as the blurb under the title.
+  rowName: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 20 },
   rowMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   // A fixed width: a growing input pushed the wine's name out of the row.
-  inputWrap: { width: 140, flexShrink: 0, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.sm, backgroundColor: colors.surface },
+  inputWrap: { width: 104, flexShrink: 0, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.sm, backgroundColor: colors.surface },
   sym: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginRight: 2 },
-  input: { flex: 1, minWidth: 0, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm },
+  input: { flex: 1, minWidth: 0, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: 6 },
   saveBtn: { borderWidth: 1, borderColor: colors.gold, backgroundColor: 'transparent', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   cancelBtn: { alignItems: 'center', paddingVertical: spacing.md },

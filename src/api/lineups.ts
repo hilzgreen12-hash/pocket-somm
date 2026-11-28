@@ -23,6 +23,10 @@ export interface LineupWine {
   grape?: string | null;
   style?: string | null;
   bottle_size_ml?: number | null;
+  // "Mark as from my cellar": the bottle came from the user's cellar but has no
+  // cellar entry to link (e.g. drunk before they used Vinster). Shows the Your
+  // Cellar stamp; nothing is archived.
+  from_cellar?: boolean;
 }
 
 export interface LineupArchive {

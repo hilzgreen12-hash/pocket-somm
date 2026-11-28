@@ -115,6 +115,35 @@ export async function verifiedProducerWines(producer: string): Promise<string[]>
   }
 }
 
+// Verified catalogue wines SOLD UNDER this name by another producer: a label
+// that shows only a brand ("La Grange St. Martin") when the catalogue files the
+// wine under the house behind it ("Famille Perrin" — "La Grange St Martin La
+// Pointe du Vent"). Without these, the identity check never saw the wine and
+// every scan of it went the slow way (web lookup, then a second Wine Intel).
+// Returned as "producer — wine name"; empty for short or generic names.
+export async function verifiedBrandWines(brand: string): Promise<string[]> {
+  const brandKey = norm(brand);
+  // Short or one-word names ("Domaine", "Reserve") would match far too much.
+  if (brandKey.length < 8 || !brandKey.includes(' ')) return [];
+  try {
+    const { data } = await admin
+      .from('wines_catalog')
+      .select('producer, wine_name')
+      .like('search_key', `%${brandKey}%`)
+      .eq('verification_status', 'verified')
+      .limit(40);
+    const out = ((data ?? []) as { producer: string; wine_name: string | null }[])
+      // Another producer's wine whose name (or producer label) carries the brand
+      // as whole words — not this producer's own rows, which are listed already.
+      .filter((r) => norm(r.producer) !== brandKey
+        && (` ${norm(r.wine_name ?? '')} `.includes(` ${brandKey} `) || ` ${norm(r.producer)} `.includes(` ${brandKey} `)))
+      .map((r) => `${r.producer.trim()} — ${(r.wine_name ?? '').trim()}`.replace(/ — $/, ''));
+    return Array.from(new Set(out)).slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
 // True when resolve-wine's live web lookup has added this exact wine to the
 // catalogue (source 'web-lookup'). Wine Intel only trusts a client-sent
 // webResearch when this holds — a crafted request can't claim a wine is real.

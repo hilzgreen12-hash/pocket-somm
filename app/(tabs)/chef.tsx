@@ -80,7 +80,7 @@ export default function ChefTab() {
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
-      <VinsterHeader />
+      <VinsterHeader blank />
 
       <View style={styles.titleRow}>
         <HelpTitle label="Pair" title="How Pair works" body={CHEF_HELP} textStyle={styles.appName} />

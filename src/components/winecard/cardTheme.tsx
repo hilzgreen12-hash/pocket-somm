@@ -9,7 +9,7 @@ export const useArchivedCard = () => useContext(ArchivedCardContext);
 
 // Option D palette.
 export const ARCHIVED = {
-  page: '#F4EBE0',      // cream
+  page: '#E2D6C6',      // cream (colors.creamDim — #F4EBE0 read as white on a phone)
   panel: '#7F4F4C',     // terracotta panels (white text, gold figures on them)
   espresso: '#3E2120',  // tabs, badges, outline buttons
   ink: '#1A1A1A',       // text straight on the cream

@@ -34,7 +34,11 @@ Deno.serve(async (req) => {
     const limited = await checkRateLimit(auth.userId, 'import-cellar', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
-    const { base64Image, stream } = await req.json();
+    const { base64Image, stream, kind } = await req.json();
+    // 'receipt': Add Wine → Scan a Receipt/Invoice — wine just bought, going
+    // into the user's own cellar, so the reader also reads cases, the invoice
+    // date, and skips everything on the bill that isn't a bottle of wine.
+    const isReceipt = kind === 'receipt';
     if (typeof base64Image !== 'string' || !base64Image) return jsonError('No image was received. Please try again.', 400);
     if (base64Image.length > MAX_IMAGE_CHARS) return jsonError(TOO_LARGE, 413);
 
@@ -88,7 +92,7 @@ Return ONLY valid JSON with this structure:
 }
 
 If you cannot identify any wines, return { "wines": [] }.
-Return raw JSON only. No markdown. No explanation.`,
+Return raw JSON only. No markdown. No explanation.${isReceipt ? RECEIPT_RULES : ''}`,
             },
           ],
         },
@@ -100,7 +104,11 @@ Return raw JSON only. No markdown. No explanation.`,
       // so keep the wines that were complete rather than failing the import.
       const wines = winesFromReply(text);
       if (wines === null) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
-      return { wines };
+      if (!isReceipt) return { wines };
+      // The invoice date, read from the same reply (kept apart from the wines
+      // so a cut-off reply still keeps it when it came first).
+      const date = text.match(/"purchase_date"\s*:\s*"(\d{4}-\d{2}-\d{2})"/)?.[1] ?? null;
+      return { wines, purchase_date: date };
     }
 
     // Buffered path (stream !== true): unchanged single-JSON response. Kept as
@@ -147,6 +155,17 @@ Return raw JSON only. No markdown. No explanation.`,
     return jsonError('Something went wrong. Please try again.', 500);
   }
 });
+
+// Extra rules for a merchant receipt or invoice (kind 'receipt').
+const RECEIPT_RULES = `
+
+THIS IMAGE IS A RECEIPT OR INVOICE for wine the user has just bought, to go into their own cellar. Read it as a bill:
+- Each wine line is one wine. Skip every line that is not a bottle of wine: delivery, shipping, duty/VAT summary lines, discounts, deposits, glassware, gift wrap, tasting tickets, spirits, beer, cider, food, subtotals and totals.
+- quantity = the total number of BOTTLES bought on that line. "2 x 6 x 75cl" = 12; "1 case of 12" = 12; "3 cs/6" = 18; a quantity column of 2 against a "6 x 75cl" pack = 12.
+- case_size: when the line is sold by the case ("6 x 75cl", "12x75cl", "OWC 6", "case of 12"), the bottles in ONE case (e.g. 6); otherwise null. owc: true when the line says OWC / original wooden case / OC, false when it says carton or cardboard, else null.
+- purchase_price: the price PER BOTTLE as charged on the line. If the line shows a case price or a line total, divide by the bottles it covers. If the invoice states prices are in bond / ex-duty / ex-VAT, use the per-bottle figure as shown.
+- Never invent a wine: read only what is printed. If a line is too unclear to read the wine, leave it out.
+- Also return, alongside "wines", "purchase_date": the invoice or receipt date as "YYYY-MM-DD" (null if not shown). Put it FIRST in the JSON object: { "purchase_date": "2026-11-20", "wines": [ { ..., "case_size": 6, "owc": true } ] }`;
 
 // The { wines: [...] } reply, or what was complete of it when the reply was cut
 // off mid-list (same as parse-cellar-import). null when unreadable.

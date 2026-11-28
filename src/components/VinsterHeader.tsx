@@ -1,11 +1,14 @@
-import { TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { TouchableOpacity, Image, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
 // The Vinster wine-ring mark, centred at the top of every tab page. Tapping
 // it opens the full About Vinster screen — this replaces the old "About
 // Vinster" footer link. Drop one in as the first element of each tab's scroll
 // content.
-export function VinsterHeader() {
+// `blank`: no mark, just the room it takes — the mark shows on Home only, and
+// the other tabs keep the same space so every tab title sits at one height.
+export function VinsterHeader({ blank = false }: { blank?: boolean } = {}) {
+  if (blank) return <View style={styles.blank} />;
   return (
     <TouchableOpacity
       onPress={() => router.push('/about')}
@@ -27,4 +30,6 @@ const styles = StyleSheet.create({
   // (and clipping the List page's bottom buttons).
   wrap: { alignSelf: 'flex-start', marginBottom: -34 },
   mark: { width: 52, height: 52 },
+  // The mark's height less its negative margin: what it adds above the title.
+  blank: { height: 52 - 34 },
 });

@@ -189,9 +189,8 @@ export function HomeStorageSection() {
   const sum = (counts: Record<string, number>) => Object.values(counts).reduce((n, c) => n + c, 0);
   const placedBottles = sum(rackCounts) + sum(binCounts) + sum(locationCounts);
 
-  // The headline total: every bottle at home, placed or not — the same count
-  // (and the same query, so it's shared from the cache) as Your Wines At
-  // Home's stats bar (app/cellar/home.tsx). External bottles never count.
+  // The headline total: every bottle at home, placed or not. External bottles
+  // never count.
   const { wines: cellarWines } = useCellar();
   const allWineIds = useMemo(() => cellarWines.map((w) => w.id), [cellarWines]);
   const { data: allPlacements } = useQuery({
@@ -402,11 +401,9 @@ export function HomeStorageSection() {
         <>
           {/* Stats bar — green outline + light-green fill (matches the other
               inverted pages), not bracketing rules. */}
-          <TouchableOpacity onPress={() => router.push('/cellar/home')} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Text style={styles.stats}>
-              {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'} · View All →
-            </Text>
-          </TouchableOpacity>
+          <Text style={styles.stats}>
+            {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
+          </Text>
         </>
       )}
 

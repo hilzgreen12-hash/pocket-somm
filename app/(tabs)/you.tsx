@@ -92,7 +92,7 @@ export default function YouScreen() {
   return (
     <TabSwipeView style={styles.container}>
     <KeyboardAwareScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingTop }]} keyboardShouldPersistTaps="always" bottomOffset={24}>
-      <VinsterHeader />
+      <VinsterHeader blank />
 
       <View style={styles.body}>
 

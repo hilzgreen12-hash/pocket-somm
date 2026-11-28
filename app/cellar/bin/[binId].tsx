@@ -235,7 +235,7 @@ export default function BinDetailScreen() {
 
       {canEdit && (
         <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
-          <Text style={styles.voiceBubbleText}>Quick Command</Text>
+          <Text style={styles.voiceBubbleText}>Voice Command</Text>
         </TouchableOpacity>
       )}
       <View style={styles.headerDivider} />

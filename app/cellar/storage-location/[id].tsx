@@ -744,7 +744,7 @@ export default function StorageLocationScreen() {
 
       {canEdit ? (
         <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
-          <Text style={styles.voiceBubbleText}>Quick Command</Text>
+          <Text style={styles.voiceBubbleText}>Voice Command</Text>
         </TouchableOpacity>
       ) : null}
       <View style={styles.headerDivider} />
